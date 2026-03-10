@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { motion } from "framer-motion";
 import { 
   Eye, 
   Heart, 
   Users, 
-  TrendingUp 
+  TrendingUp,
+  Loader2
 } from "lucide-react";
 import { useWebPushNotifications } from "@/hooks/useWebPushNotifications";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
@@ -14,23 +15,35 @@ import { supabase } from "@/integrations/supabase/client";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { StatsCard } from "@/components/dashboard/StatsCard";
-import { CreatePostPanel } from "@/components/dashboard/CreatePostPanel";
 import { RecentPosts } from "@/components/dashboard/RecentPosts";
 import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
-import { AdvancedAnalytics } from "@/components/dashboard/AdvancedAnalytics";
 import { SocialNetworkCard } from "@/components/dashboard/SocialNetworkCard";
-import { CalendarView } from "@/components/dashboard/CalendarView";
-import { StoriesLivesView } from "@/components/dashboard/StoriesLivesView";
-import { DocumentsView } from "@/components/dashboard/DocumentsView";
-import { MessagingView } from "@/components/dashboard/MessagingView";
-import { SettingsView } from "@/components/dashboard/SettingsView";
-import { MediaGalleryView } from "@/components/dashboard/MediaGalleryView";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
-import { NotificationsFullView } from "@/components/dashboard/NotificationsFullView";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
 import { cn } from "@/lib/utils";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useNavigate } from "react-router-dom";
+
+// Lazy load heavy views
+const CreatePostPanel = lazy(() => import("@/components/dashboard/CreatePostPanel"));
+const CalendarView = lazy(() => import("@/components/dashboard/CalendarView"));
+const AdvancedAnalytics = lazy(() => import("@/components/dashboard/AdvancedAnalytics"));
+const StoriesLivesView = lazy(() => import("@/components/dashboard/StoriesLivesView"));
+const DocumentsView = lazy(() => import("@/components/dashboard/DocumentsView"));
+const MessagingView = lazy(() => import("@/components/dashboard/MessagingView"));
+const SettingsView = lazy(() => import("@/components/dashboard/SettingsView"));
+const MediaGalleryView = lazy(() => import("@/components/dashboard/MediaGalleryView"));
+const NotificationsFullView = lazy(() => import("@/components/dashboard/NotificationsFullView"));
+const NewsPortal = lazy(() => import("@/components/dashboard/NewsPortal"));
+const LiveStreamManager = lazy(() => import("@/components/dashboard/LiveStreamManager"));
+const LiveClipsView = lazy(() => import("@/components/dashboard/LiveClipsView"));
+const SocialAccountsPanel = lazy(() => import("@/components/dashboard/SocialAccountsPanel"));
+
+const ViewLoader = () => (
+  <div className="flex items-center justify-center py-20">
+    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+  </div>
+);
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -84,25 +97,27 @@ const Dashboard = () => {
     switch (activeTab) {
       case "create":
         return (
-          <div className="max-w-4xl mx-auto">
-            <CreatePostPanel
-              initialDate={preSelectedDate ? preSelectedDate.toISOString().slice(0, 16) : undefined}
-              editingPost={editingPost}
-              onPostSaved={() => {
-                setEditingPost(null);
-                setPreSelectedDate(null);
-                scheduledPosts.refetch();
-              }}
-              onBackToCalendar={editingPost || preSelectedDate ? () => {
-                setEditingPost(null);
-                setPreSelectedDate(null);
-                setActiveTab("calendar");
-              } : undefined}
-              createPost={scheduledPosts.createPost}
-              updatePost={scheduledPosts.updatePost}
-              submitForApproval={scheduledPosts.submitForApproval}
-            />
-          </div>
+          <Suspense fallback={<ViewLoader />}>
+            <div className="max-w-4xl mx-auto">
+              <CreatePostPanel
+                initialDate={preSelectedDate ? preSelectedDate.toISOString().slice(0, 16) : undefined}
+                editingPost={editingPost}
+                onPostSaved={() => {
+                  setEditingPost(null);
+                  setPreSelectedDate(null);
+                  scheduledPosts.refetch();
+                }}
+                onBackToCalendar={editingPost || preSelectedDate ? () => {
+                  setEditingPost(null);
+                  setPreSelectedDate(null);
+                  setActiveTab("calendar");
+                } : undefined}
+                createPost={scheduledPosts.createPost}
+                updatePost={scheduledPosts.updatePost}
+                submitForApproval={scheduledPosts.submitForApproval}
+              />
+            </div>
+          </Suspense>
         );
 
       case "networks":
@@ -132,48 +147,62 @@ const Dashboard = () => {
         );
 
       case "analytics":
-        return <AdvancedAnalytics />;
+        return <Suspense fallback={<ViewLoader />}><AdvancedAnalytics /></Suspense>;
 
       case "calendar":
         return (
-          <CalendarView
-            posts={scheduledPosts.posts}
-            loading={scheduledPosts.loading}
-            deletePost={scheduledPosts.deletePost}
-            submitForApproval={scheduledPosts.submitForApproval}
-            approvePost={scheduledPosts.approvePost}
-            rejectPost={scheduledPosts.rejectPost}
-            refetch={scheduledPosts.refetch}
-            onCreatePost={(date?: Date) => {
-              setEditingPost(null);
-              setPreSelectedDate(date || null);
-              setActiveTab("create");
-            }}
-            onEditPost={(post: ScheduledPost) => {
-              setEditingPost(post);
-              setPreSelectedDate(null);
-              setActiveTab("create");
-            }}
-          />
+          <Suspense fallback={<ViewLoader />}>
+            <CalendarView
+              posts={scheduledPosts.posts}
+              loading={scheduledPosts.loading}
+              deletePost={scheduledPosts.deletePost}
+              submitForApproval={scheduledPosts.submitForApproval}
+              approvePost={scheduledPosts.approvePost}
+              rejectPost={scheduledPosts.rejectPost}
+              refetch={scheduledPosts.refetch}
+              onCreatePost={(date?: Date) => {
+                setEditingPost(null);
+                setPreSelectedDate(date || null);
+                setActiveTab("create");
+              }}
+              onEditPost={(post: ScheduledPost) => {
+                setEditingPost(post);
+                setPreSelectedDate(null);
+                setActiveTab("create");
+              }}
+            />
+          </Suspense>
         );
 
       case "stories":
-        return <StoriesLivesView />;
+        return <Suspense fallback={<ViewLoader />}><StoriesLivesView /></Suspense>;
 
       case "messaging":
-        return <MessagingView />;
+        return <Suspense fallback={<ViewLoader />}><MessagingView /></Suspense>;
 
       case "documents":
-        return <DocumentsView />;
+        return <Suspense fallback={<ViewLoader />}><DocumentsView /></Suspense>;
 
       case "settings":
-        return <SettingsView />;
+        return <Suspense fallback={<ViewLoader />}><SettingsView /></Suspense>;
 
       case "media":
-        return <MediaGalleryView />;
+        return <Suspense fallback={<ViewLoader />}><MediaGalleryView /></Suspense>;
 
       case "notifications":
-        return <NotificationsFullView />;
+        return <Suspense fallback={<ViewLoader />}><NotificationsFullView /></Suspense>;
+
+      case "news":
+        return <Suspense fallback={<ViewLoader />}><NewsPortal /></Suspense>;
+
+      case "lives":
+        return <Suspense fallback={<ViewLoader />}><LiveStreamManager /></Suspense>;
+
+      case "clips":
+        return <Suspense fallback={<ViewLoader />}><LiveClipsView /></Suspense>;
+
+      case "accounts":
+        return <Suspense fallback={<ViewLoader />}><SocialAccountsPanel /></Suspense>;
 
       default:
         return (
