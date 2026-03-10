@@ -40,3 +40,18 @@ verify_jwt = false
 
 [functions.bulk-import-posts]
 verify_jwt = false
+
+[functions.process-job-queue]
+verify_jwt = false
+
+[functions.collect-social-analytics]
+verify_jwt = false
+
+[functions.text-to-speech]
+verify_jwt = false
+
+[functions.transcribe-media]
+verify_jwt = false
+
+[functions.generate-live-clips]
+verify_jwt = false

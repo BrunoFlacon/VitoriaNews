@@ -11,7 +11,11 @@ import {
   Bell,
   LogOut,
   ChevronLeft,
-  MessageCircle
+  MessageCircle,
+  Newspaper,
+  Video,
+  Scissors,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -28,8 +32,12 @@ const menuItems = [
   { id: "calendar", icon: Calendar, label: "Calendário" },
   { id: "analytics", icon: BarChart3, label: "Analytics" },
   { id: "stories", icon: Radio, label: "Stories & Lives" },
+  { id: "lives", icon: Video, label: "Live Streaming" },
+  { id: "clips", icon: Scissors, label: "Cortes de Lives" },
   { id: "messaging", icon: MessageCircle, label: "Mensagens" },
+  { id: "news", icon: Newspaper, label: "Notícias" },
   { id: "documents", icon: FileText, label: "Documentos" },
+  { id: "accounts", icon: Users, label: "Contas Sociais" },
   { id: "networks", icon: Share2, label: "Redes Sociais" },
 ];
 
@@ -87,27 +95,27 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
         </div>
 
         {/* Main Menu */}
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {menuItems.map((item, index) => (
             <motion.button
               key={item.id}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
+              transition={{ delay: index * 0.03 }}
               onClick={() => setActiveTab(item.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group",
+                "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group",
                 activeTab === item.id
                   ? "bg-gradient-to-r from-primary/20 to-accent/20 text-primary border border-primary/20"
                   : "hover:bg-sidebar-accent text-muted-foreground hover:text-foreground"
               )}
             >
               <item.icon className={cn(
-                "w-5 h-5 transition-transform group-hover:scale-110",
+                "w-5 h-5 transition-transform group-hover:scale-110 flex-shrink-0",
                 activeTab === item.id && "text-primary"
               )} />
               {!isCollapsed && (
-                <span className="font-medium">{item.label}</span>
+                <span className="font-medium text-sm">{item.label}</span>
               )}
               {activeTab === item.id && !isCollapsed && (
                 <motion.div
@@ -120,28 +128,28 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
         </nav>
 
         {/* Bottom Menu */}
-        <div className="p-4 border-t border-sidebar-border space-y-2">
+        <div className="p-4 border-t border-sidebar-border space-y-1">
           {bottomItems.map((item) => (
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all",
                 activeTab === item.id
                   ? "bg-sidebar-accent text-foreground"
                   : "hover:bg-sidebar-accent text-muted-foreground hover:text-foreground"
               )}
             >
               <item.icon className="w-5 h-5" />
-              {!isCollapsed && <span className="font-medium">{item.label}</span>}
+              {!isCollapsed && <span className="font-medium text-sm">{item.label}</span>}
             </button>
           ))}
           <button
             onClick={onLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-destructive hover:bg-destructive/10 transition-all"
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-destructive hover:bg-destructive/10 transition-all"
           >
             <LogOut className="w-5 h-5" />
-            {!isCollapsed && <span className="font-medium">Sair</span>}
+            {!isCollapsed && <span className="font-medium text-sm">Sair</span>}
           </button>
         </div>
       </div>
