@@ -24,16 +24,16 @@ import { cn } from "@/lib/utils";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useNavigate } from "react-router-dom";
 
-// Lazy load heavy views
-const CreatePostPanel = lazy(() => import("@/components/dashboard/CreatePostPanel"));
-const CalendarView = lazy(() => import("@/components/dashboard/CalendarView"));
-const AdvancedAnalytics = lazy(() => import("@/components/dashboard/AdvancedAnalytics"));
-const StoriesLivesView = lazy(() => import("@/components/dashboard/StoriesLivesView"));
-const DocumentsView = lazy(() => import("@/components/dashboard/DocumentsView"));
-const MessagingView = lazy(() => import("@/components/dashboard/MessagingView"));
-const SettingsView = lazy(() => import("@/components/dashboard/SettingsView"));
-const MediaGalleryView = lazy(() => import("@/components/dashboard/MediaGalleryView"));
-const NotificationsFullView = lazy(() => import("@/components/dashboard/NotificationsFullView"));
+// Lazy load heavy views - wrap named exports for React.lazy
+const CreatePostPanel = lazy(() => import("@/components/dashboard/CreatePostPanel").then(m => ({ default: m.CreatePostPanel })));
+const CalendarView = lazy(() => import("@/components/dashboard/CalendarView").then(m => ({ default: m.CalendarView })));
+const AdvancedAnalytics = lazy(() => import("@/components/dashboard/AdvancedAnalytics").then(m => ({ default: m.AdvancedAnalytics })));
+const StoriesLivesView = lazy(() => import("@/components/dashboard/StoriesLivesView").then(m => ({ default: m.StoriesLivesView })));
+const DocumentsView = lazy(() => import("@/components/dashboard/DocumentsView").then(m => ({ default: m.DocumentsView })));
+const MessagingView = lazy(() => import("@/components/dashboard/MessagingView").then(m => ({ default: m.MessagingView })));
+const SettingsView = lazy(() => import("@/components/dashboard/SettingsView").then(m => ({ default: m.SettingsView })));
+const MediaGalleryView = lazy(() => import("@/components/dashboard/MediaGalleryView").then(m => ({ default: m.MediaGalleryView })));
+const NotificationsFullView = lazy(() => import("@/components/dashboard/NotificationsFullView").then(m => ({ default: m.NotificationsFullView })));
 const NewsPortal = lazy(() => import("@/components/dashboard/NewsPortal"));
 const LiveStreamManager = lazy(() => import("@/components/dashboard/LiveStreamManager"));
 const LiveClipsView = lazy(() => import("@/components/dashboard/LiveClipsView"));
