@@ -64,7 +64,18 @@ export const AdvancedAnalytics = () => {
     );
   }
 
-  const platformBreakdownData = Object.entries(data.platformBreakdown).map(([key, value], index) => ({
+  // Normalize and merge platform breakdown entries
+  const mergedBreakdown: Record<string, { posts: number; engagement: number }> = {};
+  Object.entries(data.platformBreakdown).forEach(([key, value]) => {
+    const normalized = normalizePlatform(key);
+    if (!mergedBreakdown[normalized]) {
+      mergedBreakdown[normalized] = { posts: 0, engagement: 0 };
+    }
+    mergedBreakdown[normalized].posts += value.posts;
+    mergedBreakdown[normalized].engagement += value.engagement;
+  });
+
+  const platformBreakdownData = Object.entries(mergedBreakdown).map(([key, value], index) => ({
     name: socialPlatforms.find(p => p.id === key)?.name || key,
     posts: value.posts,
     engagement: value.engagement,
