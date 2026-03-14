@@ -29,7 +29,7 @@ import {
 } from "recharts";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
-import { cn } from "@/lib/utils";
+import { cn, normalizePlatform } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -64,7 +64,18 @@ export const AdvancedAnalytics = () => {
     );
   }
 
-  const platformBreakdownData = Object.entries(data.platformBreakdown).map(([key, value], index) => ({
+  // Normalize and merge platform breakdown entries
+  const mergedBreakdown: Record<string, { posts: number; engagement: number }> = {};
+  Object.entries(data.platformBreakdown).forEach(([key, value]) => {
+    const normalized = normalizePlatform(key);
+    if (!mergedBreakdown[normalized]) {
+      mergedBreakdown[normalized] = { posts: 0, engagement: 0 };
+    }
+    mergedBreakdown[normalized].posts += value.posts;
+    mergedBreakdown[normalized].engagement += value.engagement;
+  });
+
+  const platformBreakdownData = Object.entries(mergedBreakdown).map(([key, value], index) => ({
     name: socialPlatforms.find(p => p.id === key)?.name || key,
     posts: value.posts,
     engagement: value.engagement,
@@ -403,7 +414,8 @@ export const AdvancedAnalytics = () => {
                     </div>
                     <div className="flex -space-x-1">
                       {content.platforms.slice(0, 3).map((platformId) => {
-                        const platform = socialPlatforms.find(p => p.id === platformId);
+                        const normalizedId = normalizePlatform(platformId);
+                        const platform = socialPlatforms.find(p => p.id === normalizedId);
                         if (!platform) return null;
                         const Icon = platform.icon;
                         return (

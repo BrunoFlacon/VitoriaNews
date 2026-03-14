@@ -112,6 +112,30 @@ export type Database = {
         }
         Relationships: []
       }
+      api_keys: {
+        Row: {
+          api_key: string | null
+          created_at: string | null
+          id: string
+          status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          api_key?: string | null
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          api_key?: string | null
+          created_at?: string | null
+          id?: string
+          status?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       api_rate_limits: {
         Row: {
           created_at: string
@@ -212,6 +236,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      auto_reply_rules: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          id: string
+          keyword: string | null
+          platform: string | null
+          reply: string | null
+          user_id: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          keyword?: string | null
+          platform?: string | null
+          reply?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          id?: string
+          keyword?: string | null
+          platform?: string | null
+          reply?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       campaign_posts: {
         Row: {
@@ -869,6 +923,138 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_api_logs: {
+        Row: {
+          created_at: string | null
+          endpoint: string | null
+          id: string
+          platform: string | null
+          request_payload: Json | null
+          response_payload: Json | null
+          status_code: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          endpoint?: string | null
+          id?: string
+          platform?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          status_code?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          endpoint?: string | null
+          id?: string
+          platform?: string | null
+          request_payload?: Json | null
+          response_payload?: Json | null
+          status_code?: number | null
+        }
+        Relationships: []
+      }
+      platform_hourly_performance: {
+        Row: {
+          avg_comments: number | null
+          avg_impressions: number | null
+          avg_likes: number | null
+          avg_shares: number | null
+          hour: number | null
+          id: string
+          platform: string | null
+          samples: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          avg_comments?: number | null
+          avg_impressions?: number | null
+          avg_likes?: number | null
+          avg_shares?: number | null
+          hour?: number | null
+          id?: string
+          platform?: string | null
+          samples?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          avg_comments?: number | null
+          avg_impressions?: number | null
+          avg_likes?: number | null
+          avg_shares?: number | null
+          hour?: number | null
+          id?: string
+          platform?: string | null
+          samples?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      platform_rate_limits: {
+        Row: {
+          created_at: string | null
+          current_requests: number | null
+          id: string
+          max_requests: number
+          platform: string
+          reset_at: string | null
+          user_id: string | null
+          window_seconds: number
+        }
+        Insert: {
+          created_at?: string | null
+          current_requests?: number | null
+          id?: string
+          max_requests: number
+          platform: string
+          reset_at?: string | null
+          user_id?: string | null
+          window_seconds: number
+        }
+        Update: {
+          created_at?: string | null
+          current_requests?: number | null
+          id?: string
+          max_requests?: number
+          platform?: string
+          reset_at?: string | null
+          user_id?: string | null
+          window_seconds?: number
+        }
+        Relationships: []
+      }
+      post_analytics: {
+        Row: {
+          collected_at: string | null
+          id: string | null
+          likes: number | null
+          platform: string | null
+          post_id: string | null
+          replies: number | null
+          retweets: number | null
+          views: number | null
+        }
+        Insert: {
+          collected_at?: string | null
+          id?: string | null
+          likes?: number | null
+          platform?: string | null
+          post_id?: string | null
+          replies?: number | null
+          retweets?: number | null
+          views?: number | null
+        }
+        Update: {
+          collected_at?: string | null
+          id?: string | null
+          likes?: number | null
+          platform?: string | null
+          post_id?: string | null
+          replies?: number | null
+          retweets?: number | null
+          views?: number | null
+        }
+        Relationships: []
+      }
       post_metrics: {
         Row: {
           clicks: number | null
@@ -957,30 +1143,39 @@ export type Database = {
       }
       published_posts: {
         Row: {
+          api_response: Json | null
           created_at: string
           id: string
           platform: string
           platform_post_id: string | null
           post_id: string
+          post_url: string | null
           published_at: string | null
+          tweet_id: string | null
           user_id: string
         }
         Insert: {
+          api_response?: Json | null
           created_at?: string
           id?: string
           platform: string
           platform_post_id?: string | null
           post_id: string
+          post_url?: string | null
           published_at?: string | null
+          tweet_id?: string | null
           user_id: string
         }
         Update: {
+          api_response?: Json | null
           created_at?: string
           id?: string
           platform?: string
           platform_post_id?: string | null
           post_id?: string
+          post_url?: string | null
           published_at?: string | null
+          tweet_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1046,6 +1241,11 @@ export type Database = {
       }
       social_accounts: {
         Row: {
+          access_secret: string | null
+          access_token: string | null
+          api_key: string | null
+          api_secret: string | null
+          chat_id: string | null
           created_at: string
           engagement_rate: number | null
           followers: number | null
@@ -1060,6 +1260,11 @@ export type Database = {
           username: string | null
         }
         Insert: {
+          access_secret?: string | null
+          access_token?: string | null
+          api_key?: string | null
+          api_secret?: string | null
+          chat_id?: string | null
           created_at?: string
           engagement_rate?: number | null
           followers?: number | null
@@ -1074,6 +1279,11 @@ export type Database = {
           username?: string | null
         }
         Update: {
+          access_secret?: string | null
+          access_token?: string | null
+          api_key?: string | null
+          api_secret?: string | null
+          chat_id?: string | null
           created_at?: string
           engagement_rate?: number | null
           followers?: number | null
@@ -1089,51 +1299,255 @@ export type Database = {
         }
         Relationships: []
       }
+      social_comments: {
+        Row: {
+          author: string | null
+          comment: string | null
+          comment_id: string | null
+          created_at: string | null
+          id: string
+          platform: string | null
+          post_id: string | null
+          processed: boolean | null
+          user_id: string | null
+        }
+        Insert: {
+          author?: string | null
+          comment?: string | null
+          comment_id?: string | null
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          processed?: boolean | null
+          user_id?: string | null
+        }
+        Update: {
+          author?: string | null
+          comment?: string | null
+          comment_id?: string | null
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          processed?: boolean | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       social_connections: {
         Row: {
           access_token: string | null
           created_at: string
+          expires_at: string | null
+          followers_count: number | null
           id: string
           is_connected: boolean
+          metadata: Json | null
           page_id: string | null
           page_name: string | null
           platform: string
           platform_user_id: string | null
           profile_image_url: string | null
+          profile_picture: string | null
           refresh_token: string | null
           token_expires_at: string | null
           updated_at: string
           user_id: string
+          username: string | null
         }
         Insert: {
           access_token?: string | null
           created_at?: string
+          expires_at?: string | null
+          followers_count?: number | null
           id?: string
           is_connected?: boolean
+          metadata?: Json | null
           page_id?: string | null
           page_name?: string | null
           platform: string
           platform_user_id?: string | null
           profile_image_url?: string | null
+          profile_picture?: string | null
           refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string
           user_id: string
+          username?: string | null
         }
         Update: {
           access_token?: string | null
           created_at?: string
+          expires_at?: string | null
+          followers_count?: number | null
           id?: string
           is_connected?: boolean
+          metadata?: Json | null
           page_id?: string | null
           page_name?: string | null
           platform?: string
           platform_user_id?: string | null
           profile_image_url?: string | null
+          profile_picture?: string | null
           refresh_token?: string | null
           token_expires_at?: string | null
           updated_at?: string
           user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      social_inbox: {
+        Row: {
+          author: string | null
+          created_at: string | null
+          handled: boolean | null
+          id: string
+          message: string | null
+          platform: string | null
+          source_id: string | null
+          type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          author?: string | null
+          created_at?: string | null
+          handled?: boolean | null
+          id?: string
+          message?: string | null
+          platform?: string | null
+          source_id?: string | null
+          type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          author?: string | null
+          created_at?: string | null
+          handled?: boolean | null
+          id?: string
+          message?: string | null
+          platform?: string | null
+          source_id?: string | null
+          type?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      social_leads: {
+        Row: {
+          created_at: string | null
+          id: string
+          message: string | null
+          platform: string | null
+          source_post: string | null
+          status: string | null
+          user_id: string | null
+          username: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          platform?: string | null
+          source_post?: string | null
+          status?: string | null
+          user_id?: string | null
+          username?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message?: string | null
+          platform?: string | null
+          source_post?: string | null
+          status?: string | null
+          user_id?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+      social_platforms: {
+        Row: {
+          api_base_url: string | null
+          auth_type: string | null
+          created_at: string | null
+          id: string
+          name: string
+          status: string | null
+        }
+        Insert: {
+          api_base_url?: string | null
+          auth_type?: string | null
+          created_at?: string | null
+          id?: string
+          name: string
+          status?: string | null
+        }
+        Update: {
+          api_base_url?: string | null
+          auth_type?: string | null
+          created_at?: string | null
+          id?: string
+          name?: string
+          status?: string | null
+        }
+        Relationships: []
+      }
+      social_publish_log: {
+        Row: {
+          account_id: string | null
+          created_at: string | null
+          id: string
+          platform: string | null
+          post_id: string | null
+          published_at: string | null
+          response: Json | null
+          status: string | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          published_at?: string | null
+          response?: Json | null
+          status?: string | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          published_at?: string | null
+          response?: Json | null
+          status?: string | null
+        }
+        Relationships: []
+      }
+      social_webhooks: {
+        Row: {
+          created_at: string | null
+          event_type: string | null
+          id: string
+          payload: Json | null
+          platform: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          platform?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          platform?: string | null
         }
         Relationships: []
       }
@@ -1229,6 +1643,30 @@ export type Database = {
           },
         ]
       }
+      system_audit: {
+        Row: {
+          checked_at: string | null
+          details: string | null
+          id: string
+          module: string | null
+          status: string | null
+        }
+        Insert: {
+          checked_at?: string | null
+          details?: string | null
+          id?: string
+          module?: string | null
+          status?: string | null
+        }
+        Update: {
+          checked_at?: string | null
+          details?: string | null
+          id?: string
+          module?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       system_logs: {
         Row: {
           created_at: string
@@ -1294,6 +1732,30 @@ export type Database = {
           },
         ]
       }
+      trending_posts: {
+        Row: {
+          detected_at: string | null
+          engagement_score: number | null
+          id: string
+          platform: string | null
+          post_id: string | null
+        }
+        Insert: {
+          detected_at?: string | null
+          engagement_score?: number | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+        }
+        Update: {
+          detected_at?: string | null
+          engagement_score?: number | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -1314,6 +1776,55 @@ export type Database = {
       }
     }
     Views: {
+      analytics_dashboard: {
+        Row: {
+          platform: string | null
+          posts: number | null
+          total_comments: number | null
+          total_impressions: number | null
+          total_likes: number | null
+          total_shares: number | null
+        }
+        Relationships: []
+      }
+      dashboard_metrics: {
+        Row: {
+          avg_engagement_rate: number | null
+          last_update: string | null
+          platform: string | null
+          post_id: string | null
+          total_clicks: number | null
+          total_comments: number | null
+          total_impressions: number | null
+          total_likes: number | null
+          total_reach: number | null
+          total_shares: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_metrics_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      queue_stats: {
+        Row: {
+          status: string | null
+          total: number | null
+        }
+        Relationships: []
+      }
+      rate_limit_status: {
+        Row: {
+          platform: string | null
+          requests: number | null
+          reset_at: string | null
+        }
+        Relationships: []
+      }
       social_connections_safe: {
         Row: {
           created_at: string | null
@@ -1356,8 +1867,143 @@ export type Database = {
         }
         Relationships: []
       }
+      social_leads_dashboard: {
+        Row: {
+          platform: string | null
+          total_leads: number | null
+        }
+        Relationships: []
+      }
+      social_posts_dashboard: {
+        Row: {
+          platform: string | null
+          post_url: string | null
+          published_at: string | null
+          tweet_id: string | null
+        }
+        Insert: {
+          platform?: string | null
+          post_url?: string | null
+          published_at?: string | null
+          tweet_id?: string | null
+        }
+        Update: {
+          platform?: string | null
+          post_url?: string | null
+          published_at?: string | null
+          tweet_id?: string | null
+        }
+        Relationships: []
+      }
+      social_publication_status: {
+        Row: {
+          api_response: Json | null
+          platform: string | null
+          platform_post_id: string | null
+          published_at: string | null
+        }
+        Insert: {
+          api_response?: Json | null
+          platform?: string | null
+          platform_post_id?: string | null
+          published_at?: string | null
+        }
+        Update: {
+          api_response?: Json | null
+          platform?: string | null
+          platform_post_id?: string | null
+          published_at?: string | null
+        }
+        Relationships: []
+      }
+      worker_throughput: {
+        Row: {
+          jobs_processed: number | null
+          minute: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      api_get_leads: {
+        Args: { p_api_key: string }
+        Returns: {
+          created_at: string
+          message: string
+          platform: string
+          username: string
+        }[]
+      }
+      api_get_post_metrics: {
+        Args: { p_api_key: string }
+        Returns: {
+          comments: number
+          impressions: number
+          likes: number
+          platform: string
+          post_id: string
+          shares: number
+        }[]
+      }
+      api_publish_post: {
+        Args: { p_api_key: string; p_content: string; p_platforms: Json }
+        Returns: string
+      }
+      api_receive_webhook: {
+        Args: { p_event: string; p_payload: Json; p_platform: string }
+        Returns: undefined
+      }
+      api_schedule_post: {
+        Args: {
+          p_api_key: string
+          p_content: string
+          p_date: string
+          p_platforms: Json
+        }
+        Returns: string
+      }
+      auto_boost_trending: { Args: never; Returns: undefined }
+      auto_reply_social: {
+        Args: { p_message: string; p_platform: string }
+        Returns: string
+      }
+      best_posting_hour: { Args: { p_platform: string }; Returns: number }
+      calculate_engagement_score: {
+        Args: {
+          p_comments: number
+          p_impressions: number
+          p_likes: number
+          p_shares: number
+        }
+        Returns: number
+      }
+      capture_social_lead: {
+        Args: {
+          p_message: string
+          p_platform: string
+          p_post: string
+          p_user_id: string
+          p_username: string
+        }
+        Returns: undefined
+      }
+      check_rate_limit: {
+        Args: { p_platform: string; p_user_id: string }
+        Returns: boolean
+      }
+      collect_post_analytics:
+        | { Args: never; Returns: undefined }
+        | { Args: { payload: Json }; Returns: undefined }
+      collect_post_metrics: { Args: { p_post_id: string }; Returns: undefined }
+      collect_social_analytics: { Args: never; Returns: undefined }
+      create_api_key: { Args: { p_user: string }; Returns: string }
+      detect_lead_keywords: { Args: { p_message: string }; Returns: boolean }
+      detect_trending_posts: { Args: never; Returns: undefined }
+      enqueue_publish_job: {
+        Args: { content_text: string; post_uuid: string; user_uuid: string }
+        Returns: undefined
+      }
+      enqueue_scheduled_posts: { Args: never; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1365,6 +2011,43 @@ export type Database = {
         }
         Returns: boolean
       }
+      optimize_post_schedule: { Args: never; Returns: undefined }
+      process_job_queue: { Args: never; Returns: undefined }
+      publish_post_worker: { Args: { payload: Json }; Returns: undefined }
+      publish_to_telegram: { Args: { p_content: string }; Returns: Json }
+      publish_to_x: { Args: { p_content: string }; Returns: Json }
+      refresh_dashboard_metrics: { Args: never; Returns: undefined }
+      refresh_social_tokens: { Args: never; Returns: undefined }
+      sdk_collect_post_metrics: {
+        Args: { p_platform: string; p_platform_post_id: string }
+        Returns: Json
+      }
+      sdk_publish_multi_platform: {
+        Args: { payload: Json }
+        Returns: undefined
+      }
+      sdk_publish_post:
+        | { Args: { p_post_id: string }; Returns: undefined }
+        | {
+            Args: {
+              p_content: string
+              p_platform: string
+              p_post_id: string
+              p_user_id: string
+            }
+            Returns: Json
+          }
+      update_hourly_performance: { Args: never; Returns: undefined }
+      validate_api_key: { Args: { p_key: string }; Returns: string }
+      worker_collect_metrics: { Args: never; Returns: undefined }
+      worker_process_batch: { Args: never; Returns: number }
+      worker_process_inbox: { Args: never; Returns: undefined }
+      worker_process_jobs: { Args: never; Returns: undefined }
+      worker_publish_post: {
+        Args: { p_platform: string; p_post_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      worker_sdk_publisher: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "editor" | "journalist"

@@ -11,7 +11,7 @@ import {
   Loader2,
   Edit
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, normalizePlatform } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
 import { useScheduledPosts } from "@/hooks/useScheduledPosts";
 
@@ -114,12 +114,13 @@ export const RecentPosts = () => {
                 <div className="flex items-start gap-4">
                   <div className="flex -space-x-2">
                     {post.platforms.slice(0, 3).map((platformId) => {
-                      const platform = socialPlatforms.find(p => p.id === platformId);
+                      const normalizedId = normalizePlatform(platformId);
+                      const platform = socialPlatforms.find(p => p.id === normalizedId);
                       if (!platform) return null;
                       const Icon = platform.icon;
                       return (
                         <div
-                          key={platformId}
+                          key={normalizedId}
                           className={cn(
                             "w-8 h-8 rounded-lg flex items-center justify-center border-2 border-card",
                             platform.color

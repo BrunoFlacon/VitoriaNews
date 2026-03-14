@@ -6,6 +6,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Normalize platform names
+function normalizePlatform(platform: string): string {
+  const value = platform.toLowerCase().trim();
+  if (value === "x" || value === "twitter" || value === "x (twitter)") {
+    return "twitter";
+  }
+  return value;
+}
+
 // Deterministic pseudo-random based on seed string
 function seededRandom(seed: string): () => number {
   let h = 0;
@@ -118,9 +127,10 @@ serve(async (req) => {
     const platformBreakdown: Record<string, { posts: number; engagement: number }> = {};
     platformPosts.forEach(post => {
       post.platforms?.forEach((p: string) => {
-        if (!platformBreakdown[p]) platformBreakdown[p] = { posts: 0, engagement: 0 };
-        platformBreakdown[p].posts++;
-        platformBreakdown[p].engagement += Math.floor(rand() * 500 + 100);
+        const normalized = normalizePlatform(p);
+        if (!platformBreakdown[normalized]) platformBreakdown[normalized] = { posts: 0, engagement: 0 };
+        platformBreakdown[normalized].posts++;
+        platformBreakdown[normalized].engagement += Math.floor(rand() * 500 + 100);
       });
     });
 
