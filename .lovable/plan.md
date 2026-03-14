@@ -1,86 +1,56 @@
-# Plano: Fluxo de Aprovacao Editorial + Indicadores Visuais no Calendario
 
-## O que sera feito
 
-continue a geração da instrução anterior e implemente o plano a seguir
+# Plan: Analytics with Real Data, pg_cron Schedulers & Verification
 
-### 1. Novo status "pending_approval" no fluxo editorial
+## Current State
 
-Adicionar um novo status ao fluxo de publicacoes para suportar o ciclo jornalistico: **Rascunho -> Aguardando Aprovacao -> Aprovado/Agendado -> Publicado**.
+- **Analytics**: The `get-analytics` edge function generates **fake/seeded data** — engagement metrics are computed with `seededRandom()` instead of querying `post_metrics` and `account_metrics` tables.
+- **Sidebar/Views**: All sections (News, Lives, Clips, Accounts) already exist with proper lazy loading and Supabase queries. They should load correctly now that RLS is permissive.
+- **News Portal**: `/news` and `/news/:slug` routes exist. The `NewsPortal` dashboard component handles CRUD. The public `News` page queries `articles` with `status = 'published'`.
+- **pg_cron**: Not configured yet. The database functions `enqueue_scheduled_posts()`, `collect_social_analytics()`, and `refresh_social_tokens()` already exist.
 
-**Migracao de banco de dados:**
+## Changes
 
-- Nenhuma alteracao de schema necessaria: o campo `status` da tabela `scheduled_posts` ja e do tipo `text`, entao novos valores como `pending_approval` e `rejected` podem ser usados diretamente.
+### 1. Update `get-analytics` Edge Function to Use Real Data
 
-**Arquivo: `src/hooks/useScheduledPosts.ts**`
+Replace fake seeded metrics with real queries to `post_metrics` and `account_metrics`:
 
-- Expandir o tipo `status` para incluir `'pending_approval' | 'rejected'`
-- Adicionar funcoes `submitForApproval(postId)` e `approvePost(postId)` / `rejectPost(postId, reason)`
+- Query `post_metrics` for the user within the selected period, aggregated by platform
+- Query `account_metrics` for follower growth data
+- Keep the existing response shape so the frontend doesn't break
+- Fall back to the current seeded logic when no real metrics exist (so the dashboard isn't empty for new users)
 
-### 2. Atualizar statusConfig no CalendarView
+### 2. Add Follower Growth Section to AdvancedAnalytics
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+Add a new card showing:
+- Current followers per connected account (from `account_metrics` or `social_connections`)
+- Growth trend over the selected period
 
-Adicionar configs para os novos status:
+### 3. Configure pg_cron Schedulers
 
-- `pending_approval`: icone `Clock` com cor laranja, label "Aguardando Aprovacao"
-- `rejected`: icone `AlertCircle` com cor vermelha escura, label "Rejeitado"
+Use the insert tool (not migration) to set up 3 cron jobs:
+- **Publish scheduler**: Every minute — calls `enqueue_scheduled_posts()`
+- **Analytics collector**: Every 6 hours — calls `collect_social_analytics()`  
+- **Token refresh**: Daily at 3am — calls `refresh_social_tokens()`
 
-Adicionar acoes no dropdown de cada post:
+Requires enabling `pg_cron` and `pg_net` extensions first via migration.
 
-- "Enviar para aprovacao" (quando status e `draft`)
-- "Aprovar" e "Rejeitar" (quando status e `pending_approval`)
+### 4. Verify All Sections Load
 
-### 3. Indicadores visuais ricos nos quadradinhos do calendario
+No code changes needed — the sidebar, views, and routes are already wired. The RLS fix from previous migrations should allow data to load. This is a manual verification step.
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+## Files Modified
 
-Substituir os pontos coloridos simples por mini-icones de status nos quadradinhos dos dias:
+1. **`supabase/functions/get-analytics/index.ts`** — Query `post_metrics` + `account_metrics` for real data, fall back to seeded data
+2. **`src/components/dashboard/AdvancedAnalytics.tsx`** — Add follower growth card using new `followerData` from API
+3. **`src/hooks/useAnalytics.ts`** — Extend `AnalyticsData` interface with `followerData` field
+4. **New migration** — Enable `pg_cron` and `pg_net` extensions
+5. **SQL insert** — Create 3 cron job schedules
 
-- Cada post mostrara um pequeno icone (CheckCircle2, Clock, Edit, AlertCircle, etc.) colorido dentro do quadradinho do dia
-- Agrupar por status quando houver muitos posts (ex: "2x publicado, 1x rascunho")
-- Mostrar contagem total quando houver mais de 4 posts no dia
+## Execution Order
 
-### 4. Painel de aprovacao no CreatePostPanel
+1. Migration: enable extensions
+2. Update edge function with real data queries
+3. Update frontend analytics types + UI
+4. Configure cron jobs via insert tool
 
-**Arquivo: `src/components/dashboard/CreatePostPanel.tsx**`
-
-- Adicionar botao "Enviar para Aprovacao" ao lado de "Salvar Rascunho"
-- Quando o post estiver com status `pending_approval`, mostrar botoes "Aprovar" e "Rejeitar" (simulando o papel do editor)
-- Campo de motivo de rejeicao ao rejeitar
-
-### 5. Acoes de aprovacao no dialogo de detalhes
-
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
-
-No dialogo de detalhes do post, adicionar botoes contextuais:
-
-- Post `draft`: "Enviar para Aprovacao"
-- Post `pending_approval`: "Aprovar" e "Rejeitar"
-- Post `rejected`: Mostrar motivo da rejeicao + "Editar e Reenviar"
-
----
-
-## Detalhes Tecnicos
-
-### Arquivos editados:
-
-- `src/hooks/useScheduledPosts.ts` - Novos status e funcoes (submitForApproval, approvePost, rejectPost)
-- `src/components/dashboard/CalendarView.tsx` - Novos status no statusConfig, icones ricos nos dias, acoes de aprovacao
-- `src/components/dashboard/CreatePostPanel.tsx` - Botao "Enviar para Aprovacao"
-
-### Fluxo editorial completo:
-
-1. Jornalista cria pauta (rascunho) no calendario
-2. Desenvolve conteudo no painel de criacao
-3. Clica "Enviar para Aprovacao"
-4. Editor ve posts com status "Aguardando Aprovacao" no calendario (icone laranja)
-5. Editor aprova (muda para "scheduled") ou rejeita (muda para "rejected" com motivo)
-6. Se rejeitado, jornalista edita e reenvia
-7. Se aprovado, pode publicar imediatamente ou aguardar agendamento
-
-### Indicadores visuais nos quadradinhos:
-
-- Cada dia mostrara ate 4 mini-icones coloridos representando os posts daquele dia
-- Se houver mais de 4 posts, mostra 3 icones + badge "+N"
-- Icones usados: CheckCircle2 (publicado/verde), Clock (agendado/azul), Edit (rascunho/amarelo), AlertCircle (falha/vermelho), Loader2 (aguardando aprovacao/laranja), X (rejeitado/vermelho escuro)
