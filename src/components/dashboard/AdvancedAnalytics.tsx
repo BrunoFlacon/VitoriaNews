@@ -29,7 +29,7 @@ import {
 } from "recharts";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
-import { cn } from "@/lib/utils";
+import { cn, normalizePlatform } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Select,
