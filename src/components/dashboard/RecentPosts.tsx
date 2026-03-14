@@ -11,7 +11,7 @@ import {
   Loader2,
   Edit
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, normalizePlatform } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
 import { useScheduledPosts } from "@/hooks/useScheduledPosts";
 
