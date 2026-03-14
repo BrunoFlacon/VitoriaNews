@@ -35,6 +35,14 @@ interface BestTime {
   engagement: number;
 }
 
+export interface FollowerData {
+  platform: string;
+  username: string | null;
+  currentFollowers: number;
+  growth: number;
+  profileImage: string | null;
+}
+
 export interface AnalyticsData {
   overview: {
     totalPosts: number;
@@ -49,8 +57,10 @@ export interface AnalyticsData {
   platformBreakdown: Record<string, { posts: number; engagement: number }>;
   topContent: TopContent[];
   bestTimes: BestTime[];
+  followerData: FollowerData[];
   period: string;
   generatedAt: string;
+  dataSource: 'real' | 'seeded';
 }
 
 export function useAnalytics() {

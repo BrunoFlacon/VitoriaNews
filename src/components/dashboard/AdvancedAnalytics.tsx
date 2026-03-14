@@ -10,7 +10,9 @@ import {
   BarChart3,
   Clock,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  UserPlus,
+  Database
 } from "lucide-react";
 import { 
   AreaChart, 
@@ -22,15 +24,13 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell,
-  BarChart,
-  Bar,
-  Legend
+  Cell
 } from "recharts";
-import { useAnalytics } from "@/hooks/useAnalytics";
+import { useAnalytics, type FollowerData } from "@/hooks/useAnalytics";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
 import { cn, normalizePlatform } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -87,7 +87,18 @@ export const AdvancedAnalytics = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display font-bold text-3xl mb-2">Analytics Avançados</h1>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="font-display font-bold text-3xl">Analytics Avançados</h1>
+            {data.dataSource === "real" ? (
+              <Badge variant="default" className="bg-green-500/20 text-green-500 border-green-500/30">
+                <Database className="w-3 h-3 mr-1" /> Dados Reais
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                Dados Estimados
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground">
             Acompanhe o desempenho de suas publicações em tempo real
           </p>
@@ -179,6 +190,26 @@ export const AdvancedAnalytics = () => {
         </div>
       </div>
 
+      {/* Follower Growth */}
+      {data.followerData && data.followerData.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="glass-card rounded-2xl border border-border p-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <UserPlus className="w-5 h-5 text-primary" />
+            <h2 className="font-display font-bold text-xl">Crescimento de Seguidores</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {data.followerData.map((fd) => (
+              <FollowerCard key={fd.platform} data={fd} />
+            ))}
+          </div>
+        </motion.div>
+      )}
+
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Chart */}
@@ -250,27 +281,9 @@ export const AdvancedAnalytics = () => {
                   }}
                   labelStyle={{ color: "hsl(210, 40%, 98%)" }}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="views"
-                  stroke="hsl(217, 91%, 60%)"
-                  strokeWidth={2}
-                  fill="url(#colorViews)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="engagement"
-                  stroke="hsl(262, 83%, 58%)"
-                  strokeWidth={2}
-                  fill="url(#colorEngagement)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="reach"
-                  stroke="hsl(142, 70%, 45%)"
-                  strokeWidth={2}
-                  fill="url(#colorReach)"
-                />
+                <Area type="monotone" dataKey="views" stroke="hsl(217, 91%, 60%)" strokeWidth={2} fill="url(#colorViews)" />
+                <Area type="monotone" dataKey="engagement" stroke="hsl(262, 83%, 58%)" strokeWidth={2} fill="url(#colorEngagement)" />
+                <Area type="monotone" dataKey="reach" stroke="hsl(142, 70%, 45%)" strokeWidth={2} fill="url(#colorReach)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -395,7 +408,7 @@ export const AdvancedAnalytics = () => {
           
           {data.topContent.length > 0 ? (
             <div className="space-y-3">
-              {data.topContent.map((content, index) => (
+              {data.topContent.map((content) => (
                 <div 
                   key={content.id}
                   className="p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
@@ -405,25 +418,25 @@ export const AdvancedAnalytics = () => {
                     <div className="flex items-center gap-3">
                       <span className="flex items-center gap-1">
                         <Eye className="w-3 h-3" />
-                        {content.views}
+                        {content.views.toLocaleString()}
                       </span>
                       <span className="flex items-center gap-1">
                         <Heart className="w-3 h-3" />
-                        {content.engagement}
+                        {content.engagement.toLocaleString()}
                       </span>
                     </div>
                     <div className="flex -space-x-1">
                       {content.platforms.slice(0, 3).map((platformId) => {
                         const normalizedId = normalizePlatform(platformId);
-                        const platform = socialPlatforms.find(p => p.id === normalizedId);
-                        if (!platform) return null;
-                        const Icon = platform.icon;
+                        const plat = socialPlatforms.find(p => p.id === normalizedId);
+                        if (!plat) return null;
+                        const Icon = plat.icon;
                         return (
                           <div
                             key={platformId}
                             className={cn(
                               "w-5 h-5 rounded flex items-center justify-center border border-card",
-                              platform.color
+                              plat.color
                             )}
                           >
                             <Icon className="w-2.5 h-2.5 text-white" />
@@ -479,7 +492,8 @@ export const AdvancedAnalytics = () => {
   );
 };
 
-// Internal StatsCard component
+// ========== Sub-components ==========
+
 interface StatsCardProps {
   title: string;
   value: string;
@@ -524,5 +538,40 @@ const StatsCard = ({ title, value, icon: Icon, trend, trendLabel, color }: Stats
       <p className="text-2xl font-bold">{value}</p>
       <p className="text-sm text-muted-foreground">{title}</p>
     </motion.div>
+  );
+};
+
+const FollowerCard = ({ data }: { data: FollowerData }) => {
+  const plat = socialPlatforms.find(p => p.id === data.platform);
+  const Icon = plat?.icon;
+
+  return (
+    <div className="glass-card rounded-xl border border-border p-4">
+      <div className="flex items-center gap-3 mb-3">
+        {Icon && (
+          <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", plat?.color)}>
+            <Icon className="w-4 h-4 text-white" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="font-medium text-sm truncate">{plat?.name || data.platform}</p>
+          {data.username && (
+            <p className="text-xs text-muted-foreground truncate">@{data.username}</p>
+          )}
+        </div>
+      </div>
+      <p className="text-2xl font-bold">{data.currentFollowers.toLocaleString()}</p>
+      <div className="flex items-center gap-1 mt-1">
+        {data.growth >= 0 ? (
+          <TrendingUp className="w-3 h-3 text-green-500" />
+        ) : (
+          <TrendingDown className="w-3 h-3 text-red-500" />
+        )}
+        <span className={cn("text-xs font-medium", data.growth >= 0 ? "text-green-500" : "text-red-500")}>
+          {data.growth > 0 ? "+" : ""}{data.growth}%
+        </span>
+        <span className="text-xs text-muted-foreground ml-1">no período</span>
+      </div>
+    </div>
   );
 };

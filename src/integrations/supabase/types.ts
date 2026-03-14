@@ -1022,6 +1022,27 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_tokens: {
+        Row: {
+          bearer_token: string | null
+          created_at: string | null
+          id: string
+          platform: string | null
+        }
+        Insert: {
+          bearer_token?: string | null
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+        }
+        Update: {
+          bearer_token?: string | null
+          created_at?: string | null
+          id?: string
+          platform?: string | null
+        }
+        Relationships: []
+      }
       post_analytics: {
         Row: {
           collected_at: string | null
