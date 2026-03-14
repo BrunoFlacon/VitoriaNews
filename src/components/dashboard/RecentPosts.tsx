@@ -114,9 +114,9 @@ export const RecentPosts = () => {
                 <div className="flex items-start gap-4">
                   <div className="flex -space-x-2">
                     {post.platforms.slice(0, 3).map((platformId) => {
-                      const platform = socialPlatforms.find(p => p.id === platformId);
+                      const normalizedId = normalizePlatform(platformId);
+                      const platform = socialPlatforms.find(p => p.id === normalizedId);
                       if (!platform) return null;
-                      const Icon = platform.icon;
                       return (
                         <div
                           key={platformId}
