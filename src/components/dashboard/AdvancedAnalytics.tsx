@@ -414,7 +414,8 @@ export const AdvancedAnalytics = () => {
                     </div>
                     <div className="flex -space-x-1">
                       {content.platforms.slice(0, 3).map((platformId) => {
-                        const platform = socialPlatforms.find(p => p.id === platformId);
+                        const normalizedId = normalizePlatform(platformId);
+                        const platform = socialPlatforms.find(p => p.id === normalizedId);
                         if (!platform) return null;
                         const Icon = platform.icon;
                         return (

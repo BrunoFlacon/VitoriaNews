@@ -117,9 +117,10 @@ export const RecentPosts = () => {
                       const normalizedId = normalizePlatform(platformId);
                       const platform = socialPlatforms.find(p => p.id === normalizedId);
                       if (!platform) return null;
+                      const Icon = platform.icon;
                       return (
                         <div
-                          key={platformId}
+                          key={normalizedId}
                           className={cn(
                             "w-8 h-8 rounded-lg flex items-center justify-center border-2 border-card",
                             platform.color

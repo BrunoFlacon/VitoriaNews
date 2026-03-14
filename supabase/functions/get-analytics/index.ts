@@ -127,9 +127,10 @@ serve(async (req) => {
     const platformBreakdown: Record<string, { posts: number; engagement: number }> = {};
     platformPosts.forEach(post => {
       post.platforms?.forEach((p: string) => {
-        if (!platformBreakdown[p]) platformBreakdown[p] = { posts: 0, engagement: 0 };
-        platformBreakdown[p].posts++;
-        platformBreakdown[p].engagement += Math.floor(rand() * 500 + 100);
+        const normalized = normalizePlatform(p);
+        if (!platformBreakdown[normalized]) platformBreakdown[normalized] = { posts: 0, engagement: 0 };
+        platformBreakdown[normalized].posts++;
+        platformBreakdown[normalized].engagement += Math.floor(rand() * 500 + 100);
       });
     });
 
