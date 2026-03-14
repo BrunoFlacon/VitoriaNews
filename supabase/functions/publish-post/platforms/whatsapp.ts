@@ -1,14 +1,7 @@
-export async function publishTikTok(content, media, connection){
-
-if(!media.length){
-return{
-success:false,
-error:"TikTok requer vídeo"
-}
-}
+export async function publishWhatsApp(content,media,connection){
 
 const res=await fetch(
-"https://open.tiktokapis.com/v2/post/publish/",
+`https://graph.facebook.com/v19.0/${connection.phone_number_id}/messages`,
 {
 method:"POST",
 headers:{
@@ -16,12 +9,11 @@ Authorization:`Bearer ${connection.access_token}`,
 "Content-Type":"application/json"
 },
 body:JSON.stringify({
-post_info:{
-title:content
-},
-source_info:{
-source:"FILE_UPLOAD",
-video_url:media[0]
+messaging_product:"whatsapp",
+to:connection.recipient,
+type:"text",
+text:{
+body:content
 }
 })
 }
@@ -38,7 +30,7 @@ error:data.error.message
 
 return{
 success:true,
-postId:data.data.publish_id
+postId:data.messages[0].id
 }
 
 }

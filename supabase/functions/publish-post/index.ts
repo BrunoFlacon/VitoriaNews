@@ -9,6 +9,9 @@ import { publishTelegram } from "./platforms/telegram.ts"
 import { publishTikTok } from "./platforms/tiktok.ts"
 import { publishPinterest } from "./platforms/pinterest.ts"
 import { publishLinkedin } from "./platforms/linkedin.ts"
+import { publishSnapchat } from "./platforms/snapchat.ts"
+import { publishThreads } from "./platforms/threads.ts"
+import { publishWhatsApp } from "./platforms/whatsapp.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
