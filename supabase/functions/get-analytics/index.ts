@@ -6,6 +6,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Normalize platform names
+function normalizePlatform(platform: string): string {
+  const value = platform.toLowerCase().trim();
+  if (value === "x" || value === "twitter" || value === "x (twitter)") {
+    return "twitter";
+  }
+  return value;
+}
+
 // Deterministic pseudo-random based on seed string
 function seededRandom(seed: string): () => number {
   let h = 0;
