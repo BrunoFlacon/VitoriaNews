@@ -18,7 +18,9 @@ import {
   AlertCircle,
   Trash2,
   Wand2,
-  ChevronLeft
+  ChevronLeft,
+  ShieldCheck,
+  ShieldX
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +35,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAIContent } from "@/hooks/useAIContent";
 import { usePublisher } from "@/hooks/usePublisher";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   Dialog,
   DialogContent,
@@ -142,9 +145,11 @@ interface CreatePostPanelProps {
   createPost: (input: CreatePostInput) => Promise<ScheduledPost | null>;
   updatePost: (postId: string, updates: Partial<CreatePostInput>) => Promise<boolean>;
   submitForApproval: (postId: string) => Promise<boolean>;
+  approvePost?: (postId: string) => Promise<boolean>;
+  rejectPost?: (postId: string, reason: string) => Promise<boolean>;
 }
 
-export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackToCalendar, createPost, updatePost, submitForApproval }: CreatePostPanelProps) => {
+export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackToCalendar, createPost, updatePost, submitForApproval, approvePost, rejectPost }: CreatePostPanelProps) => {
   const [content, setContent] = useState(editingPost?.content || "");
   const [selectedPlatforms, setSelectedPlatforms] = useState<SocialPlatformId[]>(
     (editingPost?.platforms as SocialPlatformId[]) || []
@@ -177,6 +182,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   const { generateContent, generating } = useAIContent();
   const { publishNow, publishing } = usePublisher();
   const { connections } = useSocialConnections();
+  const { isEditor } = useUserRole();
 
   const isPlatformConnected = (platformId: string) =>
     connections.some(c => c.platform === platformId && c.is_connected);
@@ -394,8 +400,8 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   const characterCount = content.length;
   const maxCharacters = 5000;
 
-  const selectedHashtags = selectedPlatforms.length > 0
-    ? [...new Set(selectedPlatforms.flatMap(p => popularHashtags[p]?.slice(0, 5) || []))]
+  const selectedHashtags: string[] = selectedPlatforms.length > 0
+    ? Array.from(new Set(selectedPlatforms.flatMap(p => popularHashtags[p]?.slice(0, 5) || [])))
     : [];
 
   const selectedBestTimes = selectedPlatforms.map(p => ({
@@ -693,7 +699,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => insertHashtags(selectedHashtags.slice(0, 5))}
+                    onClick={() => insertHashtags((selectedHashtags as string[]).slice(0, 5))}
                     className="w-full mt-2"
                   >
                     Inserir Top 5 Hashtags
@@ -997,6 +1003,41 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                 Publicar Agora (API)
               </Button>
             )}
+            
+            {/* Aprovar / Rejeitar buttons for Editors when editing a pending_approval post */}
+            {isEditing && editingPost?.status === 'pending_approval' && isEditor && (
+              <>
+                <Button 
+                  disabled={isSubmitting || publishing}
+                  onClick={async () => {
+                    const success = approvePost && await approvePost(editingPost.id);
+                    if (success) onPostSaved?.();
+                  }}
+                  className="bg-green-600 hover:bg-green-700 text-white gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Aprovar
+                </Button>
+                <Button 
+                  variant="destructive"
+                  disabled={isSubmitting || publishing}
+                  onClick={async () => {
+                    // For simplicity, we just reject with a default reason, 
+                    // or ideally show the same dialog. Since dialog is in CalendarView, we do a basic prompt.
+                    const reason = window.prompt("Motivo da rejeição:");
+                    if (reason && reason.trim()) {
+                      const success = rejectPost && await rejectPost(editingPost.id, reason.trim());
+                      if (success) onPostSaved?.();
+                    }
+                  }}
+                  className="gap-2"
+                >
+                  <ShieldX className="w-4 h-4" />
+                  Rejeitar
+                </Button>
+              </>
+            )}
+
             <Button 
               disabled={isSubmitting || publishing || !content.trim() || selectedPlatforms.length === 0}
               onClick={() => handleSubmit(false)}

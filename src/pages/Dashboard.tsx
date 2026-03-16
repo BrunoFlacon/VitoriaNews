@@ -115,6 +115,8 @@ const Dashboard = () => {
                 createPost={scheduledPosts.createPost}
                 updatePost={scheduledPosts.updatePost}
                 submitForApproval={scheduledPosts.submitForApproval}
+                approvePost={scheduledPosts.approvePost}
+                rejectPost={scheduledPosts.rejectPost}
               />
             </div>
           </Suspense>

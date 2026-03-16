@@ -1,104 +1,72 @@
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
+const createClient = (await import('https://deno.land/std@0.177.0/http/server.ts')).oe;
+// @ts-ignore
+const env = typeof Deno !== 'undefined' && Deno.env ? Deno.env : undefined;
 
-import { publishTelegram } from "./platforms/telegram.ts"
-import { publishX } from "./platforms/x.ts"
-import { publishFacebook } from "./platforms/facebook.ts"
-import { publishInstagram } from "./platforms/instagram.ts"
-import { publishYoutube } from "./platforms/youtube.ts"
-import { publishTikTok } from "./platforms/tiktok.ts"
-import { publishLinkedin } from "./platforms/linkedin.ts"
-import { publishPinterest } from "./platforms/pinterest.ts"
-import { publishThreads } from "./platforms/threads.ts"
-import { publishWhatsApp } from "./platforms/whatsapp.ts"
-import { publishSnapchat } from "./platforms/snapchat.ts"
+import { dispatchPost, PublishPayload } from '../_shared/platforms/dispatcher.ts';
 
-serve(async (req) => {
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
-  const body = await req.json()
-
-  const { content, platforms } = body
-
-  const results:any[] = []
-
-  for (const platform of platforms) {
-
-    try {
-
-      let response
-
-      switch (platform) {
-
-        case "telegram":
-          response = await publishTelegram(content)
-          break
-
-        case "x":
-          response = await publishX(content)
-          break
-
-        case "facebook":
-          response = await publishFacebook(content)
-          break
-
-        case "instagram":
-          response = await publishInstagram(content)
-          break
-
-        case "youtube":
-          response = await publishYoutube(content)
-          break
-
-        case "tiktok":
-          response = await publishTikTok(content)
-          break
-
-        case "linkedin":
-          response = await publishLinkedin(content)
-          break
-
-        case "pinterest":
-          response = await publishPinterest(content)
-          break
-
-        case "threads":
-          response = await publishThreads(content)
-          break
-
-        case "whatsapp":
-          response = await publishWhatsApp(content)
-          break
-
-        case "snapchat":
-          response = await publishSnapchat(content)
-          break
-
-        default:
-          response = { error: "platform not supported" }
-
-      }
-
-      results.push({
-        platform,
-        response
-      })
-
-    } catch (error) {
-
-      results.push({
-        platform,
-        error: error.message
-      })
-
-    }
-
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
   }
 
-  return new Response(
-    JSON.stringify({
-      success: true,
-      results
-    }),
-    { headers: { "Content-Type": "application/json" } }
-  )
+  try {
+    const supabaseUrl = env?.get('SUPABASE_URL');
+    const supabaseKey = env?.get('SUPABASE_SERVICE_ROLE_KEY');
 
-})
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('Missing Supabase Environment Variables');
+    }
+
+    const { postId, platforms, content, mediaUrls, postType = "post", mediaType: explicitMediaType } = await req.json();
+
+    let mediaType = explicitMediaType;
+    if (!mediaType && mediaUrls && mediaUrls.length > 0) {
+      const url = mediaUrls[0].toLowerCase();
+      if (url.endsWith('.mp4') || url.endsWith('.mov') || url.endsWith('.webm')) {
+        mediaType = 'video';
+      } else if (url.endsWith('.mp3') || url.endsWith('.wav') || url.endsWith('.ogg')) {
+        mediaType = 'audio';
+      } else {
+        mediaType = 'image';
+      }
+    } else if (!mediaType) {
+      mediaType = 'text'; // Maps 'none' to 'text' for generic dispatcher payload
+    }
+
+    const results = [];
+
+    // The dispatcher should technically handle fetching connection credentials 
+    // or expect them in the payload. Here we simply loop and invoke dispatchPost.
+    for (const platform of platforms) {
+      try {
+        const payload: PublishPayload = {
+          platform,
+          contentType: mediaType as 'text'|'image'|'video'|'audio'|'carousel'|'story'|'live',
+          content,
+          mediaUrls,
+          options: { postType }
+        };
+
+        const result = await dispatchPost(payload);
+        results.push({ platform, ...result });
+
+      } catch (err: any) {
+         results.push({ platform, success: false, error: err.message });
+      }
+    }
+
+    return new Response(JSON.stringify({ success: true, results }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500,
+    });
+  }
+});
