@@ -53,7 +53,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Suspense fallback={<LoadingFallback />}>
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -61,6 +61,7 @@ const App = () => (
                 <Route path="/register" element={<Register />} />
                 <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
                 <Route path="/oauth/callback" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
+                <Route path="/oauth/callback/:platform" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
                 <Route path="/news" element={<News />} />
                 <Route path="/news/:slug" element={<ArticlePage />} />
                 <Route path="*" element={<NotFound />} />

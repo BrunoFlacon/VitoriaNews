@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  MessageCircle, Plus, Trash2, Send, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal
+  MessageCircle, Plus, Trash2, Send, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
@@ -32,6 +32,8 @@ interface MessagingChannel {
   channel_id: string | null;
   channel_type: string;
   members_count: number;
+  online_count: number;
+  profile_picture?: string;
   created_at: string;
 }
 
@@ -142,6 +144,21 @@ export const MessagingView = () => {
       .order("created_at", { ascending: false });
     if (!error && data) setMessages(data as unknown as Message[]);
     setMessagesLoading(false);
+  };
+
+  const syncChannels = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-messaging-channels");
+      if (error) throw error;
+      await fetchChannels();
+      toast({ title: "Sincronização concluída", description: "Dados dos canais atualizados com sucesso." });
+    } catch (err: any) {
+      toast({ title: "Erro na sincronização", description: err.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -267,51 +284,94 @@ export const MessagingView = () => {
     setComposeSending(true);
 
     try {
-      const mediaUrl = attachments.length > 0 ? attachments.map(a => a.url).join(",") : null;
+      const mediaUrls = attachments.length > 0 ? attachments.map(a => a.url) : [];
+      const isScheduled = !!composeScheduledAt;
+
+      const payload: any = {
+        content: composeMessage.trim(),
+        mediaUrls,
+        postType: "message",
+        platforms: [],
+      };
 
       if (sendMode === "individual") {
         if (!composeIndividualPhone.trim() || !composeMessage.trim()) return;
-        const status = composeScheduledAt ? "scheduled" : "sent";
-        const { error } = await supabase.from("messages").insert({
+        payload.platforms = [composeIndividualPlatform];
+        payload.recipientPhone = composeIndividualPhone.trim();
+        
+        const { data, error } = await supabase.from("messages").insert({
           user_id: user.id,
           content: composeMessage.trim(),
-          media_url: mediaUrl,
-          status,
+          media_url: mediaUrls.join(","),
+          status: isScheduled ? "scheduled" : "sending",
           scheduled_at: composeScheduledAt || null,
           recipient_phone: composeIndividualPhone.trim(),
           recipient_name: composeIndividualName.trim() || null,
           platform: composeIndividualPlatform,
-        } as any);
+        } as any).select().single();
+        
         if (error) throw error;
-        const title = composeScheduledAt ? "Mensagem agendada!" : "Mensagem enviada!";
+
+        if (!isScheduled) {
+          const { data: resultData, error: funcError } = await supabase.functions.invoke('publish-post', {
+            body: { ...payload, postId: data.id }
+          });
+
+          if (funcError || !resultData?.success) {
+            await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
+            throw new Error(funcError?.message || "Erro ao disparar envio");
+          }
+          await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", data.id);
+        }
+
+        const title = isScheduled ? "Mensagem agendada!" : "Mensagem enviada!";
         toast({ title, description: `Para: ${composeIndividualPhone}` });
-        addNotification({ type: "success", title, message: `Para: ${composeIndividualPhone}`, platform: composeIndividualPlatform });
       } else {
         if (composeTarget.length === 0 || !composeMessage.trim()) return;
-        const status = composeScheduledAt ? "scheduled" : "sent";
-        const inserts = composeTarget.map(channelId => {
+        
+        for (const channelId of composeTarget) {
           const ch = channels.find(c => c.id === channelId);
-          return {
+          if (!ch) continue;
+
+          const { data, error } = await supabase.from("messages").insert({
             user_id: user.id,
             channel_id: channelId,
             content: composeMessage.trim(),
-            media_url: mediaUrl,
-            status,
+            media_url: mediaUrls.join(","),
+            status: isScheduled ? "scheduled" : "sending",
             scheduled_at: composeScheduledAt || null,
-            platform: ch?.platform || null,
-          };
-        });
-        const { error } = await supabase.from("messages").insert(inserts as any);
-        if (error) throw error;
+            platform: ch.platform,
+          } as any).select().single();
+
+          if (error) throw error;
+
+          if (!isScheduled) {
+            const chanPayload = { 
+              ...payload, 
+              platforms: [ch.platform], 
+              chatId: ch.channel_id,
+              postId: data.id 
+            };
+            
+            const { data: resultData, error: funcError } = await supabase.functions.invoke('publish-post', {
+              body: chanPayload
+            });
+
+            if (funcError || !resultData?.success) {
+              await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
+            } else {
+              await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", data.id);
+            }
+          }
+        }
+        
         const targetNames = channels.filter(c => composeTarget.includes(c.id)).map(c => c.channel_name).join(", ");
-        const title = composeScheduledAt ? "Mensagens agendadas!" : "Mensagens enviadas!";
+        const title = isScheduled ? "Mensagens agendadas!" : "Mensagens enviadas!";
         toast({ title, description: `Para: ${targetNames}` });
-        addNotification({ type: "success", title, message: `Para: ${targetNames}` });
       }
       resetCompose();
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
-      addNotification({ type: "error", title: "Erro ao enviar mensagem", message: error.message });
     } finally {
       setComposeSending(false);
     }
@@ -365,9 +425,36 @@ export const MessagingView = () => {
   };
 
   const handleMarkSent = async (id: string) => {
-    await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", id);
-    toast({ title: "Marcada como enviada" });
-    addNotification({ type: "success", title: "Mensagem publicada", message: "A mensagem foi marcada como enviada." });
+    const msg = messages.find(m => m.id === id);
+    if (!msg) return;
+
+    toast({ title: "Enviando...", description: "Processando envio imediato" });
+
+    const payload: any = {
+      content: msg.content,
+      mediaUrls: msg.media_url ? msg.media_url.split(",") : [],
+      postType: "message",
+      platforms: [msg.platform],
+      postId: msg.id,
+      recipientPhone: msg.recipient_phone,
+    };
+
+    if (msg.channel_id) {
+      const ch = channels.find(c => c.id === msg.channel_id);
+      if (ch) payload.chatId = ch.channel_id;
+    }
+
+    const { data: resultData, error: funcError } = await supabase.functions.invoke('publish-post', {
+      body: payload
+    });
+
+    if (funcError || !resultData?.success) {
+      await supabase.from("messages").update({ status: "failed" } as any).eq("id", id);
+      toast({ title: "Erro no envio", description: funcError?.message || "Falha na plataforma", variant: "destructive" });
+    } else {
+      await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", id);
+      toast({ title: "Enviada com sucesso!" });
+    }
   };
 
   const handleScheduleMessage = async (id: string, scheduledAt: string) => {
@@ -450,6 +537,9 @@ export const MessagingView = () => {
             <Button onClick={() => setShowAddDialog(true)} className="gap-2">
               <Plus className="w-4 h-4" /> Adicionar Canal
             </Button>
+            <Button variant="outline" onClick={syncChannels} disabled={loading} className="gap-2">
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /> Sincronizar Canais
+            </Button>
           </div>
 
           {loading ? (
@@ -485,9 +575,36 @@ export const MessagingView = () => {
                             className="glass-card rounded-2xl border border-border p-4 hover:border-primary/30 transition-all group">
                             <div className="flex items-start justify-between">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                                  <TypeIcon className="w-5 h-5 text-muted-foreground" />
-                                </div>
+                                {ch.profile_picture ? (
+                                  <div className="relative">
+                                    <img src={ch.profile_picture} alt={ch.channel_name} className="w-10 h-10 rounded-xl object-cover border border-border" />
+                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-background flex items-center justify-center p-0.5 border border-border">
+                                      {socialPlatforms.find(p => p.id === ch.platform)?.icon ? (
+                                        (() => {
+                                          const PIcon = socialPlatforms.find(p => p.id === ch.platform)?.icon;
+                                          return PIcon && <PIcon className="w-2.5 h-2.5" />;
+                                        })()
+                                      ) : (
+                                        <TypeIcon className="w-2.5 h-2.5 text-primary" />
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center relative", 
+                                    socialPlatforms.find(p => p.id === ch.platform)?.color || "bg-muted")}>
+                                    {socialPlatforms.find(p => p.id === ch.platform)?.icon ? (
+                                      (() => {
+                                        const PIcon = socialPlatforms.find(p => p.id === ch.platform)?.icon;
+                                        return PIcon && <PIcon className="w-5 h-5 text-white" />;
+                                      })()
+                                    ) : (
+                                      <TypeIcon className="w-5 h-5 text-muted-foreground" />
+                                    )}
+                                    <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-background flex items-center justify-center p-0.5 border border-border shadow-sm">
+                                      <TypeIcon className="w-2.5 h-2.5 text-primary" />
+                                    </div>
+                                  </div>
+                                )}
                                 <div>
                                   <p className="font-medium text-sm">{ch.channel_name}</p>
                                   <p className="text-xs text-muted-foreground">{getTypeLabel(ch.channel_type)}</p>
@@ -504,9 +621,10 @@ export const MessagingView = () => {
                                 </button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                              {ch.members_count > 0 && <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {ch.members_count} membros</span>}
-                              {ch.channel_id && <span className="truncate max-w-[140px]">ID: {ch.channel_id}</span>}
+                            <div className="flex flex-wrap items-center gap-3 mt-3 text-[10px] text-muted-foreground">
+                              {ch.members_count > 0 && <span className="flex items-center gap-1 font-bold text-primary/80"><Users className="w-3 h-3" /> {ch.members_count} Membros</span>}
+                              {ch.online_count > 0 && <span className="flex items-center gap-1 text-green-500 font-bold"><div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> {ch.online_count} Online</span>}
+                              {ch.channel_id && <span className="truncate max-w-[120px] opacity-60">ID: {ch.channel_id}</span>}
                             </div>
                           </motion.div>
                         );
@@ -589,10 +707,14 @@ export const MessagingView = () => {
                         <button key={ch.id} type="button" onClick={() => toggleComposeTarget(ch.id)}
                           className={cn("w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
                             selected ? "bg-primary/10 border border-primary/30" : "hover:bg-muted/40")}>
-                          {PIcon && <div className={cn("w-5 h-5 rounded flex items-center justify-center", platform?.color)}><PIcon className="w-3 h-3 text-white" /></div>}
-                          {!PIcon && <div className="w-5 h-5 rounded bg-muted flex items-center justify-center"><Hash className="w-3 h-3" /></div>}
-                          <span className="flex-1 text-left">{ch.channel_name}</span>
-                          <span className="text-xs text-muted-foreground">{getTypeLabel(ch.channel_type)}</span>
+                          {ch.profile_picture ? (
+                            <img src={ch.profile_picture} alt={ch.channel_name} className="w-6 h-6 rounded-lg object-cover" />
+                          ) : (
+                            PIcon ? <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center", platform?.color)}><PIcon className="w-3 h-3 text-white" /></div>
+                            : <div className="w-6 h-6 rounded-lg bg-muted flex items-center justify-center"><Hash className="w-3 h-3 text-muted-foreground" /></div>
+                          )}
+                          <span className="flex-1 text-left truncate">{ch.channel_name}</span>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">{ch.members_count > 0 ? `${ch.members_count} mb` : getTypeLabel(ch.channel_type)}</span>
                         </button>
                       );
                     })}
@@ -811,7 +933,7 @@ export const MessagingView = () => {
 
       {/* Add/Edit Channel Dialog */}
       <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) { setShowAddDialog(false); resetAddForm(); } else { setShowAddDialog(true); } }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editingChannel ? "Editar Canal" : "Adicionar Canal"}</DialogTitle>
           </DialogHeader>
@@ -873,7 +995,7 @@ export const MessagingView = () => {
 
       {/* Edit Message Dialog */}
       <Dialog open={!!editingMessage} onOpenChange={(open) => { if (!open) setEditingMessage(null); }}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Editar Mensagem</DialogTitle>
           </DialogHeader>

@@ -1,0 +1,12 @@
+{
+  "version": "0.2",
+  "language": "en,pt,pt-BR",
+  "words": [
+    "credenciais", "genéricas", "misturar", "será", "tratado", "separado", "waba", "ISOLADO", "CORREÇÃO", "DEFINITIVA", "conectado", "ausente", "ADICIONADO", "MULTIPLAS", "CONTAS", "DIFERENCIAR", "CANAIS", "ALTERADO", "EVITAR", "VOLTAREM", "Sessão", "expirada", "sessão", "expirou", "faça", "novamente", "silencioso", "logado", "crítico", "inválido", "Selecione", "imagem", "atualizada", "possível", "enviar", "Perfil", "atualizado", "salvar", "seção", "conectar", "abaixo", "pendentes", "publicados", "Receba", "confirmação", "forem", "comentários", "compartilhamentos", "Relatório", "semanal", "Resumo", "suas", "instantânea", "publicações", "instantâneos", "interações", "Lembretes", "agendamento", "agendados", "conecte", "contas", "Sincronizar", "Conectado", "Credenciais", "salvas", "Conectada", "expanda", "gerenciar", "conectadas", "configuradas", "seguidores", "estatísticas", "Aguardando", "Desconectar", "Processando", "autenticação", "Parâmetros", "inválidos", "Trocando", "código", "sucesso", "janela", "fechada", "automaticamente", "Feche", "tente", "Aguarde", "Redirecionando", "Fechar", "obrigatório", "VALIDAÇÕES", "Conteúdo", "vazio", "retornou", "inesperado", "googleusercontent", "lovableproj", "shadcn", "supabase"
+  ],
+  "ignorePaths": [
+    "node_modules",
+    "dist",
+    ".git"
+  ]
+}

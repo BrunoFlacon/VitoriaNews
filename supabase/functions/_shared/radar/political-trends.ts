@@ -1,5 +1,5 @@
 export async function monitorPoliticalTrends(supabaseClient: any) {
-  console.log('Monitoring political keywords from X, YouTube, Reddit, News...');
+  // console.log('Monitoring political keywords from X, YouTube, Reddit, News...');
   // Stub implementation
   const mockTrend = {
     keyword: 'elections 2024',

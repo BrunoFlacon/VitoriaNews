@@ -9,17 +9,21 @@ import {
   ResponsiveContainer 
 } from "recharts";
 
-const data = [
-  { name: "Seg", views: 4000, engagement: 2400, reach: 2400 },
-  { name: "Ter", views: 3000, engagement: 1398, reach: 2210 },
-  { name: "Qua", views: 2000, engagement: 9800, reach: 2290 },
-  { name: "Qui", views: 2780, engagement: 3908, reach: 2000 },
-  { name: "Sex", views: 1890, engagement: 4800, reach: 2181 },
-  { name: "Sáb", views: 2390, engagement: 3800, reach: 2500 },
-  { name: "Dom", views: 3490, engagement: 4300, reach: 2100 },
-];
+interface AnalyticsChartProps {
+  data?: any[];
+}
 
-export const AnalyticsChart = () => {
+export const AnalyticsChart = ({ data: chartData = [] }: AnalyticsChartProps) => {
+  const displayData = chartData.length > 0 ? chartData : [
+    { name: "Seg", views: 0, engagement: 0, reach: 0 },
+    { name: "Ter", views: 0, engagement: 0, reach: 0 },
+    { name: "Qua", views: 0, engagement: 0, reach: 0 },
+    { name: "Qui", views: 0, engagement: 0, reach: 0 },
+    { name: "Sex", views: 0, engagement: 0, reach: 0 },
+    { name: "Sáb", views: 0, engagement: 0, reach: 0 },
+    { name: "Dom", views: 0, engagement: 0, reach: 0 },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -50,7 +54,7 @@ export const AnalyticsChart = () => {
 
       <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
+          <AreaChart data={displayData}>
             <defs>
               <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />

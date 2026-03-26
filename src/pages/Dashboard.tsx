@@ -20,9 +20,33 @@ import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
 import { SocialNetworkCard } from "@/components/dashboard/SocialNetworkCard";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Settings, Activity, RefreshCw, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useNavigate } from "react-router-dom";
+import { useAnalytics } from "@/hooks/useAnalytics";
 
 // Lazy load heavy views - wrap named exports for React.lazy
 const CreatePostPanel = lazy(() => import("@/components/dashboard/CreatePostPanel").then(m => ({ default: m.CreatePostPanel })));
@@ -35,9 +59,6 @@ const SettingsView = lazy(() => import("@/components/dashboard/SettingsView").th
 const MediaGalleryView = lazy(() => import("@/components/dashboard/MediaGalleryView").then(m => ({ default: m.MediaGalleryView })));
 const NotificationsFullView = lazy(() => import("@/components/dashboard/NotificationsFullView").then(m => ({ default: m.NotificationsFullView })));
 const NewsPortal = lazy(() => import("@/components/dashboard/NewsPortal"));
-const LiveStreamManager = lazy(() => import("@/components/dashboard/LiveStreamManager"));
-const LiveClipsView = lazy(() => import("@/components/dashboard/LiveClipsView"));
-const SocialAccountsPanel = lazy(() => import("@/components/dashboard/SocialAccountsPanel"));
 
 const ViewLoader = () => (
   <div className="flex items-center justify-center py-20">
@@ -47,10 +68,12 @@ const ViewLoader = () => (
 
 const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const [preSelectedDate, setPreSelectedDate] = useState<Date | null>(null);
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
+  const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
 
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -58,6 +81,7 @@ const Dashboard = () => {
   useWebPushNotifications();
 
   const { connections, initiateOAuth, disconnect } = useSocialConnections();
+  const { data: analyticsData, loading: analyticsLoading, platform, setPlatform, syncAnalytics } = useAnalytics();
   const scheduledPosts = useScheduledPosts();
 
   // Realtime subscription for scheduled_posts - shared across all views
@@ -191,52 +215,151 @@ const Dashboard = () => {
       case "media":
         return <Suspense fallback={<ViewLoader />}><MediaGalleryView /></Suspense>;
 
+      case "accounts":
+        return <Suspense fallback={<ViewLoader />}><SettingsView /></Suspense>;
+
       case "notifications":
         return <Suspense fallback={<ViewLoader />}><NotificationsFullView /></Suspense>;
 
       case "news":
         return <Suspense fallback={<ViewLoader />}><NewsPortal /></Suspense>;
 
-      case "lives":
-        return <Suspense fallback={<ViewLoader />}><LiveStreamManager /></Suspense>;
-
-      case "clips":
-        return <Suspense fallback={<ViewLoader />}><LiveClipsView /></Suspense>;
-
-      case "accounts":
-        return <Suspense fallback={<ViewLoader />}><SocialAccountsPanel /></Suspense>;
-
       default:
         return (
           <>
-            <div className="mb-8">
-              <motion.h1
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="font-display font-bold text-3xl mb-2"
-              >
-                Bem-vindo de volta! 👋
-              </motion.h1>
-              <motion.p
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-muted-foreground"
-              >
-                Gerencie todas as suas redes sociais em um único lugar
-              </motion.p>
+            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <motion.h1
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="font-display font-bold text-3xl mb-1"
+                >
+                  Dashboard Principal 👋
+                </motion.h1>
+                <motion.p
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 }}
+                  className="text-muted-foreground"
+                >
+                  Visão geral e desempenho consolidado de todas as suas redes
+                </motion.p>
+              </div>
+
+              <Popover open={isPlatformMenuOpen} onOpenChange={setIsPlatformMenuOpen}>
+                <PopoverTrigger asChild>
+                  <button 
+                    className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl hover:border-primary/50 transition-all font-medium text-sm shadow-sm group mr-1"
+                    onMouseEnter={() => setIsPlatformMenuOpen(true)}
+                  >
+                    <Settings className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform duration-500" />
+                    <span>{platform === 'all' ? 'Todas as Redes' : socialPlatforms.find(p => p.id === platform)?.name}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent 
+                  align="end" 
+                  className="w-[240px] p-2"
+                  onMouseLeave={() => setIsPlatformMenuOpen(false)}
+                >
+                  <div className="text-xs font-bold text-muted-foreground px-2 py-1 mb-1 uppercase tracking-wider">
+                    Redes Conectadas
+                  </div>
+                  <div className="grid grid-cols-1 gap-1">
+                    <button
+                      onClick={() => setPlatform('all')}
+                      className={cn(
+                        "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors",
+                        platform === 'all' ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4" />
+                        Sumarizado (Global)
+                      </div>
+                      {platform === 'all' && <Check className="w-3 h-3" />}
+                    </button>
+                    {socialPlatforms.filter(p => connections.some(c => c.platform === p.id)).map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => setPlatform(p.id)}
+                        className={cn(
+                          "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors text-left",
+                          platform === p.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <p.icon className={cn("w-4 h-4", p.textColor)} />
+                          {p.name}
+                        </div>
+                        {platform === p.id && <Check className="w-3 h-3" />}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      className="rounded-xl hover:bg-primary/5 hover:text-primary transition-all border-border shadow-sm"
+                      onClick={() => syncAnalytics?.()}
+                      disabled={analyticsLoading}
+                    >
+                      <RefreshCw className={cn("w-4 h-4", analyticsLoading && "animate-spin")} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Sincronizar dados das APIs</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <StatsCard title="Total de Posts" value="248" icon={TrendingUp} trend={12.5} trendLabel="este mês" color="primary" delay={0} />
-              <StatsCard title="Visualizações" value="1.2M" icon={Eye} trend={8.2} trendLabel="vs mês anterior" color="accent" delay={0.1} />
-              <StatsCard title="Engajamento" value="89.5K" icon={Heart} trend={-2.1} trendLabel="vs mês anterior" color="success" delay={0.2} />
-              <StatsCard title="Seguidores" value="52.3K" icon={Users} trend={15.3} trendLabel="este mês" color="warning" delay={0.3} />
+              <StatsCard 
+                title="Total de Posts" 
+                value={analyticsData?.overview.totalPosts ?? "0"} 
+                icon={TrendingUp} 
+                trend={parseFloat(analyticsData?.engagement.growth || "0")} 
+                trendLabel="este mês" 
+                color="primary" 
+                delay={0} 
+              />
+              <StatsCard 
+                title="Visualizações" 
+                value={analyticsData?.engagement.views.toLocaleString() ?? "0"} 
+                icon={Eye} 
+                trend={parseFloat(analyticsData?.engagement.growth || "0")} 
+                trendLabel="vs mês anterior" 
+                color="accent" 
+                delay={0.1} 
+              />
+              <StatsCard 
+                title="Engajamento" 
+                value={((analyticsData?.engagement.likes || 0) + (analyticsData?.engagement.comments || 0) + (analyticsData?.engagement.shares || 0)).toLocaleString()} 
+                icon={Heart} 
+                trend={parseFloat(analyticsData?.engagement.engagementRate || "0")} 
+                trendLabel="taxa" 
+                color="success" 
+                delay={0.2} 
+              />
+              <StatsCard 
+                title="Seguidores" 
+                value={analyticsData?.followerData?.reduce((acc, curr) => acc + curr.currentFollowers, 0).toLocaleString() ?? "0"} 
+                icon={Users} 
+                trend={15.3} 
+                trendLabel="este mês" 
+                color="warning" 
+                delay={0.3} 
+              />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
-                <AnalyticsChart />
+                <AnalyticsChart data={analyticsData?.chartData} />
               </div>
               <div>
                 <motion.div
@@ -277,19 +400,31 @@ const Dashboard = () => {
             </div>
 
             <div className="mt-6">
-              <RecentPosts />
+              <RecentPosts onEditPost={(post: ScheduledPost) => {
+                setEditingPost(post);
+                setActiveTab("create");
+              }} />
             </div>
           </>
         );
     }
   };
-
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
-      <div className="pl-64 transition-all duration-300">
+    <div className="min-h-screen bg-background flex">
+      <Sidebar 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onLogout={handleLogout}
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
+      />
+      <div className={cn(
+        "flex-1 transition-all duration-300 min-w-0",
+        isSidebarCollapsed ? "md:pl-20" : "md:pl-64",
+        "pl-0" // Mobile: no padding-left as sidebar will likely be a drawer or hidden
+      )}>
         <Header onNotificationsClick={() => setShowNotifications(true)} />
-        <main className="p-8">
+        <main className="p-4 md:p-8">
           {renderContent()}
         </main>
       </div>

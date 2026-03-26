@@ -1,7 +1,7 @@
-const createClient = (await import('https://deno.land/std@0.177.0/http/server.ts')).oe;
-// @ts-ignore
-const env = typeof Deno !== 'undefined' && Deno.env ? Deno.env : undefined;
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+declare const Deno: any;
 import { dispatchPost, PublishPayload } from '../_shared/platforms/dispatcher.ts';
 
 const corsHeaders = {
@@ -9,20 +9,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-Deno.serve(async (req: Request) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = env?.get('SUPABASE_URL');
-    const supabaseKey = env?.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabaseUrl = (Deno as any).env.get('SUPABASE_URL')!;
+    const supabaseKey = (Deno as any).env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-    if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase Environment Variables');
-    }
+    const authHeader = req.headers.get('Authorization');
+    const { data: { user } } = await supabase.auth.getUser(authHeader?.replace('Bearer ', '') || '');
+    const userId = user?.id;
 
-    const { postId, platforms, content, mediaUrls, postType = "post", mediaType: explicitMediaType } = await req.json();
+    const { 
+      postId, 
+      platforms, 
+      content, 
+      mediaUrls, 
+      postType = "post", 
+      mediaType: explicitMediaType,
+      recipientPhone,
+      chatId
+    } = await req.json();
 
     let mediaType = explicitMediaType;
     if (!mediaType && mediaUrls && mediaUrls.length > 0) {
@@ -35,28 +45,29 @@ Deno.serve(async (req: Request) => {
         mediaType = 'image';
       }
     } else if (!mediaType) {
-      mediaType = 'text'; // Maps 'none' to 'text' for generic dispatcher payload
+      mediaType = 'text'; 
     }
 
     const results = [];
 
-    // The dispatcher should technically handle fetching connection credentials 
-    // or expect them in the payload. Here we simply loop and invoke dispatchPost.
-    for (const platform of platforms) {
+    for (const rawPlatform of platforms) {
       try {
+        const [platform, targetProfileId] = rawPlatform.split('|');
+        
         const payload: PublishPayload = {
           platform,
-          contentType: mediaType as 'text'|'image'|'video'|'audio'|'carousel'|'story'|'live',
+          contentType: mediaType as any,
           content,
           mediaUrls,
-          options: { postType }
+          userId,
+          options: { postType, postId, recipientPhone, chatId, targetProfileId }
         };
 
-        const result = await dispatchPost(payload);
-        results.push({ platform, ...result });
+        const result = await dispatchPost(supabase, payload);
+        results.push({ platform: rawPlatform, ...result });
 
       } catch (err: any) {
-         results.push({ platform, success: false, error: err.message });
+         results.push({ platform: rawPlatform, success: false, error: err.message });
       }
     }
 

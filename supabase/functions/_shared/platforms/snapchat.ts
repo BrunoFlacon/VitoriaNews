@@ -1,6 +1,8 @@
 import { PublishPayload } from './dispatcher.ts';
 
-export async function publishToSnapchat(payload: PublishPayload): Promise<any> {
-  console.log('Publishing to Snapchat:', payload);
-  return { success: true, platform: 'snapchat', timestamp: new Date().toISOString() };
+export async function publishToSnapchat(supabase: any, payload: PublishPayload): Promise<any> {
+  const { content, mediaUrls, userId } = payload;
+  
+  // Placeholder for real Snapchat API
+  return { success: true, platform: 'snapchat', info: 'Snapchat API implementation pending.' };
 }

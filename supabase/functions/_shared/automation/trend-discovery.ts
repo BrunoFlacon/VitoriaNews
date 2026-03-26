@@ -1,5 +1,5 @@
 export async function discoverTrends(supabaseClient: any) {
-  console.log('Discovering trends from X, Google, Reddit, YouTube, TikTok...');
+  // console.log('Discovering trends from X, Google, Reddit, YouTube, TikTok...');
   // Stub implementation
   const mockTrends = [
     { keyword: '#AI', source: 'X trends', category: 'Technology', score: 95 },

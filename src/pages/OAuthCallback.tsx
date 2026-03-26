@@ -1,11 +1,34 @@
+export function getThreadsOAuthUrl() {
+  const clientId = import.meta.env.VITE_META_APP_ID;
+
+  if (!clientId) {
+    throw new Error("META_APP_ID não configurado");
+  }
+
+  const redirectUri = `${window.location.origin}/oauth/callback/threads`;
+
+  const url = new URL("https://www.facebook.com/v21.0/dialog/oauth");
+
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("scope", "threads_basic");
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("state", crypto.randomUUID());
+
+  console.log("THREADS OAUTH URL:", url.toString());
+
+  return url.toString();
+}
+
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 const OAuthCallback = () => {
   const [searchParams] = useSearchParams();
+  const { platform: pathPlatform } = useParams<{ platform: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [status, setStatus] = useState("Processando autenticação...");
@@ -18,7 +41,8 @@ const OAuthCallback = () => {
     const handleCallback = async () => {
       const code = searchParams.get("code");
       const state = searchParams.get("state");
-      const platform = searchParams.get("platform") || localStorage.getItem("oauth_platform") || "";
+      // Platform can come from URL path (/oauth/callback/twitter), query (?platform=twitter), or localStorage
+      const platform = pathPlatform || searchParams.get("platform") || localStorage.getItem("oauth_platform") || "";
 
       if (!code || !state) {
         setStatus("Parâmetros OAuth inválidos.");
@@ -39,7 +63,7 @@ const OAuthCallback = () => {
         }
 
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-oauth-callback`,
+`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-oauth-callback`,
           {
             method: "POST",
             headers: {
@@ -69,13 +93,15 @@ const OAuthCallback = () => {
         // If opened as popup, notify parent and close
         if (isPopup) {
           try {
-            window.opener?.postMessage({ type: "oauth-complete", platform }, window.location.origin);
-          } catch {}
+            // Send to parent. We use "*" to support localhost/127.0.0.1 origin mismatch common in Twitter OAuth
+            window.opener?.postMessage({ type: "oauth-complete", platform }, "*");
+          } catch (e) {
+            // Error handling window postMessage
+          }
           setTimeout(() => window.close(), 1500);
           return;
         }
       } catch (err) {
-        console.error("OAuth callback error:", err);
         const msg = err instanceof Error ? err.message : "Erro desconhecido";
         setStatus(msg);
         setError(true);

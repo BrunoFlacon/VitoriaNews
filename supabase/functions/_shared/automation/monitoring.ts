@@ -1,5 +1,5 @@
 export async function checkTriggersAndAlerts(supabaseClient: any) {
-  console.log('Monitoring for viral campaigns, narrative shifts, and engagement spikes...');
+  // console.log('Monitoring for viral campaigns, narrative shifts, and engagement spikes...');
   // Stub implementation
   const alerts = [];
   const fakeViral = true;

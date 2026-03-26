@@ -13,7 +13,16 @@ import {
 } from "lucide-react";
 import { cn, normalizePlatform } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
-import { useScheduledPosts } from "@/hooks/useScheduledPosts";
+import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
+import { FeedPreview } from "./FeedPreview";
+import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Trash, Send, Edit2 } from "lucide-react";
 
 const statusConfig = {
   published: {
@@ -42,8 +51,9 @@ const statusConfig = {
   }
 };
 
-export const RecentPosts = () => {
-  const { posts, loading } = useScheduledPosts();
+export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost) => void }) => {
+  const { posts, loading, deletePost, updatePost } = useScheduledPosts();
+  const [previewPost, setPreviewPost] = useState<ScheduledPost | null>(null);
 
   // Show only the most recent 5 posts
   const recentPosts = posts.slice(0, 5);
@@ -109,7 +119,8 @@ export const RecentPosts = () => {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 * index }}
-                className="p-6 hover:bg-muted/30 transition-colors group"
+                className="p-6 hover:bg-muted/30 transition-colors group relative cursor-pointer"
+                onClick={() => setPreviewPost(post)}
               >
                 <div className="flex items-start gap-4">
                   <div className="flex -space-x-2">
@@ -177,14 +188,54 @@ export const RecentPosts = () => {
                     )}
                   </div>
 
-                  <button className="p-2 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-muted transition-all">
-                    <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
-                  </button>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-2 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-muted transition-all">
+                          <MoreHorizontal className="w-5 h-5 text-muted-foreground" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuItem onClick={() => setPreviewPost(post)} className="gap-2">
+                          <Eye className="w-4 h-4" /> Visualizar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onEditPost?.(post)} className="gap-2 focus:bg-white/10 focus:text-white cursor-pointer">
+                          <Edit2 className="w-4 h-4" /> Editar
+                        </DropdownMenuItem>
+                        {post.status === 'draft' && (
+                          <DropdownMenuItem 
+                            onClick={() => updatePost(post.id, { status: 'published' } as any)} 
+                            className="gap-2 text-primary focus:bg-primary/10 focus:text-primary cursor-pointer"
+                          >
+                            <Send className="w-4 h-4" /> Publicar agora
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            if(confirm("Deseja realmente excluir esta publicação?")) {
+                              deletePost(post.id);
+                            }
+                          }}
+                          className="gap-2 text-destructive focus:text-destructive"
+                        >
+                          <Trash className="w-4 h-4" /> Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </motion.div>
             );
           })}
         </div>
+      )}
+
+      {previewPost && (
+        <FeedPreview 
+          post={previewPost} 
+          isOpen={!!previewPost} 
+          onClose={() => setPreviewPost(null)} 
+        />
       )}
     </motion.div>
   );

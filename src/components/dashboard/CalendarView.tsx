@@ -17,11 +17,19 @@ import {
   Send,
   XCircle,
   ShieldCheck,
-  ShieldX,
   MessageCircle,
   Radio,
-  Video
+  Video,
+  Scissors,
+  Search,
+  Calendar as CalendarIcon,
+  ShieldX
 } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/SocialIcons";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
@@ -128,16 +136,23 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
   const { user } = useAuth();
   const [calendarMessages, setCalendarMessages] = useState<any[]>([]);
   const [calendarStories, setCalendarStories] = useState<any[]>([]);
+  const [calendarMemories, setCalendarMemories] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
     const fetchExtra = async () => {
-      const [msgRes, storyRes] = await Promise.all([
+      const [msgRes, storyRes, memRes] = await Promise.all([
         supabase.from("messages").select("*").eq("user_id", user.id).not("scheduled_at", "is", null),
         supabase.from("stories_lives").select("*").eq("user_id", user.id),
+        supabase.from("stories_lives")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("status", "published")
+          .not("completed_at", "is", null),
       ]);
       if (msgRes.data) setCalendarMessages(msgRes.data);
       if (storyRes.data) setCalendarStories(storyRes.data);
+      if (memRes.data) setCalendarMemories(memRes.data);
     };
     fetchExtra();
   }, [user, posts]);
@@ -244,6 +259,27 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
     });
     return grouped;
   }, [calendarMessages, calendarStories, month, year]);
+
+  const memoriesByDay = useMemo(() => {
+    const grouped: Record<number, any[]> = {};
+    calendarMemories.forEach(mem => {
+      const d = new Date(mem.completed_at || mem.created_at);
+      const isSixMonths = d.getMonth() === month && (year - d.getFullYear()) === 0 && d.getMonth() === (new Date().getMonth() - 6); // Simplified logic
+      // Better: Check if d is exactly 6 or 12 months before the CALENDAR month/year shown
+      
+      const mDate = new Date(d);
+      const viewDate = new Date(year, month, d.getDate());
+      
+      // Check 6 months difference
+      const diffMonths = (year * 12 + month) - (d.getFullYear() * 12 + d.getMonth());
+      if (diffMonths === 6 || diffMonths === 12) {
+        const day = d.getDate();
+        if (!grouped[day]) grouped[day] = [];
+        grouped[day].push(mem);
+      }
+    });
+    return grouped;
+  }, [calendarMemories, month, year]);
 
   const goToPrevMonth = () => { setCurrentDate(new Date(year, month - 1, 1)); setSelectedDay(null); };
   const goToNextMonth = () => { setCurrentDate(new Date(year, month + 1, 1)); setSelectedDay(null); };
@@ -353,6 +389,36 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
     );
   };
 
+  const renderMemoryIndicator = (day: number) => {
+    const mems = memoriesByDay[day];
+    if (!mems || mems.length === 0) return null;
+    return (
+      <HoverCard openDelay={100} closeDelay={100}>
+        <HoverCardTrigger asChild>
+          <div className="absolute top-1 right-1 cursor-help">
+            <div className="w-2 h-2 rounded-full bg-pink-500 animate-pulse shadow-[0_0_8px_rgba(236,72,153,0.5)]" />
+          </div>
+        </HoverCardTrigger>
+        <HoverCardContent className="w-64 p-3 bg-background/95 backdrop-blur border-pink-500/20 rounded-2xl shadow-xl">
+          <div className="space-y-3">
+            <p className="text-[10px] font-bold text-pink-500 uppercase flex items-center gap-1">
+              <Clock className="w-3 h-3" /> Memórias do dia
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {mems.slice(0, 3).map(mem => (
+                <div key={mem.id} className="aspect-[9/16] rounded-lg overflow-hidden border border-border/50">
+                  <img src={mem.thumbnail_url || mem.media_url} className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
+            {mems.length > 3 && <p className="text-[9px] text-muted-foreground text-center">+{mems.length - 3} outras memórias</p>}
+            <p className="text-[10px] text-center text-muted-foreground italic">Clique no dia para ver e republicar</p>
+          </div>
+        </HoverCardContent>
+      </HoverCard>
+    );
+  };
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="mb-6">
@@ -457,6 +523,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
                       <>
                         <span className={cn("text-sm font-medium", isToday && "text-accent", isSelected && "text-primary")}>{day}</span>
                         {(dayPosts || dayExtra) && renderDayIndicators(dayPosts || [], dayExtra)}
+                        {renderMemoryIndicator(day)}
                       </>
                     )}
                   </motion.div>
@@ -630,7 +697,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
 
       {/* Post Details Dialog */}
       <Dialog open={showPostDetails} onOpenChange={setShowPostDetails}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Detalhes do Post</DialogTitle>
             <DialogDescription>Informações completas sobre a publicação</DialogDescription>
@@ -745,7 +812,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
 
       {/* Reject Reason Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldX className="w-5 h-5 text-red-500" />

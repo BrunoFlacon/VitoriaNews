@@ -1,5 +1,5 @@
 export async function processRepostSuggestions(supabaseClient: any) {
-  console.log('Detecting top-performing posts outside of target platforms for reposting...');
+  // console.log('Detecting top-performing posts outside of target platforms for reposting...');
   // Stub implementation
   const mockSuggestion = {
     original_post_id: 'post-123',

@@ -8,57 +8,72 @@ export interface PlatformCredentials {
   credentials: Record<string, string>;
 }
 
-export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: string; masked?: boolean }[]> = {
+export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: string; placeholder?: string; masked?: boolean }[]> = {
   facebook: [
-    { label: "App ID", key: "app_id" },
-    { label: "App Secret", key: "app_secret", masked: true },
+    { label: "App ID (Meta for Developers)", key: "app_id", placeholder: "Ex: 123456789012345" },
+    { label: "App Secret", key: "app_secret", masked: true, placeholder: "Seu App Secret da Meta" },
   ],
   instagram: [
-    { label: "App ID (Meta)", key: "app_id" },
-    { label: "App Secret (Meta)", key: "app_secret", masked: true },
-  ],
-  threads: [
-    { label: "App ID (Meta)", key: "app_id" },
-    { label: "App Secret (Meta)", key: "app_secret", masked: true },
-  ],
-  whatsapp: [
-    { label: "App ID (Meta)", key: "app_id" },
-    { label: "App Secret (Meta)", key: "app_secret", masked: true },
-  ],
-  twitter: [
-    { label: "Consumer Key", key: "consumer_key" },
-    { label: "Consumer Secret", key: "consumer_secret", masked: true },
-  ],
-  youtube: [
-    { label: "Client ID (Google)", key: "client_id" },
-    { label: "Client Secret (Google)", key: "client_secret", masked: true },
-  ],
-  google: [
-    { label: "Client ID", key: "client_id" },
-    { label: "Client Secret", key: "client_secret", masked: true },
-  ],
-  linkedin: [
-    { label: "Client ID", key: "client_id" },
-    { label: "Client Secret", key: "client_secret", masked: true },
-  ],
-  tiktok: [
-    { label: "Client Key", key: "client_key" },
-    { label: "Client Secret", key: "client_secret", masked: true },
-  ],
-  pinterest: [
-    { label: "App ID", key: "app_id" },
+    { label: "App ID (Meta Business App)", key: "app_id", placeholder: "Ex: 123456789012345" },
     { label: "App Secret", key: "app_secret", masked: true },
   ],
+  threads: [
+    { label: "Threads App ID (Meta)", key: "app_id", placeholder: "Ex: 123456789012345" },
+    { label: "Threads App Secret", key: "app_secret", masked: true },
+  ],
+  whatsapp: [
+    { label: "WhatsApp App ID (Meta)", key: "app_id", placeholder: "Ex: 123456789012345" },
+    { label: "App Secret", key: "app_secret", masked: true },
+  ],
+  twitter: [
+    { label: "Client ID (OAuth 2.0)", key: "client_id", placeholder: "ID Alfanumérico longo — ex: V0VfM3Bvamd..." },
+    { label: "Client Secret (opcional para App Nativo)", key: "client_secret", masked: true, placeholder: "Deixe vazio se usar App Nativo" },
+  ],
+  youtube: [
+    { label: "Google Client ID", key: "client_id", placeholder: "Ex: ...apps.googleusercontent.com" },
+    { label: "Google Client Secret", key: "client_secret", masked: true },
+  ],
+  google: [
+    { label: "Google Client ID", key: "client_id", placeholder: "Ex: ...apps.googleusercontent.com" },
+    { label: "Google Client Secret", key: "client_secret", masked: true },
+  ],
+  linkedin: [
+    { label: "LinkedIn Client ID", key: "client_id" },
+    { label: "LinkedIn Client Secret", key: "client_secret", masked: true },
+  ],
+  tiktok: [
+    { label: "TikTok Client Key", key: "client_key" },
+    { label: "TikTok Client Secret", key: "client_secret", masked: true },
+  ],
+  pinterest: [
+    { label: "Pinterest App ID", key: "app_id" },
+    { label: "Pinterest App Secret", key: "app_secret", masked: true },
+  ],
   telegram: [
-    { label: "Bot Token", key: "bot_token", masked: true },
+    { label: "Bot Token (@BotFather)", key: "bot_token", masked: true, placeholder: "Ex: 123456:ABC-DEF1234ghIkl-zyx57" },
   ],
   snapchat: [
-    { label: "Client ID", key: "client_id" },
-    { label: "Client Secret", key: "client_secret", masked: true },
+    { label: "Snapchat Client ID", key: "client_id" },
+    { label: "Snapchat Client Secret", key: "client_secret", masked: true },
   ],
   site: [
-    { label: "URL do Site", key: "site_url" },
+    { label: "URL do Site", key: "site_url", placeholder: "https://seusite.com" },
   ],
+  meta_ads: [
+    { label: "System User Token", key: "access_token", masked: true },
+    { label: "Ad Account ID", key: "ad_account_id", placeholder: "act_123456..." },
+  ],
+  google_cloud: [
+    { label: "API Key (Maps/News)", key: "api_key", masked: true },
+    { label: "YouTube Client ID", key: "youtube_id" },
+  ],
+  spotify: [
+    { label: "Spotify Client ID", key: "client_id" },
+    { label: "Spotify Client Secret", key: "client_secret", masked: true },
+  ],
+  giphy: [
+    { label: "Giphy API Key", key: "api_key", masked: true },
+  ]
 };
 
 export function useApiCredentials() {
@@ -83,7 +98,7 @@ export function useApiCredentials() {
       });
       setCredentials(map);
     } catch (e: any) {
-      console.error("Error fetching credentials:", e);
+      // Error handled by loading state
     } finally {
       setLoading(false);
     }
@@ -106,6 +121,23 @@ export function useApiCredentials() {
       if (error) throw error;
       setCredentials(prev => ({ ...prev, [platform]: creds }));
       toast({ title: "Credenciais salvas", description: `${platform} atualizado com sucesso.` });
+
+      // Trigger sync for special platforms
+      if (platform === "telegram") {
+        try {
+          const { data: syncResult, error: syncError } = await supabase.functions.invoke("sync-telegram-info", {
+            body: { platform: "telegram" }
+          });
+          if (syncError) throw syncError;
+        } catch (syncErr: any) {
+          toast({
+            title: "Aviso de Sincronização",
+            description: "Credenciais salvas, mas não conseguimos buscar os dados do Bot agora.",
+            variant: "destructive"
+          });
+        }
+      }
+
       return true;
     } catch (e: any) {
       toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });

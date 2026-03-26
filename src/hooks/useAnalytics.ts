@@ -35,6 +35,13 @@ interface BestTime {
   engagement: number;
 }
 
+interface MessageStats {
+  totalSent: number;
+  totalFailed: number;
+  successRate: number;
+  platformStats: Record<string, { sent: number, failed: number }>;
+}
+
 export interface FollowerData {
   platform: string;
   username: string | null;
@@ -58,6 +65,7 @@ export interface AnalyticsData {
   topContent: TopContent[];
   bestTimes: BestTime[];
   followerData: FollowerData[];
+  messageStats?: MessageStats;
   period: string;
   generatedAt: string;
   dataSource: 'real' | 'seeded';
@@ -66,8 +74,9 @@ export interface AnalyticsData {
 export function useAnalytics() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<'24h' | '7d' | '30d' | '90d'>('7d');
+  const [period, setPeriod] = useState<string>('7d');
   const [platform, setPlatform] = useState<string>('all');
+  const [postType, setPostType] = useState<string>('all');
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -83,7 +92,7 @@ export function useAnalytics() {
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-analytics?period=${period}&platform=${platform}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-analytics?period=${period}&platform=${platform}&type=${postType}`,
         {
           method: "GET",
           headers: {
@@ -94,13 +103,13 @@ export function useAnalytics() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to fetch analytics");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to fetch analytics");
       }
 
       const analyticsData: AnalyticsData = await response.json();
       setData(analyticsData);
     } catch (error) {
-      console.error("Error fetching analytics:", error);
       toast({
         title: "Erro ao carregar analytics",
         description: "Não foi possível carregar os dados. Tente novamente.",
@@ -109,7 +118,7 @@ export function useAnalytics() {
     } finally {
       setLoading(false);
     }
-  }, [user, period, platform, toast]);
+  }, [user, period, platform, postType, toast]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -122,6 +131,43 @@ export function useAnalytics() {
     setPeriod,
     platform,
     setPlatform,
+    postType,
+    setPostType,
     refetch: fetchAnalytics,
+    syncAnalytics: async () => {
+      if (!user) return;
+      setLoading(true);
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/collect-social-analytics`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session?.session?.access_token}`,
+            },
+            body: JSON.stringify({}),
+          }
+        );
+
+        if (!response.ok) throw new Error("Sync failed");
+        
+        toast({
+          title: "Sincronização concluída",
+          description: "Os dados das suas redes sociais foram atualizados com sucesso.",
+        });
+        
+        await fetchAnalytics();
+      } catch (error) {
+        toast({
+          title: "Erro na sincronização",
+          description: "Não foi possível buscar dados novos agora. Tente novamente em instantes.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 }

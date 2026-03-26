@@ -1,6 +1,8 @@
 import { PublishPayload } from './dispatcher.ts';
 
-export async function publishToPinterest(payload: PublishPayload): Promise<any> {
-  console.log('Publishing to Pinterest:', payload);
-  return { success: true, platform: 'pinterest', timestamp: new Date().toISOString() };
+export async function publishToPinterest(supabase: any, payload: PublishPayload): Promise<any> {
+  const { content, mediaUrls, userId } = payload;
+  
+  // Placeholder for real Pinterest API
+  return { success: true, platform: 'pinterest', info: 'Pinterest API implementation pending.' };
 }

@@ -5,7 +5,7 @@ export interface LiveStreamPayload {
 }
 
 export async function createLiveStream(payload: LiveStreamPayload): Promise<any> {
-  console.log('Creating live stream on:', payload.platform, payload);
+  // console.log('Creating live stream on:', payload.platform, payload);
   return {
     success: true,
     platform: payload.platform,

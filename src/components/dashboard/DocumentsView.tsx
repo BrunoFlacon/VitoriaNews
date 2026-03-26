@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
 import { 
-  FileText, Upload, Download, Eye, Trash2, File, FileImage, FileVideo, FileType, Loader2, X
+  FileText, Upload, Download, Eye, Trash2, File, FileImage, FileVideo, FileType, Loader2, X, User, Share2, Scissors
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,18 @@ interface DocumentItem {
   file_size: number;
   downloads: number;
   created_at: string;
+  author_id?: string;
+  platform?: string;
+  status?: string;
+  profiles?: {
+    name: string;
+    avatar_url: string;
+  };
+  metadata?: {
+    duration?: number;
+    dimensions?: string;
+    bitrate?: string;
+  };
 }
 
 const getFileIcon = (type: string) => {
@@ -25,6 +38,10 @@ const getFileIcon = (type: string) => {
     case "pdf": return FileType;
     case "video": return FileVideo;
     case "image": return FileImage;
+    case "audio": return FileType; // Should be Volume2 or similar
+    case "story": return FileImage;
+    case "live": return FileVideo;
+    case "clip": return Scissors;
     default: return File;
   }
 };
@@ -60,18 +77,42 @@ export const DocumentsView = () => {
   const [docs, setDocs] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"date" | "size" | "duration">("date");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocs = async () => {
     if (!user) return;
-    const { data, error } = await supabase
-      .from("documents")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    if (!error && data) setDocs(data as unknown as DocumentItem[]);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("documents")
+        .select("*, profiles(name, avatar_url)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      
+      if (!error && data) {
+        setDocs(data as unknown as DocumentItem[]);
+      }
+    } catch (e) {
+      // Silent fail
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const sortedDocs = [...docs].sort((a, b) => {
+    if (sortBy === "date") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (sortBy === "size") return b.file_size - a.file_size;
+    if (sortBy === "duration") return (b.metadata?.duration || 0) - (a.metadata?.duration || 0);
+    return 0;
+  });
+
+  const filteredDocs = sortedDocs.filter(doc => {
+    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFilter = activeFilter === "all" || doc.file_type === activeFilter;
+    return matchesSearch && matchesFilter;
+  });
 
   useEffect(() => { fetchDocs(); }, [user]);
 
@@ -100,10 +141,12 @@ export const DocumentsView = () => {
       const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
       await supabase.from("documents").insert({
         user_id: user.id,
+        author_id: user.id,
         name: file.name,
         file_url: urlData.publicUrl,
         file_type: detectFileType(file.name),
         file_size: file.size,
+        status: 'available'
       } as any);
     }
 
@@ -141,10 +184,12 @@ export const DocumentsView = () => {
       const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
       await supabase.from("documents").insert({
         user_id: user.id,
+        author_id: user.id,
         name: file.name,
         file_url: urlData.publicUrl,
         file_type: detectFileType(file.name),
         file_size: file.size,
+        status: 'available'
       } as any);
     }
     toast({ title: "Upload concluído!" });
@@ -192,23 +237,61 @@ export const DocumentsView = () => {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
         className="glass-card rounded-2xl border border-border overflow-hidden"
       >
-        <div className="p-6 border-b border-border">
+        <div className="p-6 border-b border-border space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-display font-bold text-xl">Arquivos ({docs.length})</h2>
+            <h2 className="font-display font-bold text-xl">Arquivos ({filteredDocs.length})</h2>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <FileType className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar arquivos..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-4 py-2 bg-muted/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-64"
+                />
+              </div>
+              <select 
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm focus:outline-none"
+              >
+                <option value="date">Data</option>
+                <option value="size">Tamanho</option>
+                <option value="duration">Duração</option>
+              </select>
+            </div>
+          </div>
+          
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+            {["all", "image", "video", "story", "live", "clip", "pdf"].map(f => (
+              <button 
+                key={f} 
+                onClick={() => setActiveFilter(f)}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize whitespace-nowrap",
+                  activeFilter === f ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                )}
+              >
+                {f === "all" ? "Todos" : f}
+              </button>
+            ))}
           </div>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : docs.length === 0 ? (
+        ) : filteredDocs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <FileText className="w-12 h-12 text-muted-foreground mb-3 opacity-50" />
-            <p className="font-medium">Nenhum documento</p>
-            <p className="text-sm text-muted-foreground mt-1">Faça upload dos seus primeiros arquivos</p>
+            <p className="font-medium">Nenhum documento encontrado</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {searchQuery ? "Tente uma busca diferente" : "Faça upload dos seus primeiros arquivos"}
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {docs.map((doc, index) => {
+            {filteredDocs.map((doc, index) => {
               const Icon = getFileIcon(doc.file_type);
               const colorClass = getFileColor(doc.file_type);
               return (
@@ -221,12 +304,15 @@ export const DocumentsView = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{doc.name}</p>
-                      <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1"><User className="w-3 h-3" /> {doc.profiles?.name || 'Sistema'}</span>
+                        <span className="flex items-center gap-1 capitalize"><FileType className="w-3 h-3" /> {doc.file_type}</span>
+                        {doc.metadata?.duration && <span className="flex items-center gap-1 font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-foreground"><FileVideo className="w-3 h-3" /> {Math.floor(doc.metadata.duration / 60)}:{(doc.metadata.duration % 60).toString().padStart(2, '0')}</span>}
                         <span>{formatSize(doc.file_size)}</span>
-                        <span>•</span>
-                        <span>{new Date(doc.created_at).toLocaleDateString("pt-BR")}</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1"><Download className="w-3 h-3" />{doc.downloads} downloads</span>
+                        <span>{new Date(doc.created_at).toLocaleString("pt-BR")}</span>
+                        {doc.platform && <span className="flex items-center gap-1 text-primary"><Share2 className="w-3 h-3" /> {doc.platform}</span>}
+                        <span className="flex items-center gap-1"><Download className="w-3 h-3" />{doc.downloads}</span>
+                        <Badge variant="outline" className="text-[9px] h-4 py-0 uppercase">{doc.status || 'Disponível'}</Badge>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

@@ -9,6 +9,9 @@ export async function publishYoutube(
     const postType = options.postType?.toLowerCase() || 'post';
     const mediaType = options.mediaType?.toLowerCase() || 'image';
 
+    const googleClientId = (Deno as any).env.get("GOOGLE_CLIENT_ID");
+    if (!googleClientId) throw new Error("GOOGLE_CLIENT_ID não definido");
+
     if (postType === 'live' || postType === 'story') {
         return { success: false, error: `Formato ${postType} não suportado via simples publish do YouTube` };
     }

@@ -28,6 +28,8 @@ export interface CreatePostInput {
   media_type: string;
   orientation?: string;
   scheduled_at?: Date;
+  status?: ScheduledPost['status'];
+  published_at?: string;
 }
 
 export function useScheduledPosts() {
@@ -180,6 +182,8 @@ export function useScheduledPosts() {
         updateData.scheduled_at = updates.scheduled_at?.toISOString() || null;
         updateData.status = updates.scheduled_at ? 'scheduled' : 'draft';
       }
+      if (updates.status !== undefined) updateData.status = updates.status;
+      if (updates.published_at !== undefined) updateData.published_at = updates.published_at;
 
       const { error } = await supabase
         .from('scheduled_posts')

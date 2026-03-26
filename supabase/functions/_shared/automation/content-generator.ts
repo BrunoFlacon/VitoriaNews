@@ -1,5 +1,5 @@
 export async function generateContent(supabaseClient: any, trendId: string) {
-  console.log(`Generating AI content for trend ${trendId}...`);
+  // console.log(`Generating AI content for trend ${trendId}...`);
   // Stub implementation
   const mockContent = {
     trend_id: trendId,

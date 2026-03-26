@@ -151,7 +151,6 @@ export const BulkUploadDialog = ({ open, onOpenChange, onComplete }: BulkUploadD
 
       onComplete?.();
     } catch (error) {
-      console.error("Bulk import error:", error);
       toast({
         title: "Erro na importação",
         description: error instanceof Error ? error.message : "Erro desconhecido",

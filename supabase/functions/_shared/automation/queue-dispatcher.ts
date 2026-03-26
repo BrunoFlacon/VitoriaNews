@@ -4,7 +4,7 @@ import { generateContent } from './content-generator.ts';
 import { collectAnalytics } from './analytics-engine.ts';
 
 export async function processJobQueue(supabaseClient: any) {
-  console.log('Processing distributed job queue...');
+  // console.log('Processing distributed job queue...');
   // Fetch pending jobs
   const { data: jobs, error } = await supabaseClient
     .from('job_queue')
@@ -19,7 +19,7 @@ export async function processJobQueue(supabaseClient: any) {
 
   let processed = 0;
   for (const job of jobs) {
-    console.log(`Processing job ${job.id} of type ${job.job_type}`);
+    // console.log(`Processing job ${job.id} of type ${job.job_type}`);
     // Mark as in-progress (stub)
     await supabaseClient.from('job_queue').update({ status: 'processing' }).eq('id', job.id);
 
@@ -33,7 +33,7 @@ export async function processJobQueue(supabaseClient: any) {
       } else if (job.job_type === 'update_analytics') {
         await collectAnalytics(supabaseClient);
       } else if (job.job_type === 'media_transcoding') {
-        console.log(`Sending job ${job.id} to transcoding service.`);
+        // console.log(`Sending job ${job.id} to transcoding service.`);
         // To be handled by transcoder function
       }
 

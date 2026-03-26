@@ -1,6 +1,8 @@
 import { PublishPayload } from './dispatcher.ts';
 
-export async function publishToTikTok(payload: PublishPayload): Promise<any> {
-  console.log('Publishing to TikTok:', payload);
-  return { success: true, platform: 'tiktok', timestamp: new Date().toISOString() };
+export async function publishToTikTok(supabase: any, payload: PublishPayload): Promise<any> {
+  const { content, mediaUrls, userId } = payload;
+  
+  // Placeholder for real TikTok API
+  return { success: true, platform: 'tiktok', info: 'TikTok API implementation pending.' };
 }

@@ -102,7 +102,6 @@ export function usePublisher() {
 
       return data;
     } catch (error) {
-      console.error("Error publishing post:", error);
       toast({
         title: "Erro ao publicar",
         description: error instanceof Error ? error.message : "Erro desconhecido",
@@ -148,7 +147,6 @@ export function usePublisher() {
 
       return post.id;
     } catch (error) {
-      console.error("Error in publishNow:", error);
       toast({
         title: "Erro ao publicar",
         description: error instanceof Error ? error.message : "Erro desconhecido",

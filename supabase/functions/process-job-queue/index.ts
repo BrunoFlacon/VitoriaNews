@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -53,7 +53,7 @@ serve(async (req) => {
             result = await supabase.functions.invoke("transcribe-media", { body: job.payload });
             break;
           default:
-            console.log(`Unknown job type: ${job.job_type}`);
+            // console.log(`Unknown job type: ${job.job_type}`);
         }
 
         // Mark completed

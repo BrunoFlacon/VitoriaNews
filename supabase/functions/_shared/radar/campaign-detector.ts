@@ -1,5 +1,5 @@
 export async function detectViralCampaigns(supabaseClient: any) {
-  console.log('Detecting coordinated viral/bot campaigns...');
+  // console.log('Detecting coordinated viral/bot campaigns...');
   // Stub implementation
   const mockCampaign = {
     topic: 'Fake News Amplification',

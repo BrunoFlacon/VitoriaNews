@@ -1,5 +1,5 @@
 export async function mapInfluenceNetworks(supabaseClient: any) {
-  console.log('Mapping influencer networks and narrative spreaders...');
+  // console.log('Mapping influencer networks and narrative spreaders...');
   // Stub implementation
   const mockNode = {
     username: 'political_pundit_01',

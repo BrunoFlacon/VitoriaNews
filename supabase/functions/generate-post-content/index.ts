@@ -121,7 +121,7 @@ CTA: [call-to-action sugerido]`;
       raw: generatedContent,
     };
 
-    console.log("Generated content for user:", user.id, "topic:", topic);
+    // console.log("Generated content for user:", user.id, "topic:", topic);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

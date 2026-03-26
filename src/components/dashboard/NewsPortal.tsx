@@ -23,13 +23,21 @@ export const NewsPortal = () => {
 
   const fetchArticles = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("articles")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setArticles((data as Article[]) || []);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("articles")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      
+      if (!error && data) {
+        setArticles((data as Article[]) || []);
+      }
+    } catch (e) {
+      // Silent fail
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchArticles(); }, [user]);

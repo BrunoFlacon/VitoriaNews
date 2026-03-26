@@ -173,6 +173,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState("profissional");
   const [showBulkUpload, setShowBulkUpload] = useState(false);
+  const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadMedia, uploading, progress: uploadProgress } = useMediaUpload();
@@ -386,11 +387,10 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
         }
       }
     } catch (error) {
-      console.error("Error saving post:", error);
-      addNotification({
-        type: "error",
-        title: "Erro ao salvar post",
-        message: "Não foi possível salvar o post. Verifique sua conexão e tente novamente.",
+      toast({
+        title: "Erro ao criar rascunho",
+        description: "Não foi possível salvar sua imagem.",
+        variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
@@ -472,41 +472,119 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           <label className="text-sm font-medium mb-3 block">
             Selecionar Redes Sociais
           </label>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {socialPlatforms.map((platform) => {
+              const platformConnections = connections.filter(c => c.platform === platform.id && c.is_connected);
+              const hasConnections = platformConnections.length > 0;
               const Icon = platform.icon;
-              const isSelected = selectedPlatforms.includes(platform.id);
-              const connected = isPlatformConnected(platform.id);
+              
+              const selectedInPlatform = platformConnections.filter(c => selectedPlatforms.includes(`${platform.id}|${c.id}` as SocialPlatformId));
+              const isGenericSelected = selectedPlatforms.includes(platform.id as SocialPlatformId);
+              const isSelected = selectedInPlatform.length > 0 || isGenericSelected;
+
               return (
-                <motion.button
+                <div 
                   key={platform.id}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => togglePlatform(platform.id)}
-                  className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all relative",
-                    isSelected
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border hover:border-primary/50 text-muted-foreground"
-                  )}
+                  className="relative group"
+                  onMouseEnter={() => setHoveredPlatform(platform.id)}
+                  onMouseLeave={() => setHoveredPlatform(null)}
                 >
-                  <div className="relative">
-                    <div className={cn(
-                      "w-6 h-6 rounded-md flex items-center justify-center",
-                      platform.color
-                    )}>
-                      <Icon className="w-3.5 h-3.5 text-white" />
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      if (!hasConnections) {
+                        togglePlatform(platform.id as SocialPlatformId);
+                      } else if (platformConnections.length === 1) {
+                        togglePlatform(`${platform.id}|${platformConnections[0].id}` as SocialPlatformId);
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border transition-all relative outline-none",
+                      isSelected
+                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                        : "border-border hover:border-primary/50 text-muted-foreground bg-background",
+                      !hasConnections && "opacity-60"
+                    )}
+                  >
+                    <div className="relative shrink-0">
+                      <div className={cn("w-6 h-6 rounded-md flex items-center justify-center", platform.color, !hasConnections && "opacity-75")}>
+                        <Icon className="w-3.5 h-4 text-white" />
+                      </div>
+                      {hasConnections && (
+                        <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-green-500" />
+                      )}
+                      {!hasConnections && (
+                        <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-muted-foreground" />
+                      )}
                     </div>
-                    <div className={cn(
-                      "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background",
-                      connected ? "bg-green-500" : "bg-muted-foreground"
-                    )} />
-                  </div>
-                  <span className="text-sm font-medium">{platform.name}</span>
-                  {isSelected && (
-                    <X className="w-3 h-3" />
-                  )}
-                </motion.button>
+                    
+                    <span className="text-sm font-semibold max-w-[150px] truncate" title={platform.name}>
+                      {selectedInPlatform.length > 0 
+                        ? selectedInPlatform.length === 1 
+                          ? (selectedInPlatform[0].page_name || platform.name)
+                          : `${selectedInPlatform.length} Contas Selecionadas`
+                        : platformConnections.length === 1 
+                          ? (platformConnections[0].page_name || platform.name)
+                          : platform.name}
+                    </span>
+                    
+                    {isSelected && (
+                      <X 
+                        className="w-3.5 h-3.5 shrink-0 opacity-70 hover:opacity-100 transition-opacity ml-1" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!hasConnections) togglePlatform(platform.id as SocialPlatformId);
+                          else selectedInPlatform.forEach(c => togglePlatform(`${platform.id}|${c.id}` as SocialPlatformId));
+                        }} 
+                      />
+                    )}
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {hoveredPlatform === platform.id && hasConnections && platformConnections.length > 1 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        className="absolute top-full left-0 mt-2 min-w-[240px] bg-background/95 backdrop-blur-md border border-border rounded-xl shadow-xl z-50 flex flex-col overflow-hidden"
+                      >
+                        <div className="p-3 border-b border-border/50 bg-muted/40 flex items-center gap-2">
+                          <Icon className={cn("w-4 h-4", platform.textColor)} />
+                          <p className="text-xs font-bold text-foreground capitalize">Contas do {platform.name}</p>
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto p-1.5 flex flex-col gap-1 custom-scrollbar">
+                          {platformConnections.map(conn => {
+                            const connKey = `${platform.id}|${conn.id}` as SocialPlatformId;
+                            const isConnSelected = selectedPlatforms.includes(connKey);
+                            return (
+                              <button
+                                key={conn.id}
+                                onClick={() => togglePlatform(connKey)}
+                                className={cn(
+                                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all text-left w-full relative overflow-hidden group/btn",
+                                  isConnSelected 
+                                    ? "bg-primary/10 text-primary hover:bg-primary/20" 
+                                    : "text-foreground hover:bg-muted"
+                                )}
+                              >
+                                <div className={cn("w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors z-10", 
+                                  isConnSelected 
+                                    ? "bg-primary border-primary text-primary-foreground" 
+                                    : "border-muted-foreground/30 group-hover/btn:border-muted-foreground/50 bg-background"
+                                )}>
+                                  {isConnSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                                </div>
+                                <span className="truncate flex-1 font-medium z-10">{conn.page_name || `Conta de ${platform.name}`}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               );
             })}
           </div>
@@ -719,7 +797,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
         {/* AI Generation Dialog */}
         <Dialog open={showAIDialog} onOpenChange={setShowAIDialog}>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[500px]" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Wand2 className="w-5 h-5 text-primary" />

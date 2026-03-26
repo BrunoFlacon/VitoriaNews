@@ -8,7 +8,7 @@ import { processJobQueue } from './queue-dispatcher.ts';
  * Basic scheduler stub to be called by a cron function or external runner.
  */
 export async function runScheduler(supabaseClient: any, type: string) {
-  console.log(`Running scheduled task: ${type}`);
+  // console.log(`Running scheduled task: ${type}`);
 
   switch (type) {
     case 'scan_trends':

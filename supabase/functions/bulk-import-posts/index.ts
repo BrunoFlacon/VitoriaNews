@@ -13,7 +13,7 @@ interface CsvRow {
   media_type?: string;
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -125,7 +125,7 @@ serve(async (req) => {
     const successCount = results.filter(r => r.success).length;
     const failCount = results.filter(r => !r.success).length;
 
-    console.log(`Bulk import complete: ${successCount} success, ${failCount} failed, user: ${user.id}`);
+    // console.log(`Bulk import complete: ${successCount} success, ${failCount} failed, user: ${user.id}`);
 
     return new Response(JSON.stringify({
       bulkImportId,

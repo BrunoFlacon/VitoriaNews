@@ -15,22 +15,27 @@ const ArticlePage = () => {
   useEffect(() => {
     const fetch = async () => {
       if (!slug) return;
-      const { data } = await supabase
-        .from("articles")
-        .select("*")
-        .eq("slug", slug)
-        .single();
-      setArticle(data as Article | null);
-
-      if (data) {
-        const { data: audio } = await supabase
-          .from("audio_articles")
-          .select("audio_url")
-          .eq("article_id", data.id)
-          .maybeSingle();
-        if (audio) setAudioUrl(audio.audio_url);
+      try {
+        const { data, error } = await supabase
+          .from("articles")
+          .select("*")
+          .eq("slug", slug)
+          .single();
+        
+        if (!error && data) {
+          setArticle(data as Article | null);
+          const { data: audio } = await supabase
+            .from("audio_articles")
+            .select("audio_url")
+            .eq("article_id", data.id)
+            .maybeSingle();
+          if (audio) setAudioUrl(audio.audio_url);
+        }
+      } catch (e) {
+        // Silent fail
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetch();
   }, [slug]);

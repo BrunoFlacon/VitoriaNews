@@ -14,13 +14,21 @@ const News = () => {
 
   useEffect(() => {
     const fetchArticles = async () => {
-      const { data } = await supabase
-        .from("articles")
-        .select("*")
-        .eq("status", "published")
-        .order("published_at", { ascending: false });
-      setArticles((data as Article[]) || []);
-      setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from("articles")
+          .select("*")
+          .eq("status", "published")
+          .order("published_at", { ascending: false });
+        
+        if (!error && data) {
+          setArticles((data as Article[]) || []);
+        }
+      } catch (e) {
+        // Silent fail for articles table
+      } finally {
+        setLoading(false);
+      }
     };
     fetchArticles();
   }, []);

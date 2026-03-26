@@ -1,5 +1,5 @@
 export async function analyzeNarratives(supabaseClient: any) {
-  console.log('Classifying dominant narratives using NLP...');
+  // console.log('Classifying dominant narratives using NLP...');
   // Stub implementation
   const mockNarrative = {
     topic: 'Healthcare reform',

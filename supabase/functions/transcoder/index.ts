@@ -20,7 +20,7 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Transcoding ${videoUrl} to ${resolutions.join(', ')}...`);
+    // console.log(`Transcoding ${videoUrl} to ${resolutions.join(', ')}...`);
 
     // In a real environment, this would spawn FFMpeg or call an external service like AWS MediaConvert
     const outputs = resolutions.map(res => ({

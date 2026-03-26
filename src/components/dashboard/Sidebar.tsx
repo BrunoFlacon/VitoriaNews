@@ -24,6 +24,8 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout?: () => void;
+  isCollapsed: boolean;
+  setIsCollapsed: (collapsed: boolean) => void;
 }
 
 const menuItems = [
@@ -32,12 +34,9 @@ const menuItems = [
   { id: "calendar", icon: Calendar, label: "Calendário" },
   { id: "analytics", icon: BarChart3, label: "Analytics" },
   { id: "stories", icon: Radio, label: "Stories & Lives" },
-  { id: "lives", icon: Video, label: "Live Streaming" },
-  { id: "clips", icon: Scissors, label: "Cortes de Lives" },
   { id: "messaging", icon: MessageCircle, label: "Mensagens" },
   { id: "news", icon: Newspaper, label: "Notícias" },
   { id: "documents", icon: FileText, label: "Documentos" },
-  { id: "accounts", icon: Users, label: "Contas Sociais" },
   { id: "networks", icon: Share2, label: "Redes Sociais" },
 ];
 
@@ -46,8 +45,13 @@ const bottomItems = [
   { id: "settings", icon: Settings, label: "Configurações" },
 ];
 
-export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+export const Sidebar = ({ 
+  activeTab, 
+  setActiveTab, 
+  onLogout,
+  isCollapsed,
+  setIsCollapsed 
+}: SidebarProps) => {
 
   return (
     <motion.aside
@@ -55,7 +59,8 @@ export const Sidebar = ({ activeTab, setActiveTab, onLogout }: SidebarProps) => 
       animate={{ x: 0, opacity: 1 }}
       className={cn(
         "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 transition-all duration-300",
-        isCollapsed ? "w-20" : "w-64"
+        isCollapsed ? "w-20" : "w-64",
+        "hidden md:block" // Hide on mobile by default, show as drawer later if needed
       )}
     >
       <div className="flex flex-col h-full">

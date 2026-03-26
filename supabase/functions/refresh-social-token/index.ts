@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -122,7 +122,7 @@ serve(async (req) => {
       .eq("user_id", user.id)
       .eq("platform", platform);
 
-    console.log(`Token refreshed for ${platform}, user: ${user.id}`);
+    // console.log(`Token refreshed for ${platform}, user: ${user.id}`);
 
     return new Response(JSON.stringify({ success: true, expiresAt: newExpiresAt }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
