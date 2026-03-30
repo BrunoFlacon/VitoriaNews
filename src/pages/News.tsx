@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import type { Article } from "@/lib/social-sdk/types";
+import { SystemFooter } from "@/components/SystemFooter";
 
 const News = () => {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -21,7 +22,13 @@ const News = () => {
           .eq("status", "published")
           .order("published_at", { ascending: false });
         
-        if (!error && data) {
+        if (error) {
+          // Handle missing table gracefully (404 / PGRST116)
+          if (error.code === 'PGRST116' || error.message?.includes('not found')) {
+            console.warn("Articles table not found. Skipping news fetch.");
+            setArticles([]);
+          }
+        } else if (data) {
           setArticles((data as Article[]) || []);
         }
       } catch (e) {
@@ -40,7 +47,7 @@ const News = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -59,7 +66,7 @@ const News = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-8">
+      <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
         {loading ? (
           <div className="text-center py-20 text-muted-foreground">Carregando artigos...</div>
         ) : filtered.length === 0 ? (
@@ -114,6 +121,8 @@ const News = () => {
           </div>
         )}
       </main>
+
+      <SystemFooter />
     </div>
   );
 };

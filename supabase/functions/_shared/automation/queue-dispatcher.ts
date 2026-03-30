@@ -25,7 +25,7 @@ export async function processJobQueue(supabaseClient: any) {
 
     try {
       if (job.job_type === 'publish_post') {
-        await dispatchPost(job.payload);
+        await dispatchPost(supabaseClient, job.payload);
       } else if (job.job_type === 'scan_trends') {
         await discoverTrends(supabaseClient);
       } else if (job.job_type === 'generate_content') {

@@ -31,7 +31,8 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
-import { socialPlatforms } from "@/components/icons/SocialIcons";
+import { socialPlatforms } from "@/components/icons/platform-metadata";
+import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { usePublisher } from "@/hooks/usePublisher";
@@ -567,11 +568,13 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
                             {post.platforms.slice(0, 3).map((platformId) => {
                               const platform = socialPlatforms.find(p => p.id === platformId);
                               if (!platform) return null;
-                              const Icon = platform.icon;
                               return (
-                                <div key={platformId} className={cn("w-7 h-7 rounded-md flex items-center justify-center border-2 border-card", platform.color)}>
-                                  <Icon className="w-3.5 h-3.5 text-white" />
-                                </div>
+                                <PlatformIconBadge
+                                  key={platformId}
+                                  platform={platform}
+                                  size="xs"
+                                  className="border-2 border-card -mr-1.5"
+                                />
                               );
                             })}
                           </div>
@@ -719,11 +722,10 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
                     {selectedPost.platforms.map((platformId) => {
                       const platform = socialPlatforms.find(p => p.id === platformId);
                       if (!platform) return null;
-                      const Icon = platform.icon;
                       return (
-                        <div key={platformId} className={cn("flex items-center gap-2 px-2 py-1 rounded-lg", platform.color)}>
-                          <Icon className="w-4 h-4 text-white" />
-                          <span className="text-xs text-white font-medium">{platform.name}</span>
+                        <div key={platformId} className="flex items-center gap-1.5">
+                          <PlatformIconBadge platform={platform} size="xs" />
+                          <span className="text-xs font-medium">{platform.name}</span>
                         </div>
                       );
                     })}

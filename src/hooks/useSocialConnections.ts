@@ -135,20 +135,26 @@ export function useSocialConnections() {
         );
 
         clearTimeout(timeoutId);
-        const data = await response.json();
+        const data = await response.json().catch(() => ({ error: "Resposta inválida do servidor" }));
 
         if (!response.ok) {
+          console.error(`Oauth Init Error (${response.status}):`, data);
+          
           popup.document.body.innerHTML = `
             <div style="font-family: sans-serif; padding: 20px; text-align: center; background: #0f172a; color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
               <div style="color: #ef4444; font-size: 48px; margin-bottom: 20px;">⚠️</div>
               <h1 style="font-size: 20px;">Erro ao conectar ${platform}</h1>
-              <p style="color: #94a3b8; margin: 10px 0 20px;">${data.error || "Ocorreu um erro inesperado."}</p>
+              <p style="color: #94a3b8; margin: 10px 0 20px;">${data.error || `Erro HTTP ${response.status}`}</p>
               <button onclick="window.close()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">Fechar Janela</button>
             </div>
           `;
 
-          if (data.requiresToken) {
-            toast({ title: "Configuração necessária", description: data.error });
+          if (data.requiresToken || response.status === 400) {
+            toast({ 
+              title: "Configuração pendente", 
+              description: data.error || "Verifique se as APIs estão configuradas corretamente nas Configurações.",
+              variant: "destructive"
+            });
             return;
           }
           

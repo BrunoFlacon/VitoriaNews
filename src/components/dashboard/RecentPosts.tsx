@@ -12,7 +12,8 @@ import {
   Edit
 } from "lucide-react";
 import { cn, normalizePlatform } from "@/lib/utils";
-import { socialPlatforms } from "@/components/icons/SocialIcons";
+import { socialPlatforms } from "@/components/icons/platform-metadata";
+import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
 import { FeedPreview } from "./FeedPreview";
 import { useState } from "react";
@@ -123,22 +124,18 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                 onClick={() => setPreviewPost(post)}
               >
                 <div className="flex items-start gap-4">
-                  <div className="flex -space-x-2">
+                  <div className="flex items-center gap-2">
                     {post.platforms.slice(0, 3).map((platformId) => {
                       const normalizedId = normalizePlatform(platformId);
                       const platform = socialPlatforms.find(p => p.id === normalizedId);
                       if (!platform) return null;
-                      const Icon = platform.icon;
                       return (
-                        <div
+                        <PlatformIconBadge
                           key={normalizedId}
-                          className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center border-2 border-card",
-                            platform.color
-                          )}
-                        >
-                          <Icon className="w-4 h-4 text-white" />
-                        </div>
+                          platform={platform}
+                          size="sm"
+                          className="border-2 border-background shadow-sm"
+                        />
                       );
                     })}
                     {post.platforms.length > 3 && (
@@ -196,7 +193,7 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem onClick={() => setPreviewPost(post)} className="gap-2">
+                        <DropdownMenuItem onClick={() => setPreviewPost(post)} className="gap-2 focus:cursor-pointer">
                           <Eye className="w-4 h-4" /> Visualizar
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onEditPost?.(post)} className="gap-2 focus:bg-white/10 focus:text-white cursor-pointer">
@@ -216,7 +213,7 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                               deletePost(post.id);
                             }
                           }}
-                          className="gap-2 text-destructive focus:text-destructive"
+                          className="gap-2 text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
                         >
                           <Trash className="w-4 h-4" /> Excluir
                         </DropdownMenuItem>
@@ -240,3 +237,5 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
     </motion.div>
   );
 };
+
+export default RecentPosts;

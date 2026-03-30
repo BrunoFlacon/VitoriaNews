@@ -26,7 +26,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { socialPlatforms, SocialPlatformId } from "@/components/icons/SocialIcons";
+import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
+import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { useMediaUpload, type UploadedMedia } from "@/hooks/useMediaUpload";
 import { BulkUploadDialog } from "@/components/dashboard/BulkUploadDialog";
 import { ScheduledPost, CreatePostInput } from "@/hooks/useScheduledPosts";
@@ -508,9 +509,11 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     )}
                   >
                     <div className="relative shrink-0">
-                      <div className={cn("w-6 h-6 rounded-md flex items-center justify-center", platform.color, !hasConnections && "opacity-75")}>
-                        <Icon className="w-3.5 h-4 text-white" />
-                      </div>
+                      <PlatformIconBadge
+                        platform={platform}
+                        size="xs"
+                        muted={!hasConnections}
+                      />
                       {hasConnections && (
                         <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-green-500" />
                       )}

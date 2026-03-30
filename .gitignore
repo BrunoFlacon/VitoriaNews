@@ -25,3 +25,17 @@ dist-ssr
 
 # Local Backups
 backups/
+
+# Project Temporary & Test Files (Assistant Generated)
+tmp/
+.gemini/
+.system_generated/
+*.webp
+*.png
+*.jpg
+*.log
+
+# Project specific caches
+.vite
+.cache
+.turbo

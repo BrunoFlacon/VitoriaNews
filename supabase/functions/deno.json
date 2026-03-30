@@ -1,5 +1,9 @@
 {
-  "importMap": "import_map.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "lib": ["deno.window", "deno.ns"],
+    "strict": false
+  },
   "lint": {
     "rules": {
       "exclude": ["no-explicit-any"]

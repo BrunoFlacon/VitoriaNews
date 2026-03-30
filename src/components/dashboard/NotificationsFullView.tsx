@@ -4,7 +4,7 @@ import { Bell, CheckCheck, Trash2, AlertCircle, CheckCircle, Info, AlertTriangle
 import { Button } from "@/components/ui/button";
 import { useNotifications, Notification } from "@/contexts/NotificationContext";
 import { cn } from "@/lib/utils";
-import { socialPlatforms } from "@/components/icons/SocialIcons";
+import { socialPlatforms } from "@/components/icons/platform-metadata";
 
 type FilterType = 'all' | 'unread' | 'read';
 

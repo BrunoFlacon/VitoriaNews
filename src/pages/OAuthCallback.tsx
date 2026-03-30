@@ -15,8 +15,6 @@ export function getThreadsOAuthUrl() {
   url.searchParams.set("response_type", "code");
   url.searchParams.set("state", crypto.randomUUID());
 
-  console.log("THREADS OAUTH URL:", url.toString());
-
   return url.toString();
 }
 

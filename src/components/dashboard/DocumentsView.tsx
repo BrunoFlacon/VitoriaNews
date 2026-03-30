@@ -83,11 +83,16 @@ export const DocumentsView = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocs = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from("documents")
-        .select("*, profiles(name, avatar_url)")
+        .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       
@@ -95,7 +100,7 @@ export const DocumentsView = () => {
         setDocs(data as unknown as DocumentItem[]);
       }
     } catch (e) {
-      // Silent fail
+      console.error("Error fetching documents:", e);
     } finally {
       setLoading(false);
     }
@@ -114,7 +119,13 @@ export const DocumentsView = () => {
     return matchesSearch && matchesFilter;
   });
 
-  useEffect(() => { fetchDocs(); }, [user]);
+  useEffect(() => {
+    if (user) {
+      fetchDocs();
+    } else {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -305,7 +316,7 @@ export const DocumentsView = () => {
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{doc.name}</p>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1"><User className="w-3 h-3" /> {doc.profiles?.name || 'Sistema'}</span>
+                        <span className="flex items-center gap-1"><User className="w-3 h-3" /> {doc.profiles?.name || user?.user_metadata?.full_name || 'Sistema'}</span>
                         <span className="flex items-center gap-1 capitalize"><FileType className="w-3 h-3" /> {doc.file_type}</span>
                         {doc.metadata?.duration && <span className="flex items-center gap-1 font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-foreground"><FileVideo className="w-3 h-3" /> {Math.floor(doc.metadata.duration / 60)}:{(doc.metadata.duration % 60).toString().padStart(2, '0')}</span>}
                         <span>{formatSize(doc.file_size)}</span>
@@ -336,3 +347,5 @@ export const DocumentsView = () => {
     </motion.div>
   );
 };
+
+export default DocumentsView;

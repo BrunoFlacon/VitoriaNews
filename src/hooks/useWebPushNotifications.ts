@@ -89,7 +89,11 @@ export function useWebPushNotifications() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err || status === 'CHANNEL_ERROR') {
+          // Silenced: console.warn('Realtime subscription delayed/failed...');
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

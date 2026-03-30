@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Eye, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SOCIAL_PLATFORMS } from "@/components/icons/SocialIcons";
+import { socialPlatforms } from "@/components/icons/platform-metadata";
 
 interface PlatformPreviewProps {
   content: string;
@@ -349,7 +349,7 @@ const PlatformPreview = ({ content, mediaUrl, mediaType, selectedPlatforms, onCl
         {/* Platform Tabs */}
         <div className="flex gap-2 p-4 border-b border-border overflow-x-auto">
           {selectedPlatforms.map((platformId) => {
-            const platform = SOCIAL_PLATFORMS.find((p) => p.id === platformId);
+            const platform = socialPlatforms.find((p) => p.id === platformId);
             if (!platform) return null;
             
             return (

@@ -4,7 +4,7 @@ import {
   MessageCircle, Plus, Trash2, Send, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { socialPlatforms } from "@/components/icons/SocialIcons";
+import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

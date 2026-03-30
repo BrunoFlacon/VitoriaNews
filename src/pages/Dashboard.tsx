@@ -19,7 +19,7 @@ import { RecentPosts } from "@/components/dashboard/RecentPosts";
 import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
 import { SocialNetworkCard } from "@/components/dashboard/SocialNetworkCard";
 import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
-import { socialPlatforms } from "@/components/icons/SocialIcons";
+import { socialPlatforms } from "@/components/icons/platform-metadata";
 import {
   Tooltip,
   TooltipContent,
@@ -47,6 +47,7 @@ import { Button } from "@/components/ui/button";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useNavigate } from "react-router-dom";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { SystemFooter } from "@/components/SystemFooter";
 
 // Lazy load heavy views - wrap named exports for React.lazy
 const CreatePostPanel = lazy(() => import("@/components/dashboard/CreatePostPanel").then(m => ({ default: m.CreatePostPanel })));
@@ -59,10 +60,15 @@ const SettingsView = lazy(() => import("@/components/dashboard/SettingsView").th
 const MediaGalleryView = lazy(() => import("@/components/dashboard/MediaGalleryView").then(m => ({ default: m.MediaGalleryView })));
 const NotificationsFullView = lazy(() => import("@/components/dashboard/NotificationsFullView").then(m => ({ default: m.NotificationsFullView })));
 const NewsPortal = lazy(() => import("@/components/dashboard/NewsPortal"));
+const PortalSettingsWrapper = lazy(() => import("@/components/dashboard/settings/PortalSettingsWrapper").then(m => ({ default: m.PortalSettingsWrapper })));
+const ManualView = lazy(() => import("@/components/dashboard/ManualView").then(m => ({ default: m.ManualView })));
 
 const ViewLoader = () => (
   <div className="flex items-center justify-center py-20">
-    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    <div className="relative">
+      <div className="w-12 h-12 border-4 border-primary/20 rounded-full" />
+      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin absolute top-0 left-0" />
+    </div>
   </div>
 );
 
@@ -74,6 +80,9 @@ const Dashboard = () => {
   const [preSelectedDate, setPreSelectedDate] = useState<Date | null>(null);
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
+  const [settingsSubTab, setSettingsSubTab] = useState<string>('profile');
+  // Tracks which account (connection) is selected per platform for the gear profile selector
+  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>({});
 
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -156,18 +165,40 @@ const Dashboard = () => {
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {socialPlatforms.map((platform, index) => (
-                <SocialNetworkCard
-                  key={platform.id}
-                  platform={platform}
-                  isConnected={isConnected(platform.id)}
-                  isConnecting={connectingPlatform === platform.id}
-                  pageName={getPageName(platform.id)}
-                  onConnect={() => handleConnect(platform.id)}
-                  onDisconnect={() => disconnect(platform.id)}
-                  delay={index * 0.05}
-                />
-              ))}
+              {socialPlatforms.map((platform, index) => {
+                // All connections for this platform
+                const platformAccounts = connections
+                  .filter((c) => c.platform === platform.id && c.is_connected)
+                  .map((c) => ({
+                    id: c.id,
+                    page_name: c.page_name,
+                    platform_user_id: c.platform_user_id,
+                    profile_image_url: c.profile_image_url,
+                    followers_count: c.followers_count,
+                    page_id: c.page_id,
+                  }));
+
+                return (
+                  <SocialNetworkCard
+                    key={platform.id}
+                    platform={platform}
+                    isConnected={isConnected(platform.id)}
+                    isConnecting={connectingPlatform === platform.id}
+                    pageName={getPageName(platform.id)}
+                    onConnect={() => handleConnect(platform.id)}
+                    onDisconnect={() => disconnect(platform.id)}
+                    delay={index * 0.05}
+                    accounts={platformAccounts}
+                    selectedAccountId={selectedAccounts[platform.id] ?? null}
+                    onSelectAccount={(account) =>
+                      setSelectedAccounts((prev) => ({
+                        ...prev,
+                        [platform.id]: account.id,
+                      }))
+                    }
+                  />
+                );
+              })}
             </div>
           </div>
         );
@@ -210,19 +241,25 @@ const Dashboard = () => {
         return <Suspense fallback={<ViewLoader />}><DocumentsView /></Suspense>;
 
       case "settings":
-        return <Suspense fallback={<ViewLoader />}><SettingsView /></Suspense>;
+        return <Suspense fallback={<ViewLoader />}><SettingsView defaultTab={settingsSubTab} /></Suspense>;
 
       case "media":
         return <Suspense fallback={<ViewLoader />}><MediaGalleryView /></Suspense>;
 
       case "accounts":
-        return <Suspense fallback={<ViewLoader />}><SettingsView /></Suspense>;
+        return <Suspense fallback={<ViewLoader />}><SettingsView defaultTab="api" /></Suspense>;
 
       case "notifications":
         return <Suspense fallback={<ViewLoader />}><NotificationsFullView /></Suspense>;
 
       case "news":
         return <Suspense fallback={<ViewLoader />}><NewsPortal /></Suspense>;
+
+      case "sys_portal":
+        return <Suspense fallback={<ViewLoader />}><PortalSettingsWrapper /></Suspense>;
+
+      case "manual":
+        return <Suspense fallback={<ViewLoader />}><ManualView /></Suspense>;
 
       default:
         return (
@@ -419,14 +456,21 @@ const Dashboard = () => {
         setIsCollapsed={setIsSidebarCollapsed}
       />
       <div className={cn(
-        "flex-1 transition-all duration-300 min-w-0",
+        "flex-1 transition-all duration-300 min-w-0 flex flex-col min-h-screen",
         isSidebarCollapsed ? "md:pl-20" : "md:pl-64",
-        "pl-0" // Mobile: no padding-left as sidebar will likely be a drawer or hidden
+        "pl-0"
       )}>
-        <Header onNotificationsClick={() => setShowNotifications(true)} />
-        <main className="p-4 md:p-8">
+        <Header 
+          onNotificationsClick={() => setShowNotifications(true)} 
+          onNavigate={(tab: string, subTab?: string) => {
+            setActiveTab(tab);
+            if (subTab) setSettingsSubTab(subTab);
+          }}
+        />
+        <main className="p-4 md:p-8 flex-1">
           {renderContent()}
         </main>
+        <SystemFooter />
       </div>
       <NotificationsPanel
         isOpen={showNotifications}

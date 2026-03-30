@@ -5,7 +5,7 @@ import {
   Loader2, MoreVertical, Edit2, Send, Scissors, Copy, Square, Download
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { socialPlatforms, SocialPlatformId } from "@/components/icons/SocialIcons";
+import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

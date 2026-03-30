@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { SocialPlatformId, getSocialPlatform } from "@/components/icons/SocialIcons";
+import { SocialPlatformId, getSocialPlatform } from "@/components/icons/platform-metadata";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useApiCredentials } from "@/hooks/useApiCredentials";
@@ -144,7 +144,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
       if (type === "giphy") {
         const apiKey = credentials?.giphy?.api_key;
         if (!apiKey) {
-          toast({ title: "API Key Faltando", description: "Configure a Giphy API Key em Configurações > Integrações Dev", variant: "destructive" });
+          toast({ title: "API Key Faltando", description: "Configure a chave do Giphy em Configurações > API Sociais", variant: "destructive" });
           return;
         }
         const resp = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${apiKey}&q=${query}&limit=20&rating=g`);
@@ -158,7 +158,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
       } else if (type === "hashtag") {
         const token = credentials?.meta_ads?.access_token;
         if (!token) {
-           toast({ title: "Token Meta Faltando", description: "Configure o Access Token em Integrações Dev", variant: "destructive" });
+           toast({ title: "Token Meta Faltando", description: "Configure o Access Token da Meta em Configurações > API Sociais", variant: "destructive" });
            return;
         }
         const resp = await fetch(`https://graph.facebook.com/v18.0/ig_hashtag_search?user_id=${user?.id}&q=${query}&access_token=${token}`);
@@ -168,7 +168,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
         const clientId = credentials?.spotify?.client_id;
         const clientSecret = credentials?.spotify?.client_secret;
         if (!clientId || !clientSecret) {
-          toast({ title: "Spotify Keys Faltando", description: "Configure o Client ID/Secret do Spotify em Integrações Dev", variant: "destructive" });
+          toast({ title: "Chaves de Música Faltando", description: "Configure as bibliotecas de músicas da Meta, Google ou Spotify em Configurações > API Sociais", variant: "destructive" });
           return;
         }
         // Note: Real Spotify search requires a token. In a real app this would call an edge function.
@@ -177,7 +177,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
       } else if (type === "location") {
         const apiKey = credentials?.google_cloud?.api_key;
         if (!apiKey) {
-          toast({ title: "Google API Key Faltando", description: "Configure em Integrações Dev", variant: "destructive" });
+          toast({ title: "Google API Key Faltando", description: "Configure a chave (Maps) em Configurações > API Sociais", variant: "destructive" });
           return;
         }
         const resp = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${query}&key=${apiKey}`);

@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -23,7 +23,7 @@ serve(async (req) => {
     // console.log(`Transcoding ${videoUrl} to ${resolutions.join(', ')}...`);
 
     // In a real environment, this would spawn FFMpeg or call an external service like AWS MediaConvert
-    const outputs = resolutions.map(res => ({
+    const outputs = resolutions.map((res: string) => ({
       resolution: res,
       url: `${videoUrl}_${res}.mp4`,
       status: 'completed'
@@ -33,7 +33,7 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

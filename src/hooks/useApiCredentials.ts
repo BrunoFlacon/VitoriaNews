@@ -64,8 +64,12 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Ad Account ID", key: "ad_account_id", placeholder: "act_123456..." },
   ],
   google_cloud: [
-    { label: "API Key (Maps/News)", key: "api_key", masked: true },
-    { label: "YouTube Client ID", key: "youtube_id" },
+    { label: "Google Maps API Key", key: "maps_api_key", masked: true },
+    { label: "Google News API Key", key: "news_api_key", masked: true },
+    { label: "YouTube API Key", key: "youtube_api_key", masked: true },
+    { label: "Google Ads ID", key: "ads_id", placeholder: "Ex: 123-456-7890" },
+    { label: "Google Analytics ID", key: "analytics_id", placeholder: "Ex: G-XXXXXXXXXX" },
+    { label: "Search Console ID", key: "search_console_id" },
   ],
   spotify: [
     { label: "Spotify Client ID", key: "client_id" },

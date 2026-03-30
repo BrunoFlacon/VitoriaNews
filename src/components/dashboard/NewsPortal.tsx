@@ -22,7 +22,12 @@ export const NewsPortal = () => {
   const [saving, setSaving] = useState(false);
 
   const fetchArticles = async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from("articles")
@@ -30,17 +35,30 @@ export const NewsPortal = () => {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       
-      if (!error && data) {
+      if (error) {
+        if (error.code === 'PGRST116' || error.message?.includes('not found')) {
+          console.warn("Articles table not found. News feature may need setup.");
+          setArticles([]);
+        }
+      } else if (data) {
         setArticles((data as Article[]) || []);
       }
     } catch (e) {
-      // Silent fail
+      console.error("Error fetching articles:", e);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchArticles(); }, [user]);
+  useEffect(() => {
+    if (user) {
+      fetchArticles();
+    } else {
+      // If we've been waiting for too long without a user, stop loading animation
+      const timer = setTimeout(() => setLoading(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
 
   const generateSlug = (title: string) =>
     title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");

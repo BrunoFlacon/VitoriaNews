@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, Volume2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import type { Article } from "@/lib/social-sdk/types";
+import { SystemFooter } from "@/components/SystemFooter";
 
 const ArticlePage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -75,8 +76,8 @@ const ArticlePage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-3xl mx-auto px-6 py-8">
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="flex-1 max-w-3xl w-full mx-auto px-6 py-8">
         <Link to="/news" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6">
           <ArrowLeft className="w-4 h-4" /> Voltar para notícias
         </Link>
@@ -131,6 +132,8 @@ const ArticlePage = () => {
           dangerouslySetInnerHTML={{ __html: article.content }}
         />
       </div>
+
+      <SystemFooter />
     </div>
   );
 };
