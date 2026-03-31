@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { 
   Eye, 
@@ -7,6 +7,7 @@ import {
   TrendingUp,
   Loader2
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useWebPushNotifications } from "@/hooks/useWebPushNotifications";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { useScheduledPosts } from "@/hooks/useScheduledPosts";
@@ -73,6 +74,7 @@ const ViewLoader = () => (
 );
 
 const Dashboard = () => {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -114,17 +116,42 @@ const Dashboard = () => {
     navigate('/login');
   };
 
-  const isConnected = (platformId: string) =>
-    connections.some(c => c.platform === platformId && c.is_connected);
+  const isConnected = useCallback((platformId: string) =>
+    connections.some(c => c.platform === platformId && c.is_connected), [connections]);
 
-  const getPageName = (platformId: string) =>
-    connections.find(c => c.platform === platformId && c.is_connected)?.page_name ?? null;
+  const getPageName = useCallback((platformId: string) =>
+    connections.find(c => c.platform === platformId && c.is_connected)?.page_name ?? null, [connections]);
 
-  const handleConnect = async (platformId: string) => {
+  const handleConnect = useCallback(async (platformId: string) => {
+    const platform = socialPlatforms.find(p => p.id === platformId);
+    const isOAuth = platform?.type === 'social' && platformId !== 'site' && platformId !== 'telegram';
+    
+    if (!isOAuth) {
+      toast({
+        title: "Configuração de API",
+        description: `Para conectar ao ${platform?.name || platformId}, configure as chaves de API nas Configurações.`,
+      });
+      setActiveTab("settings");
+      return;
+    }
+
     setConnectingPlatform(platformId);
-    await initiateOAuth(platformId);
-    setConnectingPlatform(null);
-  };
+    try {
+      await initiateOAuth(platformId);
+    } catch (error) {
+      console.error("Connection error:", error);
+    } finally {
+      setConnectingPlatform(null);
+    }
+  }, [initiateOAuth, toast]);
+
+  const socialPlatformsList = useMemo(() => 
+    socialPlatforms.filter(p => p.type === 'social'), 
+  []);
+
+  const connectedPlatforms = useMemo(() => 
+    socialPlatforms.filter(p => connections.some(c => c.platform === p.id)),
+  [connections]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -165,7 +192,7 @@ const Dashboard = () => {
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {socialPlatforms.map((platform, index) => {
+              {socialPlatformsList.map((platform, index) => {
                 // All connections for this platform
                 const platformAccounts = connections
                   .filter((c) => c.platform === platform.id && c.is_connected)
@@ -243,9 +270,6 @@ const Dashboard = () => {
       case "settings":
         return <Suspense fallback={<ViewLoader />}><SettingsView defaultTab={settingsSubTab} /></Suspense>;
 
-      case "media":
-        return <Suspense fallback={<ViewLoader />}><MediaGalleryView /></Suspense>;
-
       case "accounts":
         return <Suspense fallback={<ViewLoader />}><SettingsView defaultTab="api" /></Suspense>;
 
@@ -315,7 +339,7 @@ const Dashboard = () => {
                       </div>
                       {platform === 'all' && <Check className="w-3 h-3" />}
                     </button>
-                    {socialPlatforms.filter(p => connections.some(c => c.platform === p.id)).map(p => (
+                    {connectedPlatforms.map(p => (
                       <button
                         key={p.id}
                         onClick={() => setPlatform(p.id)}

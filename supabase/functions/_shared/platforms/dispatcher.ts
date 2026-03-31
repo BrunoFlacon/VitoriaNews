@@ -19,6 +19,11 @@ import { publishToPinterest } from './pinterest.ts';
 import { publishToSnapchat } from './snapchat.ts';
 import { publishToYouTube } from './youtube.ts';
 import { publishToSite } from './site.ts';
+import { publishToKwai } from './kwai.ts';
+import { publishToRumble } from './rumble.ts';
+import { publishToTruthSocial } from './truthsocial.ts';
+import { publishToGettr } from './gettr.ts';
+import { publishToGoogleNews } from './googlenews.ts';
 import { getMetaCredentials } from "../credentials.ts";
 
 export async function dispatchPost(supabase: any, payload: PublishPayload): Promise<any> {
@@ -36,6 +41,11 @@ export async function dispatchPost(supabase: any, payload: PublishPayload): Prom
     case 'snapchat': return publishToSnapchat(supabase, payload);
     case 'youtube': return publishToYouTube(supabase, payload);
     case 'site': return publishToSite(supabase, payload);
+    case 'kwai': return publishToKwai(supabase, payload);
+    case 'rumble': return publishToRumble(supabase, payload);
+    case 'truthsocial': return publishToTruthSocial(supabase, payload);
+    case 'gettr': return publishToGettr(supabase, payload);
+    case 'googlenews': return publishToGoogleNews(supabase, payload);
     default: throw new Error(`Platform ${platform} is not supported for publishing.`);
   }
 }

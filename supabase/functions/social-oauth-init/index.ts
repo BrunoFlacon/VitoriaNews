@@ -58,6 +58,11 @@ serve(async (req: Request) => {
     const { platform, redirect_uri } = await req.json();
     if (!platform || !redirect_uri) return oauthError(platform || "unknown", "init", "platform and redirect_uri are required");
 
+    // Bloqueio preventivo para plataformas que NÃO usam OAuth
+    if (['googlenews', 'giphy', 'spotify', 'site', 'telegram', 'kwai', 'rumble', 'gettr', 'truthsocial'].includes(platform.toLowerCase())) {
+        return oauthError(platform, "init", `A plataforma '${platform}' utiliza chaves de API ou identificadores manuais, não OAuth padrão. Por favor, configure as credenciais diretamente na aba de Configurações das APIs.`);
+    }
+
     // Fetch user credentials
     const getPlatformCreds = async (p: string) => {
       const { data } = await supabase.from("api_credentials").select("credentials").eq("user_id", user.id).eq("platform", p).maybeSingle();

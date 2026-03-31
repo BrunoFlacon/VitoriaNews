@@ -50,22 +50,19 @@ const renderApiAsset = (src: string, isActive: boolean, className: string) => {
   );
 };
 
-const MetaIcon = ({ "data-active": isActive, className }: any) => renderApiAsset("/api-icons/meta.png", isActive, className);
-const GoogleIcon = ({ "data-active": isActive, className }: any) => renderApiAsset("/api-icons/google.png", isActive, className);
-const SpotifyIcon = ({ "data-active": isActive, className }: any) => renderApiAsset("/api-icons/spotify.png", isActive, className);
-const GiphyIcon = ({ "data-active": isActive, className }: any) => renderApiAsset("/api-icons/giphy.png", isActive, className);
-
 // Merged platform configurations with oauth meta and dev integrations
 const PLATFORM_CONFIGS: any[] = [
   ...socialPlatforms.map(p => ({
     ...p,
-    oauthSupported: p.id !== 'site' && p.id !== 'telegram'
+    oauthSupported: p.type === 'social' && p.id !== 'site' && p.id !== 'telegram'
   })),
-  { id: 'meta_ads', name: 'Meta Marketing & Ads API', icon: MetaIcon, color: "bg-[#1877F210]", textColor: "text-[#1877F2]", gradient: "from-blue-500 to-indigo-500", oauthSupported: false },
-  { id: 'google_cloud', name: 'Google Cloud (Maps, YouTube, Ads)', icon: GoogleIcon, color: "bg-[#EA433510]", textColor: "text-[#EA4335]", gradient: "from-red-500 to-orange-500", oauthSupported: false },
-  { id: 'spotify', name: 'Spotify Web API', icon: SpotifyIcon, color: "bg-[#1DB95410]", textColor: "text-[#1DB954]", gradient: "from-green-500 to-emerald-500", oauthSupported: false },
-  { id: 'giphy', name: 'Giphy SDK', icon: GiphyIcon, color: "bg-purple-500/10", textColor: "text-purple-500", gradient: "from-purple-500 to-fuchsia-500", oauthSupported: false }
+  { id: 'meta_ads', name: 'Meta Marketing & Ads API', icon: socialPlatforms.find(p => p.id === 'facebook')?.icon, color: "bg-[#1877F210]", textColor: "text-[#1877F2]", gradient: "from-blue-500 to-indigo-500", oauthSupported: false },
+  { id: 'google_cloud', name: 'Google Cloud (Maps, YouTube, Ads)', icon: socialPlatforms.find(p => p.id === 'googlenews')?.icon, color: "bg-[#EA433510]", textColor: "text-[#EA4335]", gradient: "from-red-500 to-orange-500", oauthSupported: false },
+  { id: 'newsapi', name: 'NewsAPI.org (Global News)', icon: Globe, color: "bg-[#00000010]", textColor: "text-foreground", gradient: "from-gray-500 to-black", oauthSupported: false }
 ];
+
+// Deduplicate PLATFORM_CONFIGS just in case socialPlatforms already has meta_ads/google_cloud
+const UNIQUE_PLATFORM_CONFIGS = Array.from(new Map(PLATFORM_CONFIGS.map(item => [item.id, item])).values());
 
 export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const { user, profile, updateProfile, isOnline, toggleOnline } = useAuth();
@@ -222,11 +219,16 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   // Persistence for active platforms
   const [activePlatformIds, setActivePlatformIds] = useState<string[]>(() => {
     try {
+      const allPlatformIds = UNIQUE_PLATFORM_CONFIGS.map(c => c.id);
       const saved = localStorage.getItem('activePlatformIds');
-      // Default set of popular platforms
-      return saved ? JSON.parse(saved) : ['facebook', 'instagram', 'twitter', 'linkedin', 'youtube', 'threads', 'tiktok', 'telegram', 'google_cloud'];
+      if (!saved) return allPlatformIds;
+      const parsed: string[] = JSON.parse(saved);
+      // Keep valid saved IDs and add any new platform that wasn't in the old cache
+      const valid = parsed.filter((id: string) => allPlatformIds.includes(id));
+      const missing = allPlatformIds.filter(id => !valid.includes(id));
+      return [...valid, ...missing];
     } catch (e) {
-      return ['facebook', 'instagram', 'twitter', 'linkedin', 'youtube', 'threads', 'tiktok', 'telegram', 'google_cloud'];
+      return UNIQUE_PLATFORM_CONFIGS.map(c => c.id);
     }
   });
 
@@ -826,7 +828,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
             
             <div className="space-y-3">
-              {PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
+              {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
                 const platformConnections = connections.filter(c => c.platform === config.id && c.is_connected);
                 const hasConnections = platformConnections.length > 0;
                 
@@ -856,14 +858,26 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                 <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-600">Conectado</Badge>
                               </div>
                             )}
-                             {hasCreds && !hasConnections && (
-                               <Badge variant="outline" className={cn(
-                                 "text-[10px]",
-                                 !config.oauthSupported ? "bg-green-600/10 text-green-600 border-green-600/30" : "text-yellow-600 border-yellow-600/30"
-                               )}>
-                                 {!config.oauthSupported ? "Conectado" : "Credenciais salvas"}
-                               </Badge>
-                             )}
+                             {hasCreds && !hasConnections && (() => {
+                               // For google_cloud, count how many sub-services have keys 
+                               let label = !config.oauthSupported ? "Conectado" : "Credenciais salvas";
+                               let className = !config.oauthSupported
+                                 ? "bg-green-600/10 text-green-600 border-green-600/30"
+                                 : "text-yellow-600 border-yellow-600/30";
+                               
+                               if (config.id === 'google_cloud') {
+                                 const googleCreds = credentials['google_cloud'] || {};
+                                 const serviceKeys = ['maps_api_key','news_api_key','youtube_api_key','ads_id','analytics_id'];
+                                 const activeServices = serviceKeys.filter(k => googleCreds[k]?.trim()).length;
+                                 label = `Conectado (${activeServices} serviço${activeServices !== 1 ? 's' : ''})`;
+                               }
+                               
+                               return (
+                                 <Badge variant="outline" className={cn("text-[10px]", className)}>
+                                   {label}
+                                 </Badge>
+                               );
+                             })()}
                           </div>
                           
                           {hasConnections ? (
@@ -1135,7 +1149,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
             <div className="space-y-4 pt-2">
               <p className="text-sm text-muted-foreground hidden">Selecione uma plataforma para configurar. Ela será adicionada à lista de APIs e redes sociais.</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {PLATFORM_CONFIGS.map(config => {
+                {UNIQUE_PLATFORM_CONFIGS.map(config => {
                   const isAlreadyAdded = activePlatformIds.includes(config.id);
                   return (
                     <button

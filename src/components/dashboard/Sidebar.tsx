@@ -17,7 +17,8 @@ import {
   Scissors,
   Users,
   Globe,
-  BookOpen
+  BookOpen,
+  FolderOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
@@ -41,7 +42,7 @@ const ICON_MAP: Record<string, any> = {
   stories: Radio,
   messaging: MessageCircle,
   news: Newspaper,
-  documents: FileText,
+  documents: FolderOpen,
   networks: Share2,
   settings: Settings,
   sys_portal: Globe,
@@ -72,9 +73,8 @@ export const Sidebar = ({
           { id: "stories", icon: Radio, label: "Stories & Lives" },
           { id: "messaging", icon: MessageCircle, label: "Mensagens" },
           { id: "news", icon: Newspaper, label: "Notícias" },
-          { id: "documents", icon: FileText, label: "Documentos" },
+          { id: "documents", icon: FolderOpen, label: "Arquivos & Galeria" },
           { id: "networks", icon: Share2, label: "Redes Sociais" },
-          { id: "media", icon: Scissors, label: "Galeria Media" },
         ], 
         bottomMenu: [
           { id: "notifications", icon: Bell, label: "Notificações" },

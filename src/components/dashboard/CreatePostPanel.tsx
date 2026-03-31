@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Image, 
+  Image as ImageIcon, 
   Video, 
   FileText, 
   Calendar, 
@@ -20,7 +20,8 @@ import {
   Wand2,
   ChevronLeft,
   ShieldCheck,
-  ShieldX
+  ShieldX,
+  Music
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,6 +31,8 @@ import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-m
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { useMediaUpload, type UploadedMedia } from "@/hooks/useMediaUpload";
 import { BulkUploadDialog } from "@/components/dashboard/BulkUploadDialog";
+import { GiphySearch } from "@/components/dashboard/GiphySearch";
+import { SpotifySearch } from "@/components/dashboard/SpotifySearch";
 import { ScheduledPost, CreatePostInput } from "@/hooks/useScheduledPosts";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useToast } from "@/hooks/use-toast";
@@ -53,8 +56,8 @@ import {
 
 type MediaType = "image" | "video" | "document" | "story" | "live";
 
-const mediaTypes: { id: MediaType; icon: typeof Image; label: string; accept: string }[] = [
-  { id: "image", icon: Image, label: "Imagem", accept: "image/*" },
+const mediaTypes: { id: MediaType; icon: typeof ImageIcon; label: string; accept: string }[] = [
+  { id: "image", icon: ImageIcon, label: "Imagem", accept: "image/*" },
   { id: "video", icon: Video, label: "Vídeo", accept: "video/*" },
   { id: "document", icon: FileText, label: "Documento", accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" },
   { id: "story", icon: Smartphone, label: "Story", accept: "image/*,video/*" },
@@ -474,7 +477,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             Selecionar Redes Sociais
           </label>
           <div className="flex flex-wrap gap-3">
-            {socialPlatforms.map((platform) => {
+            {socialPlatforms.filter(p => p.type === 'social').map((platform) => {
               const platformConnections = connections.filter(c => c.platform === platform.id && c.is_connected);
               const hasConnections = platformConnections.length > 0;
               const Icon = platform.icon;
@@ -788,6 +791,61 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                 </div>
               </PopoverContent>
             </Popover>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <button 
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  Giphy
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[350px] p-0 border-none bg-transparent shadow-none" align="start">
+                <GiphySearch 
+                  onSelect={(url) => {
+                    const newMedia: UploadedMedia = {
+                      id: `giphy-${Date.now()}`,
+                      file_url: url,
+                      file_type: "image/gif",
+                      name: "Giphy GIF",
+                      file_size: 0
+                    };
+                    setUploadedFiles(prev => [...prev, newMedia]);
+                    if (!selectedMedia) setSelectedMedia("image");
+                    toast({
+                      title: "GIF Adicionado!",
+                      description: "GIF selecionado do Giphy.",
+                    });
+                  }}
+                  onClose={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}
+                />
+              </PopoverContent>
+            </Popover>
+            
+            <Popover>
+              <PopoverTrigger asChild>
+                <button 
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-sm text-foreground transition-colors border border-[#1DB954]/20"
+                >
+                  <Music className="w-4 h-4 text-[#1DB954]" />
+                  Spotify
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[350px] p-0 border-none bg-transparent shadow-none" align="start">
+                <SpotifySearch 
+                  onSelect={(track) => {
+                    setContent(prev => prev + (prev ? "\n\n" : "") + `🎵 Ouça agora: ${track.name} - ${track.artist}\n${track.url}`);
+                    toast({
+                      title: "Música Adicionada!",
+                      description: `${track.name} inserida no seu post.`,
+                    });
+                  }}
+                  onClose={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}
+                />
+              </PopoverContent>
+            </Popover>
+
             <button 
               onClick={() => setShowAIDialog(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-primary/20 to-accent/20 hover:from-primary/30 hover:to-accent/30 text-sm text-foreground transition-colors"

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { 
-  FileText, Upload, Download, Eye, Trash2, File, FileImage, FileVideo, FileType, Loader2, X, User, Share2, Scissors
+  FileText, Upload, Download, Eye, Trash2, File, FileImage, FileVideo, FileType, Loader2, X, User, Share2, Scissors, List, Search, Filter, Grid, Play
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,6 @@ interface DocumentItem {
   downloads: number;
   created_at: string;
   author_id?: string;
-  platform?: string;
-  status?: string;
   profiles?: {
     name: string;
     avatar_url: string;
@@ -38,9 +36,7 @@ const getFileIcon = (type: string) => {
     case "pdf": return FileType;
     case "video": return FileVideo;
     case "image": return FileImage;
-    case "audio": return FileType; // Should be Volume2 or similar
-    case "story": return FileImage;
-    case "live": return FileVideo;
+    case "excel": return FileType;
     case "clip": return Scissors;
     default: return File;
   }
@@ -80,6 +76,8 @@ export const DocumentsView = () => {
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "size" | "duration">("date");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("grid");
+  const [selectedDoc, setSelectedDoc] = useState<DocumentItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDocs = async () => {
@@ -96,254 +94,395 @@ export const DocumentsView = () => {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
       
-      if (!error && data) {
-        setDocs(data as unknown as DocumentItem[]);
-      }
-    } catch (e) {
-      console.error("Error fetching documents:", e);
+      if (error) throw error;
+      setDocs(data as DocumentItem[] || []);
+    } catch (error: any) {
+      toast({
+        title: "Erro ao carregar arquivos",
+        description: error.message,
+        variant: "destructive"
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const sortedDocs = [...docs].sort((a, b) => {
-    if (sortBy === "date") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    if (sortBy === "size") return b.file_size - a.file_size;
-    if (sortBy === "duration") return (b.metadata?.duration || 0) - (a.metadata?.duration || 0);
-    return 0;
-  });
-
-  const filteredDocs = sortedDocs.filter(doc => {
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFilter = activeFilter === "all" || doc.file_type === activeFilter;
-    return matchesSearch && matchesFilter;
-  });
-
   useEffect(() => {
-    if (user) {
-      fetchDocs();
-    } else {
-      setLoading(false);
-    }
+    fetchDocs();
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel("documents-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "documents", filter: `user_id=eq.${user.id}` }, () => fetchDocs())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [user]);
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !user) return;
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || !user) return;
     setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const fileExt = file.name.split(".").pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
 
-    for (const file of Array.from(files)) {
-      const ext = file.name.split(".").pop();
-      const path = `documents/${user.id}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from("media").upload(path, file);
-      if (uploadError) {
-        toast({ title: "Erro no upload", description: uploadError.message, variant: "destructive" });
-        continue;
+        const { error: uploadError } = await supabase.storage
+          .from("documents")
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("documents")
+          .getPublicUrl(filePath);
+
+        const { error: dbError } = await supabase
+          .from("documents")
+          .insert({
+            user_id: user.id,
+            name: file.name,
+            file_url: publicUrl,
+            file_type: detectFileType(file.name),
+            file_size: file.size,
+            author_id: user.id
+          });
+
+        if (dbError) throw dbError;
       }
-      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-      await supabase.from("documents").insert({
-        user_id: user.id,
-        author_id: user.id,
-        name: file.name,
-        file_url: urlData.publicUrl,
-        file_type: detectFileType(file.name),
-        file_size: file.size,
-        status: 'available'
-      } as any);
+
+      toast({
+        title: "Upload concluído",
+        description: `${files.length} arquivo(s) enviado(s) com sucesso.`
+      });
+      fetchDocs();
+    } catch (error: any) {
+      toast({
+        title: "Erro no upload",
+        description: error.message,
+        variant: "destructive"
+      });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-
-    toast({ title: "Upload concluído!" });
-    setUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleDownload = async (doc: DocumentItem) => {
-    // Increment downloads
-    await supabase.from("documents").update({ downloads: doc.downloads + 1 } as any).eq("id", doc.id);
-    window.open(doc.file_url, "_blank");
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from("documents").delete().eq("id", id);
-    toast({ title: "Documento removido" });
+    try {
+      const { error } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setDocs(prev => prev.filter(doc => doc.id !== id));
+      toast({
+        title: "Arquivo removido",
+        description: "O documento foi excluído permanentemente."
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao excluir",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
   };
 
   const handlePreview = (doc: DocumentItem) => {
+    setSelectedDoc(doc);
+  };
+
+  const handleDownload = (doc: DocumentItem) => {
     window.open(doc.file_url, "_blank");
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    const files = e.dataTransfer.files;
-    if (!files.length) return;
+  const filteredDocs = docs.filter(doc => {
+    const matchesFilter = activeFilter === "all" || doc.file_type === activeFilter;
+    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesFilter && matchesSearch;
+  }).sort((a, b) => {
+    if (sortBy === "size") return b.file_size - a.file_size;
+    if (sortBy === "duration") return (b.metadata?.duration || 0) - (a.metadata?.duration || 0);
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 
-    setUploading(true);
-    for (const file of Array.from(files)) {
-      const path = `documents/${user.id}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage.from("media").upload(path, file);
-      if (uploadError) continue;
-      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-      await supabase.from("documents").insert({
-        user_id: user.id,
-        author_id: user.id,
-        name: file.name,
-        file_url: urlData.publicUrl,
-        file_type: detectFileType(file.name),
-        file_size: file.size,
-        status: 'available'
-      } as any);
-    }
-    toast({ title: "Upload concluído!" });
-    setUploading(false);
+  const renderGridItem = (doc: DocumentItem) => {
+    const Icon = getFileIcon(detectFileType(doc.name));
+    const type = detectFileType(doc.name);
+    
+    return (
+      <motion.div
+        key={doc.id}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="group relative aspect-square rounded-2xl overflow-hidden bg-card/40 border border-border hover:border-primary/50 transition-all cursor-pointer shadow-sm active:scale-95"
+        onClick={() => handlePreview(doc)}
+      >
+        {type === "image" ? (
+          <img 
+            src={doc.file_url} 
+            alt={doc.name} 
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center p-4">
+            <div className={cn("w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-110", getFileColor(type))}>
+              <Icon className="w-8 h-8" />
+            </div>
+          </div>
+        )}
+        
+        {type === "video" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/5 transition-colors">
+            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-lg border border-white/10">
+              <Play className="w-6 h-6 text-white fill-white/20" />
+            </div>
+          </div>
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent translate-y-full group-hover:translate-y-0 transition-transform">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold text-white truncate mb-0.5">{doc.name}</p>
+              <p className="text-[9px] text-white/60 font-medium uppercase tracking-wider">
+                {formatSize(doc.file_size)}
+              </p>
+            </div>
+            <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-white" onClick={(e) => { e.stopPropagation(); handleDownload(doc) }}>
+              <Download className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
+  const renderListItem = (doc: DocumentItem) => {
+    const Icon = getFileIcon(detectFileType(doc.name));
+    const type = detectFileType(doc.name);
+    
+    return (
+      <motion.div
+        key={doc.id}
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-border hover:border-primary/30 transition-all group cursor-pointer"
+        onClick={() => handlePreview(doc)}
+      >
+        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", getFileColor(type))}>
+          <Icon className="w-6 h-6" />
+        </div>
+        
+        <div className="flex-1 min-w-0">
+          <h4 className="font-bold text-base text-white group-hover:text-primary transition-colors truncate">{doc.name}</h4>
+          <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground font-medium uppercase tracking-wider">
+            <span className="flex items-center gap-1"><User className="w-3 h-3" /> {doc.profiles?.name || 'Bruno Flacon'}</span>
+            <span className="w-1 h-1 rounded-full bg-border" />
+            <span>{formatSize(doc.file_size)}</span>
+            <span className="w-1 h-1 rounded-full bg-border" />
+            <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white/5" onClick={(e) => { e.stopPropagation(); handlePreview(doc) }}>
+            <Eye className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white/5" onClick={(e) => { e.stopPropagation(); handleDownload(doc) }}>
+            <Download className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-red-500/10 text-red-500" onClick={(e) => { e.stopPropagation(); handleDelete(doc.id) }}>
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </motion.div>
+    );
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="mb-8">
-        <h1 className="font-display font-bold text-3xl mb-2">Documentos</h1>
-        <p className="text-muted-foreground">Gerencie arquivos e documentos para suas publicações</p>
-      </div>
-
-      <input ref={fileInputRef} type="file" multiple onChange={handleUpload} className="hidden" />
-
-      {/* Upload Area */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="glass-card rounded-2xl border-2 border-dashed border-border p-8 mb-8 hover:border-primary/50 transition-colors cursor-pointer group"
-        onClick={() => !uploading && fileInputRef.current?.click()}
-        onDragOver={e => e.preventDefault()}
-        onDrop={handleDrop}
-      >
-        <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl bg-muted mx-auto mb-4 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-            {uploading ? (
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
-            ) : (
-              <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
-            )}
-          </div>
-          <p className="font-medium mb-1">
-            {uploading ? "Enviando..." : "Arraste arquivos ou clique para fazer upload"}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 md:p-8 space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-bold font-display tracking-tight text-white mb-1">
+             Arquivos & Galeria
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {filteredDocs.length} arquivos • Gerencie sua biblioteca de mídia centralizada
           </p>
-          <p className="text-sm text-muted-foreground">Suporta PDF, DOCX, XLSX, imagens, vídeos e mais</p>
-          {!uploading && (
-            <Button className="mt-4" variant="outline">Selecionar Arquivos</Button>
-          )}
         </div>
-      </motion.div>
-
-      {/* Documents List */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-        className="glass-card rounded-2xl border border-border overflow-hidden"
-      >
-        <div className="p-6 border-b border-border space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display font-bold text-xl">Arquivos ({filteredDocs.length})</h2>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <FileType className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar arquivos..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 pr-4 py-2 bg-muted/50 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 w-64"
-                />
-              </div>
-              <select 
-                value={sortBy} 
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm focus:outline-none"
-              >
-                <option value="date">Data</option>
-                <option value="size">Tamanho</option>
-                <option value="duration">Duração</option>
-              </select>
-            </div>
+        
+        <div className="flex items-center gap-3">
+          <div className="flex bg-card border border-border p-1 rounded-xl">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "p-2 rounded-lg transition-all",
+                viewMode === "grid" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-white"
+              )}
+            >
+              <Grid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "p-2 rounded-lg transition-all",
+                viewMode === "list" ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-white"
+              )}
+            >
+              <List className="w-4 h-4" />
+            </button>
           </div>
           
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-            {["all", "image", "video", "story", "live", "clip", "pdf"].map(f => (
-              <button 
-                key={f} 
-                onClick={() => setActiveFilter(f)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize whitespace-nowrap",
-                  activeFilter === f ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-muted hover:bg-muted/80 text-muted-foreground"
-                )}
-              >
-                {f === "all" ? "Todos" : f}
-              </button>
-            ))}
-          </div>
+          <input type="file" multiple ref={fileInputRef} onChange={handleUpload} className="hidden" />
+          <Button 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="rounded-xl px-5 h-11 bg-primary hover:bg-primary/90 text-white font-bold"
+          >
+            {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+            Novo Upload
+          </Button>
         </div>
+      </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
-        ) : filteredDocs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <FileText className="w-12 h-12 text-muted-foreground mb-3 opacity-50" />
-            <p className="font-medium">Nenhum documento encontrado</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {searchQuery ? "Tente uma busca diferente" : "Faça upload dos seus primeiros arquivos"}
-            </p>
-          </div>
-        ) : (
-          <div className="divide-y divide-border">
-            {filteredDocs.map((doc, index) => {
-              const Icon = getFileIcon(doc.file_type);
-              const colorClass = getFileColor(doc.file_type);
-              return (
-                <motion.div key={doc.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 * index }}
-                  className="p-4 hover:bg-muted/30 transition-colors group"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", colorClass)}>
-                      <Icon className="w-6 h-6" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{doc.name}</p>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1"><User className="w-3 h-3" /> {doc.profiles?.name || user?.user_metadata?.full_name || 'Sistema'}</span>
-                        <span className="flex items-center gap-1 capitalize"><FileType className="w-3 h-3" /> {doc.file_type}</span>
-                        {doc.metadata?.duration && <span className="flex items-center gap-1 font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded text-foreground"><FileVideo className="w-3 h-3" /> {Math.floor(doc.metadata.duration / 60)}:{(doc.metadata.duration % 60).toString().padStart(2, '0')}</span>}
-                        <span>{formatSize(doc.file_size)}</span>
-                        <span>{new Date(doc.created_at).toLocaleString("pt-BR")}</span>
-                        {doc.platform && <span className="flex items-center gap-1 text-primary"><Share2 className="w-3 h-3" /> {doc.platform}</span>}
-                        <span className="flex items-center gap-1"><Download className="w-3 h-3" />{doc.downloads}</span>
-                        <Badge variant="outline" className="text-[9px] h-4 py-0 uppercase">{doc.status || 'Disponível'}</Badge>
+      <div className="flex flex-col lg:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Pesquisar arquivos..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full h-11 bg-card border border-border rounded-xl pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all text-sm"
+          />
+        </div>
+        
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {(["all", "image", "video", "pdf"] as const).map(f => (
+            <button 
+              key={f} 
+              onClick={() => setActiveFilter(f)}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border whitespace-nowrap",
+                activeFilter === f ? "bg-primary text-white border-primary" : "bg-card border-border text-muted-foreground hover:text-white"
+              )}
+            >
+              {f === "all" ? "Todos" : f === "image" ? "Imagens" : f === "video" ? "Vídeos" : "PDFs"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <Loader2 className="w-10 h-10 text-primary animate-spin" />
+          <p className="text-xs text-muted-foreground font-bold uppercase tracking-widest animate-pulse">Sincronizando...</p>
+        </div>
+      ) : filteredDocs.length === 0 ? (
+        <div className="text-center py-20 bg-card/20 border border-dashed border-border rounded-2xl">
+          <FileText className="w-16 h-16 mx-auto text-muted-foreground mb-4 opacity-10" />
+          <h3 className="text-xl font-bold mb-1">Biblioteca Vazia</h3>
+          <p className="text-sm text-muted-foreground">Nem um arquivo encontrado aqui.</p>
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 md:gap-6">
+          {filteredDocs.map(renderGridItem)}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+           {filteredDocs.map(renderListItem)}
+        </div>
+      )}
+
+      {/* Preview Modal (Normalized) */}
+      <AnimatePresence>
+        {selectedDoc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
+            onClick={() => setSelectedDoc(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-4xl bg-card border border-border rounded-2xl overflow-hidden shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setSelectedDoc(null)}
+                className="absolute top-4 right-4 z-[110] p-2 rounded-lg bg-black/60 text-white hover:bg-white hover:text-black transition-all border border-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="flex flex-col">
+                <div className="flex items-center justify-center min-h-[300px] md:min-h-[450px] bg-black/20 p-6 md:p-8">
+                  {detectFileType(selectedDoc.name) === "image" ? (
+                    <img
+                      src={selectedDoc.file_url}
+                      alt={selectedDoc.name}
+                      className="max-w-full max-h-[60vh] object-contain rounded-xl shadow-lg"
+                    />
+                  ) : detectFileType(selectedDoc.name) === "video" ? (
+                    <video
+                      src={selectedDoc.file_url}
+                      controls
+                      autoPlay
+                      className="max-w-full max-h-[60vh] rounded-xl shadow-lg"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-6 py-10">
+                      <div className={cn("w-24 h-24 rounded-2xl flex items-center justify-center shadow-lg", getFileColor(detectFileType(selectedDoc.name)))}>
+                        {getFileIcon(detectFileType(selectedDoc.name))({ className: "w-12 h-12" })}
+                      </div>
+                      <div className="text-center space-y-4">
+                        <h3 className="text-xl font-bold text-white px-6 truncate max-w-sm">{selectedDoc.name}</h3>
+                        <Button onClick={() => handleDownload(selectedDoc)} className="rounded-xl h-12 px-8 font-bold">
+                          <Download className="w-4 h-4 mr-2" /> Abrir Arquivo
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handlePreview(doc)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                        <Eye className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => handleDownload(doc)} className="p-2 rounded-lg hover:bg-muted transition-colors">
-                        <Download className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => handleDelete(doc.id)} className="p-2 rounded-lg hover:bg-destructive/10 transition-colors">
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
+                  )}
+                </div>
+                
+                <div className="p-6 md:p-8 bg-muted/30 border-t border-border">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl font-bold text-white truncate mb-1">{selectedDoc.name}</h3>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> {selectedDoc.profiles?.name || 'Bruno Flacon'}</span>
+                        <span className="w-1 h-1 rounded-full bg-border" />
+                        <span>{formatSize(selectedDoc.file_size)}</span>
+                        <span className="w-1 h-1 rounded-full bg-border" />
+                        <span>{new Date(selectedDoc.created_at).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 shrink-0">
+                      <Button 
+                        onClick={() => handleDownload(selectedDoc)}
+                        variant="secondary"
+                        className="rounded-xl h-11 px-6 font-bold gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Baixar
+                      </Button>
+                      <Button 
+                        onClick={() => { handleDelete(selectedDoc.id); setSelectedDoc(null); }}
+                        variant="destructive"
+                        className="rounded-xl h-11 w-11 p-0"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
-                </motion.div>
-              );
-            })}
-          </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
-      </motion.div>
+      </AnimatePresence>
     </motion.div>
   );
 };

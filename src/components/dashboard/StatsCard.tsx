@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,7 @@ const iconColors = {
   warning: "text-yellow-500 bg-yellow-500/10",
 };
 
-export const StatsCard = ({
+export const StatsCard = memo(({
   title,
   value,
   icon: Icon,
@@ -78,4 +79,6 @@ export const StatsCard = ({
       </div>
     </motion.div>
   );
-};
+});
+
+StatsCard.displayName = "StatsCard";

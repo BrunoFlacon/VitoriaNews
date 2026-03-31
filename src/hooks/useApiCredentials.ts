@@ -77,6 +77,27 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   ],
   giphy: [
     { label: "Giphy API Key", key: "api_key", masked: true },
+  ],
+  kwai: [
+    { label: "Kwai App ID", key: "app_id" },
+    { label: "Kwai App Secret", key: "app_secret", masked: true },
+  ],
+  rumble: [
+    { label: "Rumble Channel ID", key: "channel_id" },
+    { label: "Rumble API Key", key: "api_key", masked: true },
+  ],
+  truthsocial: [
+    { label: "Truth Social Client ID", key: "client_id" },
+    { label: "Truth Social Client Secret", key: "client_secret", masked: true },
+  ],
+  gettr: [
+    { label: "Gettr API Key", key: "api_key", masked: true },
+  ],
+  googlenews: [
+    { label: "Google News API Key", key: "api_key", masked: true },
+  ],
+  newsapi: [
+    { label: "NewsAPI.org API Key", key: "api_key", masked: true, placeholder: "Cole a sua key (ex: 3a5d8f...)" },
   ]
 };
 

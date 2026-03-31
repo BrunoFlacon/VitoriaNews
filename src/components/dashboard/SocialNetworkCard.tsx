@@ -1,4 +1,4 @@
-import { forwardRef, useState, useEffect, useRef } from "react";
+import { forwardRef, useState, useEffect, useRef, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Plus, Settings, Loader2, User, X } from "lucide-react";
@@ -27,7 +27,7 @@ interface SocialNetworkCardProps {
   onSelectAccount?: (account: SocialAccount) => void;
 }
 
-export const SocialNetworkCard = forwardRef<HTMLDivElement, SocialNetworkCardProps>(
+export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCardProps>(
   ({
     platform,
     isConnected,
@@ -242,6 +242,6 @@ export const SocialNetworkCard = forwardRef<HTMLDivElement, SocialNetworkCardPro
       </motion.div>
     );
   }
-);
+));
 
 SocialNetworkCard.displayName = "SocialNetworkCard";

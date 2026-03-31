@@ -38,6 +38,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { TrendsView } from "./TrendsView";
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
@@ -70,6 +71,7 @@ export const AdvancedAnalytics = () => {
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
+  const [activeView, setActiveView] = useState<'analytics' | 'trends'>('analytics');
 
   // Aggregating Follower Data to prevent duplicates
   const groupedFollowers = useMemo(() => {
@@ -165,6 +167,12 @@ export const AdvancedAnalytics = () => {
       case 'whatsapp': return '#25D366';
       case 'telegram': return '#0088CC';
       case 'threads': return '#000000';
+      case 'kwai': return '#FF5000';
+      case 'rumble': return '#85C742';
+      case 'truthsocial': return '#00AEEF';
+      case 'gettr': return '#E11A27';
+      case 'spotify': return '#1DB954';
+      case 'googlenews': return '#4285F4';
       default: return '#3b82f6';
     }
   }
@@ -172,6 +180,8 @@ export const AdvancedAnalytics = () => {
   function normalizePlatform(platform: string): string {
     const value = platform.toLowerCase().trim();
     if (value === "x" || value === "twitter" || value === "x (twitter)") return "twitter";
+    if (value === "truth social") return "truthsocial";
+    if (value === "google news") return "googlenews";
     return value;
   }
 
@@ -192,6 +202,26 @@ export const AdvancedAnalytics = () => {
           <p className="text-muted-foreground">
             Acompanhe o desempenho de suas publicações e perfis em tempo real com base em relatórios reais.
           </p>
+          <div className="flex items-center gap-1 mt-6 p-1 bg-muted/30 rounded-xl inline-flex border border-border/50">
+            <button 
+              onClick={() => setActiveView('analytics')} 
+              className={cn(
+                "px-4 py-2 text-sm font-bold rounded-lg transition-all", 
+                activeView === 'analytics' ? "bg-background shadow-sm text-foreground border border-border/50" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Visão Geral
+            </button>
+            <button 
+              onClick={() => setActiveView('trends')}
+              className={cn(
+                "px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
+                activeView === 'trends' ? "bg-background shadow-sm text-primary border border-border/50" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <TrendingUp className="w-4 h-4" /> Trends & Viral
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -219,13 +249,13 @@ export const AdvancedAnalytics = () => {
             </PopoverTrigger>
             <PopoverContent 
               align="end" 
-              className="w-[240px] p-2"
+              className="w-[260px] p-2"
               onMouseLeave={() => setIsPlatformMenuOpen(false)}
             >
-              <div className="text-xs font-bold text-muted-foreground px-2 py-1 mb-1 uppercase tracking-wider">
+              <div className="text-xs font-bold text-muted-foreground px-3 py-2 mb-1 uppercase tracking-wider border-b border-border/50">
                 Redes Sociais
               </div>
-              <div className="grid grid-cols-1 gap-1">
+              <div className="grid grid-cols-1 gap-1 max-h-[450px] overflow-y-auto custom-scrollbar p-1">
                 <button
                   onClick={() => setPlatform('all')}
                   className={cn(
@@ -239,22 +269,25 @@ export const AdvancedAnalytics = () => {
                   </div>
                   {platform === 'all' && <Check className="w-3 h-3" />}
                 </button>
-                {socialPlatforms.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => setPlatform(p.id)}
-                    className={cn(
-                      "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors text-left",
-                      platform === p.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <p.icon className={cn("w-4 h-4", p.textColor)} />
-                      {p.name}
-                    </div>
-                    {platform === p.id && <Check className="w-3 h-3" />}
-                  </button>
-                ))}
+                {socialPlatforms.map(p => {
+                  if (p.id === 'site' || p.id === 'giphy') return null;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setPlatform(p.id)}
+                      className={cn(
+                        "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors text-left",
+                        platform === p.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <p.icon className={cn("w-4 h-4", p.textColor)} />
+                        {p.name}
+                      </div>
+                      {platform === p.id && <Check className="w-3 h-3" />}
+                    </button>
+                  );
+                })}
               </div>
             </PopoverContent>
           </Popover>
@@ -292,8 +325,14 @@ export const AdvancedAnalytics = () => {
         </div>
       </div>
 
-      {/* TOP WIDGETS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {activeView === 'trends' ? (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <TrendsView />
+        </div>
+      ) : (
+        <div className="space-y-8 animate-in fade-in duration-500">
+          {/* TOP WIDGETS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Total de Visualizações", value: engagement.views, icon: Eye, color: "text-blue-500", bg: "bg-blue-500/10" },
           { label: "Engajamento Total", value: engagement.likes + engagement.comments, icon: Heart, color: "text-purple-500", bg: "bg-purple-500/10" },
@@ -714,7 +753,9 @@ export const AdvancedAnalytics = () => {
             </div>
           </div>
         </div>
-      </Card>
+        </Card>
+        </div>
+      )}
     </div>
   );
 };

@@ -10,7 +10,14 @@ import {
   TelegramIcon,
   PinterestIcon,
   SnapchatIcon,
-  ThreadsIcon
+  ThreadsIcon,
+  KwaiIcon,
+  RumbleIcon,
+  TruthSocialIcon,
+  GettrIcon,
+  SpotifyIcon,
+  GiphyIcon,
+  GoogleNewsIcon
 } from "./SocialIcons";
 
 export const socialPlatforms = [
@@ -20,7 +27,8 @@ export const socialPlatforms = [
     icon: FacebookIcon,
     color: "bg-[#1877F2]",
     textColor: "text-[#1877F2]",
-    gradient: "from-[#1877F2] to-[#0D65D9]"
+    gradient: "from-[#1877F2] to-[#0D65D9]",
+    type: "social"
   },
   {
     id: "instagram",
@@ -28,7 +36,8 @@ export const socialPlatforms = [
     icon: InstagramIcon,
     color: "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
     textColor: "text-[#DD2A7B]",
-    gradient: "from-[#F58529] via-[#DD2A7B] to-[#8134AF]"
+    gradient: "from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
+    type: "social"
   },
   {
     id: "twitter",
@@ -36,7 +45,8 @@ export const socialPlatforms = [
     icon: XIcon,
     color: "bg-black",
     textColor: "text-white",
-    gradient: "from-[#1a1a1a] to-[#000000]"
+    gradient: "from-[#1a1a1a] to-[#000000]",
+    type: "social"
   },
   {
     id: "linkedin",
@@ -44,7 +54,8 @@ export const socialPlatforms = [
     icon: LinkedinIcon,
     color: "bg-[#0A66C2]",
     textColor: "text-[#0A66C2]",
-    gradient: "from-[#0A66C2] to-[#004182]"
+    gradient: "from-[#0A66C2] to-[#004182]",
+    type: "social"
   },
   {
     id: "youtube",
@@ -52,7 +63,8 @@ export const socialPlatforms = [
     icon: YoutubeIcon,
     color: "bg-[#FF0000]",
     textColor: "text-[#FF0000]",
-    gradient: "from-[#FF0000] to-[#CC0000]"
+    gradient: "from-[#FF0000] to-[#CC0000]",
+    type: "social"
   },
   {
     id: "tiktok",
@@ -60,7 +72,8 @@ export const socialPlatforms = [
     icon: TikTokIcon,
     color: "bg-[#000000]",
     textColor: "text-[#00F2EA]",
-    gradient: "from-[#000000] via-[#010101] to-[#000000]"
+    gradient: "from-[#000000] via-[#010101] to-[#000000]",
+    type: "social"
   },
   {
     id: "whatsapp",
@@ -68,7 +81,8 @@ export const socialPlatforms = [
     icon: WhatsappIcon,
     color: "bg-[#25D366]",
     textColor: "text-[#25D366]",
-    gradient: "from-[#25D366] to-[#128C7E]"
+    gradient: "from-[#25D366] to-[#128C7E]",
+    type: "social"
   },
   {
     id: "telegram",
@@ -76,7 +90,8 @@ export const socialPlatforms = [
     icon: TelegramIcon,
     color: "bg-[#0088CC]",
     textColor: "text-[#0088CC]",
-    gradient: "from-[#0088CC] to-[#006699]"
+    gradient: "from-[#0088CC] to-[#006699]",
+    type: "social"
   },
   {
     id: "pinterest",
@@ -84,7 +99,8 @@ export const socialPlatforms = [
     icon: PinterestIcon,
     color: "bg-[#E60023]",
     textColor: "text-[#E60023]",
-    gradient: "from-[#E60023] to-[#BD001A]"
+    gradient: "from-[#E60023] to-[#BD001A]",
+    type: "social"
   },
   {
     id: "snapchat",
@@ -92,7 +108,8 @@ export const socialPlatforms = [
     icon: SnapchatIcon,
     color: "bg-[#FFFC00]",
     textColor: "text-[#000000]",
-    gradient: "from-[#FFFC00] to-[#FFE600]"
+    gradient: "from-[#FFFC00] to-[#FFE600]",
+    type: "social"
   },
   {
     id: "threads",
@@ -100,7 +117,71 @@ export const socialPlatforms = [
     icon: ThreadsIcon,
     color: "bg-[#000000]",
     textColor: "text-white",
-    gradient: "from-[#000000] to-[#1a1a1a]"
+    gradient: "from-[#000000] to-[#1a1a1a]",
+    type: "social"
+  },
+  {
+    id: "kwai",
+    name: "Kwai",
+    icon: KwaiIcon,
+    color: "bg-[#FF5000]",
+    textColor: "text-[#FF5000]",
+    gradient: "from-[#FF5000] to-[#FF8000]",
+    type: "social"
+  },
+  {
+    id: "rumble",
+    name: "Rumble",
+    icon: RumbleIcon,
+    color: "bg-[#85C742]",
+    textColor: "text-[#85C742]",
+    gradient: "from-[#85C742] to-[#6BA336]",
+    type: "social"
+  },
+  {
+    id: "truthsocial",
+    name: "Truth Social",
+    icon: TruthSocialIcon,
+    color: "bg-[#00AEEF]",
+    textColor: "text-[#00AEEF]",
+    gradient: "from-[#00AEEF] to-[#0089C2]",
+    type: "social"
+  },
+  {
+    id: "gettr",
+    name: "Gettr",
+    icon: GettrIcon,
+    color: "bg-[#E11A27]",
+    textColor: "text-[#E11A27]",
+    gradient: "from-[#E11A27] to-[#B0141E]",
+    type: "social"
+  },
+  {
+    id: "spotify",
+    name: "Spotify",
+    icon: SpotifyIcon,
+    color: "bg-[#1DB954]",
+    textColor: "text-[#1DB954]",
+    gradient: "from-[#1DB954] to-[#191414]",
+    type: "tool"
+  },
+  {
+    id: "giphy",
+    name: "Giphy",
+    icon: GiphyIcon,
+    color: "bg-[#000000]",
+    textColor: "text-white",
+    gradient: "from-[#000000] via-[#4d4d4d] to-[#000000]",
+    type: "tool"
+  },
+  {
+    id: "googlenews",
+    name: "Google News",
+    icon: GoogleNewsIcon,
+    color: "bg-[#4285F4]",
+    textColor: "text-[#4285F4]",
+    gradient: "from-[#4285F4] via-[#34A853] via-[#FBBC05] to-[#EA4335]",
+    type: "news"
   },
   {
     id: "site",
@@ -108,11 +189,10 @@ export const socialPlatforms = [
     icon: Camera,
     color: "bg-gradient-to-br from-primary to-accent",
     textColor: "text-primary",
-    gradient: "from-primary to-accent"
+    gradient: "from-primary to-accent",
+    type: "social"
   },
 ] as const;
-// Remove legacy export to avoid Vite HMR "Could not Fast Refresh" errors
-// export const SOCIAL_PLATFORMS = socialPlatforms;
 
 export type SocialPlatformId = typeof socialPlatforms[number]["id"];
 
