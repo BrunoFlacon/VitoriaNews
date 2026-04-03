@@ -69,6 +69,19 @@ serve(async (req: Request) => {
         break;
       }
 
+      case 'detect-attacks': {
+        try {
+          const { detectCoordinatedAttack } = await import('./attack-detector.ts');
+          const { posts } = await req.json();
+          await detectCoordinatedAttack(posts);
+          data = { message: 'Attack detection process completed' };
+        } catch (detectorErr: any) {
+          console.error('[radar-api] attack-detector failed:', detectorErr.message);
+          data = { error: detectorErr.message };
+        }
+        break;
+      }
+
       default:
         return jsonResponse({ error: `Endpoint '${path}' not found` }, 404);
     }

@@ -198,3 +198,7 @@ export type SocialPlatformId = typeof socialPlatforms[number]["id"];
 
 export const getSocialPlatform = (id: SocialPlatformId) =>
   socialPlatforms.find(p => p.id === id);
+
+export const platformMetadata = Object.fromEntries(
+  socialPlatforms.map(p => [p.id, p])
+) as Record<string, typeof socialPlatforms[number]>;

@@ -15,6 +15,7 @@ import type { Article } from "@/lib/social-sdk/types";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { TrendDetailDrawer } from "./TrendDetailDrawer";
+import { PowerRadar } from "./PowerRadar";
 
 export const NewsPortal = () => {
   const { user } = useAuth();
@@ -143,9 +144,10 @@ export const NewsPortal = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-6 grid w-full grid-cols-2 max-w-[400px]">
+        <TabsList className="mb-6 grid w-full grid-cols-3 max-w-[600px]">
           <TabsTrigger value="my-articles" className="font-bold">Meus Artigos</TabsTrigger>
           <TabsTrigger value="discovery" className="font-bold">Descoberta & Radar</TabsTrigger>
+          <TabsTrigger value="power-radar" className="font-bold">Radar de Poder</TabsTrigger>
         </TabsList>
 
         <TabsContent value="my-articles">
@@ -358,6 +360,10 @@ export const NewsPortal = () => {
               );})}
             </Tabs>
           </div>
+        </TabsContent>
+
+        <TabsContent value="power-radar">
+           <PowerRadar />
         </TabsContent>
       </Tabs>
 

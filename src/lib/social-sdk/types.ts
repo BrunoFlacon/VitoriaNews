@@ -116,3 +116,55 @@ export interface LiveSession {
   created_at: string;
   updated_at: string;
 }
+
+export interface PoliticalTrend {
+  id: string;
+  user_id?: string;
+  keyword: string;
+  mentions: number;
+  sentiment: string;
+  velocity: number;
+  detected_at: string;
+}
+
+export interface Narrative {
+  id: string;
+  user_id?: string;
+  topic: string;
+  narrative_type: string;
+  sentiment: string;
+  dominance_score: number;
+  detected_at: string;
+}
+
+export interface ViralCampaign {
+  id: string;
+  user_id?: string;
+  topic: string;
+  platforms: string[];
+  intensity_score: number;
+  detected_at: string;
+}
+
+export interface AttackEvent {
+  id: string;
+  user_id?: string;
+  topico: string;
+  plataforma: string;
+  pontuacao_de_intensidade: number;
+  padrao_detectado?: string;
+  contas_envolvidas?: string[];
+  hashtags_relacionadas?: string[];
+  nivel_de_risco: 'baixo' | 'médio' | 'alto';
+  criado_em: string;
+}
+
+export interface RepostSuggestion {
+  id: string;
+  user_id?: string;
+  original_post_id: string;
+  target_platform: string;
+  suggested_content: string;
+  status: 'pending' | 'approved' | 'rejected' | 'editing';
+  created_at: string;
+}

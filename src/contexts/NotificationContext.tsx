@@ -84,6 +84,28 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
           fetchNotifications();
         }
       )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'eventos_de_ataque', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          addNotification({
+            type: 'error',
+            title: '🚨 Ataque Detectado',
+            message: `Padrão coordenado detectado: ${payload.new.topico}`,
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'repost_suggestions', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          addNotification({
+            type: 'info',
+            title: '💡 Sugestão de Repost',
+            message: `O sistema sugere republicar conteúdo para ${payload.new.target_platform}`,
+          });
+        }
+      )
       .subscribe();
 
     return () => {
