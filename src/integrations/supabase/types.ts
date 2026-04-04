@@ -1137,11 +1137,8 @@ export type Database = {
           email: string
           id: string
           name: string
-          profile_content: Json | null
-          social_links: Json | null
           updated_at: string
           user_id: string
-          website: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -1150,11 +1147,8 @@ export type Database = {
           email: string
           id?: string
           name: string
-          profile_content?: Json | null
-          social_links?: Json | null
           updated_at?: string
           user_id: string
-          website?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -1163,11 +1157,8 @@ export type Database = {
           email?: string
           id?: string
           name?: string
-          profile_content?: Json | null
-          social_links?: Json | null
           updated_at?: string
           user_id?: string
-          website?: string | null
         }
         Relationships: []
       }
