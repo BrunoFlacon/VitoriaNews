@@ -1,4 +1,5 @@
 // deno-lint-ignore-file
+// @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -76,15 +77,31 @@ serve(async (req: Request) => {
         break;
       }
 
-      case 'discover-trends': {
-        // Returns mock data if trend-discovery module is unavailable
+      case 'discover-trends':
+      case 'sync-intelligence': {
         try {
           const { discoverTrends } = await import('../_shared/automation/trend-discovery.ts');
-          data = await discoverTrends(supabaseClient);
+          const authHeader = req.headers.get('Authorization');
+          const token = authHeader?.replace('Bearer ', '');
+          const { data: { user } } = await supabaseClient.auth.getUser(token);
+          
+          data = await discoverTrends(supabaseClient, user?.id);
         } catch (importErr: any) {
-          console.warn('[automation-api] trend-discovery import failed:', importErr.message);
-          // Return a graceful empty result so frontend doesn't hard-fail
-          data = { discovered: 0, message: 'Trend discovery module unavailable — check shared module.' };
+          console.warn('[automation-api] trend-discovery failed:', importErr.message);
+          data = { error: importErr.message };
+        }
+        break;
+      }
+
+      case 'detect-attacks': {
+        try {
+          const { detectCoordinatedAttack } = await import('../_shared/radar/attack-detector.ts');
+          const body = await req.json();
+          await detectCoordinatedAttack(body.posts || []);
+          data = { message: 'Attack detection completed' };
+        } catch (detectorErr: any) {
+          console.error('[automation-api] attack-detector failed:', detectorErr.message);
+          data = { error: detectorErr.message };
         }
         break;
       }

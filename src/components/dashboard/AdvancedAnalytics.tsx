@@ -354,7 +354,7 @@ export const AdvancedAnalytics = () => {
             </div>
             <div>
               <h3 className="text-3xl font-bold font-display tracking-tight text-card-foreground">
-                {stat.value.toLocaleString()}
+                {(stat.value || 0).toLocaleString()}
               </h3>
               <p className="text-sm text-muted-foreground font-medium mt-1">{stat.label}</p>
             </div>
@@ -510,10 +510,10 @@ export const AdvancedAnalytics = () => {
                    </div>
                    
                    <p className="text-2xl font-bold mt-2 font-display">
-                     {platformActiveProfile[group.platform] 
-                       ? group.profiles.find((p: any) => `${p.platform}-${p.username || p.platform_user_id}` === platformActiveProfile[group.platform])?.currentFollowers?.toLocaleString()
-                       : group.totalFollowers.toLocaleString()}
-                   </p>
+                      {platformActiveProfile[group.platform] 
+                        ? (group.profiles.find((p: any) => `${p.platform}-${p.username || p.platform_user_id}` === platformActiveProfile[group.platform])?.currentFollowers || 0).toLocaleString()
+                        : (group.totalFollowers || 0).toLocaleString()}
+                    </p>
                    <p className="text-xs text-muted-foreground mt-1">
                      {platformActiveProfile[group.platform] ? "seguidores do perfil" : "seguidores combinados"}
                    </p>
@@ -653,8 +653,8 @@ export const AdvancedAnalytics = () => {
                 </div>
                 <p className="text-sm text-card-foreground line-clamp-2 mb-3">{item.content}</p>
                 <div className="flex items-center gap-4 text-xs font-medium">
-                  <span className="flex items-center gap-1 text-blue-500"><Eye className="w-3 h-3" /> {item.views.toLocaleString()}</span>
-                  <span className="flex items-center gap-1 text-purple-500"><Heart className="w-3 h-3" /> {item.engagement.toLocaleString()}</span>
+                  <span className="flex items-center gap-1 text-blue-500"><Eye className="w-3 h-3" /> {(item.views || 0).toLocaleString()}</span>
+                  <span className="flex items-center gap-1 text-purple-500"><Heart className="w-3 h-3" /> {(item.engagement || 0).toLocaleString()}</span>
                 </div>
               </div>
             )) : (

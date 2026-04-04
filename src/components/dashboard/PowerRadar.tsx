@@ -13,7 +13,8 @@ import {
   Globe,
   Radio,
   Search,
-  Filter
+  Filter,
+  Loader2
 } from "lucide-react";
 import { 
   ScatterChart, 
@@ -40,12 +41,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 export const PowerRadar = () => {
-  const { politicalTrends, loading: trendsLoading } = useTrends();
+  const { trends, politicalTrends, loading: trendsLoading, syncTrends, isSyncing } = useTrends();
   const { narratives, campaigns, attacks, suggestions, updateSuggestionStatus } = useIntelligence();
   
   const [selectedSuggestion, setSelectedSuggestion] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeRadarTab, setActiveRadarTab] = useState<"overview" | "attacks" | "narratives">("overview");
+  const [platformFilter, setPlatformFilter] = useState<string>("all");
 
   // Data for the Influence Map (Scatter Chart)
   const influenceData = useMemo(() => {
@@ -92,22 +94,33 @@ export const PowerRadar = () => {
             </div>
          </div>
          
-         <div className="relative z-10 flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/10">
-            {["overview", "attacks", "narratives"].map((tab) => (
-              <Button
-                key={tab}
-                variant="ghost"
-                onClick={() => setActiveRadarTab(tab as any)}
-                className={cn(
-                  "text-[10px] font-black uppercase tracking-widest px-6 h-10 transition-all rounded-xl",
-                  activeRadarTab === tab ? "bg-primary text-white shadow-lg" : "text-muted-foreground hover:text-white"
-                )}
-              >
-                {tab === "overview" && "Visão Geral"}
-                {tab === "attacks" && "Ataques Coordenados"}
-                {tab === "narratives" && "Engenharia Social"}
-              </Button>
-            ))}
+         <div className="relative z-10 flex items-center gap-4">
+            <div className="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/10">
+               {["overview", "attacks", "narratives"].map((tab) => (
+                 <Button
+                   key={tab}
+                   variant="ghost"
+                   onClick={() => setActiveRadarTab(tab as any)}
+                   className={cn(
+                     "text-[10px] font-black uppercase tracking-widest px-6 h-10 transition-all rounded-xl",
+                     activeRadarTab === tab ? "bg-primary text-white shadow-lg" : "text-muted-foreground hover:text-white"
+                   )}
+                 >
+                   {tab === "overview" && "Visão Geral"}
+                   {tab === "attacks" && "Ataques Coordenados"}
+                   {tab === "narratives" && "Engenharia Social"}
+                 </Button>
+               ))}
+            </div>
+            <Button 
+               onClick={() => syncTrends()}
+               disabled={isSyncing}
+               variant="outline"
+               className="border-primary/30 text-primary font-black uppercase tracking-widest px-4 h-12 rounded-2xl hover:bg-primary/10 transition-all"
+            >
+               {isSyncing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
+               Sincronizar Inteligência
+            </Button>
          </div>
       </div>
 
@@ -199,17 +212,48 @@ export const PowerRadar = () => {
 
            {/* TENDÊNCIAS POLÍTICAS GRID */}
            <section>
-              <div className="flex items-center justify-between mb-4 px-2">
+              <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 px-2 gap-4">
                  <h2 className="text-xs font-black uppercase tracking-[0.2em] text-white flex items-center gap-2">
                     <Activity className="w-4 h-4 text-primary" /> Tendências e Narrativas
                  </h2>
-                 <Button variant="ghost" size="sm" className="text-[10px] font-bold uppercase tracking-widest text-primary">Ver Tudo <ArrowUpRight className="w-3 h-3 ml-1" /></Button>
+                 <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-white/5 rounded-lg border border-white/10 p-1">
+                      {["all", "google", "newsapi"].map((platform) => (
+                         <button
+                            key={platform}
+                            onClick={() => setPlatformFilter(platform)}
+                            className={cn(
+                               "px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all",
+                               platformFilter === platform 
+                                  ? "bg-primary text-white" 
+                                  : "text-muted-foreground hover:text-white hover:bg-white/5"
+                            )}
+                         >
+                            {platform === "all" ? "Todas" : platform}
+                         </button>
+                      ))}
+                    </div>
+                    <Button variant="ghost" size="sm" className="text-[10px] font-bold uppercase tracking-widest text-primary ml-2">Ver Tudo <ArrowUpRight className="w-3 h-3 ml-1" /></Button>
+                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 {politicalTrends.slice(0, 4).map((trend) => (
-                   <TrendCard key={trend.id} trend={trend} />
+                 {[...politicalTrends, ...trends.filter(t => t && ((t.score || 0) > 90 || t.sub_source === 'NewsAPI'))]
+                    .filter(t => {
+                      if (!t) return false;
+                      if (platformFilter === 'all') return true;
+                      const kw = (t.keyword || "").toLowerCase();
+                      const src = ((t as any).source || "").toLowerCase();
+                      return kw.includes(platformFilter) || src.includes(platformFilter);
+                    })
+                    .sort((a, b) => {
+                      const dateA = new Date(a?.detected_at || 0).getTime();
+                      const dateB = new Date(b?.detected_at || 0).getTime();
+                      return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
+                    })
+                    .slice(0, 4).map((trend) => (
+                      <TrendCard key={trend.id} trend={trend as any} />
                  ))}
-                 {politicalTrends.length === 0 && (
+                 {politicalTrends.length === 0 && trends.length === 0 && (
                    <div className="col-span-full py-12 text-center bg-white/5 rounded-[32px] border border-dashed border-white/10">
                       <TrendingUp className="w-10 h-10 mx-auto text-muted-foreground/20 mb-2" />
                       <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest leading-relaxed">Nenhuma tendência detectada no radar secundário</p>
@@ -230,7 +274,7 @@ export const PowerRadar = () => {
                  <span className="flex h-2 w-2 rounded-full bg-red-500 animate-ping" />
               </div>
               <div className="space-y-4">
-                 {attacks.slice(0, 3).map((attack) => (
+                 {(attacks || []).slice(0, 3).map((attack) => (
                    <motion.div 
                      key={attack.id}
                      initial={{ opacity: 0, x: 20 }}
@@ -245,17 +289,19 @@ export const PowerRadar = () => {
                             "text-[9px] font-black uppercase",
                             attack.nivel_de_risco === 'alto' ? "bg-red-500/20 text-red-500" : "bg-orange-500/20 text-orange-500"
                          )}>
-                            Risco {attack.nivel_de_risco}
+                            Risco {attack.nivel_de_risco === 'alto' ? 'Alto' : 'Médio'}
                          </Badge>
-                         <span className="text-[10px] font-bold text-muted-foreground">{new Date(attack.criado_em).toLocaleTimeString('pt-BR')}</span>
+                         <span className="text-[10px] font-bold text-muted-foreground">
+                            {attack.criado_em ? new Date(attack.criado_em).toLocaleTimeString('pt-BR') : 'Agora'}
+                         </span>
                       </div>
-                      <h3 className="text-sm font-black text-white uppercase italic tracking-tight mb-2">{attack.topico}</h3>
+                      <h3 className="text-sm font-black text-white uppercase italic tracking-tight mb-2">{attack.topico || 'Ataque Detectado'}</h3>
                       <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest mb-4">
                         {attack.padrao_detectado || 'Padrão inusual detectado'}
                       </p>
                       <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-tighter">
                          <div className="flex items-center gap-1.5 text-red-400">
-                            <Activity className="w-3 h-3" /> {attack.pontuacao_de_intensidade}% Intensidade
+                            <Activity className="w-3 h-3" /> {(attack.pontuacao_de_intensidade || 0)}% Intensidade
                          </div>
                          <div className="flex items-center gap-1.5 text-white/40">
                             <Users className="w-3 h-3" /> {attack.contas_envolvidas?.length || 0} Contas

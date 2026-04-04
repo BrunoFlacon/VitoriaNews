@@ -798,7 +798,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <ImageIcon className="w-4 h-4" />
-                  Giphy
+                  GIPHY
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-[350px] p-0 border-none bg-transparent shadow-none" align="start">
@@ -808,7 +808,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                       id: `giphy-${Date.now()}`,
                       file_url: url,
                       file_type: "image/gif",
-                      name: "Giphy GIF",
+                      name: "GIPHY GIF",
                       file_size: 0
                     };
                     setUploadedFiles(prev => [...prev, newMedia]);

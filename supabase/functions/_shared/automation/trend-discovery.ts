@@ -29,182 +29,89 @@ async function fetchCreds(supabaseClient: any, platform: string): Promise<Record
   }
 }
 
-export async function discoverTrends(supabaseClient: any) {
+import { collectMetaIntelligence } from './collectors/meta.ts';
+import { collectGoogleIntelligence } from './collectors/google.ts';
+import { collectTikTokIntelligence } from './collectors/tiktok.ts';
+import { collectAlternativeIntelligence } from './collectors/alt-social.ts';
+import { monitorPoliticalTrends } from '../radar/political-trends.ts';
+
+export async function discoverTrends(supabaseClient: any, userId?: string) {
   const allTrends: any[] = [];
   let trendsCount = 0;
 
-  // ─── 1. Google Trends RSS (sempre gratuito, sem chave) ─────────────────────
-  try {
-    const rssRes = await fetch('https://trends.google.com/trends/trendingsearches/daily/rss?geo=BR');
-    if (rssRes.ok) {
-      const xml = await rssRes.text();
-      const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+  // Se userId não for informado, pegamos o primeiro usuário logado ou rodamos globalmente
+  // Para fins de automação, muitas vezes rodamos para todos os usuários com conexões
+  const targetUserId = userId || (await supabaseClient.auth.getUser())?.data?.user?.id;
 
-      items.slice(0, 10).forEach(itemXml => {
-        const titleMatch = itemXml[1].match(/<title>(.*?)<\/title>/);
-        const linkMatch  = itemXml[1].match(/<link>(.*?)<\/link>/);
-        const pubMatch   = itemXml[1].match(/<pubDate>(.*?)<\/pubDate>/);
-        const trafficMatch = itemXml[1].match(/<ht:approx_traffic>(.*?)<\/ht:approx_traffic>/);
-        const imgMatch   = itemXml[1].match(/<ht:picture>(.*?)<\/ht:picture>/);
-
-        const title   = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '').trim() : '';
-        const link    = linkMatch  ? linkMatch[1].replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '') : `https://www.google.com/search?q=${encodeURIComponent(title)}`;
-        const pub     = pubMatch   ? pubMatch[1] : null;
-        const traffic = trafficMatch ? trafficMatch[1] : '50K+';
-        const imgUrl  = imgMatch ? imgMatch[1] : null;
-
-        if (title && title !== 'Daily Search Trends') {
-          allTrends.push({
-            keyword: title,
-            source: 'Google Trends',
-            category: 'Geral',
-            url: link,
-            thumbnail_url: imgUrl,
-            metadata: { 
-              published_at: pub ? new Date(pub).toISOString() : new Date().toISOString(),
-              traffic: traffic 
-            },
-            score: traffic.includes('M') ? 98 : 92 + Math.floor(Math.random() * 5),
-          });
-        }
-      });
-    }
-  } catch (err) {
-    console.error('[discoverTrends] Google Trends error:', err);
+  if (!targetUserId) {
+    console.error('[discoverTrends] No user ID provided or found');
+    return { success: false, error: 'No user ID' };
   }
 
-  // ─── 2. NewsAPI.org (se chave cadastrada) ──────────────────────────────────
-  try {
-    const newsApiCreds = await fetchCreds(supabaseClient, 'newsapi');
-    const googleCreds  = await fetchCreds(supabaseClient, 'google_cloud');
-    const newsApiKey   = newsApiCreds.api_key || googleCreds.news_api_key || '';
+  // 1. Coleta Unificada
+  const metaTrends = await collectMetaIntelligence(supabaseClient, targetUserId);
+  const googleTrends = await collectGoogleIntelligence(supabaseClient, targetUserId);
+  const tikTokTrends = await collectTikTokIntelligence(supabaseClient, targetUserId);
+  const altTrends = await collectAlternativeIntelligence(supabaseClient, targetUserId);
 
-    if (newsApiKey.trim()) {
-      console.log('[discoverTrends] Buscando NewsAPI.org...');
-      const res = await fetch(
-        `https://newsapi.org/v2/top-headlines?country=br&pageSize=12&apiKey=${newsApiKey}`,
-        { headers: { Accept: 'application/json' } }
-      );
+  allTrends.push(...metaTrends, ...googleTrends, ...tikTokTrends, ...altTrends);
+
+  // 2. Coleta de Notícias (NewsAPI como Fonte Principal)
+  try {
+    const { data: newsApiData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'newsapi').maybeSingle();
+    const newsApiKey = newsApiData?.credentials?.api_key || '';
+
+    if (newsApiKey) {
+      console.log('[discoverTrends] Fetching from NewsAPI...');
+      const res = await fetch(`https://newsapi.org/v2/top-headlines?country=br&pageSize=20&apiKey=${newsApiKey}`);
       if (res.ok) {
         const json = await res.json();
         for (const article of (json.articles || [])) {
-          if (!article.title || article.title === '[Removed]') continue;
           allTrends.push({
-            keyword: article.title.split(' - ')[0].substring(0, 100),
-            source: 'NewsAPI',
-            category: 'Notícias',
+            keyword: article.title.substring(0, 100),
+            source: article.source?.name || 'Notícias',
+            sub_source: 'NewsAPI',
+            category: 'Geral',
             url: article.url,
-            thumbnail_url: article.urlToImage || null,
-            description: article.description || '',
-            metadata: { published_at: article.publishedAt, source_name: article.source?.name },
-            score: 88 + Math.floor(Math.random() * 8),
-          });
-        }
-      } else {
-        const errBody = await res.text();
-        console.warn('[discoverTrends] NewsAPI respondeu com erro:', res.status, errBody.substring(0, 200));
-      }
-    }
-  } catch (err) {
-    console.error('[discoverTrends] NewsAPI error:', err);
-  }
-
-  // ─── 3. G1 Globo RSS (gratuito, com imagens nativas) ──────────────────────
-  try {
-    const res = await fetch('https://g1.globo.com/rss/g1/');
-    if (res.ok) {
-      const xml   = await res.text();
-      const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
-
-      items.slice(0, 12).forEach(itemXml => {
-        const titleMatch   = itemXml[1].match(/<title>(.*?)<\/title>/);
-        const linkMatch    = itemXml[1].match(/<link>(.*?)<\/link>/);
-        const descMatch    = itemXml[1].match(/<description>(.*?)<\/description>/);
-        const pubMatch     = itemXml[1].match(/<pubDate>(.*?)<\/pubDate>/);
-        
-        // Busca imagem em media:content ou em tag <img> dentro da description (escaped or not)
-        const mediaMatch   = itemXml[1].match(/<media:content[^>]*url=['"]([^'"]+)['"]/i);
-        const imgTagMatch  = itemXml[1].match(/&lt;img[^>]*src=['"]([^'"]+)['"]/i) || itemXml[1].match(/<img[^>]*src=['"]([^'"]+)['"]/i);
-
-        const title = titleMatch ? titleMatch[1].replace(/<!\[CDATA\[/g,'').replace(/\]\]>/g,'').split(' - ')[0].trim() : '';
-        const link  = linkMatch  ? linkMatch[1].replace(/<!\[CDATA\[/g,'').replace(/\]\]>/g,'') : '';
-        const desc  = descMatch  ? descMatch[1].replace(/<!\[CDATA\[/g,'').replace(/\]\]>/g,'').replace(/<[^>]+>/gm,'').substring(0,400) : '';
-        const pub   = pubMatch   ? pubMatch[1] : null;
-        const img   = mediaMatch ? mediaMatch[1] : (imgTagMatch ? imgTagMatch[1] : null);
-
-        if (title) {
-          allTrends.push({
-            keyword: title,
-            source: 'G1',
-            category: 'Notícias',
-            url: link,
-            thumbnail_url: img,
-            description: desc,
-            metadata: { 
-              published_at: pub ? new Date(pub).toISOString() : new Date().toISOString(),
-              original_pub_date: pub // Guarda a string original para debug
-            },
+            thumbnail_url: article.urlToImage,
+            description: article.description,
             score: 85,
+            metadata: { 
+              published_at: article.publishedAt,
+              author: article.author,
+              content_snippet: article.content ? article.content.substring(0, 200) : null
+            }
           });
         }
-      });
-    }
-  } catch (err) {
-    console.error('[discoverTrends] G1 error:', err);
-  }
-
-  // ─── 4. Redes Sociais (baseadas nos Google Trends capturados) ──────────────
-  const seedKeywords = allTrends.filter(t => t.source === 'Google Trends').slice(0, 6);
-  const socialNetworks = [
-    { name: 'X / Twitter',  category: 'Viral',       baseScore: 93 },
-    { name: 'Instagram',    category: 'Viral',        baseScore: 90 },
-    { name: 'TikTok',       category: 'Viral',        baseScore: 95 },
-    { name: 'Facebook',     category: 'Discussão',    baseScore: 84 },
-    { name: 'Threads',      category: 'Debate',       baseScore: 80 },
-    { name: 'YouTube',      category: 'Vídeo',        baseScore: 88 },
-    { name: 'LinkedIn',     category: 'Profissional', baseScore: 78 },
-    { name: 'Pinterest',    category: 'Inspiração',   baseScore: 75 },
-  ];
-
-  if (seedKeywords.length > 0) {
-    for (const network of socialNetworks) {
-      const numTrends = 2 + Math.floor(Math.random() * 2);
-      for (let i = 0; i < numTrends; i++) {
-        const seed = seedKeywords[i % seedKeywords.length];
-        const useHashtag = Math.random() > 0.4;
-        const kw = useHashtag ? `#${seed.keyword.replace(/\s+/g, '')}` : seed.keyword;
-        const url = (SOCIAL_SEARCH_URLS[network.name] || ((k: string) => `https://www.google.com/search?q=${encodeURIComponent(k)}`))(kw);
-
-        allTrends.push({
-          keyword: kw,
-          source: network.name,
-          category: network.category,
-          url,
-          thumbnail_url: seed.thumbnail_url || null,
-          description: `Trending em ${network.name}: "${seed.keyword}" está com alto engajamento agora.`,
-          score: network.baseScore + Math.floor(Math.random() * 7),
-        });
       }
     }
-  }
+  } catch (e) { console.error('[discoverTrends] NewsAPI failed:', e); }
 
-  // ─── 5. Salvar no banco ────────────────────────────────────────────────────
+  // 3. Sincronizar Radar Político / Geopolítico
+  try {
+    console.log('[discoverTrends] Monitoring Political Trends...');
+    await monitorPoliticalTrends(supabaseClient);
+  } catch (e) { console.error('[discoverTrends] Political monitoring failed:', e); }
+
+  // 3. Salvar no banco
   for (const trend of allTrends) {
     try {
       const { error } = await supabaseClient.from('trends').insert({
-        keyword:       trend.keyword,
-        source:        trend.source,
-        category:      trend.category,
-        score:         trend.score,
-        url:           trend.url,
-        thumbnail_url: trend.thumbnail_url,
-        description:   trend.description || '',
-        metadata:      trend.metadata || {},
-        detected_at:   new Date().toISOString(),
+        user_id: targetUserId,
+        keyword: trend.keyword,
+        source: trend.source,
+        sub_source: trend.sub_source || null,
+        category: trend.category,
+        score: trend.score || 0,
+        url: trend.url || null,
+        thumbnail_url: trend.thumbnail_url || null,
+        description: trend.description || null,
+        metadata: trend.metadata || {},
+        detected_at: new Date().toISOString(),
       });
       if (!error) trendsCount++;
     } catch (e) {
-      console.error('[discoverTrends] insert error:', e);
+      console.error('[discoverTrends] Insert error:', e);
     }
   }
 

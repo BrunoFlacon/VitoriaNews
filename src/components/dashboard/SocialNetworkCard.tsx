@@ -225,7 +225,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                           </p>
                           {account.followers_count != null && (
                             <p className="text-xs text-muted-foreground">
-                              {account.followers_count.toLocaleString("pt-BR")} seguidores
+                              {(account.followers_count || 0).toLocaleString("pt-BR")} seguidores
                             </p>
                           )}
                         </div>
