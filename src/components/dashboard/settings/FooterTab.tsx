@@ -31,7 +31,7 @@ export const FooterTab = () => {
 
   const fetchSettings = async () => {
     try {
-      const { data, error } = await supabase.from('system_settings').select('*').eq('group', 'general').maybeSingle();
+      const { data, error } = await (supabase as any).from('system_settings').select('*').eq('group', 'general').maybeSingle();
       if (data) setSettings(data);
     } catch(e) {
       console.error(e);
