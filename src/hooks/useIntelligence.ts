@@ -17,12 +17,12 @@ export function useIntelligence() {
   const narrativesQuery = useQuery<Narrative[]>({
     queryKey: ["narratives"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("narratives")
         .select("*")
         .order("detected_at", { ascending: false });
       if (error) throw error;
-      return data as Narrative[];
+      return (data || []) as unknown as Narrative[];
     }
   });
 
