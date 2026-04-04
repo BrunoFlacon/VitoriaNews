@@ -51,16 +51,20 @@ export const TrendsView = () => {
       );
     }
 
-    return combined.sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime());
+    return combined.sort((a, b) => {
+      const dateA = new Date(a.detected_at || 0).getTime();
+      const dateB = new Date(b.detected_at || 0).getTime();
+      return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
+    });
   }, [trends, searchTerm]);
 
   const topTrendsChartData = useMemo(() => {
     return filteredTrends
       .slice(0, 8)
       .map(t => ({
-        name: t.keyword.length > 20 ? t.keyword.substring(0, 17) + "..." : t.keyword,
+        name: (t.keyword || "").length > 20 ? (t.keyword || "").substring(0, 17) + "..." : (t.keyword || "Sem Título"),
         score: t.score || 50,
-        fullName: t.keyword
+        fullName: t.keyword || "Sem Título"
       }))
       .sort((a, b) => b.score - a.score);
   }, [filteredTrends]);

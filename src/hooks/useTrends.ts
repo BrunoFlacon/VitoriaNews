@@ -6,6 +6,7 @@ export interface TrendItem {
   id: string;
   keyword: string;
   source: string;
+  sub_source?: string;
   category: string;
   score: number;
   url?: string;
@@ -21,6 +22,8 @@ export interface PoliticalTrend {
   mentions: number;
   sentiment: string;
   velocity: number;
+  source?: string;
+  category?: string;
   detected_at: string;
 }
 
@@ -74,9 +77,8 @@ export function useTrends() {
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      // supabase.functions.invoke gerencia JWT automaticamente — sem risco de 401
       const { data, error } = await supabase.functions.invoke('automation-api', {
-        body: { path: 'discover-trends' },
+        body: { path: 'sync-intelligence' },
       });
       if (error) throw new Error(`Falha ao sincronizar tendências: ${error.message}`);
       return data;

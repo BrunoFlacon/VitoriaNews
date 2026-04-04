@@ -391,7 +391,7 @@ const Dashboard = () => {
               />
               <StatsCard 
                 title="Visualizações" 
-                value={analyticsData?.engagement.views.toLocaleString() ?? "0"} 
+                value={(analyticsData?.engagement.views || 0).toLocaleString() ?? "0"} 
                 icon={Eye} 
                 trend={parseFloat(analyticsData?.engagement.growth || "0")} 
                 trendLabel="vs mês anterior" 
@@ -409,7 +409,7 @@ const Dashboard = () => {
               />
               <StatsCard 
                 title="Seguidores" 
-                value={analyticsData?.followerData?.reduce((acc, curr) => acc + curr.currentFollowers, 0).toLocaleString() ?? "0"} 
+                value={(analyticsData?.followerData?.reduce((acc, curr) => acc + curr.currentFollowers, 0) || 0).toLocaleString() ?? "0"} 
                 icon={Users} 
                 trend={15.3} 
                 trendLabel="este mês" 

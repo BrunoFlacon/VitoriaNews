@@ -20,10 +20,12 @@ export async function monitorPoliticalTrends(supabaseClient: any) {
         if (lowerTitle.includes('avança') || lowerTitle.includes('aprova') || lowerTitle.includes('alta')) sentiment = 'positive';
 
         trendsToInsert.push({
-          keyword: title.substring(0, 80) + (title.length > 80 ? '...' : ''), // Limit length
-          mentions: Math.floor(Math.random() * 1000) + 100, // Simulated mentions
+          keyword: title.substring(0, 100),
+          mentions: Math.floor(Math.random() * 1000) + 100,
           sentiment: sentiment,
           velocity: Math.random() * 20,
+          source: 'Google News',
+          category: 'Política',
           detected_at: new Date().toISOString()
         });
       }

@@ -2,95 +2,121 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// Access Deno global
 declare const Deno: any;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
-const jsonResponse = (body: any, status = 200) =>
-  new Response(JSON.stringify(body), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    status,
-  });
-
 serve(async (req: Request) => {
-  // Always handle CORS preflight first
+  // 1. Handle CORS Preflight perfectly
+  // This must be at the very top and return as fast as possible
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders, status: 200 });
+    return new Response('ok', { 
+      status: 200, 
+      headers: corsHeaders 
+    });
   }
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || '';
+    
+    if (!supabaseUrl || !supabaseKey) {
+        console.error('[radar-api] Critical configuration missing');
+    }
+
     const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
+    // Identify action/path
     const url = new URL(req.url);
-    const path = url.pathname.split('/').filter(Boolean).pop();
+    let path = url.pathname.split('/').filter(Boolean).pop();
+    let body: any = {};
+
+    if (req.method === 'POST') {
+      try {
+        body = await req.json();
+        // If 'path' is in the body, it takes precedence for manual invokes
+        if (body.path && (!path || path === 'radar-api')) {
+          path = body.path;
+        }
+      } catch (e) {
+        console.warn('[radar-api] Error parsing body');
+      }
+    }
 
     let data: any = null;
     let error: any = null;
 
     switch (path) {
-      case 'political-trends':
-        ({ data, error } = await supabaseClient
-          .from('political_trends')
-          .select('*')
-          .order('detected_at', { ascending: false })
-          .limit(20));
-        break;
+      case 'sync-intelligence': {
+          const { discoverTrends } = await import('../_shared/automation/trend-discovery.ts');
+          
+          const authHeader = req.headers.get('Authorization') || '';
+          const token = authHeader.replace('Bearer ', '');
+          
+          if (!token) {
+              return new Response(JSON.stringify({ error: 'Missing token' }), { 
+                  status: 401, 
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              });
+          }
+
+          const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+          if (authError || !user) {
+              return new Response(JSON.stringify({ error: 'Unauthorized', details: authError }), { 
+                  status: 401, 
+                  headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+              });
+          }
+
+          data = await discoverTrends(supabaseClient, user.id);
+          break;
+      }
+      
+      case 'detect-attacks': {
+          const { detectCoordinatedAttack } = await import('../_shared/radar/attack-detector.ts');
+          const posts = body.posts || [];
+          await detectCoordinatedAttack(posts);
+          data = { message: 'Detection process finished' };
+          break;
+      }
 
       case 'narratives':
-        ({ data, error } = await supabaseClient
-          .from('narratives')
-          .select('*')
-          .order('detected_at', { ascending: false })
-          .limit(20));
+        ({ data, error } = await supabaseClient.from('narratives').select('*').order('detected_at', { ascending: false }).limit(20));
         break;
 
       case 'campaigns':
-        ({ data, error } = await supabaseClient
-          .from('viral_campaigns')
-          .select('*')
-          .order('detected_at', { ascending: false })
-          .limit(20));
+        ({ data, error } = await supabaseClient.from('viral_campaigns').select('*').order('detected_at', { ascending: false }).limit(20));
         break;
-
-      case 'discover-trends': {
-        try {
-          const { discoverTrends } = await import('../_shared/automation/trend-discovery.ts');
-          data = await discoverTrends(supabaseClient);
-        } catch (importErr: any) {
-          console.warn('[radar-api] trend-discovery import failed:', importErr.message);
-          data = { discovered: 0, message: 'Trend discovery module unavailable.' };
-        }
-        break;
-      }
-
-      case 'detect-attacks': {
-        try {
-          const { detectCoordinatedAttack } = await import('./attack-detector.ts');
-          const { posts } = await req.json();
-          await detectCoordinatedAttack(posts);
-          data = { message: 'Attack detection process completed' };
-        } catch (detectorErr: any) {
-          console.error('[radar-api] attack-detector failed:', detectorErr.message);
-          data = { error: detectorErr.message };
-        }
-        break;
-      }
 
       default:
-        return jsonResponse({ error: `Endpoint '${path}' not found` }, 404);
+        return new Response(JSON.stringify({ error: `Not found: ${path}` }), { 
+            status: 404, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
     }
 
-    if (error) throw error;
+    if (error) {
+      return new Response(JSON.stringify({ error }), { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
+    }
 
-    return jsonResponse({ success: true, data });
+    return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+    });
+
   } catch (err: any) {
-    console.error('[radar-api] error:', err.message);
-    return jsonResponse({ error: err.message }, 500);
+    console.error('[radar-api] Fatal error:', err.message);
+    return new Response(JSON.stringify({ error: err.message }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500
+    });
   }
 });

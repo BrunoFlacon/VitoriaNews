@@ -18,7 +18,7 @@ import {
   Twitter,
   Instagram,
   Youtube,
-  Linkedin
+  Linkedin as LinkedIn
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -87,7 +87,7 @@ function getPublishedAt(trend: TrendItem): string {
   return new Date(trend.detected_at).toLocaleDateString('pt-BR');
 }
 
-const SVG_FALLBACK = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%230d0d0d'/%3E%3Ctext x='400' y='300' dominant-baseline='middle' text-anchor='middle' font-family='system-ui' font-size='28' font-weight='bold' fill='%23333'%3ESem capa disponivel%3C/text%3E%3C/svg%3E`;
+const SVG_FALLBACK = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='600' viewBox='0 0 800 600'%3E%3Crect width='800' height='600' fill='%230d0d0d'/%3E%3Ctext x='400' y='300' dominant-baseline='middle' text-anchor='middle' font-family='system-ui' font-size='28' font-weight='bold' fill='%23333'%3ESem capa disponível%3C/text%3E%3C/svg%3E`;
 
 export const TrendDetailDrawer = ({ trend, isOpen, onClose, onProduce }: TrendDetailDrawerProps) => {
   if (!trend) return null;
@@ -120,7 +120,7 @@ export const TrendDetailDrawer = ({ trend, isOpen, onClose, onProduce }: TrendDe
         </SheetHeader>
 
         <div className="mt-8 space-y-6">
-          {/* CAPA MULTIMIDIA */}
+          {/* CAPA MULTIMÍDIA */}
           <div className="relative group rounded-2xl overflow-hidden border border-white/10 aspect-video bg-white/5">
             <img
               src={trend.thumbnail_url || SVG_FALLBACK}
