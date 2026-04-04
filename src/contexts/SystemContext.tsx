@@ -56,10 +56,10 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       // PERFORMANCE: Consolidando em uma única chamada ao banco
       // select("*") é resiliente pois traz o que existir, sem dar erro 400 por colunas específicas
-      const { data: allData, error } = await supabase
+      const { data: allData, error } = await (supabase as any)
         .from("system_settings")
         .select("*");
-      
+
       if (error) {
         console.error("Error fetching system settings:", error);
         // Mesmo com erro, mantemos o loading false para mostrar fallbacks locais
