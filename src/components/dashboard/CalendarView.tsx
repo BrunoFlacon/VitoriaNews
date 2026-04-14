@@ -39,6 +39,7 @@ import { usePublisher } from "@/hooks/usePublisher";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useSocialStats } from "@/hooks/useSocialStats";
 
 import {
   DropdownMenu,
@@ -161,6 +162,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
   const { addNotification } = useNotifications();
   const { publishNow, publishing } = usePublisher();
   const { isEditor } = useUserRole();
+  const { isConnected: isPlatformConnected } = useSocialStats();
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -573,6 +575,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
                                   key={platformId}
                                   platform={platform}
                                   size="xs"
+                                  muted={!isPlatformConnected(platformId)}
                                   className="border-2 border-card -mr-1.5"
                                 />
                               );
@@ -724,7 +727,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
                       if (!platform) return null;
                       return (
                         <div key={platformId} className="flex items-center gap-1.5">
-                          <PlatformIconBadge platform={platform} size="xs" />
+                          <PlatformIconBadge platform={platform} size="xs" muted={!isPlatformConnected(platformId)} />
                           <span className="text-xs font-medium">{platform.name}</span>
                         </div>
                       );

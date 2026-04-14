@@ -23,10 +23,23 @@ export const TrendCard = ({ trend }: TrendCardProps) => {
 
   return (
     <Card className="bg-card/50 border-white/5 hover:bg-card/80 transition-all group overflow-hidden relative">
-      <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+      <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity z-0">
         <TrendingUp className="w-12 h-12" />
       </div>
-      <CardHeader className="pb-2">
+      
+      {/* News Thumbnail Enrichment */}
+      {(trend as any).thumbnail_url && (
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          <img 
+            src={(trend as any).thumbnail_url} 
+            alt="" 
+            className="w-full h-full object-cover opacity-[0.08] group-hover:opacity-[0.15] transition-opacity duration-500 scale-110 group-hover:scale-100" 
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/80 to-transparent" />
+        </div>
+      )}
+
+      <CardHeader className="pb-2 relative z-10">
         <div className="flex justify-between items-start">
           <Badge className={getSentimentColor(trend.sentiment)}>
             {trend.sentiment || 'Neuro'}
@@ -46,11 +59,16 @@ export const TrendCard = ({ trend }: TrendCardProps) => {
             </span>
           </div>
         </div>
-        <CardTitle className="text-base font-black mt-3 group-hover:text-primary transition-colors leading-tight">
+        <CardTitle className="text-base font-black mt-3 group-hover:text-primary transition-colors leading-tight line-clamp-2">
           {trend.keyword || 'Desconhecido'}
         </CardTitle>
+        {(trend as any).description && (
+          <p className="text-[10px] text-muted-foreground mt-1 line-clamp-1 opacity-60 group-hover:opacity-100 transition-opacity">
+            {(trend as any).description}
+          </p>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="relative z-10">
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Menções</span>
@@ -65,6 +83,19 @@ export const TrendCard = ({ trend }: TrendCardProps) => {
             </div>
           </div>
         </div>
+        
+        {(trend as any).url && (
+          <div className="mt-4 pt-4 border-t border-white/5 flex justify-end">
+            <a 
+              href={(trend as any).url} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-[9px] font-bold uppercase tracking-widest text-primary hover:text-white transition-colors flex items-center gap-1"
+            >
+              Ver Fonte Completa <TrendingUp className="w-3 h-3" />
+            </a>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -16,9 +16,12 @@ interface PlatformIconBadgeProps {
  * Standardized social platform icon badge used across the entire app.
  * Renders the platform SVG icon inside a rounded square with:
  * - Brand background colour (or muted when disconnected/muted)
- * - Diagonal drop-shadow (box-shadow), more pronounced for larger sizes
- * - SVG drop-shadow filter on the inner icon
- * - Smooth hover / transition
+ * - Subtle diagonal drop-shadow (not too strong)
+ * - Smooth transition on connection state changes
+ *
+ * Design calibration:
+ *   - Connected: brand color bg + subtle drop-shadow (toned down from previous version)
+ *   - Disconnected: dark muted bg, opacity-70 (slightly visible, not blown out)
  */
 export function PlatformIconBadge({
   platform,
@@ -35,11 +38,12 @@ export function PlatformIconBadge({
     lg:  { wrapper: "w-14 h-14 rounded-2xl", icon: "w-[44px] h-[44px]" },
   } as const;
 
+  // Subtle shadows — noticeably lighter than before
   const boxShadow = {
-    xs:  muted ? "none" : "2px 3px 5px rgba(0,0,0,0.45)",
-    sm:  muted ? "none" : "3px 4px 8px rgba(0,0,0,0.50)",
-    md:  muted ? "none" : "5px 6px 12px rgba(0,0,0,0.60)",
-    lg:  muted ? "none" : "6px 8px 15px rgba(0,0,0,0.65)",
+    xs:  "2px 3px 5px rgba(0,0,0,0.30)",
+    sm:  "3px 4px 7px rgba(0,0,0,0.35)",
+    md:  "4px 5px 10px rgba(0,0,0,0.40)",
+    lg:  "5px 6px 12px rgba(0,0,0,0.45)",
   } as const;
 
   const { wrapper, icon } = sizeClasses[size];
@@ -47,17 +51,32 @@ export function PlatformIconBadge({
   return (
     <div
       className={cn(
-        "flex items-center justify-center shrink-0 transition-all",
-        muted ? "bg-transparent border-[1.5px] border-muted-foreground/30" : platform.color,
+        "flex items-center justify-center shrink-0 transition-all duration-500",
+        muted
+          // Disconnected: dark bg, no border ring, opacity-70 (not too faded)
+          ? "bg-[#1c1f30]/60 border border-white/8 opacity-70 grayscale-[60%]"
+          // Connected: brand color, very subtle ring, no heavy scale transform
+          : cn(platform.color, "shadow-md"),
         wrapper,
         className
       )}
-      style={{ boxShadow: boxShadow[size] }}
+      style={{
+        // Connected: subtle directional shadow (not the heavy branded shadow from before)
+        boxShadow: muted ? "none" : boxShadow[size],
+        // Instagram gradient override
+        background: !muted && platform.id === 'instagram' ? platform.gradient : undefined,
+      }}
     >
       <Icon
-        className={cn(icon, muted ? "text-muted-foreground/70" : "text-white")}
+        className={cn(
+          icon,
+          muted ? "text-slate-400/60" : "text-white"
+        )}
         data-active={!muted}
-        style={{ filter: muted ? "none" : "drop-shadow(3px 4px 3px rgba(0,0,0,0.55))" }}
+        style={{
+          // Connected: very gentle icon inner shadow (was drop-shadow(1px 2px 2px) before — now halved)
+          filter: muted ? "none" : "drop-shadow(0px 1px 1px rgba(0,0,0,0.25))",
+        }}
       />
     </div>
   );

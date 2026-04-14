@@ -298,7 +298,7 @@ export const DocumentsView = () => {
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 md:p-8 space-y-8">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h1 className="text-3xl font-bold font-display tracking-tight text-white mb-1">
@@ -335,7 +335,7 @@ export const DocumentsView = () => {
           <Button 
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            className="rounded-xl px-5 h-11 bg-primary hover:bg-primary/90 text-white font-bold"
+            className="rounded-xl px-5 h-10 bg-primary hover:bg-primary/90 text-white font-bold"
           >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
             Novo Upload
@@ -351,7 +351,7 @@ export const DocumentsView = () => {
             placeholder="Pesquisar arquivos..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-11 bg-card border border-border rounded-xl pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all text-sm"
+            className="w-full h-10 bg-card border border-border rounded-xl pl-11 pr-4 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all text-sm"
           />
         </div>
         
@@ -361,7 +361,7 @@ export const DocumentsView = () => {
               key={f} 
               onClick={() => setActiveFilter(f)}
               className={cn(
-                "px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border whitespace-nowrap",
+                "px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all border whitespace-nowrap",
                 activeFilter === f ? "bg-primary text-white border-primary" : "bg-card border-border text-muted-foreground hover:text-white"
               )}
             >

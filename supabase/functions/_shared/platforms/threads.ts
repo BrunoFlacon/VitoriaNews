@@ -1,5 +1,5 @@
-import { getThreadsCredentials } from "../credentials";
-import { PublishPayload } from "./dispatcher";
+import { getThreadsCredentials } from "../credentials.ts";
+import { PublishPayload } from "./dispatcher.ts";
 
 export async function publishToThreads(supabase: any, payload: PublishPayload) {
   const { content, mediaUrls, userId, options } = payload;

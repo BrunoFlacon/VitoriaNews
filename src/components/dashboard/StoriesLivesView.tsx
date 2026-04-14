@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useSocialStats } from "@/hooks/useSocialStats";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -75,6 +76,7 @@ const livePlatforms: SocialPlatformId[] = ["youtube", "instagram", "tiktok", "fa
 export const StoriesLivesView = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { isConnected: isPlatformConnected } = useSocialStats();
   const [activeTab, setActiveTab] = useState("stories");
   
   // States for Stories & Lives
@@ -806,16 +808,19 @@ export const StoriesLivesView = () => {
                   if (!p) return null;
                   const Icon = p.icon;
                   const selected = formPlatforms.includes(pid);
+                  const connected = isPlatformConnected(pid);
                   return (
                     <button key={pid} type="button" onClick={() => togglePlatform(pid)}
                       className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-sm",
-                        selected ? "border-primary/40 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40")}
+                        selected ? "border-primary/40 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                        !connected && "opacity-70")}
                     >
-                      <div className={cn("w-6 h-6 rounded flex items-center justify-center", p.color)}>
+                      <div className={cn("w-6 h-6 rounded flex items-center justify-center", connected ? p.color : "bg-slate-700/50")}>
                         <Icon className="w-3 h-3 text-white" />
                       </div>
                       <span className="flex-1 text-left">{p.name}</span>
-                      {selected && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+                      {connected && <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" title="Conectado" />}
+                      {selected && !connected && <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
                     </button>
                   );
                 })}

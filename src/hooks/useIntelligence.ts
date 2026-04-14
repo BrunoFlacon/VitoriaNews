@@ -17,58 +17,79 @@ export function useIntelligence() {
   const narrativesQuery = useQuery<Narrative[]>({
     queryKey: ["narratives"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("narratives")
-        .select("*")
-        .order("detected_at", { ascending: false });
-      if (error) throw error;
-      return (data || []) as unknown as Narrative[];
+      try {
+        const { data, error } = await (supabase as any).from("narratives")
+          .select("*").order("detected_at", { ascending: false });
+        if (error) return [];
+        return (data || []) as unknown as Narrative[];
+      } catch { return []; }
     }
   });
 
   const campaignsQuery = useQuery<ViralCampaign[]>({
     queryKey: ["viral-campaigns"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("viral_campaigns")
-        .select("*")
-        .order("detected_at", { ascending: false });
-      if (error) throw error;
-      return data as ViralCampaign[];
+      try {
+        const { data, error } = await (supabase as any).from("viral_campaigns")
+          .select("*").order("detected_at", { ascending: false });
+        if (error) return [];
+        return (data || []) as unknown as ViralCampaign[];
+      } catch { return []; }
     }
   });
 
   const attacksQuery = useQuery<AttackEvent[]>({
     queryKey: ["attack-events"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("eventos_de_ataque")
-        .select("*")
-        .order("criado_em", { ascending: false });
-      if (error) throw error;
-      return data as AttackEvent[];
+      try {
+        const { data, error } = await (supabase as any).from("eventos_de_ataque")
+          .select("*").order("criado_em", { ascending: false });
+        if (error) return [];
+        return (data || []) as unknown as AttackEvent[];
+      } catch { return []; }
     }
   });
 
   const suggestionsQuery = useQuery<RepostSuggestion[]>({
     queryKey: ["repost-suggestions"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("repost_suggestions")
-        .select("*")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as RepostSuggestion[];
+      try {
+        const { data, error } = await (supabase as any).from("repost_suggestions")
+          .select("*").eq("status", "pending").order("created_at", { ascending: false });
+        if (error) return [];
+        return (data || []) as unknown as RepostSuggestion[];
+      } catch { return []; }
+    }
+  });
+  
+  const competitorsQuery = useQuery<any[]>({
+    queryKey: ["competitor-intel"],
+    queryFn: async () => {
+      try {
+        const { data, error } = await (supabase as any).from("competitor_intel")
+          .select("*").order("last_updated", { ascending: false });
+        if (error) return [];
+        return data || [];
+      } catch { return []; }
+    }
+  });
+
+  const influenceNodesQuery = useQuery<any[]>({
+    queryKey: ["influence-nodes"],
+    queryFn: async () => {
+      try {
+        const { data, error } = await (supabase as any).from("influence_nodes")
+          .select("*").order("influence_score", { descending: true });
+        if (error) return [];
+        return data || [];
+      } catch { return []; }
     }
   });
 
   const updateSuggestionStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
-      const { data, error } = await supabase
-        .from("repost_suggestions")
-        .update({ status })
-        .eq("id", id);
+      const { data, error } = await (supabase as any).from("repost_suggestions")
+        .update({ status }).eq("id", id);
       if (error) throw error;
       return data;
     },
@@ -108,7 +129,9 @@ export function useIntelligence() {
     campaigns: campaignsQuery.data || [],
     attacks: attacksQuery.data || [],
     suggestions: suggestionsQuery.data || [],
-    loading: narrativesQuery.isLoading || campaignsQuery.isLoading || attacksQuery.isLoading || suggestionsQuery.isLoading,
+    competitors: competitorsQuery.data || [],
+    influenceNodes: influenceNodesQuery.data || [],
+    loading: narrativesQuery.isLoading || campaignsQuery.isLoading || attacksQuery.isLoading || suggestionsQuery.isLoading || competitorsQuery.isLoading || influenceNodesQuery.isLoading,
     updateSuggestionStatus,
   };
 }

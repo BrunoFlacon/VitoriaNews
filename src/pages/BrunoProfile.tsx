@@ -4,12 +4,16 @@ import {
   ArrowLeft, Pencil, Camera, Plus, Loader2, Trash2, Check,
   ChevronUp, ChevronDown, Rocket, Shield, Target, Zap, 
   CheckCircle2, Code2, Cpu, Layout, Server, Database, 
-  EyeOff, Eye, Link as LinkIcon, Edit3, GripVertical, Wand2, Image as ImageIcon, X, Star
+  EyeOff, Eye, Link as LinkIcon, Edit3, GripVertical, Wand2, Image as ImageIcon, X, Star, History, Heart,
+  Phone, User, Send, AlertCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSystem } from "@/contexts/SystemContext";
 import { useToast } from "@/hooks/use-toast";
 import { Reorder, motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
+import { XIcon, InstagramIcon, LinkedinIcon } from "@/components/icons/SocialIcons";
 
 /* ─── TIPOS & INTERFACES ──────────────────────── */
 interface SocialLink {
@@ -48,6 +52,8 @@ interface ContentState {
   };
   style: {
     fontFamily: string;
+    fontSize: string;
+    fontColor: string;
     primaryColor: string;
     bgColor: string;
     effects: {
@@ -87,6 +93,19 @@ interface ContentState {
     paragraphs: string[];
     avatarUrl: string;
     social: SocialLink[];
+    commercialWhatsapp: string;
+    professionalEmail: string;
+    region: string;
+  };
+  contact: {
+    visible: boolean;
+    title: string;
+    subtitle: string;
+    badgeText: string;
+    whatsappLabel: string;
+    emailLabel: string;
+    regionLabel: string;
+    socialTitle: string;
   };
   footer: {
     links: FooterLink[];
@@ -100,6 +119,22 @@ const ICON_MAP: Record<string, React.ElementType> = { Rocket, Shield, Target, Za
 const getIcon = (name: string, props: React.SVGProps<SVGSVGElement>) => {
   const IconCmp = ICON_MAP[name] || Star;
   return <IconCmp {...props} />;
+};
+
+const getSocialIcon = (platform: string, props: React.SVGProps<SVGSVGElement>) => {
+  switch (platform.toLowerCase()) {
+    case 'x':
+    case 'twitter':
+      return <XIcon {...props} />;
+    case 'instagram':
+      return <InstagramIcon {...props} />;
+    case 'linkedin':
+      return <LinkedinIcon {...props} />;
+    case 'github':
+      return <Github {...props} />;
+    default:
+      return <Globe {...props} />;
+  }
 };
 
 /* ─── ÍCONES SOCIAIS OFICIAIS ─────────────────────────────────── */
@@ -130,7 +165,7 @@ const FONTS = [
 ];
 
 const INITIAL_CONTENT: ContentState = {
-  layout: ['hero', 'learning', 'benefits', 'modules', 'bio'], // Ordem das seções
+  layout: ['hero', 'benefits', 'learning', 'modules', 'bio', 'contact'], // Ordem das seções
   navbar: {
     logoType: 'text', 
     logoText: 'V',
@@ -139,83 +174,307 @@ const INITIAL_CONTENT: ContentState = {
   },
   style: {
     fontFamily: '"Outfit", sans-serif',
-    primaryColor: '#3b82f6', 
+    fontSize: '16px',
+    fontColor: '#ffffff',
+    primaryColor: '#3b82f6',
     bgColor: '#080C16',
     effects: {
-      flares: true,       
-      glassmorphism: true, 
-      shadowIntensity: 'glow', 
+      flares: true,
+      glassmorphism: true,
+      shadowIntensity: 'glow',
     }
   },
   hero: {
     visible: true,
-    title: "Aprenda A Criar Sistemas De Alto Retorno E \nMultiplique Seus Resultados!",
-    subtitle: "Descubra a estratégia e arquitetura que os profissionais de elite usam para transformar ideias em plataformas de alto rendimento.",
-    ctaText: "Garantir Minha Vaga Agora!",
-    ctaLink: "#vaga",
+    title: "Engenharia de Software & \nComunicação Integrada.",
+    subtitle: "Conheça Bruno Flacon. De fundador da Web Rádio Vitória a engenheiro Full-Stack criando ecossistemas de alta performance para portais de notícias.",
+    ctaText: "Ver Arquitetura do Sistema",
+    ctaLink: "#learning",
     avatarUrl: "https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
   },
   learning: {
     visible: true,
-    title: "O Que Você Vai Aprender?",
-    mediaUrl: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&q=80&w=1000",
+    title: "Vitória Net: Core Architecture",
+    mediaUrl: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1000&q=80",
     items: [
-      "Criação De Arquiteturas Web No React e Next.js Do Zero",
-      "Estratégia Para Encontrar O Banco de Dados Certo E Escalar Mais",
-      "Escalando Aplicações Lucrativas Sem Desperdícios de Servidor",
-      "Erros Que Fazem Você Perder Dinheiro Na AWS E Como Evitá-Los",
-      "Passo A Passo Para Lançar Seu Primeiro SaaS Hoje"
+      "Gestão e Área Unificada de Múltiplas Redes Sociais no mesmo lugar",
+      "Análises Inteligentes e Predições de Engajamento Operacional",
+      "Central de Produção Jornalística (Assinaturas, Newsletters e Redes)",
+      "Toda a base que um Portal de Notícias precisa para operar do Back ao Front"
     ]
   },
   benefits: {
     visible: true,
-    title: "4 Benefícios Exclusivos Ao \nAcessar Este Material",
+    title: "Nossa Força na Região \nImpulsionando Informação.",
     items: [
-      { id: 1, icon: "Rocket", title: "Do zero ao avançado", desc: "Desenvolvimento de Arquitetura de Software de Forma Simples, Mesmo Que o Projeto Seja Complexo." },
-      { id: 2, icon: "Shield", title: "Evite erros e gaste menos", desc: "Descubra Como Estruturar Do Jeito Certo E Evitar Desperdícios Com Servidores." },
-      { id: 3, icon: "Target", title: "Técnicas validadas", desc: "Métodos Testados E Aplicados Por Profissionais Do Mercado Para Garantir Escalabilidade." },
-      { id: 4, icon: "Zap", title: "Next.js e Node", desc: "Domine As Principais Stacks De Alta Performance Para Alavancar Sua Plataforma." }
+      { id: 1, icon: "Target", title: "Alcance Massivo", desc: "+50.000 seguidores através das principais redes sociais." },
+      { id: 2, icon: "CheckCircle2", title: "Impacto Local", desc: "Presença de destaque em Tupã - SP e em toda a região macro." },
+      { id: 3, icon: "Layout", title: "Ecossistema Completo", desc: "Gestão ponta-a-ponta, da captura da notícia à entrega interativa na Web." },
+      { id: 4, icon: "Zap", title: "Distribuição Imediata", desc: "Roteamento das notícias otimizado para o algoritmo das redes instantaneamente." }
     ]
   },
   modules: {
     visible: true,
-    title: "O Que Você Vai \nAprender Na Prática",
+    title: "Visão Técnica do \nEcossistema",
     items: [
-      { id: 1, icon: "Layout", title: "Front-end de Alta Conversão", subtitle: "React & Next.js" },
-      { id: 2, icon: "Server", title: "Back-end Robusto", subtitle: "Node & NestJS" },
-      { id: 3, icon: "Database", title: "Banco de Dados Escalável", subtitle: "PostgreSQL & Prisma" },
-      { id: 4, icon: "Cpu", title: "Infra & Cloud", subtitle: "AWS & Docker" }
+      { id: 1, icon: "Server", title: "Social Canvas Hub", subtitle: "Distribuição em Redes" },
+      { id: 2, icon: "Code2", title: "Assinaturas Vip", subtitle: "Paywalls e Membros" },
+      { id: 3, icon: "Database", title: "Central Jornalística", subtitle: "Gerenciador Nativo" },
+      { id: 4, icon: "Cpu", title: "Radar Analytics", subtitle: "Inteligências Artificiais" }
     ]
   },
   bio: {
     visible: true,
     name: "Bruno Flacon",
-    title: "Quem É O Arquiteto de Software \n",
+    title: "Engenheiro & Fundador \n",
     paragraphs: [
-      "Com anos de experiência em desenvolvimento Full-Stack, já ajudei dezenas de empresas a transformarem suas ideias em plataformas escaláveis e seguras.",
-      "Meu foco é ensinar o que realmente funciona no mercado de tecnologia, sem complicação e sem código inútil. Se você quer aprender a criar aplicações robustas no ecossistema moderno (React, Node, Cloud), está no lugar certo.",
-      "Meu objetivo é te levar do zero à arquitetura de elite, mostrando o caminho das pedras de forma simples e direta."
+      "A jornada inteira começou atuando como fundador da Web Rádio Vitória, quando decidi arregaçar as mangas e entender as complexidades técnicas de distribuir conteúdo em larga escala para atrair a atenção local do público.",
+      "Hoje, como desenvolvedor Full-Stack focado, crio arquiteturas de ponta para sanar exatamente as dores operacionais que os jornalistas das redações vivem diariamente. O Vitória Net é a consolidação técnica de anos da comunicação digital atrelada a código em um único hub.",
+      "As minhas plataformas não focam apenas no painel visual: são potentes motores nos bastidores, criados para aguentarem alta disponibilidade e tráfego, simplificando a operação de portais inteiros."
     ],
     avatarUrl: "https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
     social: [
-      { id: 1, platform: 'linkedin', url: 'https://linkedin.com' },
-      { id: 2, platform: 'instagram', url: 'https://instagram.com' },
-      { id: 3, platform: 'github', url: 'https://github.com' }
-    ]
+      { id: 1, platform: 'linkedin', url: 'https://linkedin.com/' },
+      { id: 2, platform: 'instagram', url: 'https://instagram.com/' },
+      { id: 3, platform: 'github', url: 'https://github.com/' }
+    ],
+    commercialWhatsapp: "(14) 9 9999-9999",
+    professionalEmail: "redacao@vitorianet.com.br",
+    region: "Tupã - SP e região"
+  },
+  contact: {
+    visible: true,
+    title: "Entre em Contato",
+    subtitle: "Fale com a nossa equipe. Preencha os dados abaixo e retornaremos em breve.",
+    badgeText: "Fale Conosco",
+    whatsappLabel: "WhatsApp / Comercial",
+    emailLabel: "E-mail Profissional",
+    regionLabel: "Região de Atuação",
+    socialTitle: "Siga nas Redes Sociais"
   },
   footer: {
     links: [
-      { id: 1, label: "PRIVACIDADE", url: "#" },
-      { id: 2, label: "TERMOS", url: "#" },
-      { id: 3, label: "MANUAL", url: "#" }
+      { id: 1, label: "PRIVACIDADE", url: "/privacy" },
+      { id: 2, label: "TERMOS DE USO", url: "/terms" },
+      { id: 3, label: "CONTATO TÉCNICO", url: "#contact" },
+      { id: 4, label: "MÍDIA KIT - OFF", url: "/profile/bruno-flacon" }
     ],
-    copyright: "© 2024 • Desenvolvido com ❤️ por Bruno Flacon."
+    copyright: "© 2026 • Code & Design com ❤️ por Bruno Flacon"
   }
+};
+
+/* ─── FORMULÁRIO DE CONTATO BLINDADO ───────────────────────────── */
+const ContactForm = () => {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
+  const [status, setStatus] = useState<'idle'|'confirming'|'sending'|'success'|'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [fieldWarning, setFieldWarning] = useState<{name?:string;email?:string;phone?:string}>({});
+  const [blocked, setBlocked] = useState(false);
+  const suspiciousRef = React.useRef(0);
+
+  const VALID_DOMAINS = ['gmail.com','hotmail.com','outlook.com','yahoo.com','icloud.com','live.com',
+    'uol.com.br','bol.com.br','globo.com','terra.com.br','ig.com.br','protonmail.com','tutanota.com','msn.com'];
+
+  const hasPattern = (val: string) => {
+    const c = val.toLowerCase().replace(/\s/g,'');
+    if (!c) return false;
+    if (/(.)\1{2,}/.test(c)) return true;
+    let seq = 0;
+    for(let i=1;i<c.length;i++){if(c.charCodeAt(i)===c.charCodeAt(i-1)+1)seq++;else seq=0;if(seq>=3)return true;}
+    return false;
+  };
+
+  const isNameLikeReal = (v: string) => {
+    const parts = v.trim().split(/\s+/);
+    return parts.length >= 2 && parts.every(p => p.length >= 2 && !hasPattern(p));
+  };
+
+  const isEmailRealFormat = (v: string) => {
+    if(!/^[a-zA-Z][a-zA-Z0-9.]{1,}@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(v)) return false;
+    const domain = v.split('@')[1]?.toLowerCase()||'';
+    const local = v.split('@')[0]?.toLowerCase()||'';
+    if(hasPattern(local)) return false;
+    return VALID_DOMAINS.some(d=>domain===d||domain.endsWith('.'+d)) || (domain.includes('.')&&domain.length>5);
+  };
+
+  const isPhoneRealFormat = (v: string) => {
+    if(v.length!==11) return false;
+    const ddd=parseInt(v.substring(0,2));
+    if(ddd<11||ddd>99) return false;
+    if(v[2]!=='9') return false;
+    if(hasPattern(v)) return false;
+    if(new Set(v).size<=2) return false;
+    return true;
+  };
+
+  const warn = (field: string, msg: string) => {
+    suspiciousRef.current++;
+    if(suspiciousRef.current>=2){setBlocked(true);setErrorMsg('Formulário bloqueado. Recarregue a página para tentar novamente.');return;}
+    setFieldWarning(p=>({...p,[field]:msg}));
+  };
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if(blocked) return;
+    const val = e.target.value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g,'').slice(0,45);
+    setName(val); setFieldWarning(p=>({...p,name:undefined})); setErrorMsg('');
+    if(val.length>=4 && hasPattern(val.replace(/\s/g,''))) warn('name','Por favor, digite seu nome real.');
+  };
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if(blocked) return;
+    let val = e.target.value.replace(/[^a-zA-Z0-9@._-]/g,'').toLowerCase();
+    if((val.match(/@/g)||[]).length>1) val=val.replace(/@/,'').replace(/@/,'@');
+    setEmail(val); setFieldWarning(p=>({...p,email:undefined})); setErrorMsg('');
+  };
+
+  const handleEmailBlur = () => {
+    if(!email||blocked) return;
+    if(!isEmailRealFormat(email)) warn('email','Use um e-mail válido como nome@gmail.com ou nome@empresa.com.br');
+  };
+
+  const handleWhatsappChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if(blocked) return;
+    let val = e.target.value.replace(/\D/g,'');
+    if(val.startsWith('55')&&val.length>2) val=val.substring(2);
+    if(val.length>11) val=val.slice(0,11);
+    setWhatsapp(val); setFieldWarning(p=>({...p,phone:undefined})); setErrorMsg('');
+  };
+
+  const handleWhatsappBlur = () => {
+    if(!whatsapp||blocked) return;
+    if(!isPhoneRealFormat(whatsapp)){
+      const msg = whatsapp.length<11 ? 'Número incompleto. Digite DDD + 9 + 8 dígitos.'
+        : whatsapp[2]!=='9' ? 'WhatsApp começa com 9 após o DDD. Ex: 14 9 9999-9999'
+        : 'Número inválido. Confirme seu WhatsApp.';
+      warn('phone', msg);
+    }
+  };
+
+  const isNameValid = isNameLikeReal(name);
+  const isEmailValid = isEmailRealFormat(email);
+  const isPhoneValid = isPhoneRealFormat(whatsapp);
+  const formatPhone = (v: string) => v.replace(/(\d{2})(\d{1})(\d{4})(\d{4})/,'($1) $2 $3-$4');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); if(blocked) return;
+    if(!isNameValid){setErrorMsg('Informe seu nome completo.');return;}
+    if(!isEmailValid){setErrorMsg('Informe um e-mail válido.');return;}
+    if(!isPhoneValid){setErrorMsg('Informe um número de WhatsApp válido.');return;}
+    if(status==='idle'||status==='error'){setStatus('confirming');return;}
+    if(status==='confirming'){
+      setStatus('sending');
+      try{
+        const{error}=await(supabase as any).from('media_kit_leads').insert([{name:name.trim(),email,whatsapp:`55${whatsapp}`}]);
+        if(error) throw new Error();
+        setStatus('success');
+        setTimeout(()=>{setStatus('idle');setName('');setEmail('');setWhatsapp('');},8000);
+      }catch{setErrorMsg('Erro ao enviar. Tente novamente.');setStatus('error');}
+    }
+  };
+
+  if(status==='success') return(
+    <div className="mt-20 bg-green-500/10 border border-green-500/30 p-8 rounded-2xl flex flex-col items-center text-center w-full max-w-xl shadow-[0_0_40px_rgba(34,197,94,0.2)]">
+      <CheckCircle2 className="w-14 h-14 text-green-500 mb-4"/>
+      <h3 className="text-2xl font-black text-white">Mensagem Recebida!</h3>
+      <p className="text-green-400 mt-2">Entraremos em contato em breve.</p>
+    </div>
+  );
+  if(blocked) return(
+    <div className="mt-20 bg-red-500/10 border border-red-500/30 p-8 rounded-2xl flex flex-col items-center text-center w-full max-w-xl">
+      <AlertCircle className="w-12 h-12 text-red-500 mb-3"/>
+      <p className="text-red-400 font-bold">Formulário bloqueado.</p>
+      <p className="text-slate-500 text-sm mt-2">Recarregue a página para tentar novamente.</p>
+    </div>
+  );
+
+  return(
+    <div className="mt-20 w-full max-w-xl mx-auto md:mx-0 bg-[#0A0F1C]/90 backdrop-blur-xl rounded-3xl border border-white/10 p-6 sm:p-8 shadow-2xl relative z-20 group/form">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-1 bg-theme rounded-b-full shadow-[0_0_30px_rgba(var(--color-primary-rgb),1)] transition-all group-hover/form:w-full"/>
+      <h3 className="text-xl font-black text-white mb-1 text-center uppercase tracking-widest flex flex-col items-center gap-2">
+        <Shield className="w-5 h-5 text-theme opacity-80"/>Contato com a Redação
+      </h3>
+      <p className="text-slate-500 text-xs text-center mb-7">Preencha os dados abaixo e entraremos em contato em breve.</p>
+
+      {(status==='confirming'||status==='sending')?(
+        <div className="space-y-5">
+          <div className="bg-amber-500/10 border border-amber-500/30 p-5 rounded-2xl text-center">
+            <AlertCircle className="w-7 h-7 text-amber-500 mx-auto mb-2"/>
+            <p className="text-amber-400 font-bold text-sm">Confirme seus dados antes de enviar</p>
+          </div>
+          <div className="space-y-3 bg-black/40 p-5 rounded-2xl border border-white/5 text-sm">
+            <div><span className="text-slate-500 text-xs uppercase font-bold">Nome: </span><span className="text-white">{name}</span></div>
+            <div className="h-px bg-white/5"/>
+            <div><span className="text-slate-500 text-xs uppercase font-bold">E-mail: </span><span className="text-theme">{email}</span></div>
+            <div className="h-px bg-white/5"/>
+            <div><span className="text-slate-500 text-xs uppercase font-bold">WhatsApp: </span><span className="text-green-400">+55 {formatPhone(whatsapp)}</span></div>
+          </div>
+          <div className="flex gap-4">
+            <button onClick={()=>setStatus('idle')} className="flex-1 py-3.5 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl text-sm transition-all">Corrigir</button>
+            <button onClick={handleSubmit} disabled={status==='sending'} className="flex-1 py-3.5 bg-green-500 hover:bg-green-600 text-white font-black rounded-xl text-sm shadow-[0_0_20px_rgba(34,197,94,0.3)] flex items-center justify-center gap-2 transition-all">
+              {status==='sending'?<Loader2 className="w-4 h-4 animate-spin"/>:<Check className="w-4 h-4"/>}Confirmar Envio
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="p-6 md:p-8 space-y-6" noValidate>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Nome Completo</label>
+              <div className="relative group">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-theme transition-colors"/>
+                <input type="text" value={name} onChange={handleNameChange} maxLength={45} placeholder="Seu nome"
+                  className={`w-full bg-white/[0.03] border rounded-2xl pl-11 pr-11 py-4 text-white outline-none focus:bg-white/[0.08] transition-all placeholder:text-slate-600 ${fieldWarning.name?'border-red-500/60':isNameValid?'border-green-500/40':'border-white/10 focus:border-theme/50'}`}/>
+                {isNameValid&&<CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500 animate-in fade-in zoom-in"/>}
+              </div>
+              {fieldWarning.name&&<p className="text-red-400 text-[10px] font-bold mt-1.5 flex items-center gap-1 uppercase tracking-tighter"><AlertCircle className="w-3 h-3 shrink-0"/>{fieldWarning.name}</p>}
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">E-mail Corporativo</label>
+              <div className="relative group">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-theme transition-colors"/>
+                <input type="email" value={email} onChange={handleEmailChange} onBlur={handleEmailBlur} placeholder="nome@empresa.com"
+                  className={`w-full bg-white/[0.03] border rounded-2xl pl-11 pr-11 py-4 text-white outline-none focus:bg-white/[0.08] transition-all placeholder:text-slate-600 ${fieldWarning.email?'border-red-500/60':isEmailValid?'border-green-500/40':'border-white/10 focus:border-theme/50'}`}/>
+                {isEmailValid&&<CheckCircle2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-green-500 animate-in fade-in zoom-in"/>}
+              </div>
+              {fieldWarning.email&&<p className="text-red-400 text-[10px] font-bold mt-1.5 flex items-center gap-1 uppercase tracking-tighter"><AlertCircle className="w-3 h-3 shrink-0"/>{fieldWarning.email}</p>}
+            </div>
+
+            <div>
+              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">WhatsApp</label>
+              <div className="relative group">
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-theme transition-colors"/>
+                <input type="tel" value={whatsapp} onChange={handleWhatsappChange} onBlur={handleWhatsappBlur} placeholder="DDD + número"
+                  className={`w-full bg-white/[0.03] border rounded-2xl pl-11 pr-11 py-4 text-white outline-none focus:bg-white/[0.08] transition-all placeholder:text-slate-600 font-mono ${fieldWarning.phone?'border-red-500/60':isPhoneValid?'border-green-500/40':'border-white/10 focus:border-theme/50'}`}/>
+                {isPhoneValid&&<div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-1.5 animate-in fade-in zoom-in"><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/><CheckCircle2 className="w-4 h-4 text-green-500"/></div>}
+              </div>
+              {fieldWarning.phone
+                ?<p className="text-red-400 text-[10px] font-bold mt-1.5 flex items-center gap-1 uppercase tracking-tighter"><AlertCircle className="w-3 h-3 shrink-0"/>{fieldWarning.phone}</p>
+                :isPhoneValid&&<p className="text-green-500 text-[10px] font-bold mt-1.5 uppercase tracking-tighter">✔ Conexão Verificada</p>
+              }
+            </div>
+          </div>
+
+          {errorMsg&&<div className="text-red-400 text-xs bg-red-500/10 border border-red-500/30 p-4 rounded-2xl flex items-start gap-2"><AlertCircle className="w-4 h-4 shrink-0 mt-0.5"/>{errorMsg}</div>}
+
+          <button type="submit" disabled={!isNameValid||!isEmailValid||!isPhoneValid}
+            className="w-full bg-theme hover:brightness-110 text-white rounded-2xl py-4 font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 group/send disabled:opacity-20 disabled:cursor-not-allowed shadow-theme relative overflow-hidden active:scale-[0.98]">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
+            <Send className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform"/>
+            Iniciar Conexão
+          </button>
+        </form>
+      )}
+    </div>
+  );
 };
 
 /* ─── COMPONENTE PRINCIPAL ───────────────────────────────────── */
 export default function PresentationPage() {
   const { user, profile } = useAuth();
+  const { settings } = useSystem();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const [content, setContent] = useState<ContentState>(INITIAL_CONTENT);
@@ -235,24 +494,44 @@ export default function PresentationPage() {
       if (!user) return;
       
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('profiles')
           .select('profile_content')
           .eq('id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error) throw error;
         
         if (data?.profile_content) {
-          // Merge with initial content to ensure new fields are present
           const saved = data.profile_content as unknown as ContentState;
           setContent(prev => ({
             ...prev,
             ...saved,
-            // Ensure style is merged
-            style: { ...prev.style, ...(saved.style || {}) },
-            // Ensure navbar is merged
-            navbar: { ...prev.navbar, ...(saved.navbar || {}) }
+            // Garantir que o layout sempre inclua 'contact'
+            layout: saved.layout?.includes('contact')
+              ? saved.layout
+              : [...(saved.layout || prev.layout), 'contact'],
+            // Merge de sub-objetos para não perder campos novos
+            style: {
+              ...prev.style,
+              ...(saved.style || {}),
+              fontSize: saved.style?.fontSize || prev.style.fontSize,
+              fontColor: saved.style?.fontColor || prev.style.fontColor,
+              effects: { ...prev.style.effects, ...((saved.style || {}).effects || {}) }
+            },
+            navbar: { ...prev.navbar, ...(saved.navbar || {}) },
+            contact: { ...prev.contact, ...(saved.contact || {}) },
+            // Preservar social links e novos campos
+            bio: saved.bio ? {
+              ...prev.bio,
+              ...saved.bio,
+              social: Array.isArray(saved.bio.social) && saved.bio.social.length > 0
+                ? saved.bio.social
+                : prev.bio.social,
+              commercialWhatsapp: saved.bio.commercialWhatsapp || prev.bio.commercialWhatsapp,
+              professionalEmail: saved.bio.professionalEmail || prev.bio.professionalEmail,
+              region: saved.bio.region || prev.bio.region
+            } : prev.bio,
           }));
         }
       } catch (err) {
@@ -340,7 +619,7 @@ export default function PresentationPage() {
     setSaving(true);
     
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('profiles')
         .update({
           profile_content: content as any,
@@ -353,7 +632,7 @@ export default function PresentationPage() {
       setIsEditing(false);
       toast({ title: "Alterações Salvas com Sucesso!" });
     } catch (err: any) {
-      toast({ title: "Erro ao salvar: " + err.message });
+      toast({ title: "Erro ao salvar: " + err.message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -474,14 +753,22 @@ export default function PresentationPage() {
               {!isEditing && <div className="h-1 w-32 bg-theme rounded-full my-4 hidden md:block" />}
               <ContentEditable tag="p" multiline value={content.hero.subtitle} onChange={v => updateSection('hero', 'subtitle', v)} className="text-xl text-slate-300 leading-relaxed max-w-2xl font-light" />
               <div className="pt-4 flex flex-col sm:flex-row items-center gap-4 group/btn relative">
-                <button className="bg-theme-gradient text-white shadow-theme hover-shadow-theme px-10 py-5 rounded-lg text-lg font-bold uppercase tracking-wide transition-all transform hover:-translate-y-1 w-full sm:w-auto">
+                <a href={content.hero.ctaLink} className="bg-gradient-to-r from-primary to-primary/80 text-white shadow-[0_0_40px_rgba(var(--color-primary-rgb),0.6)] hover:shadow-[0_0_60px_rgba(var(--color-primary-rgb),0.9)] px-10 py-5 rounded-lg text-lg font-black uppercase tracking-wide transition-all transform hover:-translate-y-1 w-full sm:w-auto relative group/cta flex justify-center text-center border-b-4 border-black/20">
                   {content.hero.ctaText}
-                </button>
+                </a>
                 {isEditing && (
-                  <div className="absolute -top-12 left-0 bg-[#131825] border border-white/10 p-2 rounded-lg flex items-center gap-2 shadow-xl z-20">
-                    <input type="text" value={content.hero.ctaText} onChange={e => updateSection('hero', 'ctaText', e.target.value)} className="bg-black/50 border border-white/20 rounded px-2 py-1 text-xs text-white outline-none w-32" placeholder="Texto Botão" />
-                    <LinkIcon className="w-4 h-4 text-slate-400" />
-                    <input type="text" value={content.hero.ctaLink} onChange={e => updateSection('hero', 'ctaLink', e.target.value)} className="bg-black/50 border border-white/20 rounded px-2 py-1 text-xs text-white outline-none w-32" placeholder="URL Destino" />
+                  <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-[#131825]/95 backdrop-blur-xl border border-white/20 p-2 rounded-xl flex items-center gap-3 shadow-2xl z-50 w-max pointer-events-auto">
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-black text-theme uppercase tracking-tighter ml-1">Configurar Link do Botão</span>
+                      <div className="flex items-center gap-2">
+                        <input type="text" value={content.hero.ctaText} onChange={e => updateSection('hero', 'ctaText', e.target.value)} className="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white outline-none w-40 focus:border-theme/50" placeholder="Texto" />
+                        <div className="w-px h-6 bg-white/10" />
+                        <div className="relative">
+                            <LinkIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                            <input type="text" value={content.hero.ctaLink} onChange={e => updateSection('hero', 'ctaLink', e.target.value)} className="bg-black/40 border border-white/10 rounded-lg pl-8 pr-3 py-1.5 text-xs text-white outline-none w-48 focus:border-theme/50" placeholder="URL Destino" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -533,18 +820,24 @@ export default function PresentationPage() {
               </div>
               <div className="flex-1 space-y-8">
                 <ContentEditable tag="h2" multiline value={content.learning.title} onChange={v => updateSection('learning', 'title', v)} className="text-3xl md:text-4xl font-black text-white" />
-                <div className="space-y-4">
+                <div className="space-y-0 relative border-l-2 border-white/10 ml-3 py-2">
                   {content.learning.items.map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-4 group/item">
-                      <CheckCircle2 className="w-6 h-6 text-theme shrink-0 mt-0.5" />
-                      <ContentEditable tag="p" multiline value={item} onChange={v => { const newItems = [...content.learning.items]; newItems[idx] = v; updateSection('learning', 'items', newItems); }} className="text-slate-300 font-medium text-lg leading-snug flex-1" />
+                    <div key={idx} className="relative pl-10 py-5 group/item flex items-center">
+                      {/* Ponto da linha do tempo */}
+                      <div className="absolute -left-[9px] top-1/2 -translate-y-1/2 w-4 h-4 bg-theme rounded-full shadow-[0_0_15px_rgba(var(--color-primary-rgb),0.6)] border-[3px] border-[#0B101E] group-hover/item:scale-125 transition-transform duration-300 z-10" />
+                      
+                      <div className="flex-1 bg-[#131825]/50 backdrop-blur-md rounded-2xl border border-white/5 p-5 group-hover/item:border-theme/30 group-hover/item:bg-[#131825] transition-all cursor-text relative shadow-lg">
+                        <div className="text-theme/50 font-black text-[10px] mb-2 uppercase tracking-widest">Etapa {idx + 1}</div>
+                        <ContentEditable tag="p" multiline value={item} onChange={v => { const newItems = [...content.learning.items]; newItems[idx] = v; updateSection('learning', 'items', newItems); }} className="text-slate-300 font-medium text-base md:text-lg leading-snug w-full" />
+                      </div>
+
                       {isEditing && (
-                        <button onClick={() => { const n = content.learning.items.filter((_,i)=>i!==idx); updateSection('learning', 'items', n); }} className="text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity p-1"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => { const n = content.learning.items.filter((_,i)=>i!==idx); updateSection('learning', 'items', n); }} className="text-red-500 opacity-0 group-hover/item:opacity-100 transition-opacity p-3 ml-2"><Trash2 className="w-5 h-5" /></button>
                       )}
                     </div>
                   ))}
                   {isEditing && (
-                    <button onClick={() => updateSection('learning', 'items', [...content.learning.items, "Novo item na lista..."])} className="text-theme font-bold text-sm uppercase flex items-center gap-2 mt-4 hover:bg-theme/10 px-4 py-2 rounded-lg border border-dashed border-theme/50 transition-colors w-full justify-center"><Plus className="w-4 h-4"/> Adicionar Item</button>
+                    <button onClick={() => updateSection('learning', 'items', [...content.learning.items, "Nova Etapa da Linha do Tempo..."])} className="text-theme font-bold text-sm uppercase flex items-center gap-2 mt-8 ml-10 hover:bg-theme/10 px-4 py-2 rounded-lg border border-dashed border-theme/50 transition-colors w-[calc(100%-2.5rem)] justify-center"><Plus className="w-4 h-4"/> Adicionar Etapa</button>
                   )}
                 </div>
               </div>
@@ -560,10 +853,27 @@ export default function PresentationPage() {
             <div className="text-center space-y-4 relative z-10">
               <ContentEditable tag="h2" multiline value={content.benefits.title} onChange={v => updateSection('benefits', 'title', v)} className="text-3xl md:text-4xl font-black" />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+            <Reorder.Group 
+              axis="x" 
+              values={content.benefits.items} 
+              onReorder={v => updateSection('benefits', 'items', v)}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10"
+            >
               {content.benefits.items.map((item, idx) => (
-                <div key={item.id} className={`border border-[#1F2937] hover:border-theme/50 rounded-xl p-8 transition-all duration-300 relative group/card ${effects.glassmorphism ? 'glass-card' : 'bg-[#111623]'} ${effects.shadowIntensity === 'glow' ? 'hover-shadow-theme' : effects.shadowIntensity === 'normal' ? 'shadow-lg' : ''}`}>
+                <Reorder.Item 
+                  key={item.id} 
+                  value={item}
+                  drag={isEditing ? "x" : false}
+                  className={`border border-[#1F2937] hover:border-theme/50 rounded-xl p-8 transition-all duration-300 relative group/card ${effects.glassmorphism ? 'glass-card' : 'bg-[#111623]'} ${effects.shadowIntensity === 'glow' ? 'hover-shadow-theme' : effects.shadowIntensity === 'normal' ? 'shadow-lg' : ''}`}
+                >
                   <div className="w-14 h-14 bg-theme opacity-10 rounded-lg absolute top-8 left-8" />
+                  
+                  {isEditing && (
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover/card:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1 bg-white/5 rounded border border-white/10">
+                      <GripVertical className="w-3 h-3 text-slate-500" />
+                    </div>
+                  )}
+
                   <div className={`relative z-10 w-14 h-14 flex items-center justify-center mb-6 text-theme ${isEditing ? 'cursor-pointer hover:scale-110 transition-transform bg-black/40 rounded-lg border border-dashed border-theme' : ''}`}>
                     {getIcon(item.icon, { className: "w-8 h-8" })}
                     {isEditing && (
@@ -578,12 +888,12 @@ export default function PresentationPage() {
                   {isEditing && (
                     <button onClick={() => { const n = content.benefits.items.filter(i=>i.id!==item.id); updateSection('benefits', 'items', n); }} className="absolute top-2 right-2 text-red-500 bg-red-500/10 p-2 rounded-lg opacity-0 group-hover/card:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
                   )}
-                </div>
+                </Reorder.Item>
               ))}
               {isEditing && (
                 <div onClick={() => updateSection('benefits', 'items', [...content.benefits.items, { id: Date.now(), icon: "Star", title: "Novo Benefício", desc: "Descrição..." }])} className="border-2 border-dashed border-white/10 hover:border-theme/50 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-all min-h-[250px] text-slate-500 hover:text-theme"><Plus className="w-12 h-12 mb-4" /><span className="font-bold uppercase tracking-widest text-xs">Adicionar Card</span></div>
               )}
-            </div>
+            </Reorder.Group>
           </section>
         );
 
@@ -594,11 +904,28 @@ export default function PresentationPage() {
             <div className="text-left">
               <ContentEditable tag="h2" multiline value={content.modules.title} onChange={v => updateSection('modules', 'title', v)} className="text-3xl font-black" />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Reorder.Group 
+              axis="x" 
+              values={content.modules.items} 
+              onReorder={v => updateSection('modules', 'items', v)}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
+            >
               {content.modules.items.map((item, idx) => (
-                <div key={item.id} className={`relative rounded-2xl overflow-hidden group/card aspect-[3/4] flex flex-col items-center justify-end p-6 text-center ${effects.glassmorphism ? 'glass-card' : 'bg-[#111623]'} ${effects.shadowIntensity === 'glow' ? 'hover-shadow-theme' : ''}`}>
+                <Reorder.Item 
+                  key={item.id} 
+                  value={item}
+                  drag={isEditing ? "x" : false}
+                  className={`relative rounded-2xl overflow-hidden group/card aspect-[3/4] flex flex-col items-center justify-end p-6 text-center shadow-lg ${effects.glassmorphism ? 'glass-card' : 'bg-[#111623]'} ${effects.shadowIntensity === 'glow' ? 'hover-shadow-theme' : ''}`}
+                >
                   <div className="absolute inset-0 bg-gradient-to-t from-[#080C16] via-[#080C16]/80 to-transparent z-10 pointer-events-none" />
                   <div className="absolute inset-0 opacity-40 group-hover/card:opacity-60 group-hover/card:scale-110 transition-all duration-700 pointer-events-none" style={{ background: `linear-gradient(to bottom right, rgba(${primaryRgb}, 0.5), #080C16)` }} />
+                  
+                  {isEditing && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 opacity-0 group-hover/card:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1.5 bg-white/10 rounded-xl border border-white/20 backdrop-blur-md">
+                      <GripVertical className="w-4 h-4 text-white/50" />
+                    </div>
+                  )}
+
                   <div className={`relative z-20 w-24 h-24 mb-auto mt-12 bg-white rounded-3xl flex items-center justify-center shadow-[0_0_40px_rgba(255,255,255,0.2)] text-theme ${isEditing ? 'cursor-pointer hover:scale-105 border-2 border-dashed border-theme' : ''}`}>
                     {getIcon(item.icon, { className: "w-12 h-12" })}
                     {isEditing && (
@@ -615,12 +942,12 @@ export default function PresentationPage() {
                   {isEditing && (
                     <button onClick={() => { const n = content.modules.items.filter(i=>i.id!==item.id); updateSection('modules', 'items', n); }} className="absolute top-4 right-4 z-50 text-red-500 bg-red-500/20 p-2 rounded-lg opacity-0 group-hover/card:opacity-100 transition-opacity"><Trash2 className="w-4 h-4" /></button>
                   )}
-                </div>
+                </Reorder.Item>
               ))}
               {isEditing && (
-                <div onClick={() => updateSection('modules', 'items', [...content.modules.items, { id: Date.now(), icon: "Cpu", title: "Novo Módulo", subtitle: "Tecnologia..." }])} className="relative rounded-2xl border-2 border-dashed border-white/10 hover:border-theme/50 aspect-[3/4] flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-all text-slate-500 hover:text-theme"><Plus className="w-12 h-12 mb-4" /><span className="font-bold uppercase tracking-widest text-xs">Adicionar Módulo</span></div>
+                <div onClick={() => updateSection('modules', 'items', [...content.modules.items, { id: Date.now(), icon: "Cpu", title: "Novo Módulo", subtitle: "Tecnologia..." }])} className="relative rounded-2xl border-2 border-dashed border-white/10 hover:border-theme/50 aspect-[3/4] flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 transition-all text-slate-500 hover:text-theme shadow-md"><Plus className="w-12 h-12 mb-4" /><span className="font-bold uppercase tracking-widest text-xs">Adicionar Módulo</span></div>
               )}
-            </div>
+            </Reorder.Group>
           </section>
         );
 
@@ -633,7 +960,7 @@ export default function PresentationPage() {
               <div className="flex-1 space-y-6">
                 <h2 className="text-3xl md:text-5xl font-black text-white leading-tight flex flex-col gap-2">
                   <ContentEditable tag="span" multiline value={content.bio.title} onChange={v => updateSection('bio', 'title', v)} />
-                  <ContentEditable tag="span" value={content.bio.name} onChange={v => updateSection('bio', 'name', v)} className="text-theme text-glow-theme" />
+                  <ContentEditable tag="span" value={content.bio.name} onChange={v => updateSection('bio', 'name', v)} className="text-theme text-glow-theme font-['Dancing_Script'] tracking-wider drop-shadow-2xl" />
                 </h2>
                 <div className="space-y-4 text-slate-300 text-lg leading-relaxed">
                   {content.bio.paragraphs.map((p, idx) => (
@@ -648,24 +975,54 @@ export default function PresentationPage() {
                     <button onClick={() => updateSection('bio', 'paragraphs', [...content.bio.paragraphs, "Novo parágrafo..."])} className="text-theme font-bold text-xs uppercase flex items-center gap-2 mt-2 hover:bg-theme/10 px-3 py-1.5 rounded border border-dashed border-theme/50 transition-colors"><Plus className="w-3 h-3"/> Adicionar Parágrafo</button>
                   )}
                 </div>
-                <div className="flex flex-wrap items-center gap-4 pt-6">
-                  {content.bio.social.map((link) => (
+
+                {/* Novos Campos */}
+                <div className="space-y-4 pt-6 border-t border-white/10">
+                  <div className="flex items-center gap-3">
+                    <Phone className="w-5 h-5 text-theme" />
+                    <div>
+                      <span className="text-slate-500 text-xs uppercase font-bold">WhatsApp / Comercial</span>
+                      <ContentEditable tag="div" value={content.bio.commercialWhatsapp} onChange={v => updateSection('bio', 'commercialWhatsapp', v)} className="text-white font-medium" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Mail className="w-5 h-5 text-theme" />
+                    <div>
+                      <span className="text-slate-500 text-xs uppercase font-bold">E-mail Profissional</span>
+                      <ContentEditable tag="div" value={content.bio.professionalEmail} onChange={v => updateSection('bio', 'professionalEmail', v)} className="text-white font-medium" />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Globe className="w-5 h-5 text-theme" />
+                    <div>
+                      <span className="text-slate-500 text-xs uppercase font-bold">Região de Atuação</span>
+                      <ContentEditable tag="div" value={content.bio.region} onChange={v => updateSection('bio', 'region', v)} className="text-white font-medium" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-6">
+                  <span className="text-slate-500 text-xs uppercase font-bold mb-4 block">Siga nas Redes Sociais</span>
+                  <div className="flex flex-wrap items-center gap-4">
+                    {content.bio.social.map((link) => (
                     <div key={link.id} className="relative group/social">
-                      <a href={link.url} target="_blank" rel="noopener noreferrer" className={`text-slate-400 hover:text-theme transition-colors block ${isEditing ? 'pointer-events-none' : ''}`}><OfficialIcon platform={link.platform} color="currentColor" className="w-8 h-8" /></a>
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" className={`text-slate-400 hover:text-theme transition-colors block ${isEditing ? 'pointer-events-none' : ''}`}>{getSocialIcon(link.platform, { className: "w-8 h-8" })}</a>
                       {isEditing && (
-                        <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-[#131825] border border-white/10 p-1.5 rounded-lg flex flex-col items-center gap-1 shadow-xl z-20 opacity-0 group-hover/social:opacity-100 transition-opacity w-44 pointer-events-auto">
-                          <input type="text" value={link.platform} onChange={e => { const n = [...content.bio.social]; const i = n.findIndex(x=>x.id===link.id); n[i].platform = e.target.value; updateSection('bio', 'social', n); }} className="bg-black/50 border border-white/20 rounded px-2 py-1 text-[10px] text-white outline-none w-full" placeholder="Ex: instagram, linkedin, x" />
-                          <div className="flex w-full gap-1">
-                            <input type="text" value={link.url} onChange={e => { const n = [...content.bio.social]; const i = n.findIndex(x=>x.id===link.id); n[i].url = e.target.value; updateSection('bio', 'social', n); }} className="bg-black/50 border border-white/20 rounded px-2 py-1 text-[10px] text-white outline-none flex-1" placeholder="URL Destino" />
-                            <button onClick={() => { const n = content.bio.social.filter(x=>x.id!==link.id); updateSection('bio', 'social', n); }} className="bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded px-2 py-1 transition-colors"><Trash2 className="w-3 h-3"/></button>
+                        <div className="absolute -top-20 left-1/2 -translate-x-1/2 bg-[#131825]/95 backdrop-blur-xl border border-white/20 p-3 rounded-xl flex flex-col items-start gap-2 shadow-2xl z-20 opacity-0 group-hover/social:opacity-100 transition-all scale-95 group-hover/social:scale-100 w-52 pointer-events-auto">
+                          <span className="text-[10px] font-black text-theme uppercase tracking-tighter">Editar Link Social</span>
+                          <input type="text" value={link.platform} onChange={e => { const n = [...content.bio.social]; const i = n.findIndex(x=>x.id===link.id); n[i].platform = e.target.value; updateSection('bio', 'social', n); }} className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none w-full focus:border-theme/40" placeholder="Ex: instagram, linkedin, github" />
+                          <div className="flex w-full gap-2 mt-1">
+                            <input type="text" value={link.url} onChange={e => { const n = [...content.bio.social]; const i = n.findIndex(x=>x.id===link.id); n[i].url = e.target.value; updateSection('bio', 'social', n); }} className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none flex-1 focus:border-theme/40" placeholder="https://..." />
+                            <button onClick={() => { const n = content.bio.social.filter(x=>x.id!==link.id); updateSection('bio', 'social', n); }} className="bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg px-2.5 py-1.5 transition-all"><Trash2 className="w-3.5 h-3.5"/></button>
                           </div>
                         </div>
                       )}
                     </div>
                   ))}
-                  {isEditing && (
-                    <button onClick={() => updateSection('bio', 'social', [...content.bio.social, { id: Date.now(), platform: 'globe', url: '#' }])} className="w-8 h-8 rounded-full border border-dashed border-slate-500 flex items-center justify-center text-slate-500 hover:text-white hover:border-white transition-colors"><Plus className="w-4 h-4"/></button>
-                  )}
+                    {isEditing && (
+                      <button onClick={() => updateSection('bio', 'social', [...content.bio.social, { id: Date.now(), platform: 'globe', url: '#' }])} className="w-8 h-8 rounded-full border border-dashed border-slate-500 flex items-center justify-center text-slate-500 hover:text-white hover:border-white transition-colors"><Plus className="w-4 h-4"/></button>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex-1 w-full max-w-md flex justify-center edit-hover-group">
@@ -684,12 +1041,99 @@ export default function PresentationPage() {
           </section>
         );
 
+      case 'contact':
+        return (
+          <section key="contact" id="contact" className={`${wrapperClass} py-24 px-6 relative overflow-hidden bg-[#0A0F1C]`}>
+            <SectionControl section="contact" index={index} />
+
+            {/* Fundo decorativo */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-theme/40 to-transparent" />
+              <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 30% 50%, rgba(${primaryRgb}, 0.1) 0%, transparent 60%)` }} />
+              <div className="absolute right-0 top-0 bottom-0 w-1/2" style={{ background: `radial-gradient(ellipse at 70% 50%, rgba(${primaryRgb}, 0.05) 0%, transparent 70%)` }} />
+            </div>
+
+            <div className="max-w-7xl mx-auto relative z-10">
+              <div className="grid md:grid-cols-2 gap-16 items-start">
+
+                {/* Coluna Esquerda: Texto + Info */}
+                <div className="space-y-10">
+                  <div>
+                    <div className="inline-flex items-center gap-2 bg-theme/10 border border-theme/30 rounded-full px-4 py-1.5 text-xs font-black text-theme uppercase tracking-widest mb-6">
+                      <span className="w-1.5 h-1.5 rounded-full bg-theme animate-pulse"/> 
+                      <ContentEditable value={content.contact.badgeText} onChange={v => updateSection('contact', 'badgeText', v)} />
+                    </div>
+                    <ContentEditable tag="h2" value={content.contact.title} onChange={v => updateSection('contact', 'title', v)} className="text-4xl md:text-5xl font-black text-white mb-5 leading-tight" />
+                    <ContentEditable tag="p" value={content.contact.subtitle} onChange={v => updateSection('contact', 'subtitle', v)} className="text-slate-400 text-lg leading-relaxed" />
+                  </div>
+
+                  {/* Cards de info de contato */}
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className={`flex items-center gap-4 p-4 rounded-2xl border border-white/5 bg-white/[0.03] ${effects.glassmorphism ? 'backdrop-blur-sm' : ''} hover:border-theme/30 transition-colors`}>
+                      <div className="w-12 h-12 rounded-xl bg-theme/15 border border-theme/20 flex items-center justify-center shrink-0 shadow-lg">
+                        <Phone className="w-5 h-5 text-theme" />
+                      </div>
+                      <div>
+                        <ContentEditable tag="p" value={content.contact.whatsappLabel} onChange={v => updateSection('contact', 'whatsappLabel', v)} className="text-[10px] font-black text-slate-500 uppercase tracking-widest" />
+                        <ContentEditable tag="p" value={content.bio.commercialWhatsapp} onChange={v => updateSection('bio', 'commercialWhatsapp', v)} className="text-white font-semibold text-sm outline-none" />
+                      </div>
+                    </div>
+                    <div className={`flex items-center gap-4 p-4 rounded-2xl border border-white/5 bg-white/[0.03] ${effects.glassmorphism ? 'backdrop-blur-sm' : ''} hover:border-theme/30 transition-colors`}>
+                      <div className="w-12 h-12 rounded-xl bg-theme/15 border border-theme/20 flex items-center justify-center shrink-0 shadow-lg">
+                        <Mail className="w-5 h-5 text-theme" />
+                      </div>
+                      <div>
+                        <ContentEditable tag="p" value={content.contact.emailLabel} onChange={v => updateSection('contact', 'emailLabel', v)} className="text-[10px] font-black text-slate-500 uppercase tracking-widest" />
+                        <ContentEditable tag="p" value={content.bio.professionalEmail} onChange={v => updateSection('bio', 'professionalEmail', v)} className="text-white font-semibold text-sm outline-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`flex items-center gap-4 p-4 rounded-2xl border border-white/5 bg-white/[0.03] ${effects.glassmorphism ? 'backdrop-blur-sm' : ''} hover:border-theme/30 transition-colors max-w-sm`}>
+                    <div className="w-12 h-12 rounded-xl bg-theme/15 border border-theme/20 flex items-center justify-center shrink-0 shadow-lg">
+                      <Globe className="w-5 h-5 text-theme" />
+                    </div>
+                    <div>
+                      <ContentEditable tag="p" value={content.contact.regionLabel} onChange={v => updateSection('contact', 'regionLabel', v)} className="text-[10px] font-black text-slate-500 uppercase tracking-widest" />
+                      <ContentEditable tag="p" value={content.bio.region} onChange={v => updateSection('bio', 'region', v)} className="text-white font-semibold text-sm outline-none" />
+                    </div>
+                  </div>
+
+                  {/* Divisor com redes sociais */}
+                  <div>
+                    <div className="flex items-center justify-between mb-4 max-w-sm">
+                      <ContentEditable tag="p" value={content.contact.socialTitle} onChange={v => updateSection('contact', 'socialTitle', v)} className="text-[10px] font-black text-slate-500 uppercase tracking-widest" />
+                      {isEditing && <span className="text-[9px] text-slate-600 font-bold uppercase italic">* Editar na seção BIO acima</span>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {content.bio.social.map(link => (
+                        <a key={link.id} href={link.url} target="_blank" rel="noopener noreferrer"
+                          className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 hover:border-theme hover:bg-theme/10 flex items-center justify-center text-white/50 hover:text-theme transition-all group/social-link shadow-lg">
+                          <OfficialIcon platform={link.platform} color="currentColor" className="w-6 h-6" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Coluna Direita: Formulário */}
+                <div className="relative">
+                   <div className="absolute -inset-4 bg-theme/5 blur-3xl rounded-full opacity-30 pointer-events-none" />
+                   <div className="relative bg-[#131825]/40 backdrop-blur-md border border-white/10 rounded-3xl p-1 shadow-2xl overflow-hidden hover:border-theme/30 transition-colors">
+                      <ContactForm />
+                   </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        );
+
       default: return null;
     }
   };
 
   return (
-    <div className="min-h-screen text-slate-50 relative overflow-x-hidden" style={{ backgroundColor: content.style.bgColor, fontFamily: content.style.fontFamily }}>
+    <div className="min-h-screen text-slate-50 relative overflow-x-hidden" style={{ backgroundColor: content.style.bgColor, fontFamily: content.style.fontFamily, fontSize: content.style.fontSize, color: content.style.fontColor }}>
       
       {/* Hidden File Input for Image Uploads */}
       <input
@@ -699,7 +1143,30 @@ export default function PresentationPage() {
         accept="image/*"
         onChange={handleFileChange}
       />
-      
+
+      {/* Style Editor Panel */}
+      {isEditing && (
+        <div className="fixed top-20 right-6 z-[100] bg-[#131825]/95 backdrop-blur-xl border border-white/20 p-4 rounded-xl shadow-2xl w-80">
+          <h3 className="text-sm font-black text-theme uppercase tracking-wider mb-4">Configurações de Estilo</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Fonte</label>
+              <select value={content.style.fontFamily} onChange={e => updateStyle('fontFamily', e.target.value)} className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none focus:border-theme">
+                {FONTS.map(f => <option key={f.value} value={f.value} className="bg-slate-900">{f.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Tamanho da Fonte (px)</label>
+              <input type="number" value={parseInt(content.style.fontSize)} onChange={e => updateStyle('fontSize', e.target.value + 'px')} className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-sm text-white outline-none focus:border-theme" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Cor da Fonte</label>
+              <input type="color" value={content.style.fontColor} onChange={e => updateStyle('fontColor', e.target.value)} className="w-full h-10 bg-black/40 border border-white/10 rounded cursor-pointer" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── ESTILOS GLOBAIS E INJEÇÃO DE CORES ── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&family=Inter:wght@300;400;600;800;900&family=Space+Grotesk:wght@300;400;600;700&family=Playfair+Display:wght@400;700;900&display=swap');
@@ -708,6 +1175,9 @@ export default function PresentationPage() {
           --color-primary: ${primary};
           --color-primary-rgb: ${primaryRgb};
         }
+
+        html { scroll-behavior: smooth; }
+        #contact { scroll-margin-top: 80px; }
         
         .text-theme { color: var(--color-primary); }
         .bg-theme { background-color: var(--color-primary); }
@@ -761,13 +1231,16 @@ export default function PresentationPage() {
           </div>
 
           <div className="flex items-center gap-4">
+            <button onClick={() => { if(confirm('Isso resetará o conteúdo para o novo Mídia Kit Padrão. Continuar?')) { setContent(INITIAL_CONTENT); toast({title: "Mídia Kit Restaurado!"}); } }} className="px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)]">
+              <History className="w-4 h-4"/> Restaurar Template Oficial
+            </button>
             <button onClick={handleCancel} className="text-red-400 hover:bg-red-500/10 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all border border-transparent hover:border-red-500/30">
               <X className="w-4 h-4"/> Cancelar
             </button>
             <button onClick={() => setIsEditing(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all">
               <Eye className="w-4 h-4"/> Preview Mode
             </button>
-            <button onClick={handleSave} disabled={saving} className="bg-theme hover:opacity-80 text-white px-6 py-2 rounded-lg text-sm font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-theme">
+            <button onClick={() => handleSave()} disabled={saving} className="bg-theme hover:opacity-80 text-white px-6 py-2 rounded-lg text-sm font-bold uppercase tracking-wider flex items-center gap-2 transition-all shadow-theme">
               {saving ? <Loader2 className="w-4 h-4 animate-spin"/> : <Check className="w-4 h-4"/>} Salvar Página
             </button>
           </div>
@@ -779,23 +1252,18 @@ export default function PresentationPage() {
         <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
           
           {/* Logo Customizável */}
-          <div className={`flex items-center gap-2 group/logo relative ${isEditing ? 'cursor-pointer hover:bg-white/5 p-1 rounded transition-colors' : ''}`}>
-            {content.navbar.logoType === 'image' && content.navbar.logoUrl ? (
-              <img src={content.navbar.logoUrl} alt="Logo" className="h-8 w-auto object-contain" />
+          <Link to="/dashboard" className="flex items-center gap-2 md:gap-3 group/logo relative drop-shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.5)] transition-transform hover:scale-105 z-50">
+            {settings?.logo_url ? (
+              <img src={settings.logo_url} alt="Logo" className="w-9 h-9 md:w-11 md:h-11 object-contain shrink-0 rounded-xl shadow-xl" />
             ) : (
-              <div className="w-8 h-8 rounded bg-theme flex items-center justify-center font-black text-xl text-white shadow-theme">
-                <ContentEditable tag="span" value={content.navbar.logoText} onChange={v => updateSection('navbar', 'logoText', v)} />
+              <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-gradient-to-br from-primary to-accent border border-white/20 flex items-center justify-center shrink-0 shadow-lg">
+                <span className="text-black font-black text-xl">V</span>
               </div>
             )}
-            <ContentEditable tag="span" value={content.navbar.brandName} onChange={v => updateSection('navbar', 'brandName', v)} className="text-lg font-black tracking-widest text-white uppercase ml-1" />
-            
-            {isEditing && (
-              <div className="absolute top-full left-0 mt-2 bg-[#131825] border border-white/10 p-2 rounded-lg shadow-xl opacity-0 group-hover/logo:opacity-100 transition-opacity flex flex-col gap-1 z-50">
-                <button onClick={() => updateSection('navbar', 'logoType', 'text')} className="text-xs text-white hover:bg-theme/20 px-2 py-1 rounded text-left flex items-center gap-2"><Edit3 className="w-3 h-3"/> Usar Texto</button>
-                <button onClick={() => { updateSection('navbar', 'logoType', 'image'); handleUploadClick('navbar', 'logoUrl'); }} className="text-xs text-white hover:bg-theme/20 px-2 py-1 rounded text-left flex items-center gap-2"><ImageIcon className="w-3 h-3"/> Usar Imagem</button>
-              </div>
-            )}
-          </div>
+            <div className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent font-display font-black tracking-tight text-2xl md:text-3xl whitespace-nowrap">
+               {settings?.platform_name || "Vitória Net"}
+            </div>
+          </Link>
 
           <div className="flex items-center gap-6">
             {!isEditing && isOwner && (
@@ -812,24 +1280,68 @@ export default function PresentationPage() {
         {content.layout.map((sectionId, index) => renderSection(sectionId, index))}
 
         {/* ── FOOTER Fixo no final ── */}
-        <footer className="w-full border-t border-white/[0.05] bg-[#050810] py-12 flex flex-col items-center justify-center text-center space-y-6 mt-12">
-          <div className="flex flex-wrap items-center justify-center gap-4 font-bold text-xs uppercase tracking-widest text-slate-500">
-            {content.footer.links.map((link, idx) => (
-              <div key={link.id} className="relative group/link flex items-center">
-                <ContentEditable tag="span" value={link.label} onChange={v => { const n = [...content.footer.links]; n[idx].label = v; updateSection('footer', 'links', n); }} className="hover:text-white cursor-pointer transition-colors" />
-                {isEditing && (
-                  <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#131825] border border-white/10 p-1.5 rounded-lg flex items-center gap-1 shadow-xl z-50 opacity-0 group-hover/link:opacity-100 transition-opacity pointer-events-auto min-w-[200px]">
-                     <input type="text" value={link.url} onChange={e => { const n = [...content.footer.links]; n[idx].url = e.target.value; updateSection('footer', 'links', n); }} className="bg-black/50 border border-white/20 rounded px-2 py-1 text-[10px] text-white outline-none flex-1" placeholder="URL Destino / Link" />
-                     <button onClick={() => { const n = content.footer.links.filter(x=>x.id!==link.id); updateSection('footer', 'links', n); }} className="bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white p-1 rounded transition-colors"><Trash2 className="w-3 h-3"/></button>
-                  </div>
-                )}
+        <footer className="w-full border-t border-white/[0.05] bg-[#050810] py-12 px-6 flex flex-col relative overflow-hidden mt-12">
+           <style>{`
+             @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
+             
+             .signature-watermark {
+               font-family: 'Dancing Script', cursive;
+               font-size: 5.5rem;
+               color: rgba(255, 255, 255, 0.4);
+               transform: rotate(-5deg);
+               opacity: 0.4;
+             }
+           `}</style>
+           
+           <div className="max-w-5xl mx-auto w-full flex flex-col gap-8 relative z-10">
+              {/* Linha Superior (Centro) */}
+              <div className="flex justify-center text-xs md:text-sm font-black uppercase tracking-[0.2em] text-slate-400">
+                 <span className="flex items-center gap-2">
+                   DESENVOLVIDO COM <Heart className="w-4 h-4 text-red-500 fill-red-500 animate-pulse drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" /> POR BRUNO FLACON
+                 </span>
               </div>
-            ))}
-            {isEditing && (
-              <button onClick={() => updateSection('footer', 'links', [...content.footer.links, { id: Date.now(), label: "Novo Link", url: "#" }])} className="text-theme flex items-center gap-1 hover:bg-theme/10 px-2 py-1 rounded border border-dashed border-theme/50"><Plus className="w-3 h-3"/> Add Link</button>
-            )}
-          </div>
-          <ContentEditable tag="p" value={content.footer.copyright} onChange={v => updateSection('footer', 'copyright', v)} className="text-slate-600 text-sm font-medium"/>
+              
+              {/* Linha do Meio (Datas dos Projetos) Centro */}
+              <div className="flex items-center justify-center gap-3 md:gap-5 text-[9px] md:text-[10px] font-mono text-slate-600 font-bold tracking-widest flex-wrap uppercase">
+                 <span>Ago/2012 Web Rádio Vitória</span>
+                 <span className="w-1.5 h-1.5 bg-theme/30 rotate-45" />
+                 <span>Out/2025 Social Hub</span>
+                 <span className="w-1.5 h-1.5 bg-theme/30 rotate-45" />
+                 <span>© Jan/2026 Vitória Net</span>
+              </div>
+
+              {/* Linha Inferior (Links Editáveis à Esquerda e Copyright removido) */}
+              <div className="flex flex-col md:flex-row items-center justify-start text-[7px] md:text-[8px] font-black uppercase tracking-[0.2em] text-slate-500 mt-6 md:mt-8">
+                <div className="flex flex-wrap items-center gap-4 md:gap-6 border-t border-white/10 pt-3 md:pt-4">
+                  {content.footer.links.map((link, idx) => (
+                    <div key={link.id} className="relative group/link flex items-center">
+                      <a href="#contact" className={`hover:text-theme cursor-pointer transition-colors ${isEditing ? 'pointer-events-none' : ''}`}>
+                        <ContentEditable tag="span" value={link.label} onChange={v => { const n = [...content.footer.links]; n[idx].label = v; updateSection('footer', 'links', n); }} />
+                      </a>
+                      {isEditing && (
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#131825] border border-white/10 p-1.5 rounded-lg flex items-center gap-1 shadow-xl z-50 opacity-0 group-hover/link:opacity-100 transition-opacity pointer-events-auto min-w-[200px]">
+                           <input type="text" value={link.url} onChange={e => { const n = [...content.footer.links]; n[idx].url = e.target.value; updateSection('footer', 'links', n); }} className="bg-black/50 border border-white/20 rounded px-2 py-1 text-[10px] text-white outline-none flex-1" placeholder="URL Destino / Link" />
+                           <button onClick={() => { const n = content.footer.links.filter(x=>x.id!==link.id); updateSection('footer', 'links', n); }} className="bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white p-1 rounded transition-colors"><Trash2 className="w-3 h-3"/></button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {isEditing && (
+                    <button onClick={() => updateSection('footer', 'links', [...content.footer.links, { id: Date.now(), label: "Novo Link", url: "#" }])} className="text-theme flex items-center gap-1 hover:bg-theme/10 px-2 py-1 rounded border border-dashed border-theme/50"><Plus className="w-3 h-3"/> Add Link</button>
+                  )}
+                  {isEditing && isOwner && (
+                    <Link to="/system-history" className="bg-theme/20 text-theme border border-theme/30 px-3 py-1 rounded-full flex items-center gap-2 hover:bg-theme/30 transition-all font-black text-[10px] ml-4">
+                      <History className="w-3 h-3" /> VER HISTÓRICO
+                    </Link>
+                  )}
+                </div>
+              </div>
+           </div>
+
+           {/* Marca d'água Assinatura Canto Direito Mais Destacada */}
+           <div className="absolute right-4 bottom-4 md:right-8 md:bottom-2 pointer-events-none select-none z-0">
+             <span className="signature-watermark text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] whitespace-nowrap">Bruno Flacon</span>
+           </div>
         </footer>
       </main>
     </div>

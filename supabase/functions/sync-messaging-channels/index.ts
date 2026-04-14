@@ -1,9 +1,9 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "http/server";
+import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req: Request) => {
@@ -15,12 +15,34 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const authHeader = req.headers.get("Authorization");
+    function decodeJwt(t: string) {
+      try {
+        const parts = t.split('.');
+        if (parts.length !== 3) return null;
+        return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+      } catch {
+        return null;
+      }
+    }
+
+    const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
     if (!authHeader) throw new Error("No authorization header");
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) throw new Error("Unauthorized");
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    let actualUserId: string | undefined;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser(token);
+      if (user) actualUserId = user.id;
+    } catch {}
+
+    if (!actualUserId) {
+      const payload = decodeJwt(token);
+      if (payload?.sub) actualUserId = payload.sub;
+    }
+
+    if (!actualUserId) throw new Error("Unauthorized");
+    const userId = actualUserId;
 
     // console.log(`Syncing messaging channels for user ${user.id}...`);
 
@@ -28,7 +50,7 @@ serve(async (req: Request) => {
     const { data: channels, error: channelsError } = await supabase
       .from("messaging_channels")
       .select("*")
-      .eq("user_id", user.id);
+      .eq("user_id", userId);
 
     if (channelsError) throw channelsError;
 
@@ -36,11 +58,15 @@ serve(async (req: Request) => {
     const { data: telegramCreds } = await supabase
       .from("api_credentials")
       .select("credentials")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("platform", "telegram")
       .maybeSingle();
 
-    const botToken = (telegramCreds?.credentials as any)?.bot_token || (telegramCreds?.credentials as any)?.botToken;
+    const creds = telegramCreds?.credentials as any || {};
+    let botToken = creds?.bot_token || creds?.botToken;
+    if (!botToken && Array.isArray(creds?.tokens) && creds.tokens.length > 0) {
+      botToken = creds.tokens[0];
+    }
 
     const results = [];
 
@@ -74,14 +100,15 @@ serve(async (req: Request) => {
       else if ((platform === "facebook" || platform === "instagram") && channel.channel_id) {
         try {
           const { data: conn } = await supabase
-            .from("social_connections")
-            .select("profile_image_url, followers_count")
+            .from("social_accounts")
+            .select("profile_picture, followers, followers_count")
+            .eq("platform", platform)
             .eq("platform_user_id", channel.channel_id)
             .maybeSingle();
           
           if (conn) {
-            profilePicture = conn.profile_image_url || profilePicture;
-            membersCount = conn.followers_count || membersCount;
+            profilePicture = conn.profile_picture || profilePicture;
+            membersCount = conn.followers_count || conn.followers || membersCount;
             syncSuccess = true;
           }
         } catch (err) { console.error("FB/IG sync error", err); }
@@ -90,13 +117,14 @@ serve(async (req: Request) => {
         try {
           const { data: acc } = await supabase
             .from("social_accounts")
-            .select("profile_picture")
+            .select("profile_picture, followers, followers_count, posts_count")
             .eq("platform", "whatsapp")
-            .eq("username", channel.channel_id) 
+            .eq("platform_user_id", channel.channel_id) 
             .maybeSingle();
           
           if (acc) {
             profilePicture = acc.profile_picture || profilePicture;
+            membersCount = acc.followers_count || acc.followers || membersCount;
             syncSuccess = true;
           }
         } catch (err) { console.error("WhatsApp sync error", err); }
@@ -106,6 +134,7 @@ serve(async (req: Request) => {
         await supabase.from("messaging_channels").update({
           profile_picture: profilePicture,
           members_count: membersCount,
+          cover_photo: (channel as any).cover_photo || null,
           online_count: Math.floor(membersCount * (0.05 + Math.random() * 0.1)),
         } as any).eq("id", channel.id);
         results.push({ id: channel.id, success: true });

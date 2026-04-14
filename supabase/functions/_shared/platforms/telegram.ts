@@ -16,20 +16,35 @@ export async function publishToTelegram(supabase: any, payload: PublishPayload):
     .eq('platform', 'telegram')
     .maybeSingle();
 
-  if (error || !credentials?.credentials?.bot_token) {
+  const creds = (credentials?.credentials as any) || {};
+  let botToken = creds.bot_token || creds.botToken;
+  if (!botToken && Array.isArray(creds.tokens) && creds.tokens.length > 0) {
+    botToken = creds.tokens[0];
+  }
+
+  if (!botToken) {
     throw new Error('Telegram Bot Token not found. Please configure it in Settings.');
   }
 
-  const botToken = credentials.credentials.bot_token;
-  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  let url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+  let body: any = {
+    chat_id: chatId,
+    text: content,
+  };
+
+  if (mediaUrls && mediaUrls.length > 0) {
+    url = `https://api.telegram.org/bot${botToken}/sendPhoto`;
+    body = {
+      chat_id: chatId,
+      photo: mediaUrls[0],
+      caption: content || "",
+    };
+  }
 
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: content,
-    }),
+    body: JSON.stringify(body),
   });
 
   const result = await response.json();

@@ -43,8 +43,9 @@ export function useAIContent() {
         return null;
       }
 
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-post-content`,
+        `${baseUrl}/functions/v1/generate-post-content`,
         {
           method: "POST",
           headers: {

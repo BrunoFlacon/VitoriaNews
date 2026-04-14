@@ -11,6 +11,7 @@ interface SocialAccount {
   platform_user_id: string | null;
   profile_image_url?: string | null;
   followers_count?: number | null;
+  posts_count?: number | null;
   page_id?: string | null;
 }
 
@@ -223,11 +224,21 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                           <p className="text-sm font-medium truncate">
                             {account.page_name || account.platform_user_id || "Perfil"}
                           </p>
-                          {account.followers_count != null && (
-                            <p className="text-xs text-muted-foreground">
-                              {(account.followers_count || 0).toLocaleString("pt-BR")} seguidores
-                            </p>
-                          )}
+                            <div className="flex flex-wrap items-center gap-x-2">
+                              {account.followers_count != null && !(platform.id === 'whatsapp' && account.followers_count === 0) && (
+                                <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                  {(account.followers_count || 0).toLocaleString("pt-BR")} {platform.id === 'youtube' ? 'inscritos' : (platform.id === 'whatsapp' || platform.id === 'telegram' ? 'membros' : 'seguidores')}
+                                </p>
+                              )}
+                              {account.posts_count != null && !(platform.id === 'whatsapp' && account.posts_count === 0) && !(platform.id === 'telegram' && account.posts_count === 0) && (
+                                <>
+                                  { account.followers_count != null && <div className="w-1 h-1 rounded-full bg-muted-foreground/30" /> }
+                                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                    {(account.posts_count || 0).toLocaleString("pt-BR")} {platform.id === 'youtube' ? 'vídeos' : 'posts'}
+                                  </p>
+                                </>
+                              )}
+                            </div>
                         </div>
                         {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
                       </button>

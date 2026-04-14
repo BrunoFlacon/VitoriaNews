@@ -17,7 +17,8 @@ import {
   GettrIcon,
   SpotifyIcon,
   GiphyIcon,
-  GoogleNewsIcon
+  GoogleNewsIcon,
+  RedditIcon
 } from "./SocialIcons";
 
 export const socialPlatforms = [
@@ -28,6 +29,7 @@ export const socialPlatforms = [
     color: "bg-[#1877F2]",
     textColor: "text-[#1877F2]",
     gradient: "from-[#1877F2] to-[#0D65D9]",
+    shadow: "shadow-[#1877F2]/40",
     type: "social"
   },
   {
@@ -37,6 +39,7 @@ export const socialPlatforms = [
     color: "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
     textColor: "text-[#DD2A7B]",
     gradient: "from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
+    shadow: "shadow-[#DD2A7B]/40",
     type: "social"
   },
   {
@@ -88,9 +91,10 @@ export const socialPlatforms = [
     id: "telegram",
     name: "Telegram",
     icon: TelegramIcon,
-    color: "bg-[#0088CC]",
-    textColor: "text-[#0088CC]",
-    gradient: "from-[#0088CC] to-[#006699]",
+    color: "bg-[#24A1DE]",
+    textColor: "text-[#24A1DE]",
+    gradient: "from-[#2AABEE] to-[#229ED9]",
+    shadow: "shadow-[#24A1DE]/40",
     type: "social"
   },
   {
@@ -182,6 +186,15 @@ export const socialPlatforms = [
     textColor: "text-[#4285F4]",
     gradient: "from-[#4285F4] via-[#34A853] via-[#FBBC05] to-[#EA4335]",
     type: "news"
+  },
+  {
+    id: "reddit",
+    name: "Reddit",
+    icon: RedditIcon,
+    color: "bg-[#FF4500]",
+    textColor: "text-[#FF4500]",
+    gradient: "from-[#FF4500] to-[#FF5700]",
+    type: "social"
   },
   {
     id: "site",
