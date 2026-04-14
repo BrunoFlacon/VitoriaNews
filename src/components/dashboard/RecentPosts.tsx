@@ -15,6 +15,7 @@ import { cn, normalizePlatform } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
+import { useSocialStats } from "@/hooks/useSocialStats";
 import { FeedPreview } from "./FeedPreview";
 import { useState } from "react";
 import {
@@ -54,6 +55,7 @@ const statusConfig = {
 
 export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost) => void }) => {
   const { posts, loading, deletePost, updatePost } = useScheduledPosts();
+  const { isConnected: isPlatformConnected } = useSocialStats();
   const [previewPost, setPreviewPost] = useState<ScheduledPost | null>(null);
 
   // Show only the most recent 5 posts
@@ -134,6 +136,7 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                           key={normalizedId}
                           platform={platform}
                           size="sm"
+                          muted={!isPlatformConnected(normalizedId)}
                           className="border-2 border-background shadow-sm"
                         />
                       );

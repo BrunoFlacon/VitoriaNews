@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -12,7 +12,12 @@ export interface SocialConnection {
   token_expires_at: string | null;
   page_id: string | null;
   profile_image_url?: string | null;
+  profile_picture?: string | null;
+  cover_photo?: string | null;
   followers_count?: number | null;
+  posts_count?: number | null;
+  username?: string | null;
+  metadata?: Record<string, any> | null;
 }
 
 export function useSocialConnections() {
@@ -21,21 +26,113 @@ export function useSocialConnections() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const fetchConnections = async () => {
+  const lastFetchRef = useRef<number>(0);
+  const fetchConnections = useCallback(async () => {
     if (!user) return;
+    
+    // Simple debounce: don't fetch more than once every 2 seconds unless forced
+    const now = Date.now();
+    if (now - lastFetchRef.current < 2000) return;
+    lastFetchRef.current = now;
 
     try {
+      setLoading(true);
+      // 1. Fetch OAuth-based connections
       const { data, error } = await supabase
         .from('social_connections')
-        .select('id, platform, is_connected, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, followers_count')
+        .select('id, platform, is_connected, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
         .eq('user_id', user.id);
 
       if (error) throw error;
-      setConnections((data || []) as unknown as SocialConnection[]);
+
+      const oauthConnections = (data || []) as unknown as SocialConnection[];
+
+      // 2. Check api_credentials for Telegram and WhatsApp bot tokens/keys
+      const { data: credsData } = await supabase
+        .from('api_credentials' as any)
+        .select('platform, credentials')
+        .eq('user_id', user.id)
+        .in('platform', ['telegram', 'whatsapp']) as { data: any[] | null };
+
+      const tgCreds: any = credsData?.find(r => r.platform === 'telegram')?.credentials;
+      const waCreds: any = credsData?.find(r => r.platform === 'whatsapp')?.credentials;
+
+      const hasTGToken = tgCreds &&
+        (typeof tgCreds.bot_token === 'string' && tgCreds.bot_token.trim() !== '' ||
+         typeof tgCreds.token === 'string' && tgCreds.token.trim() !== '' ||
+         (Array.isArray(tgCreds.tokens) && tgCreds.tokens.length > 0));
+
+      const hasWAToken = waCreds &&
+        (typeof waCreds.app_id === 'string' && waCreds.app_id.trim() !== '' ||
+         typeof waCreds.access_token === 'string' && waCreds.access_token.trim() !== '');
+
+      // 3. Inject synthetic connections if missing
+      const alreadyHasTelegramConn = oauthConnections.some(c => c.platform === 'telegram' && c.is_connected);
+      const alreadyHasWhatsAppConn = oauthConnections.some(c => c.platform === 'whatsapp' && c.is_connected);
+
+      let finalConnections = [...oauthConnections];
+
+      if ((hasTGToken && !alreadyHasTelegramConn) || (hasWAToken && !alreadyHasWhatsAppConn)) {
+        // Fetch extra info from social_accounts (synced by the edge function)
+        const { data: accounts } = await supabase
+          .from('social_accounts')
+          .select('id, platform, username, profile_picture, followers, posts_count')
+          .eq('user_id', user.id)
+          .in('platform', ['telegram', 'whatsapp']);
+
+        if (hasTGToken && !alreadyHasTelegramConn) {
+          const platformAccounts = accounts?.filter(a => a.platform === 'telegram') || [];
+          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers) || 0), 0);
+          const totalPosts = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
+          const firstAcc = platformAccounts[0];
+          const botToken: string = Array.isArray(tgCreds?.tokens) ? tgCreds.tokens[0] : (tgCreds?.bot_token || tgCreds?.token || '');
+          
+          finalConnections.push({
+            id: `telegram-api-${user.id}`,
+            platform: 'telegram',
+            is_connected: true,
+            page_name: firstAcc?.username ? `@${firstAcc.username}` : 'Bot Telegram',
+            platform_user_id: firstAcc?.id || null,
+            token_expires_at: null,
+            page_id: null,
+            profile_image_url: firstAcc?.profile_picture || null,
+            profile_picture: firstAcc?.profile_picture || null,
+            followers_count: totalFollowers,
+            posts_count: totalPosts,
+            username: firstAcc?.username || null,
+            metadata: { from_api_credentials: true, bot_token_preview: botToken ? botToken.slice(0,8) + '...' : '' },
+          });
+        }
+
+        if (hasWAToken && !alreadyHasWhatsAppConn) {
+          const platformAccounts = accounts?.filter(a => a.platform === 'whatsapp') || [];
+          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers) || 0), 0);
+          const totalPosts = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
+          const firstAcc = platformAccounts[0];
+
+          finalConnections.push({
+            id: `whatsapp-api-${user.id}`,
+            platform: 'whatsapp',
+            is_connected: true,
+            page_name: firstAcc?.username || 'WhatsApp Business',
+            platform_user_id: firstAcc?.id || null,
+            token_expires_at: null,
+            page_id: null,
+            profile_image_url: firstAcc?.profile_picture || null,
+            profile_picture: firstAcc?.profile_picture || null,
+            followers_count: totalFollowers,
+            posts_count: totalPosts,
+            username: firstAcc?.username || null,
+            metadata: { from_api_credentials: true },
+          });
+        }
+      }
+      
+      setConnections(finalConnections);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     fetchConnections();
@@ -121,8 +218,9 @@ export function useSocialConnections() {
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
 
       try {
+        const baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
         const response = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-oauth-init`,
+          `${baseUrl}/functions/v1/social-oauth-init`,
           {
             method: "POST",
             headers: {
@@ -198,29 +296,44 @@ export function useSocialConnections() {
       }
 
       let isFinalized = false;
-      const finalize = async () => {
-        if (isFinalized) return;
+
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === "oauth-complete") {
+          // Send signal and return immediately
+          isFinalized = true;
+          window.removeEventListener("message", handleMessage);
+          clearInterval(pollInterval);
+          
+          // Execute finalize in a background-like task
+          (async () => {
+            await finalize(true);
+            toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
+          })();
+        }
+      };
+      window.addEventListener("message", handleMessage);
+
+      // Finalize should take a 'triggered' flag to avoid double recursion
+      const finalize = async (fromMessage = false) => {
+        if (!fromMessage && isFinalized) return;
         isFinalized = true;
         clearInterval(pollInterval);
         window.removeEventListener("message", handleMessage);
         await fetchConnections();
       };
 
-      const handleMessage = async (event: MessageEvent) => {
-        if (event.data?.type === "oauth-complete") {
-          await finalize();
-          toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
-        }
-      };
-      window.addEventListener("message", handleMessage);
-
       const pollInterval = setInterval(async () => {
         try {
-          if (popup.closed) {
+          if (popup && popup.closed) {
+            clearInterval(pollInterval);
             await finalize();
           }
-        } catch {}
-      }, 1000);
+        } catch (e) {
+          // If we can't access popup (cross-origin), just wait for it to close
+          clearInterval(pollInterval);
+          await finalize();
+        }
+      }, 2000); // Increased interval to 2s to reduce overhead
 
       setTimeout(() => {
         finalize();
@@ -243,6 +356,21 @@ export function useSocialConnections() {
       const parts = platformOrKey.split('|');
       const platform = parts[0];
       const connectionId = parts[1]; // may be undefined
+
+      // Telegram uses api_credentials (not social_connections) for its "connection"
+      const isTelegramSynthetic = platform === 'telegram' &&
+        (!connectionId || connectionId.startsWith('telegram-api-'));
+
+      if (isTelegramSynthetic) {
+        await supabase
+          .from('api_credentials' as any)
+          .delete()
+          .eq('user_id', user.id)
+          .eq('platform', 'telegram');
+        await fetchConnections();
+        toast({ title: "Telegram desconectado", description: "Bot Token removido com sucesso." });
+        return;
+      }
 
       let query = supabase
         .from('social_connections')

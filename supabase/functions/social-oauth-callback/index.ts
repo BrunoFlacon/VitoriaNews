@@ -132,7 +132,7 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
   const meData = await meRes.json();
   const defaultProfileImageUrl = meData.picture?.data?.url || "";
 
-  const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?access_token=${accessToken}`);
+  const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?access_token=${accessToken}&fields=id,name,access_token,picture.type(large)`);
   const pagesData = await pagesRes.json();
   const pages = pagesData.data || [];
 
@@ -167,7 +167,8 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
     } catch { /* fallback */ }
   } else {
     for (const page of pages) {
-      results.push({ accessToken: page.access_token, refreshToken: "", expiresIn, platformUserId: page.id, pageName: page.name, pageId: page.id, profileImageUrl: defaultProfileImageUrl });
+      const pagePhoto = page.picture?.data?.url || defaultProfileImageUrl;
+      results.push({ accessToken: page.access_token, refreshToken: "", expiresIn, platformUserId: page.id, pageName: page.name, pageId: page.id, profileImageUrl: pagePhoto });
     }
   }
 
@@ -217,6 +218,111 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   }];
 }
 
+async function exchangeReddit(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
+  const clientId = creds.client_id || Deno.env.get("REDDIT_CLIENT_ID");
+  const clientSecret = creds.client_secret || Deno.env.get("REDDIT_CLIENT_SECRET");
+  
+  if (!clientId || !clientSecret) throw new Error("Configuração Reddit incompleta.");
+
+  const auth = btoa(`${clientId}:${clientSecret}`);
+  const payload = {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri
+  };
+
+  const res = await fetch("https://www.reddit.com/api/v1/access_token", {
+    method: "POST",
+    headers: { 
+      "Authorization": `Basic ${auth}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": "SocialCanvasHub/1.0"
+    },
+    body: new URLSearchParams(payload)
+  });
+
+  const data = await res.json();
+  if (data.error) throw new Error(data.error_description || data.error);
+
+  const accessToken = data.access_token;
+  const refreshToken = data.refresh_token || "";
+  const expiresIn = data.expires_in || 3600;
+
+  const userRes = await fetch("https://oauth.reddit.com/api/v1/me", {
+    headers: { "Authorization": `Bearer ${accessToken}`, "User-Agent": "SocialCanvasHub/1.0" }
+  });
+  const userData = await userRes.json();
+
+  return [{
+    accessToken,
+    refreshToken,
+    expiresIn,
+    platformUserId: userData.id,
+    pageName: userData.name,
+    pageId: "",
+    profileImageUrl: userData.icon_img?.split('?')[0] || "",
+    username: userData.name
+  }];
+}
+
+async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
+  const clientId = creds.client_id || Deno.env.get("TWITTER_CLIENT_ID");
+  const clientSecret = creds.client_secret || Deno.env.get("TWITTER_CLIENT_SECRET");
+  
+  if (!clientId) throw new Error("Client ID do Twitter não configurado.");
+
+  const payload = {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: codeVerifier,
+    client_id: clientId,
+  };
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+  };
+
+  // Se houver secret, usa Basic Auth
+  if (clientSecret) {
+    headers["Authorization"] = `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
+  }
+
+  const res = await fetch("https://api.twitter.com/2/oauth2/token", {
+    method: "POST",
+    headers,
+    body: new URLSearchParams(payload)
+  });
+
+  const data = await res.json();
+  await logOAuth(supabase, { user_id: userId, provider: "twitter", stage: "exchange", request_payload: payload, response_payload: data });
+
+  if (data.error) throw new Error(data.error_description || data.error);
+
+  const accessToken = data.access_token;
+  const refreshToken = data.refresh_token || "";
+  const expiresIn = data.expires_in || 7200;
+
+  const userRes = await fetch("https://api.twitter.com/2/users/me?user.fields=profile_image_url,public_metrics", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const userData = await userRes.json();
+  const user = userData.data;
+
+  return [{
+    accessToken,
+    refreshToken,
+    expiresIn,
+    platformUserId: user.id,
+    pageName: user.name,
+    pageId: "",
+    profileImageUrl: user.profile_image_url?.replace("_normal", "") || "",
+    username: user.username,
+    followers: user.public_metrics?.followers_count || 0,
+    postsCount: user.public_metrics?.tweet_count || 0
+  }];
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -262,12 +368,26 @@ serve(async (req: Request) => {
       raw = await getCreds(platform);
     }
 
-    const formattedCreds = {
-      client_id: raw.client_id || raw.youtube_id || Deno.env.get("GOOGLE_CLIENT_ID"),
-      client_secret: raw.client_secret || Deno.env.get("GOOGLE_CLIENT_SECRET"),
-      app_id: raw.app_id || raw.client_id || Deno.env.get("META_APP_ID") || Deno.env.get("THREADS_CLIENT_ID"),
-      app_secret: raw.app_secret || raw.client_secret || Deno.env.get("META_APP_SECRET") || Deno.env.get("THREADS_CLIENT_SECRET"),
+    const getVal = (userKey: string, envKey: string) => {
+      const val = raw[userKey] || Deno.env.get(envKey);
+      return val?.trim() || null;
     };
+
+    const formattedCreds: any = {};
+    
+    if (platform === "twitter") {
+      formattedCreds.client_id = getVal("client_id", "TWITTER_CLIENT_ID");
+      formattedCreds.client_secret = getVal("client_secret", "TWITTER_CLIENT_SECRET");
+    } else if (platform === "reddit") {
+      formattedCreds.client_id = getVal("client_id", "REDDIT_CLIENT_ID");
+      formattedCreds.client_secret = getVal("client_secret", "REDDIT_CLIENT_SECRET");
+    } else if (platform === "google" || platform === "youtube") {
+      formattedCreds.client_id = raw.client_id || raw.youtube_id || Deno.env.get("GOOGLE_CLIENT_ID");
+      formattedCreds.client_secret = raw.client_secret || Deno.env.get("GOOGLE_CLIENT_SECRET");
+    } else {
+      formattedCreds.app_id = raw.app_id || raw.client_id || Deno.env.get("META_APP_ID") || Deno.env.get("THREADS_CLIENT_ID");
+      formattedCreds.app_secret = raw.app_secret || raw.client_secret || Deno.env.get("META_APP_SECRET") || Deno.env.get("THREADS_CLIENT_SECRET");
+    }
 
     let results: TokenResult[];
 
@@ -278,8 +398,12 @@ serve(async (req: Request) => {
       case "instagram":
       case "whatsapp": results = await exchangeMeta(code, oauthState.redirect_uri, platform, formattedCreds, supabase, user.id); break;
       case "threads": results = await exchangeThreads(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
+      case "reddit": results = await exchangeReddit(code, oauthState.redirect_uri, { 
+        client_id: raw.client_id, 
+        client_secret: raw.client_secret 
+      }, supabase, user.id); break;
+      case "twitter": results = await exchangeTwitter(code, oauthState.redirect_uri, oauthState.code_verifier || "", formattedCreds, supabase, user.id); break;
       default:
-        // Mantém as outras (Twitter, LinkedIn, etc) se necessário, ou lança erro
         throw new Error(`Troca de token para plataforma '${platform}' não implementada nesta refatoração.`);
     }
 

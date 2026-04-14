@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+
 interface EngagementData {
   views: number;
   likes: number;
@@ -46,8 +47,26 @@ export interface FollowerData {
   platform: string;
   username: string | null;
   currentFollowers: number;
+  postsCount: number;
   growth: number;
   profileImage: string | null;
+}
+
+export interface AdsStatsData {
+  impressions: number;
+  reach: number;
+  clicks: number;
+  spend: number;
+}
+
+export interface YoutubeStatsData {
+  views: number;
+  likes: number;
+  comments: number;
+}
+
+export interface GaStatsData {
+  views: number;
 }
 
 export interface AnalyticsData {
@@ -58,6 +77,8 @@ export interface AnalyticsData {
     failedPosts: number;
     draftPosts: number;
     publishRate: string | number;
+    totalFollowers?: number;
+    followersGrowth?: string | number;
   };
   engagement: EngagementData;
   chartData: ChartDataPoint[];
@@ -66,6 +87,13 @@ export interface AnalyticsData {
   bestTimes: BestTime[];
   followerData: FollowerData[];
   messageStats?: MessageStats;
+  adsStats?: AdsStatsData;
+  youtubeStats?: YoutubeStatsData;
+  gaStats?: GaStatsData;
+  viralData?: any[];
+  trendsData?: any[];
+  attacksData?: any[];
+  messagingChannels?: any[];
   period: string;
   generatedAt: string;
   dataSource: 'real' | 'seeded';
@@ -78,6 +106,7 @@ export function useAnalytics() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [analyticsErrorInfo, setAnalyticsErrorInfo] = useState<string | null>(null);
 
   // Initialize period from user metadata or localStorage when user changes
   useEffect(() => {
@@ -112,35 +141,36 @@ export function useAnalytics() {
       throw new Error("No user available for query");
     }
 
-    const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.access_token) {
-      throw new Error("No session available for query");
-    }
+    try {
+      setAnalyticsErrorInfo(null);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sessão expirada. Faça login novamente.");
+      
+      const { data: aData, error: aErr } = await supabase.functions.invoke('get-analytics', {
+        method: 'POST',
+        body: { period, platform, type: postType }
+      });
 
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-analytics?period=${period}&platform=${platform}&type=${postType}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.session.access_token}`,
-        },
+      if (aErr) {
+        const msg = aErr.message || (aErr as any).detail || "Erro desconhecido";
+        setAnalyticsErrorInfo(msg);
+        throw new Error(msg);
       }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || "Failed to fetch analytics");
+      return aData as AnalyticsData;
+    } catch (err: any) {
+      setAnalyticsErrorInfo(err.message);
+      throw err;
     }
-
-    return response.json() as Promise<AnalyticsData>;
   };
 
   const { data, isLoading, refetch, isError } = useQuery<AnalyticsData, Error>({
     queryKey: ['analytics', user?.id, period, platform, postType],
     queryFn: fetchAnalyticsData,
     enabled: !!user,
-    staleTime: 5 * 60 * 1000, // keep the data fresh for 5 mins
+    staleTime: 5 * 60 * 1000,    // considerar fresco por 5 minutos
+    gcTime: 10 * 60 * 1000,      // manter em cache por 10 minutos
+    retry: 1,
+    refetchOnWindowFocus: false,  // não rebuscar ao focar a janela
   });
 
   // Display toast once on unhandled fetching errors
@@ -157,21 +187,13 @@ export function useAnalytics() {
   const syncMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("No user");
-      const { data: session } = await supabase.auth.getSession();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/collect-social-analytics`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session?.session?.access_token}`,
-          },
-          body: JSON.stringify({}),
-        }
-      );
+      const { data, error } = await supabase.functions.invoke('collect-social-analytics', {
+        method: 'POST',
+        body: {}
+      });
 
-      if (!response.ok) throw new Error("Sync failed");
-      return response;
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
       toast({
@@ -189,9 +211,111 @@ export function useAnalytics() {
     }
   });
 
+  const syncMetaAds = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("No user");
+      const { data, error } = await supabase.functions.invoke('collect-meta-ads-analytics', {
+        method: 'POST'
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Meta Ads sincronizado",
+        description: `${data.total_campaigns || 0} campanhas atualizadas.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Erro Meta Ads",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const syncGoogleAnalytics = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("No user");
+      const { data, error } = await supabase.functions.invoke('collect-google-analytics', {
+        method: 'POST'
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Google Analytics sincronizado",
+        description: "Dados de tráfego do site atualizados.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Erro Google Analytics",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const syncYouTubeAnalytics = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("No user");
+      const { data, error } = await supabase.functions.invoke('collect-youtube-analytics', {
+        method: 'POST'
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "YouTube Analytics sincronizado",
+        description: "Dados de vídeos e canal atualizados.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Erro YouTube Analytics",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const syncTelegramChats = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("No user");
+      const { data, error } = await supabase.functions.invoke("sync-telegram-chats", {
+        body: { platform: "telegram" }
+      });
+      if (error) throw error;
+      if (data && data.success === false) throw new Error(data.error || "Telegram sync failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Telegram sincronizado",
+        description: `${data.synced || 0} chats atualizados.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Erro Telegram",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  });
+
   return {
     data: data || null,
     loading: isLoading || syncMutation.isPending,
+    error: analyticsErrorInfo,
     period,
     setPeriod,
     platform,
@@ -199,6 +323,10 @@ export function useAnalytics() {
     postType,
     setPostType,
     refetch,
-    syncAnalytics: () => syncMutation.mutate()
+    syncAnalytics: () => syncMutation.mutate(),
+    syncMetaAds: () => syncMetaAds.mutate(),
+    syncGoogleAnalytics: () => syncGoogleAnalytics.mutate(),
+    syncYouTubeAnalytics: () => syncYouTubeAnalytics.mutate(),
+    syncTelegramChats: () => syncTelegramChats.mutate(),
   };
 }

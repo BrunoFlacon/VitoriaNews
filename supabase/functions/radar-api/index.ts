@@ -1,6 +1,7 @@
-// deno-lint-ignore-file
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// @ts-ignore
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-ignore
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
 // Access Deno global
 declare const Deno: any;
@@ -52,6 +53,7 @@ serve(async (req: Request) => {
     let error: any = null;
 
     switch (path) {
+      case 'intelligence':
       case 'sync-intelligence': {
           const { discoverTrends } = await import('../_shared/automation/trend-discovery.ts');
           
@@ -73,7 +75,17 @@ serve(async (req: Request) => {
               });
           }
 
-          data = await discoverTrends(supabaseClient, user.id);
+          await discoverTrends(supabaseClient, user.id);
+          
+          // After discovery, fetch the latest trends to return to the UI
+          const { data: trends, error: fetchError } = await supabaseClient
+            .from('trends')
+            .select('*')
+            .order('detected_at', { ascending: false })
+            .limit(50);
+            
+          if (fetchError) throw fetchError;
+          data = trends;
           break;
       }
       

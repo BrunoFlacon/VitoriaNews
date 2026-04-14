@@ -11,9 +11,19 @@ import {
 
 interface AnalyticsChartProps {
   data?: any[];
+  loading?: boolean;
 }
 
-export const AnalyticsChart = ({ data: chartData = [] }: AnalyticsChartProps) => {
+export const AnalyticsChart = ({ data: chartData = [], loading = false }: AnalyticsChartProps) => {
+  if (loading) {
+    return (
+      <div className="glass-card rounded-2xl border border-border p-6 h-[420px] flex flex-col justify-center items-center">
+        <div className="w-20 h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+        <p className="text-muted-foreground font-medium animate-pulse">Carregando métricas...</p>
+      </div>
+    );
+  }
+
   const displayData = chartData.length > 0 ? chartData : [
     { name: "Seg", views: 0, engagement: 0, reach: 0 },
     { name: "Ter", views: 0, engagement: 0, reach: 0 },
@@ -29,7 +39,7 @@ export const AnalyticsChart = ({ data: chartData = [] }: AnalyticsChartProps) =>
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
-      className="glass-card rounded-2xl border border-border p-6"
+      className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col"
     >
       <div className="flex items-center justify-between mb-6">
         <div>

@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "@supabase/supabase-js";
 
 export async function collectMetaIntelligence(supabaseClient: any, userId: string) {
   console.log(`[MetaCollector] Starting collection for user: ${userId}`);

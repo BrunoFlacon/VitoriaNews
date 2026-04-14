@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   User, Bell, Key, Shield, Globe, Save, Camera, Check, AlertCircle, Loader2, Unplug, Info,
   Eye, EyeOff, ChevronDown, ChevronUp, Trash2, Users, RefreshCw, Heart, Share2, TrendingUp, Plus, X,
   Phone, MessageSquare, Calendar, Mail, Image as ImageIcon, Link2, LogOut, Pencil, Laptop, Clock,
-  UserCircle2
+  UserCircle2, FileText, Target
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useSocialStats } from "@/hooks/useSocialStats";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { useApiCredentials, PLATFORM_CREDENTIAL_FIELDS } from "@/hooks/useApiCredentials";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +27,7 @@ import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SystemSettingsView } from "./settings/SystemSettingsView";
 import { PortalSettingsWrapper } from "./settings/PortalSettingsWrapper";
+import { useSystem } from "@/contexts/SystemContext";
 
 interface SocialAccountStats {
   id: string;
@@ -34,7 +36,10 @@ interface SocialAccountStats {
   username: string;
   profile_picture: string;
   followers_count: number;
-  metadata?: { posts_count?: number };
+  following: number | null;
+  posts_count: number | null;
+  engagement_rate: number | null;
+  metadata?: Record<string, any> | null;
   views: number;
   likes: number;
   shares: number;
@@ -56,9 +61,10 @@ const PLATFORM_CONFIGS: any[] = [
     ...p,
     oauthSupported: p.type === 'social' && p.id !== 'site' && p.id !== 'telegram'
   })),
-  { id: 'meta_ads', name: 'Meta Marketing & Ads API', icon: socialPlatforms.find(p => p.id === 'facebook')?.icon, color: "bg-[#1877F210]", textColor: "text-[#1877F2]", gradient: "from-blue-500 to-indigo-500", oauthSupported: false },
+  { id: 'meta_ads', name: 'Meta Marketing & Ads API', icon: socialPlatforms.find(p => p.id === 'facebook')?.icon, color: "bg-[#1877F210]", textColor: "text-[#1877F2]", gradient: "from-blue-500 to-indigo-500", oauthSupported: false, showPixels: true },
   { id: 'google_cloud', name: 'Google Cloud (Maps, YouTube, Ads)', icon: socialPlatforms.find(p => p.id === 'googlenews')?.icon, color: "bg-[#EA433510]", textColor: "text-[#EA4335]", gradient: "from-red-500 to-orange-500", oauthSupported: false },
-  { id: 'newsapi', name: 'NewsAPI.org (Global News)', icon: Globe, color: "bg-[#00000010]", textColor: "text-foreground", gradient: "from-gray-500 to-black", oauthSupported: false }
+  { id: 'newsapi', name: 'NewsAPI.org (Global News)', icon: Globe, color: "bg-[#00000010]", textColor: "text-foreground", gradient: "from-gray-500 to-black", oauthSupported: false },
+  { id: 'resend', name: 'Resend (Email Automation)', icon: Mail, color: "bg-[#00000010]", textColor: "text-foreground", gradient: "from-slate-700 to-black", oauthSupported: false }
 ];
 
 // Deduplicate PLATFORM_CONFIGS just in case socialPlatforms already has meta_ads/google_cloud
@@ -68,6 +74,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const { user, profile, updateProfile, isOnline, toggleOnline } = useAuth();
   const { can } = usePermissions();
   const { toast } = useToast();
+  const { settings: systemSettings, updateSettingsOptimistic } = useSystem();
   const [activeSettingsTab, setActiveSettingsTab] = useState(defaultTab || 'profile');
 
   // Sync when defaultTab prop changes from parent (e.g. Header dropdown navigation)
@@ -84,58 +91,84 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const { connections, loading: connectionsLoading, initiateOAuth, disconnect } = useSocialConnections();
   const { credentials, loading: credsLoading, saving, saveCredentials, deleteCredentials, hasCredentials } = useApiCredentials();
   
-  const [socialStats, setSocialStats] = useState<SocialAccountStats[]>([]);
-  const [statsLoading, setStatsLoading] = useState(false);
+  const { stats: socialStats, audienceBreakdown, loading: statsLoading, refresh: refreshStats, setStatsLoading } = useSocialStats();
 
-  const fetchSocialStats = async () => {
-    if (!user) return;
-    setStatsLoading(true);
-    const { data, error } = await supabase
-      .from("social_accounts")
-      .select("*")
-      .eq("user_id", user.id);
+  const getBrandLogo = (id: string, isActive: boolean) => {
+    const className = "w-8 h-8 rounded-lg transition-all duration-500 overflow-hidden bg-background/50 flex items-center justify-center p-1 border border-border/40 shadow-sm group-hover:scale-110";
     
-    if (data) {
-      setSocialStats(data as any);
+    switch (id) {
+      case 'resend':
+        return (
+          <div className={cn(className, isActive ? "border-slate-800" : "grayscale opacity-40")}>
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              <path d="M20 5L35 12.5V27.5L20 35L5 27.5V12.5L20 5Z" fill="black" />
+              <path d="M10 25L20 30L30 25M10 15L20 20L30 15" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        );
+      case 'whatsapp':
+        return (
+          <div className={cn(className, isActive ? "border-green-500 shadow-green-500/20" : "grayscale opacity-40")}>
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.438 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" fill="#25D366" />
+            </svg>
+          </div>
+        );
+      default:
+        const config = UNIQUE_PLATFORM_CONFIGS.find(c => c.id === id);
+        return <PlatformIconBadge platform={config as any} size="md" muted={!isActive} />;
     }
-    setStatsLoading(false);
   };
 
-  const syncSocialStats = async () => {
+  const syncSocialStats = async (platformId?: string) => {
     if (!user) return;
     setStatsLoading(true);
     try {
-      // Temporariamente desativado para evitar Erro 401 nativo do navegador
-      // O servidor backend precisará ser configurado com supabase CLI depois
-      // await supabase.functions.invoke("sync-social-data", { method: "POST" });
-      
-      await new Promise(resolve => setTimeout(resolve, 800));
-    } catch (e) {
-      // SILENT FAIL completely
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) {
+        toast({ title: "Sessão expirada", description: "Por favor, faça login novamente.", variant: "destructive" });
+        return;
+      }
 
+      const functionName = platformId === 'telegram' ? 'sync-telegram-chats' : 'collect-social-analytics';
+      
+      const { data: invData, error: invErr } = await supabase.functions.invoke(`${functionName}?_cb=${Date.now()}`, {
+        body: platformId ? { platform: platformId, userId: session.user.id } : { userId: session.user.id },
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'X-Authorization': `Bearer ${session.access_token}`
+        }
+      });
+
+      if (invErr) {
+        throw new Error(invErr.message || `Erro durante a execução da Edge Function (${functionName})`);
+      }
+
+      toast({ 
+        title: platformId === 'telegram' ? "Telegram Sincronizado!" : "Sincronização concluída", 
+        description: "Os dados foram atualizados com sucesso." 
+      });
+    } catch (e: any) {
+      const errMsg = e?.message || e?.context?.message || JSON.stringify(e);
+      toast({ title: "Erro na sincronização", description: errMsg, variant: "destructive" });
     } finally {
-      await fetchSocialStats();
-      setStatsLoading(false);
+      refreshStats();
     }
   };
 
   const hasSyncedRef = useRef(false);
 
   useEffect(() => {
-    fetchSocialStats();
+    // Initial fetch handled by useSocialStats hook
   }, [user]);
 
   // Auto-sync on first load when there are connections
   useEffect(() => {
     if (!hasSyncedRef.current && connections.length > 0) {
       hasSyncedRef.current = true;
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          syncSocialStats();
-        }
-      });
+      syncSocialStats();
     }
-  }, [connections]);
+  }, [connections.length]);
 
   
   const [profileData, setProfileData] = useState({
@@ -202,6 +235,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const [formValues, setFormValues] = useState<Record<string, Record<string, string>>>({});
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
   const [showAddApiModal, setShowAddApiModal] = useState(false);
+  // Optimistic local state for bot toggle - avoids UI flicker on refresh cycle
+  const [localBotActive, setLocalBotActive] = useState<boolean | null>(null);
   
   useEffect(() => {
     if (profile) {
@@ -250,6 +285,22 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     if (expandedPlatform === id) setExpandedPlatform(null);
   };
 
+  const handleDisconnectCustom = async (platformId: string, connectionId: string) => {
+    if (platformId === 'telegram') {
+      try {
+        // PER USER REQUEST: Do NOT expurgate social_accounts or messaging_channels.
+        // Just remove the login/token (which effectively acts as 'disconnecting' from the backend syncs)
+        await deleteCredentials('telegram');
+        refreshStats();
+        toast({ title: "Desconectado", description: "O Bot do Telegram foi desconectado, mas seus dados e perfis permanecem seguros." });
+      } catch (err: any) {
+        toast({ title: "Erro", description: "Não foi possível desconectar a conta de forma limpa.", variant: "destructive" });
+      }
+    } else {
+      await disconnect(`${platformId}|${connectionId}`);
+    }
+  };
+
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -286,11 +337,11 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         const { error: uploadError } = await supabase.storage.from('media').upload(filePath, blob, { upsert: true });
         if (uploadError) throw uploadError;
         
-        const { data: urlData } = supabase.storage.from('media').getPublicUrl(filePath);
-        const avatarUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+        const { data: publicUrlData } = supabase.storage.from('media').getPublicUrl(filePath);
+        const avatarUrl = `${publicUrlData.publicUrl}?t=${Date.now()}`;
         
-        const success = await updateProfile({ avatar_url: avatarUrl });
-        if (success) {
+        const updateSuccess = await updateProfile({ avatar_url: avatarUrl });
+        if (updateSuccess) {
           toast({ title: "Foto atualizada" });
           setAvatarToCrop(null);
         }
@@ -346,7 +397,6 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       if (success) toast({ variant: "success" as any, title: "Perfil atualizado" });
       else throw new Error("Falha na atualização");
     } catch (error: any) {
-      console.error("Erro ao salvar perfil:", error);
       toast({ title: "Erro", description: "Não foi possível salvar o perfil. Verifique os campos.", variant: "destructive" });
     }
   };
@@ -411,11 +461,85 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     }));
   };
 
+  const handleToggleBot = useCallback(async (active: boolean) => {
+    // Apply optimistic update immediately so UI reflects change before refresh
+    setLocalBotActive(active);
+    try {
+      // 1. Tentar avisar o robô local via proxy (8081 -> 3000)
+      let botNotified = false;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+        
+        const localResponse = await fetch('/api/bot/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        botNotified = localResponse.ok;
+
+        if (!botNotified) {
+          // Revert optimistic update if server rejected
+          setLocalBotActive(!active);
+        }
+      } catch (err) {
+        // If proxy unreachable, keep optimistic state but warn user
+        botNotified = false;
+      }
+
+      // 2. Atualizar no Supabase para persistência global (Apenas se não for virtual)
+      const whatsappAccount = socialStats.find(s => s.platform === 'whatsapp');
+      if (whatsappAccount) {
+        const isVirtual = String(whatsappAccount.id).startsWith('virtual-');
+        
+        if (!isVirtual) {
+          const updateData: any = { 
+            metadata: { 
+              ...(whatsappAccount.metadata as any || {}),
+              botActive: active,
+              is_active: active
+            } 
+          };
+          
+          const { error } = await supabase
+            .from('social_accounts')
+            .update(updateData)
+            .eq('id', whatsappAccount.id);
+
+          if (error) throw error;
+        }
+        
+        toast({
+          title: active ? "Robô Ativado" : "Robô Pausado",
+          description: botNotified 
+            ? "O robô local foi notificado com sucesso." 
+            : "Salvo localmente. Inicie o robô para que ele receba a alteração.",
+          variant: botNotified ? "default" : "destructive",
+        });
+        
+        refreshStats();
+      }
+    } catch (err: any) {
+      toast({
+        title: "Erro ao atualizar robô",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  }, [socialStats, supabase, toast, refreshStats]);
+
   const handleSaveCreds = async (platform: string) => {
     const vals = formValues[platform] || {};
     const success = await saveCredentials(platform, vals);
     if (success) {
       setFormValues(prev => ({ ...prev, [platform]: vals }));
+      // Give sync some time to complete before fetching stats if it's telegram
+      setTimeout(() => {
+        refreshStats();
+      }, platform === 'telegram' ? 3500 : 500);
     }
   };
 
@@ -700,7 +824,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                           />
                           <div className="flex items-center gap-1.5 ml-1">
                             {isOnline ? (
-                              <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
                             ) : (
                               <div className="w-2.5 h-2.5 rounded-full bg-transparent border border-muted-foreground/40 shadow-inner" />
                             )}
@@ -807,7 +931,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={syncSocialStats}
+                  onClick={() => syncSocialStats()}
                   disabled={statsLoading}
                   className="flex items-center gap-2 text-xs"
                 >
@@ -829,12 +953,37 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
             
             <div className="space-y-3">
               {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
-                const platformConnections = connections.filter(c => c.platform === config.id && c.is_connected);
+                const platformStats = socialStats.find(s => s.platform === config.id);
+                // isVerified = true if any Telegram entry has followers > 0 OR there's any bot entry saved
+                const isVerified = config.id === 'telegram' || config.id === 'whatsapp'
+                  ? socialStats.some(s => s.platform === config.id)
+                  : (!!platformStats && (platformStats.followers_count > 0 || (platformStats.posts_count ?? 0) > 0));
+                
+                const hasCreds = hasCredentials(config.id);
+                // Telegram connects via Bot Token — data saved directly to social_accounts.
+                const platformConnections = config.id === 'telegram'
+                  ? socialStats.filter(s => s.platform === config.id).map(s => ({
+                      id: s.id,
+                      platform: s.platform,
+                      username: s.username,
+                      platform_user_id: s.id,
+                      profile_image_url: s.profile_picture,
+                      page_name: s.username || 'Bot/Canal Telegram',
+                      followers_count: s.followers_count,
+                      is_connected: true
+                    })) as any[]
+                  : connections.filter(c => 
+                      c.platform === config.id && 
+                      c.is_connected && 
+                      ((c as any).access_token !== null || config.id === 'whatsapp')
+                    );
+
                 const hasConnections = platformConnections.length > 0;
+                const isVerifiedFinal = (config.id === 'telegram' && hasCreds) || (config.id === 'whatsapp' && hasCreds) || socialStats.some(s => s.platform === config.id);
+                const isEffectivelyConnected = hasConnections || isVerifiedFinal;
                 
                 const isConnecting = connectingPlatform === config.id;
                 const isExpanded = expandedPlatform === config.id;
-                const hasCreds = hasCredentials(config.id);
                 const fields = PLATFORM_CREDENTIAL_FIELDS[config.id] || [];
                 
                 return (
@@ -844,51 +993,69 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                       onClick={() => toggleExpand(config.id)}
                     >
                       <div className="flex items-start gap-4 flex-1">
+                        {/* Icon is colored only when truly connected/verified, muted otherwise */}
                         <PlatformIconBadge 
                           platform={config as any} 
                           size="md" 
-                          muted={hasConnections ? false : (config.oauthSupported ? true : !hasCreds)}
+                          muted={!isEffectivelyConnected}
                         />
 
                         <div className="text-left min-w-0 flex-1">
                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                             <p className="font-semibold text-base">{config.name}</p>
-                            {hasConnections && (
-                              <div className="flex items-center">
-                                <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-600">Conectado</Badge>
-                              </div>
+                            
+                            {/* Conectado (green): effective connection confirmed */}
+                            {isEffectivelyConnected && (
+                              <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-600 w-fit">
+                                Conectado
+                              </Badge>
                             )}
-                             {hasCreds && !hasConnections && (() => {
-                               // For google_cloud, count how many sub-services have keys 
-                               let label = !config.oauthSupported ? "Conectado" : "Credenciais salvas";
-                               let className = !config.oauthSupported
-                                 ? "bg-green-600/10 text-green-600 border-green-600/30"
-                                 : "text-yellow-600 border-yellow-600/30";
-                               
+                            
+                            {/* Credenciais Salvas (grey): has creds but not yet verified */}
+                            {!isEffectivelyConnected && hasCreds && (() => {
+                               let label = "Credenciais Salvas";
                                if (config.id === 'google_cloud') {
                                  const googleCreds = credentials['google_cloud'] || {};
                                  const serviceKeys = ['maps_api_key','news_api_key','youtube_api_key','ads_id','analytics_id'];
                                  const activeServices = serviceKeys.filter(k => googleCreds[k]?.trim()).length;
-                                 label = `Conectado (${activeServices} serviço${activeServices !== 1 ? 's' : ''})`;
+                                 label = `Credenciais Salvas (${activeServices} serviço${activeServices !== 1 ? 's' : ''})`;
                                }
-                               
                                return (
-                                 <Badge variant="outline" className={cn("text-[10px]", className)}>
+                                 <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground border-border/50 bg-muted/30 w-fit">
                                    {label}
                                  </Badge>
                                );
                              })()}
                           </div>
                           
-                          {hasConnections ? (
-                            <p className="text-sm text-muted-foreground mt-1">
+                          {/* Subtitle: show real metrics if verified, else connection name, else hint */}
+                          {isVerified ? (
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {config.id === 'telegram' ? (
+                                <>
+                                  <span className="font-bold text-slate-200">
+                                    {platformConnections.length > 0 ? platformConnections[0].page_name : "Bot Telegram"}
+                                  </span>
+                                  <span className="ml-2 text-muted-foreground/60">— expanda para gerenciar</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="font-bold text-slate-200">
+                                    {platformConnections.length > 0 ? platformConnections[0].page_name : "Conta Principal"}
+                                  </span>
+                                  <span className="ml-2 text-muted-foreground/60">— expanda para gerenciar</span>
+                                </>
+                              )}
+                            </p>
+                          ) : hasConnections ? (
+                            <p className="text-sm text-muted-foreground mt-0.5">
                               {platformConnections.length === 1 
-                                ? <><span className="font-medium text-foreground">{platformConnections[0].page_name || "Conta Conectada"}</span> — expanda para gerenciar</>
-                                : <><span className="font-medium text-foreground">{platformConnections.length} contas conectadas</span> — expanda para gerenciar</>}
+                                ? <><span className="font-bold text-slate-200">{platformConnections[0].page_name || "Conta Conectada"}</span> — expanda para gerenciar</>
+                                : <><span className="font-bold text-slate-200">{platformConnections.length} contas</span> — expanda para gerenciar</>}
                             </p>
                           ) : (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {hasCreds ? "Credenciais configuradas — pronto para conectar nas configurações de API abaixo" : "Configurações pendentes"}
+                            <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">
+                              {hasCreds ? "Credenciais salvas — clique Sincronizar para verificar" : "Configurações pendentes — clique para configurar"}
                             </p>
                           )}
                         </div>
@@ -902,8 +1069,6 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                            }}
                            className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
                         >
-                          <Key className="w-4 h-4" /> 
-                          <span className="font-medium">{config.oauthSupported ? (hasConnections ? 'Gerenciar' : 'Conectar') : 'API'}</span>
                           {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                         </button>
                         
@@ -928,8 +1093,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                           className="overflow-hidden"
                         >
                           <div className="p-5 border-t border-border bg-background/50 space-y-6">
-
-                            {/*  Google Cloud services status  */}
+                            {/* Google Cloud services status */}
                             {config.id === 'google_cloud' && (
                               <div className="space-y-3">
                                 <div className="flex items-center gap-2">
@@ -969,51 +1133,208 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                             {/*  Connected Profiles List  */}
                             {hasConnections && (
                               <div className="space-y-4">
-                                <div className="flex items-center gap-2">
-                                  <Users className="w-4 h-4 text-muted-foreground" />
-                                  <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Contas Conectadas</p>
+                                <div className="flex items-center justify-between px-1">
+                                  <div className="flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-muted-foreground/70" />
+                                    <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Contas Conectadas</p>
+                                  </div>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => syncSocialStats(config.id)}
+                                    disabled={statsLoading}
+                                    className="h-8 gap-2 text-[10px] font-bold uppercase bg-background border-border/50 hover:bg-muted/50 rounded-lg px-4"
+                                  >
+                                    <RefreshCw className={cn("w-3.5 h-3.5", statsLoading && "animate-spin")} />
+                                    Sincronizar
+                                  </Button>
                                 </div>
                                 <div className="grid grid-cols-1 gap-3">
+                                  {/* Lista Individual de Conexões */}
                                   {platformConnections.map(conn => {
-                                    const stats = socialStats.find(s => s.platform === config.id && s.platform_user_id === conn.platform_user_id) 
-                                               || socialStats.find(s => s.platform === config.id);
-                                    
-                                    return (
-                                      <div key={conn.id} className="flex flex-col sm:flex-row sm:items-center gap-4 bg-muted/40 p-4 rounded-xl border border-border/50 shadow-sm transition-all hover:border-primary/20">
-                                        <div className="flex items-center gap-4 flex-1 min-w-0">
-                                          <Avatar className="w-12 h-12 rounded-xl border-2 border-background shadow-sm">
-                                            <AvatarImage src={(conn as any)?.profile_image_url || stats?.profile_picture || ""} alt={conn.page_name || config.name} className="object-cover" />
-                                            <AvatarFallback className="rounded-xl bg-muted text-lg font-bold">{config.name[0]}</AvatarFallback>
-                                          </Avatar>
-                                          <div className="min-w-0 flex-1">
-                                            <p className="font-bold truncate text-base text-foreground">{conn.page_name || stats?.username || "Conta Conectada"}</p>
-                                            
-                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1 text-xs text-muted-foreground font-medium">
-                                              {stats ? (
-                                                <>
-                                                  <span className="flex items-center gap-1.5 text-foreground"><Users className="w-3.5 h-3.5 text-primary" /> {(stats.followers_count || 0) > 1000 ? ((stats.followers_count || 0)/1000).toFixed(1) + 'K' : (stats.followers_count || 0)} seguidores</span>
-                                                  <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-muted-foreground/30"></div> {stats.metadata?.posts_count || 0} posts</span>
-                                                  {stats.views > 0 && <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-muted-foreground/30"></div> {stats.views > 1000 ? (stats.views/1000).toFixed(1) + 'K' : stats.views} views</span>}
-                                                  {stats.likes > 0 && <span className="flex items-center gap-1.5"><div className="w-1 h-1 rounded-full bg-muted-foreground/30"></div> {stats.likes > 1000 ? (stats.likes/1000).toFixed(1) + 'K' : stats.likes} likes</span>}
-                                                </>
-                                              ) : (
-                                                <span>Aguardando estatísticas...</span>
-                                              )}
+                                      const stats = socialStats.find(s => 
+                                        s.platform === config.id && (
+                                          (s.platform_user_id && conn.platform_user_id && s.platform_user_id === conn.platform_user_id) ||
+                                          (s.username && conn.username && s.username === conn.username) || 
+                                          s.id === conn.id
+                                        )
+                                      );
+                                      
+                                      // Fallback for messaging channels (Telegram Groups/Channels)
+                                      const channelStats = (config.id === 'telegram' || config.id === 'whatsapp') 
+                                        ? (audienceBreakdown?.flatMap(b => b.channels) || []).find(ch => 
+                                            ch.channel_id === conn.platform_user_id || ch.channel_name === conn.username
+                                          )
+                                        : null;
+
+                                      // Special case for Meta Ads: Show profile of related FB/IG account
+                                      const metaAdsProfile = config.id === 'meta_ads' 
+                                        ? connections.find(c => (c.platform === 'facebook' || c.platform === 'instagram') && c.is_connected)
+                                        : null;
+
+                                     const displayPhoto = stats?.profile_picture || conn.profile_image_url || conn.profile_picture || "";
+                                     const displayName = stats?.username || conn.page_name || conn.username || "Conta Conectada";
+                                     
+                                     // For Telegram/WhatsApp: sum ALL messaging_channels members (groups + channels)
+                                     const totalPlatformMembers = (config.id === 'telegram' || config.id === 'whatsapp')
+                                        ? (audienceBreakdown?.flatMap(b => b.channels) || [])
+                                            .filter(ch => ch.platform === config.id || !ch.platform)
+                                            .reduce((sum, ch) => sum + (ch.members_count || 0), 0)
+                                        : 0;
+                                      
+                                      const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
+                                        ? (totalPlatformMembers || Number(stats?.followers_count ?? 0))
+                                        : Number(stats?.followers_count ?? conn.followers_count ?? 0);
+
+                                      // Statistics for WhatsApp (Official vs Bot)
+                                      const waMetadata = (stats?.metadata as any) || {};
+                                      const displayPosts = config.id === 'whatsapp' 
+                                        ? Number(waMetadata.official_posts_count ?? stats?.posts_count ?? 0)
+                                        : Number(stats?.posts_count ?? (conn.metadata as any)?.posts_count ?? 0);
+                                      
+                                      const botPosts = Number(waMetadata.bot_posts_count ?? 0);
+                                      const botAnswers = Number(waMetadata.bot_answers_count ?? 0);
+                                     
+                                     return (
+                                        <div key={conn.id} className="space-y-4">
+                                          {/* Main Account Card (Official) */}
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-[#0a0b14]/60 p-5 rounded-[22px] border border-white/5 shadow-2xl transition-all hover:bg-[#111322] group">
+                                            <div className="flex items-center gap-6 flex-1 min-w-0">
+                                              <div className="relative">
+                                                <Avatar className="w-16 h-16 rounded-2xl border-[3px] border-[#151726] shadow-xl flex-shrink-0 transition-transform group-hover:scale-105">
+                                                  <AvatarImage src={metaAdsProfile?.profile_image_url || displayPhoto} alt={displayName} className="object-cover" />
+                                                  <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 text-xl font-bold">
+                                                    {displayName.charAt(0).toUpperCase()}
+                                                  </AvatarFallback>
+                                                </Avatar>
+                                                {config.id === 'whatsapp' && (
+                                                  <div className="absolute -bottom-1 -right-1 bg-green-500 w-5 h-5 rounded-full border-2 border-[#151726] flex items-center justify-center">
+                                                    <Check className="w-3 h-3 text-white" />
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                   <p className="font-black text-[17px] text-white tracking-tight">{displayName}</p>
+                                                   <Badge variant="outline" className="text-[8px] font-normal border-white/10 text-slate-500">Oficial</Badge>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-10">
+                                                  {/* Membros / Seguidores */}
+                                                  <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                                      Total de {config.id === 'youtube' ? 'Inscritos' : (config.id === 'whatsapp' || config.id === 'telegram' ? 'Membros' : 'Seguidores')}
+                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                      <Users className="w-4 h-4 text-blue-500/80" />
+                                                      <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayFollowers.toLocaleString()}</span>
+                                                    </div>
+                                                  </div>
+                                                  
+                                                  <div className="w-px h-8 bg-white/5" />
+
+                                                  {/* Posts / Videos */}
+                                                  <div className="flex flex-col gap-0.5">
+                                                    <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                                     Total de {config.id === 'youtube' ? 'Vídeos' : 'Posts'}
+                                                    </span>
+                                                    <div className="flex items-center gap-2">
+                                                      <FileText className="w-4 h-4 text-blue-500/80" />
+                                                      <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayPosts.toLocaleString('en-US', {minimumIntegerDigits: 2})}</span>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
                                             </div>
+                                            <Button 
+                                              variant="outline" 
+                                              size="sm" 
+                                              className="relative overflow-hidden bg-slate-900 border-border/30 text-slate-300 font-black uppercase tracking-[0.15em] text-[9px] h-11 px-6 hover:text-red-400 hover:bg-slate-900 focus:ring-0 active:scale-95 transition-all shrink-0 w-full sm:w-auto mt-3 sm:mt-0 rounded-xl"
+                                              onClick={() => handleDisconnectCustom(config.id, conn.id || 'all')}
+                                            >
+                                              <Unplug className="w-4 h-4 mr-2" />
+                                               Desconectar
+                                            </Button>
                                           </div>
+
+                                          {/* Robot Profile Card (Specific for WhatsApp) */}
+                                          {config.id === 'whatsapp' && (
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-green-500/5 p-5 rounded-[22px] border border-green-500/10 shadow-xl transition-all hover:bg-green-500/10 group animate-in fade-in slide-in-from-top-2">
+                                              <div className="flex items-center gap-6 flex-1 min-w-0">
+                                                <div className="relative">
+                                                  <Avatar className="w-16 h-16 rounded-2xl border-[3px] border-[#151726]/30 shadow-xl flex-shrink-0 transition-transform group-hover:scale-105 bg-green-500/20">
+                                                    <AvatarImage src="/bot-avatar.png" alt="Perfil do Robô" className="object-cover" />
+                                                    <AvatarFallback className="rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 text-xl font-bold text-green-500">
+                                                      RT
+                                                    </AvatarFallback>
+                                                  </Avatar>
+                                                  <div className="absolute -bottom-1 -right-1 bg-green-500 w-3 h-3 rounded-full border-2 border-[#151726] shadow-sm animate-pulse" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="flex items-center gap-2 mb-2">
+                                                    <p className="font-black text-[17px] text-white tracking-tight">Robô Bot_Zap</p>
+                                                  {/* Badge Ativo/Pausado - usa estado local otimista se disponível */}
+                                                  {(() => {
+                                                    const isBotOn = localBotActive !== null ? localBotActive : waMetadata.is_active === true;
+                                                    return (
+                                                      <Badge className={cn(
+                                                        "text-[8px] font-black uppercase tracking-tighter",
+                                                        isBotOn ? "bg-green-500/20 text-green-500 border-green-500/30" : "bg-red-500/20 text-red-500 border-red-500/30"
+                                                      )}>
+                                                        {isBotOn ? "Ativo" : "Pausado"}
+                                                      </Badge>
+                                                    );
+                                                  })()}
+                                                </div>
+                                                  
+                                                  <div className="flex items-center gap-10">
+                                                    {/* Posts do Bot */}
+                                                    <div className="flex flex-col gap-0.5">
+                                                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                                        Posts do Bot
+                                                      </span>
+                                                      <div className="flex items-center gap-2">
+                                                        <FileText className="w-4 h-4 text-green-500/80" />
+                                                        <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botPosts.toLocaleString('en-US', {minimumIntegerDigits: 2})}</span>
+                                                      </div>
+                                                    </div>
+                                                    
+                                                    <div className="w-px h-8 bg-white/5" />
+
+                                                    {/* Respostas do Bot */}
+                                                    <div className="flex flex-col gap-0.5">
+                                                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500">
+                                                        Total de Respostas
+                                                      </span>
+                                                      <div className="flex items-center gap-2">
+                                                        <MessageSquare className="w-4 h-4 text-green-500/80" />
+                                                        <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botAnswers.toLocaleString('en-US', {minimumIntegerDigits: 2})}</span>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              
+                                              <div className="flex flex-col gap-2 items-center justify-center p-2 bg-[#151726]/40 rounded-2xl border border-white/5 min-w-[100px]">
+                                                {(() => {
+                                                  const isBotOn = localBotActive !== null ? localBotActive : waMetadata.is_active === true;
+                                                  return (
+                                                    <>
+                                                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{isBotOn ? 'LIGADO' : 'DESLIGADO'}</span>
+                                                      <Switch 
+                                                        checked={isBotOn}
+                                                        onCheckedChange={(checked) => handleToggleBot(checked)}
+                                                        className="data-[state=checked]:bg-green-500"
+                                                      />
+                                                    </>
+                                                  );
+                                                })()}
+                                              </div>
+                                            </div>
+                                          )}
                                         </div>
-                                        <Button 
-                                          variant="outline" 
-                                          size="sm" 
-                                          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 hover:border-destructive/30 shrink-0 w-full sm:w-auto mt-1 sm:mt-0"
-                                          onClick={() => disconnect(`${config.id}|${conn.id}`)}
-                                        >
-                                          <Unplug className="w-4 h-4 mr-2" />
-                                          Desconectar
-                                        </Button>
-                                      </div>
-                                    );
-                                  })}
+                                      );
+                                   })}
                                 </div>
                               </div>
                             )}
@@ -1025,9 +1346,9 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                               
                               {fields.length > 0 && (
                                 <div className="space-y-4">
-                                  <div className="flex items-center gap-2">
-                                    <Key className="w-4 h-4 text-muted-foreground" />
-                                    <p className="text-sm font-semibold">Configuração da API</p>
+                                  <div className="flex items-center gap-2 px-1">
+                                    <Key className="w-4 h-4 text-muted-foreground/60" />
+                                    <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Configuração da API</p>
                                   </div>
                                   <div className="grid gap-3">
                                     {fields.map((field) => {
@@ -1038,7 +1359,9 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                       
                                       return (
                                         <div key={field.key} className="space-y-1.5">
-                                          <label className="text-xs font-medium text-muted-foreground uppercase tracking-tight">{field.label}</label>
+                                          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">
+                                            {field.label.includes("TOKEN") && config.id === 'telegram' ? "BOT TOKEN (@BOTFATHER)" : field.label}
+                                          </label>
                                           <div className="relative">
                                             <Input
                                               type={field.masked && !isVisible ? "password" : "text"}
@@ -1066,6 +1389,53 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                       );
                                     })}
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Meta Pixel Configuration within the Tab */}
+                              {config.id === 'meta_ads' && (
+                                <div className="space-y-4 pt-4 border-t border-border/10">
+                                  <div className="flex items-center gap-2 px-1">
+                                    <Share2 className="w-4 h-4 text-[#1877F2]" />
+                                    <p className="text-xs font-black uppercase tracking-[0.15em] text-foreground">Pixels de Monitoramento Meta</p>
+                                  </div>
+                                  <div className="space-y-4 bg-[#1877F208] p-4 rounded-2xl border border-[#1877F220]">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <label className="text-[10px] font-black uppercase text-muted-foreground ml-1">META PIXEL ID</label>
+                                        {systemSettings?.meta_pixel_id && <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 text-[8px]">Ativo no Portal</Badge>}
+                                      </div>
+                                      <div className="relative group/field">
+                                        <Input 
+                                          value={systemSettings?.meta_pixel_id || ''}
+                                          onChange={(e) => updateSettingsOptimistic({ meta_pixel_id: e.target.value })}
+                                          placeholder="Ex: 123456789012345"
+                                          className="bg-background/80 border-white/5 h-11 pr-10 focus:ring-blue-500/20 transition-all rounded-xl font-mono text-sm"
+                                        />
+                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/30 group-hover/field:text-[#1877F2] transition-colors">
+                                          <Target className="w-4 h-4" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                      O Pixel ID permite que o site rastreie conversões e otimize campanhas de anúncios automaticamente. 
+                                      Este código será injetado globalmente no seu portal.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* WhatsApp Business API specific instructions/fields */}
+                              {config.id === 'whatsapp' && (
+                                <div className="p-4 rounded-2xl bg-green-500/5 border border-green-500/10 space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <Phone className="w-4 h-4 text-green-500" />
+                                    <h5 className="text-xs font-black uppercase tracking-wider text-green-600">WhatsApp Business API (Configuração Meta)</h5>
+                                  </div>
+                                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                                    Diferente da sincronização de conta pessoal/comercial comum, esta API é necessária para o envio de mensagens automatizadas (Alertas e Newsletter).
+                                    Preencha os campos abaixo com os dados obtidos no portal Meta for Developers.
+                                  </p>
                                 </div>
                               )}
   
@@ -1108,6 +1478,26 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                      <><Plus className="w-4 h-4" />Ativar Integração</>}
                                   </Button>
                                 )}
+
+                                {/* Telegram: explicit connect button to trigger sync after saving token */}
+                                {config.id === 'telegram' && hasCreds && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={isEffectivelyConnected ? "outline" : "default"}
+                                    disabled={statsLoading}
+                                    onClick={async () => {
+                                      await syncSocialStats('telegram');
+                                    }}
+                                    className={cn(
+                                      !isEffectivelyConnected && "bg-[#2AABEE] hover:bg-[#229ED9] text-white border-0",
+                                      isEffectivelyConnected && "gap-2"
+                                    )}
+                                  >
+                                    {statsLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+                                    {isEffectivelyConnected ? "Adicionar Outra Conta" : "Conectar Conta"}
+                                  </Button>
+                                )}
   
                                 {hasCreds && (
                                   <Button
@@ -1136,7 +1526,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
         {/*  Add API Modal  */}
         <Dialog open={showAddApiModal} onOpenChange={setShowAddApiModal}>
-          <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Plus className="w-5 h-5 text-primary" />
@@ -1334,7 +1724,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
       {/* Edit Social Link Dialog */}
       <Dialog open={!!editingSocial} onOpenChange={(open) => !open && setEditingSocial(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Editar Rede Social</DialogTitle>
             <DialogDescription>
@@ -1371,7 +1761,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteConfirm !== null} onOpenChange={(open) => !open && setShowDeleteConfirm(null)}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Confirmar Exclusão</DialogTitle>
             <DialogDescription>
@@ -1387,7 +1777,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
       {/* Avatar Crop Dialog */}
       <Dialog open={!!avatarToCrop} onOpenChange={(open) => !open && setAvatarToCrop(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Ajustar Foto de Perfil</DialogTitle>
             <DialogDescription>

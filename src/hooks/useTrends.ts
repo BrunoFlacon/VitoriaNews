@@ -27,34 +27,25 @@ export interface PoliticalTrend {
   detected_at: string;
 }
 
-/** Busca trends diretamente do Supabase — sem passar por Edge Function */
-async function fetchTrendsFromDB(): Promise<TrendItem[]> {
-  const { data, error } = await supabase
-    .from("trends" as any)
-    .select("*")
-    .order("detected_at", { ascending: false })
-    .limit(50);
+/** Busca trends unificadas via Edge Function (evita erros de CORS) */
+async function fetchUnifiedTrends(): Promise<TrendItem[]> {
+  try {
+    // radar-api is the official intelligence source
+    const { data, error } = await supabase.functions.invoke('radar-api', {
+      body: { path: 'intelligence' }
+    });
 
-  if (error) {
-    console.error("[useTrends] Erro ao buscar trends:", error.message);
-    return [];
+    if (error || !data) {
+      const { data: localData } = await supabase.from('trends' as any).select('*').order('detected_at', { ascending: false }).limit(30);
+      return (localData as unknown as TrendItem[]) || [];
+    }
+    
+    return (data?.data as TrendItem[]) ?? [];
+  } catch (e) {
+    console.error('[useTrends] critically failed, using DB fallback', e);
+    const { data: localData } = await supabase.from('trends' as any).select('*').order('detected_at', { ascending: false }).limit(30);
+    return (localData as unknown as TrendItem[]) || [];
   }
-  return (data as unknown as TrendItem[]) ?? [];
-}
-
-/** Busca political_trends diretamente do Supabase */
-async function fetchPoliticalTrendsFromDB(): Promise<PoliticalTrend[]> {
-  const { data, error } = await supabase
-    .from("political_trends" as any)
-    .select("*")
-    .order("detected_at", { ascending: false })
-    .limit(50);
-
-  if (error) {
-    console.error("[useTrends] Erro ao buscar political_trends:", error.message);
-    return [];
-  }
-  return (data as unknown as PoliticalTrend[]) ?? [];
 }
 
 export function useTrends() {
@@ -62,24 +53,18 @@ export function useTrends() {
   const { toast } = useToast();
 
   const trendsQuery = useQuery<TrendItem[]>({
-    queryKey: ["trends-db"],
-    queryFn: fetchTrendsFromDB,
-    staleTime: 1000 * 60 * 3, // 3 min cache
-    retry: 2,
-  });
-
-  const politicalTrendsQuery = useQuery<PoliticalTrend[]>({
-    queryKey: ["political-trends-db"],
-    queryFn: fetchPoliticalTrendsFromDB,
-    staleTime: 1000 * 60 * 3,
-    retry: 2,
+    queryKey: ["trends-unified"],
+    queryFn: fetchUnifiedTrends,
+    staleTime: 1000 * 60 * 10, // 10 min cache
+    retry: 0,
   });
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('automation-api', {
+      const { data, error } = await supabase.functions.invoke('radar-api', {
         body: { path: 'sync-intelligence' },
       });
+
       if (error) throw new Error(`Falha ao sincronizar tendências: ${error.message}`);
       return data;
     },
@@ -88,8 +73,7 @@ export function useTrends() {
         title: "Radar Atualizado",
         description: "Novas tendências e notícias foram capturadas com sucesso.",
       });
-      queryClient.invalidateQueries({ queryKey: ["trends-db"] });
-      queryClient.invalidateQueries({ queryKey: ["political-trends-db"] });
+      queryClient.invalidateQueries({ queryKey: ["trends-unified"] });
     },
     onError: (err: any) => {
       toast({
@@ -100,16 +84,16 @@ export function useTrends() {
     }
   });
 
+  const rawData = trendsQuery.data ?? [];
+  const trends = Array.isArray(rawData) ? rawData : [];
+
   return {
-    trends: trendsQuery.data ?? [],
-    politicalTrends: politicalTrendsQuery.data ?? [],
-    loading: trendsQuery.isLoading || politicalTrendsQuery.isLoading || syncMutation.isPending,
+    trends: trends,
+    politicalTrends: Array.isArray(trends) ? trends.filter(t => t.category === 'Política') : [],
+    loading: trendsQuery.isLoading || syncMutation.isPending,
     isSyncing: syncMutation.isPending,
-    error: trendsQuery.error || politicalTrendsQuery.error,
+    error: trendsQuery.error,
     syncTrends: () => syncMutation.mutate(),
-    refetch: () => {
-      trendsQuery.refetch();
-      politicalTrendsQuery.refetch();
-    },
+    refetch: () => trendsQuery.refetch(),
   };
 }

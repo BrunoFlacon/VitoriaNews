@@ -60,8 +60,9 @@ const OAuthCallback = () => {
           throw new Error("Sessão expirada. Faça login novamente.");
         }
 
+        const baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
         const response = await fetch(
-`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-oauth-callback`,
+          `${baseUrl}/functions/v1/social-oauth-callback`,
           {
             method: "POST",
             headers: {
@@ -137,7 +138,7 @@ const OAuthCallback = () => {
         <p className="text-lg font-medium">{status}</p>
         <p className="text-sm text-muted-foreground">
           {isPopup
-            ? done ? "Esta janela será fechada automaticamente..." : error ? "Feche esta janela e tente novamente." : "Aguarde..."
+            ? done ? "Esta janela será fechada automaticamente..." : error ? "Feche esta janela e tente novamente." : "Aguarder..."
             : "Redirecionando para o dashboard..."}
         </p>
         {isPopup && (error || done) && (

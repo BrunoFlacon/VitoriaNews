@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maps Lead Extractor Free</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell shell--free">
+    <header class="hero">
+      <span class="badge">Free</span>
+      <h1>Maps Lead Extractor</h1>
+      <p class="tagline">Lista do Maps → CSV no Excel</p>
+    </header>
+
+    <main class="panel">
+      <div id="status" class="status">Abra uma busca no Google Maps e extraia os cards da lista.</div>
+
+      <div class="metric">
+        <span id="count">0</span>
+        <span class="metric__label">leads nesta extração</span>
+      </div>
+      <p class="hint hint--limit">Limite Free: <strong>20 leads</strong> por extração. Role a lista antes de extrair para escolher quais entram.</p>
+
+      <div class="actions">
+        <button type="button" id="extractBtn" class="btn btn--primary">Extrair leads visíveis</button>
+        <button type="button" id="downloadBtn" class="btn btn--ghost" disabled>Baixar CSV</button>
+      </div>
+
+      <section class="upsell">
+        <h2>Quer mais?</h2>
+        <ul>
+          <li><strong>Inteligência de venda:</strong> dores, oportunidades e pitch por lead</li>
+          <li>Sem teto de 20 leads, dedup e verificação de site (HTTP) opcional</li>
+          <li>CSV fixo para importar no CRM / sistema (ex.: Conexão)</li>
+        </ul>
+        <p class="upsell__note">A versão Pro é outra extensão (pacote separado).</p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="brand" id="brandBlock">
+        <div class="brand__row">
+          <div class="brand__mark" id="brandMark" aria-hidden="true">TSG</div>
+          <div class="brand__meta">
+            <span class="brand__name" id="brandName">Sua marca</span>
+            <span class="brand__slogan" id="brandSlogan"></span>
+          </div>
+        </div>
+        <a class="btn btn--wa" id="waProBtn" href="#" target="_blank" rel="noopener noreferrer">
+          <span class="btn--wa__icon" aria-hidden="true"></span>
+          Comparar versão Pro no WhatsApp
+        </a>
+      </div>
+      <p class="legal" id="legalNote"></p>
+      <p class="foot__note">Uso local · sem servidor</p>
+    </footer>
+  </div>
+  <script src="brand-config.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

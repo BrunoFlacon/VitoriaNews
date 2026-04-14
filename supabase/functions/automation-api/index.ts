@@ -43,13 +43,27 @@ serve(async (req: Request) => {
     let error: any = null;
 
     switch (path) {
-      case 'trends':
-        ({ data, error } = await supabaseClient
-          .from('trends')
-          .select('*')
-          .order('detected_at', { ascending: false })
-          .limit(20));
+      case 'intelligence':
+      case 'trends': {
+        const [trendsRes, politicalRes] = await Promise.all([
+          supabaseClient.from('trends').select('*').order('detected_at', { ascending: false }).limit(30),
+          supabaseClient.from('political_trends').select('*').order('detected_at', { ascending: false }).limit(20)
+        ]);
+        
+        // Unifica os dados para o frontend
+        const unified = [
+          ...(trendsRes.data || []),
+          ...(politicalRes.data || []).map(pt => ({
+            ...pt,
+            source: pt.source || 'Radar Político',
+            category: pt.category || 'Política'
+          }))
+        ].sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime());
+
+        data = unified;
+        error = trendsRes.error || politicalRes.error;
         break;
+      }
 
       case 'analytics':
         ({ data, error } = await supabaseClient

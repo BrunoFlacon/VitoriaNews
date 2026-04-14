@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agente IA + Chatbot WhatsApp</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      color: #eee;
+      padding: 20px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    
+    header {
+      text-align: center;
+      padding: 30px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    header h1 { font-size: 1.8rem; margin-bottom: 8px; }
+    header p { opacity: 0.8; font-size: 0.95rem; }
+    
+    .card {
+      background: rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 20px 0;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    #qr-area {
+      text-align: center;
+      padding: 30px;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #qr-area img { max-width: 280px; border-radius: 12px; }
+    #qr-area .msg { margin-top: 16px; font-size: 1rem; opacity: 0.9; }
+    #qr-area .status-ok { color: #4ade80; }
+    #qr-area .status-pendente { color: #fbbf24; }
+    
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      opacity: 0.9;
+    }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-size: 0.95rem;
+    }
+    .form-group select { cursor: pointer; }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+    .form-group input::placeholder, .form-group textarea::placeholder { color: #888; }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-success { background: #22c55e; color: white; }
+    .btn-small { padding: 6px 12px; font-size: 0.85rem; }
+    
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .checkbox-group input[type="checkbox"] { width: auto; }
+    
+    .flow-item {
+      background: rgba(0,0,0,0.2);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .flow-item .flow-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .flow-item .flow-palavras { font-size: 0.85rem; opacity: 0.85; margin-bottom: 8px; }
+    .flow-item .flow-resposta { font-size: 0.9rem; white-space: pre-wrap; }
+    
+    .tab-buttons {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      padding: 10px 18px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      color: #eee;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+    .tab-btn.active { background: #3b82f6; border-color: #3b82f6; }
+    .tab-btn:hover:not(.active) { background: rgba(255,255,255,0.12); }
+    
+    .tab-content { display: none; }
+    .tab-content.ativo { display: block; }
+    
+    .dica {
+      background: rgba(59, 130, 246, 0.15);
+      border-left: 4px solid #3b82f6;
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+    
+    .link-groq {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+    .link-groq:hover { text-decoration: underline; }
+    .link-footer {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+    .link-footer:hover { text-decoration: underline; }
+    .card-creditos { padding: 12px 24px; margin-bottom: 8px; }
+    .qr-loading { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.6; } }
+    
+    @media (max-width: 600px) {
+      header h1 { font-size: 1.4rem; }
+      .card { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Logo e Créditos -->
+    <div class="card card-creditos">
+      <div style="display:flex; align-items:center; justify-content:center; gap:16px; flex-wrap:wrap;">
+        <a href="https://tsgsites.com.br" target="_blank">
+          <img src="https://tsgsites.com.br/wp-content/uploads/2023/12/logo-tsg-oficial.png" alt="TSG Soluções Digitais" style="height:50px; width:auto;">
+        </a>
+        <div style="font-size:0.9rem;">
+          <strong>Desenvolvido por</strong> <a href="https://tsgsites.com.br" target="_blank" class="link-footer">Sâmara | TSG Soluções Digitais</a>
+        <span style="margin:0 8px;">|</span>
+        <a href="https://wa.me/5531973534157" target="_blank" class="link-footer">💬 Fale comigo</a>
+        <span style="margin:0 8px;">|</span>
+        <a href="https://conexao.tsgsites.com.br" target="_blank" class="link-footer">Sistema Conexão</a>
+        <span style="margin:0 8px;">|</span>
+        <a href="LINK DA VERSÃO PRO AQUI" target="_blank" class="link-footer">Versão PRO</a>
+        </div>
+      </div>
+    </div>
+
+    <header>
+      <h1>🤖 Agente de IA + Chatbot WhatsApp</h1>
+      <p>Configure sua chave Groq, crie fluxos e conecte o WhatsApp. Tudo em um só lugar.</p>
+    </header>
+
+    <!-- QR Code -->
+    <div class="card">
+      <h2>📲 Conectar WhatsApp</h2>
+      <div id="qr-area">
+        <div class="msg status-pendente">Aguarde 1-2 minutos. O QR Code aparecerá aqui. Na primeira vez pode demorar mais.</div>
+      </div>
+      <div id="qr-buttons" style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:16px;">
+        <button class="btn btn-primary" id="btnGerarQR">Gerar novo QR Code</button>
+        <button class="btn btn-small" id="btnLimparSessao" style="background:#f59e0b; color:white;">Limpar sessão e tentar</button>
+        <button class="btn btn-small" id="btnDesconectar" style="background:#dc2626; color:white; display:none;">Desconectar WhatsApp</button>
+      </div>
+      <p style="font-size:0.8rem; opacity:0.7; margin-top:8px; text-align:center;">Se o QR não aparecer ou não conectar, use "Limpar sessão e tentar"</p>
+    </div>
+
+    <!-- Abas -->
+    <div class="tab-buttons">
+      <button class="tab-btn active" data-tab="groq">Chave Groq (IA)</button>
+      <button class="tab-btn" data-tab="fluxos">Fluxos do Bot</button>
+      <button class="tab-btn" data-tab="modelo">Modelo e Prompt</button>
+    </div>
+
+    <!-- Aba Groq -->
+    <div id="tab-groq" class="tab-content ativo">
+      <div class="card">
+        <h2>🔑 IA gratuita com Groq</h2>
+        <p class="dica">
+          O bot já responde a "oi", "olá" e "menu" com os fluxos abaixo. <strong>Adicione a chave Groq</strong> 
+          para a IA responder perguntas que não estão nos fluxos (ex: horário, preços, informações).
+        </p>
+        <a href="https://console.groq.com/keys" target="_blank" class="btn btn-success" style="display:inline-flex; align-items:center; gap:8px; margin-bottom:16px; text-decoration:none;">
+          🆓 Clicar aqui → Obter chave GRÁTIS no Groq
+        </a>
+        <p style="font-size:0.85rem; opacity:0.8; margin-bottom:12px;">(Vai abrir o site. Crie conta gratuita → API Keys → Create API Key → Copie)</p>
+        <div class="form-group">
+          <label>Cole sua chave aqui (gsk_...)</label>
+          <input type="password" id="groqKey" placeholder="Cole a chave que copiou do Groq">
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="useAI" checked>
+          <label for="useAI">Usar IA quando a pessoa fizer perguntas que não estão nos fluxos</label>
+        </div>
+        <button class="btn btn-primary" id="salvarGroq">Salvar configuração</button>
+      </div>
+    </div>
+
+    <!-- Aba Fluxos -->
+    <div id="tab-fluxos" class="tab-content">
+      <div class="card">
+        <h2>📋 Fluxos do Bot</h2>
+        <p class="dica">
+          Quando a pessoa digitar alguma das palavras abaixo, o bot responde com a mensagem definida. 
+          Use vírgula para separar palavras (ex: oi, olá, bom dia).
+        </p>
+        <div id="lista-fluxos"></div>
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <button class="btn btn-success" id="novoFluxo">+ Adicionar fluxo</button>
+          <button class="btn btn-primary" id="salvarFluxos">Salvar alterações</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Aba Modelo -->
+    <div id="tab-modelo" class="tab-content">
+      <div class="card">
+        <h2>⚙️ Prompt da IA (personalidade do bot)</h2>
+        <p class="dica">
+          Substitua <strong>[SUA EMPRESA]</strong> pelo nome real. A IA usa esse texto para saber como responder.
+        </p>
+        <div class="form-group">
+          <label>Instruções para a IA (edite e adapte para sua empresa)</label>
+          <textarea id="promptSistema" placeholder="Ex: Você é o assistente virtual da [SUA EMPRESA]..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Modelo Groq</label>
+          <select id="modeloGroq">
+            <option value="llama-3.1-8b-instant">Llama 3.1 8B (rápido)</option>
+            <option value="llama-3.1-70b-versatile">Llama 3.1 70B (mais inteligente)</option>
+            <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="salvarModelo">Salvar</button>
+      </div>
+    </div>
+
+    <!-- Footer / Links -->
+    <div class="card">
+      <div style="display:flex; flex-wrap:wrap; gap:16px; justify-content:center; align-items:center; font-size:0.9rem;">
+        <span>Desenvolvedora Sâmara | TSG Soluções Digitais</span>
+        <a href="https://tsgsites.com.br" target="_blank" class="link-footer">tsgsites.com.br</a>
+        <span>|</span>
+        <a href="https://wa.me/5531973534157" target="_blank" class="btn btn-success btn-small" style="text-decoration:none;">💬 Fale comigo</a>
+        <span>|</span>
+        <a href="https://conexao.tsgsites.com.br" target="_blank" class="link-footer">conexao.tsgsites.com.br</a>
+        <span>|</span>
+        <a href="LINK DA VERSÃO PRO AQUI" target="_blank" class="link-footer">Adquira a Versão PRO</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const $ = id => document.getElementById(id);
+
+    // Tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('ativo'));
+        btn.classList.add('active');
+        $(`tab-${btn.dataset.tab}`).classList.add('ativo');
+      });
+    });
+
+    // QR e status
+    socket.on('qr', (qrDataUrl) => {
+      const area = $('qr-area');
+      const btnDesconectar = $('btnDesconectar');
+      if (qrDataUrl === 'loading') {
+        area.innerHTML = `<div class="msg status-pendente qr-loading">⏳ Aguarde 1-2 minutos. O QR Code aparecerá aqui.</div>`;
+        btnDesconectar.style.display = 'none';
+        if ($('btnLimparSessao')) $('btnLimparSessao').style.display = 'inline-block';
+      } else if (qrDataUrl) {
+        area.innerHTML = `<img src="${qrDataUrl}" alt="QR Code"><div class="msg status-pendente">Escaneie com o WhatsApp (Aparelhos conectados)</div>`;
+        btnDesconectar.style.display = 'none';
+        if ($('btnLimparSessao')) $('btnLimparSessao').style.display = 'inline-block';
+      } else {
+        // qr null = conectado (QR foi limpo)
+        area.innerHTML = `<div class="msg status-ok">✅ WhatsApp conectado!</div>`;
+        btnDesconectar.style.display = 'inline-block';
+        if ($('btnLimparSessao')) $('btnLimparSessao').style.display = 'none';
+      }
+    });
+    socket.on('status', (s) => {
+      const area = $('qr-area');
+      const btnDesconectar = $('btnDesconectar');
+      if (s.conectado) {
+        area.innerHTML = `<div class="msg status-ok">✅ ${s.mensagem}</div>`;
+        btnDesconectar.style.display = 'inline-block';
+      } else {
+        if (!area.querySelector('img')) {
+          area.innerHTML = `<div class="msg status-pendente">${s.mensagem}</div>`;
+        }
+        btnDesconectar.style.display = 'none';
+      }
+      $('btnLimparSessao').style.display = s.conectado ? 'none' : 'inline-block';
+    });
+
+    // Botões Gerar QR, Limpar sessão e Desconectar
+    $('btnGerarQR').addEventListener('click', async () => {
+      $('btnGerarQR').disabled = true;
+      $('btnLimparSessao').disabled = true;
+      $('btnGerarQR').textContent = 'Gerando...';
+      try {
+        await fetch('/api/whatsapp/restart', { method: 'POST' });
+      } catch (e) {}
+      setTimeout(() => {
+        $('btnGerarQR').disabled = false;
+        $('btnLimparSessao').disabled = false;
+        $('btnGerarQR').textContent = 'Gerar novo QR Code';
+      }, 3000);
+    });
+    $('btnLimparSessao').addEventListener('click', async () => {
+      if (!confirm('Isso vai limpar a sessão do WhatsApp. Você precisará escanear o QR Code de novo. Continuar?')) return;
+      $('btnGerarQR').disabled = true;
+      $('btnLimparSessao').disabled = true;
+      $('btnLimparSessao').textContent = 'Limpando...';
+      try {
+        await fetch('/api/whatsapp/restart?limpar=1', { method: 'POST' });
+      } catch (e) {}
+      setTimeout(() => {
+        $('btnGerarQR').disabled = false;
+        $('btnLimparSessao').disabled = false;
+        $('btnLimparSessao').textContent = 'Limpar sessão e tentar';
+      }, 3000);
+    });
+    $('btnDesconectar').addEventListener('click', async () => {
+      if (!confirm('Desconectar o WhatsApp?')) return;
+      $('btnDesconectar').disabled = true;
+      try {
+        await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+      } catch (e) {}
+      $('btnDesconectar').disabled = false;
+      $('btnDesconectar').style.display = 'none';
+    });
+
+    // Carregar config
+    async function carregarConfig() {
+      const r = await fetch('/api/config/full');
+      const cfg = await r.json();
+      $('groqKey').value = cfg.groqApiKey || '';
+      $('useAI').checked = cfg.useAI !== false;
+      $('promptSistema').value = cfg.promptSistema || '';
+      $('modeloGroq').value = cfg.model || 'llama-3.1-8b-instant';
+      renderFluxos(cfg.flows || []);
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s || '';
+      return div.innerHTML;
+    }
+    function renderFluxos(flows) {
+      const div = $('lista-fluxos');
+      div.innerHTML = flows.map((f, i) => {
+        const palavrasStr = (f.palavras || []).join(', ');
+        const respostaStr = f.resposta || '';
+        return `
+        <div class="flow-item" data-idx="${i}">
+          <div class="flow-header">
+            <span>Fluxo ${i + 1}</span>
+            <button class="btn btn-small" onclick="removerFluxo(${i})">Remover</button>
+          </div>
+          <div class="flow-palavras">
+            <input type="text" class="flow-palavras-input" placeholder="oi, olá, bom dia" value="${escapeHtml(palavrasStr)}">
+          </div>
+          <div class="form-group">
+            <textarea class="flow-resposta-input" placeholder="Resposta do bot">${escapeHtml(respostaStr)}</textarea>
+          </div>
+        </div>
+      `}).join('');
+    }
+
+    function coletarFluxos() {
+      const items = document.querySelectorAll('.flow-item');
+      return Array.from(items).map((el, i) => {
+        const palavrasRaw = el.querySelector('.flow-palavras-input')?.value || '';
+        const palavras = palavrasRaw.split(',').map(p => p.trim()).filter(Boolean);
+        const resposta = el.querySelector('.flow-resposta-input')?.value || '';
+        return { id: String(i + 1), palavras, resposta };
+      });
+    }
+
+    window.removerFluxo = function(i) {
+      const flows = coletarFluxos();
+      flows.splice(i, 1);
+      renderFluxos(flows);
+    };
+
+    $('novoFluxo').addEventListener('click', () => {
+      const flows = coletarFluxos();
+      flows.push({ id: String(flows.length + 1), palavras: [], resposta: '' });
+      renderFluxos(flows);
+    });
+
+    async function salvarTudo() {
+      const flows = coletarFluxos();
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          groqApiKey: $('groqKey').value.trim(),
+          useAI: $('useAI').checked,
+          model: $('modeloGroq').value,
+          promptSistema: $('promptSistema').value.trim(),
+          flows
+        })
+      });
+      alert('Salvo com sucesso!');
+    }
+
+    $('salvarGroq').addEventListener('click', salvarTudo);
+    $('salvarModelo').addEventListener('click', salvarTudo);
+    $('salvarFluxos').addEventListener('click', async () => {
+      const flows = coletarFluxos();
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flows })
+      });
+      alert('Fluxos salvos!');
+    });
+
+    // Salvar fluxos ao editar (debounce)
+    let debounceFluxo;
+    document.addEventListener('input', (e) => {
+      if (e.target.closest('.flow-item')) {
+        clearTimeout(debounceFluxo);
+        debounceFluxo = setTimeout(() => {
+          const flows = coletarFluxos();
+          fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ flows })
+          });
+        }, 1500);
+      }
+    });
+
+    carregarConfig();
+  </script>
+</body>
+</html>

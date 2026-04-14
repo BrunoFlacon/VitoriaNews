@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import type { Article } from "@/lib/social-sdk/types";
 import { SystemFooter } from "@/components/SystemFooter";
+import { SubscriberCapture } from "@/components/portal/SubscriberCapture";
 
 const News = () => {
   const [articles, setArticles] = useState<Article[]>([]);
@@ -23,7 +24,6 @@ const News = () => {
           .order("published_at", { ascending: false });
         
         if (error) {
-          // Handle missing table gracefully (404 / PGRST116)
           if (error.code === 'PGRST116' || error.message?.includes('not found')) {
             console.warn("Articles table not found. Skipping news fetch.");
             setArticles([]);
@@ -32,7 +32,7 @@ const News = () => {
           setArticles((data as Article[]) || []);
         }
       } catch (e) {
-        // Silent fail for articles table
+        // Silent fail
       } finally {
         setLoading(false);
       }
@@ -122,6 +122,7 @@ const News = () => {
         )}
       </main>
 
+      <SubscriberCapture sourcePlatform="web_portal" />
       <SystemFooter />
     </div>
   );

@@ -6,9 +6,10 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, normalizePlatform } from "@/lib/utils";
 import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
+import { useSocialStats, SocialAccountStat } from "@/hooks/useSocialStats";
 
 interface FeedPreviewProps {
   post: ScheduledPost;
@@ -20,32 +21,37 @@ export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
   const [selectedPlatform, setSelectedPlatform] = useState<SocialPlatformId>(
     (normalizePlatform(post.platforms[0]) as SocialPlatformId) || "instagram"
   );
+  
+  const { byPlatform } = useSocialStats();
+  const getAccount = (platform: string) => byPlatform[normalizePlatform(platform)]?.[0];
 
   const renderPreview = () => {
+    const account = getAccount(selectedPlatform);
+    
     switch (selectedPlatform) {
       case "instagram":
-        return <InstagramPreview post={post} />;
+        return <InstagramPreview post={post} account={account} />;
       case "facebook":
-        return <FacebookPreview post={post} />;
+        return <FacebookPreview post={post} account={account} />;
       case "twitter":
       case "x" as any:
-        return <XPreview post={post} />;
+        return <XPreview post={post} account={account} />;
       case "linkedin":
-        return <LinkedInPreview post={post} />;
+        return <LinkedInPreview post={post} account={account} />;
       case "whatsapp":
-        return <WhatsAppPreview post={post} />;
+        return <WhatsAppPreview post={post} account={account} />;
       case "telegram":
-        return <TelegramPreview post={post} />;
+        return <TelegramPreview post={post} account={account} />;
       case "tiktok":
-        return <TikTokPreview post={post} />;
+        return <TikTokPreview post={post} account={account} />;
       case "youtube":
-        return <YouTubePreview post={post} />;
+        return <YouTubePreview post={post} account={account} />;
       case "pinterest":
-        return <PinterestPreview post={post} />;
+        return <PinterestPreview post={post} account={account} />;
       case "snapchat":
-        return <SnapchatPreview post={post} />;
+        return <SnapchatPreview post={post} account={account} />;
       case "site":
-        return <WebsitePreview post={post} />;
+        return <WebsitePreview post={post} account={account} />;
       default:
         return (
           <div className="flex flex-col items-center justify-center p-12 text-zinc-500 bg-zinc-50 rounded-2xl border border-dashed border-zinc-200">
@@ -58,6 +64,10 @@ export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/40 shadow-2xl">
+        <DialogHeader className="sr-only">
+            <DialogTitle>Prévia da Publicação</DialogTitle>
+            <DialogDescription>Visualize como o post agendado aparecerá nas redes sociais antes de ser publicado.</DialogDescription>
+        </DialogHeader>
         <div className="flex h-[80vh]">
           {/* Sidebar - Platforms */}
           <div className="w-20 border-r border-border/40 bg-muted/10 flex flex-col items-center py-5 gap-3">
@@ -159,8 +169,10 @@ export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
               <div>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Agenda</p>
                 <p className="text-sm">
-                  {post.scheduled_at 
-                    ? new Date(post.scheduled_at).toLocaleString() 
+                  {post.published_at 
+                    ? `Publicado em: ${new Date(post.published_at).toLocaleString()}`
+                    : post.scheduled_at 
+                    ? `Agendado para: ${new Date(post.scheduled_at).toLocaleString()}` 
                     : "Publicação Imediata"}
                 </p>
               </div>
@@ -187,17 +199,21 @@ export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
 
 /* Platform Specific Mini-Previews */
 
-const InstagramPreview = ({ post }: { post: ScheduledPost }) => (
+const InstagramPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
   <div className="flex flex-col bg-white text-zinc-900">
     {/* IG Header */}
     <div className="flex items-center justify-between p-3 border-b border-zinc-100">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[1.5px]">
-          <div className="w-full h-full rounded-full bg-white p-[1.5px]">
-            <div className="w-full h-full rounded-full bg-zinc-200" />
+        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[1.5px] overflow-hidden">
+          <div className="w-full h-full rounded-full bg-white p-[1.5px] overflow-hidden">
+            {account?.profile_picture ? (
+              <img src={account.profile_picture} className="w-full h-full object-cover rounded-full" />
+            ) : (
+              <div className="w-full h-full rounded-full bg-zinc-200" />
+            )}
           </div>
         </div>
-        <span className="text-sm font-bold text-zinc-900">socialhub_pro</span>
+        <span className="text-sm font-bold text-zinc-900">{account?.username || "seu_perfil"}</span>
       </div>
       <MoreHorizontal className="w-5 h-5 text-zinc-500" />
     </div>
@@ -223,24 +239,30 @@ const InstagramPreview = ({ post }: { post: ScheduledPost }) => (
       </div>
       <div className="space-y-1">
         <p className="text-sm">
-          <span className="font-bold mr-2 text-zinc-900">socialhub_pro</span>
+          <span className="font-bold mr-2 text-zinc-900">{account?.username || "seu_perfil"}</span>
           <span className="text-zinc-800">{post.content}</span>
         </p>
-        <p className="text-[10px] text-zinc-400 uppercase font-medium">Há 2 minutos</p>
+        <p className="text-[10px] text-zinc-400 font-medium uppercase">
+          {post.published_at ? new Date(post.published_at).toLocaleString() : post.scheduled_at ? new Date(post.scheduled_at).toLocaleString() : "Agora"}
+        </p>
       </div>
     </div>
   </div>
 );
 
-const FacebookPreview = ({ post }: { post: ScheduledPost }) => (
+const FacebookPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
   <div className="flex flex-col bg-white text-zinc-900">
     <div className="p-3">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-10 h-10 rounded-full bg-zinc-100 border border-zinc-200" />
+        <div className="w-10 h-10 rounded-full bg-zinc-100 border border-zinc-200 overflow-hidden">
+          {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+        </div>
         <div>
-          <p className="text-sm font-bold text-zinc-900">SocialHub Pro</p>
+          <p className="text-sm font-bold text-zinc-900">{account?.username || "Sua Página"}</p>
           <div className="flex items-center gap-1">
-            <p className="text-[10px] text-zinc-500 font-medium">Agora ·</p>
+            <p className="text-[10px] text-zinc-500 font-medium">
+               {post.published_at ? new Date(post.published_at).toLocaleString() : "Agora"} ·
+            </p>
             <svg viewBox="0 0 16 16" className="w-3 h-3 text-zinc-500 fill-current"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM4.5 11.5v-7l7 3.5-7 3.5z" opacity="0.3"/><path d="M8 1a7 7 0 100 14A7 7 0 008 1zM2 8a6 6 0 1112 0A6 6 0 012 8z"/><path d="M8 4.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zM5.5 8a2.5 2.5 0 115 0 2.5 2.5 0 01-5 0z"/></svg>
           </div>
         </div>
@@ -270,15 +292,17 @@ const FacebookPreview = ({ post }: { post: ScheduledPost }) => (
   </div>
 );
 
-const XPreview = ({ post }: { post: ScheduledPost }) => (
+const XPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
   <div className="flex flex-col p-4 bg-white text-zinc-900 border-zinc-200">
     <div className="flex items-start gap-3">
-      <div className="w-12 h-12 rounded-full bg-zinc-100 border border-zinc-200 shrink-0" />
+      <div className="w-12 h-12 rounded-full bg-zinc-100 border border-zinc-200 shrink-0 overflow-hidden">
+        {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 mb-0.5">
-          <span className="font-bold text-sm text-zinc-900">SocialHub Pro</span>
-          <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#1d9bf0] fill-current"><path d="M22.5 12.5c0-1.58-.8-2.47-1.24-3.23.96-1.88.77-2.54.58-3.04-.31-.82-1.37-1.31-2.22-1.21-1.01.12-1.61-.31-2.4-1.01C15.65 2.62 14.61 2 13.51 2c-1.1 0-2.14.62-3.71 1.99-.79.7-1.39 1.13-2.4 1.01-.85-.1-1.91.39-2.22 1.21-.19.5-.38 1.16.58 3.04-.44.76-1.24 1.65-1.24 3.23 0 1.58.8 2.47 1.24 3.23-.96 1.88-.77 2.54-.58 3.04.31.82 1.37 1.31 2.22 1.21 1.01-.12 1.61.31 2.4 1.01C11.35 21.38 12.39 22 13.51 22c1.1 0 2.14-.62 3.71-1.99.79-.7 1.39-1.13 2.4-1.01.85.1 1.91-.39 2.22-1.21.19-.5.38-1.16-.58-3.04.44-.76 1.24-1.65 1.24-3.23zM9.93 16.12l-3.17-3.17 1.41-1.41 1.76 1.76 4.93-4.93 1.41 1.41-6.34 6.34z"/></svg>
-          <span className="text-zinc-500 text-sm">@socialhub · agora</span>
+          <span className="font-bold text-sm text-zinc-900">{account?.username || "Perfil X"}</span>
+          <svg viewBox="0 0 24 24" className="w-4 h-4 text-[#1d9bf0] fill-current"><path d="M22.5 12.5c0-1.58-.8-2.47-1.24-3.23.96-1.88.77-2.54.58-3.04-.31-.82-1.37-1.31-2.22-1.21-1.01.12-1.61-.31-2.4-1.01C15.65 2.62 14.61 2 13.51 2c-1.1 0-2.14.62-3.71 1.99-.79.7-1.39 1.13-2.4 1.01-.85-.1-1.91.39-2.22 1.21-.19-.5-.38 1.16.58 3.04-.44.76-1.24 1.65-1.24 3.23 0 1.58.8 2.47 1.24 3.23-.96 1.88-.77 2.54-.58 3.04.31.82 1.37 1.31 2.22 1.21 1.01-.12 1.61.31 2.4 1.01C11.35 21.38 12.39 22 13.51 22c1.1 0 2.14-.62 3.71-1.99.79-.7 1.39-1.13 2.4-1.01.85.1 1.91-.39 2.22-1.21.19-.5.38-1.16-.58-3.04.44-.76 1.24-1.65 1.24-3.23zM9.93 16.12l-3.17-3.17 1.41-1.41 1.76 1.76 4.93-4.93 1.41 1.41-6.34 6.34z"/></svg>
+          <span className="text-zinc-500 text-sm">@{account?.username?.toLowerCase().replace(/\s/g, '') || "perfil_x"} · {post.published_at ? new Date(post.published_at).toLocaleDateString() : "agora"}</span>
         </div>
         <p className="text-sm mb-3 whitespace-pre-wrap leading-normal text-zinc-900">{post.content}</p>
         <div className="flex gap-1 overflow-hidden rounded-2xl border border-zinc-200 mb-3 bg-zinc-50">
@@ -319,14 +343,16 @@ const RefreshCw = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
 );
 
-const LinkedInPreview = ({ post }: { post: ScheduledPost }) => (
+const LinkedInPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
   <div className="flex flex-col bg-white text-zinc-900 shadow-sm border border-zinc-200">
     <div className="p-4">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 rounded bg-zinc-100 border border-zinc-200 shrink-0" />
+        <div className="w-12 h-12 rounded bg-zinc-100 border border-zinc-200 shrink-0 overflow-hidden">
+          {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+        </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-zinc-900">SocialHub Professional Services</p>
-          <p className="text-[10px] text-zinc-500 leading-tight">Especialista em Marketing Digital Hub • Agora • 🌐</p>
+          <p className="text-sm font-bold text-zinc-900">{account?.username || "Seu Perfil Profissional"}</p>
+          <p className="text-[10px] text-zinc-500 leading-tight">Membro • {post.published_at ? new Date(post.published_at).toLocaleDateString() : "Agora"} • 🌐</p>
         </div>
       </div>
       <p className="text-sm text-zinc-800 mb-4 whitespace-pre-wrap leading-relaxed">{post.content}</p>
@@ -357,14 +383,16 @@ const ThumbsUp = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>
 );
 
-const TelegramPreview = ({ post }: { post: ScheduledPost }) => (
+const TelegramPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
   <div className="flex flex-col bg-[#54a9eb] h-full min-h-[400px] p-4 relative font-sans text-zinc-900">
     <div className="absolute top-0 left-0 right-0 h-12 bg-[#54a9eb] border-b border-white/10 flex items-center px-4 justify-between z-10">
         <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/20 border border-white/10" />
+            <div className="w-8 h-8 rounded-full bg-white/20 border border-white/10 overflow-hidden">
+              {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+            </div>
             <div>
-                <p className="text-white text-sm font-bold leading-tight">Canal SocialHub</p>
-                <p className="text-white/70 text-[10px]">1,234 inscritos</p>
+                <p className="text-white text-sm font-bold leading-tight">{account?.username || "Seu Canal/Grupo"}</p>
+                <p className="text-white/70 text-[10px]">{account?.followers_count || 0} inscritos</p>
             </div>
         </div>
         <MoreHorizontal className="w-5 h-5 text-white" />
@@ -379,7 +407,7 @@ const TelegramPreview = ({ post }: { post: ScheduledPost }) => (
       <div className="p-3">
         <p className="text-[0.9rem] leading-relaxed whitespace-pre-wrap text-zinc-800">{post.content}</p>
         <div className="flex justify-end items-center gap-1 mt-1">
-          <span className="text-[10px] text-zinc-400 font-medium">{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+          <span className="text-[10px] text-zinc-400 font-medium">{post.published_at ? new Date(post.published_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : post.scheduled_at ? new Date(post.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
           <span className="text-[#3c96d6] text-[10px]">✓✓</span>
         </div>
       </div>
@@ -387,12 +415,14 @@ const TelegramPreview = ({ post }: { post: ScheduledPost }) => (
   </div>
 );
 
-const WhatsAppPreview = ({ post }: { post: ScheduledPost }) => (
+const WhatsAppPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
   <div className="flex flex-col bg-[#efeae2] h-full min-h-[400px] p-4 relative font-sans text-zinc-900">
     <div className="absolute top-0 left-0 right-0 h-14 bg-[#075e54] flex items-center px-4 justify-between z-10">
         <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-zinc-300" />
-            <span className="text-white text-[0.95rem] font-medium">SocialHub Pro</span>
+            <div className="w-9 h-9 rounded-full bg-zinc-300 overflow-hidden">
+                {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+            </div>
+            <span className="text-white text-[0.95rem] font-medium">{account?.username || "Contato / Grupo"}</span>
         </div>
         <div className="flex items-center gap-4 text-white">
             <div className="w-4 h-4 border-2 border-white rounded-sm opacity-70" />
@@ -408,14 +438,14 @@ const WhatsAppPreview = ({ post }: { post: ScheduledPost }) => (
       )}
       <p className="text-[0.9rem] leading-relaxed whitespace-pre-wrap text-zinc-900 px-1">{post.content}</p>
       <div className="flex justify-end items-center gap-1 mt-1 px-1">
-        <span className="text-[10px] text-zinc-400 leading-none">{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+        <span className="text-[10px] text-zinc-400 leading-none">{post.published_at ? new Date(post.published_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : post.scheduled_at ? new Date(post.scheduled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
         <span className="text-[#34b7f1] text-[12px] leading-none">✓✓</span>
       </div>
     </div>
   </div>
 );
 
-const TikTokPreview = ({ post }: { post: ScheduledPost }) => (
+const TikTokPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
     <div className="flex flex-col bg-black h-full min-h-[500px] relative font-sans overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center opacity-30">
             {post.media_ids && post.media_ids[0] ? (
@@ -429,7 +459,7 @@ const TikTokPreview = ({ post }: { post: ScheduledPost }) => (
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 flex flex-col justify-end p-4">
             <div className="flex items-end justify-between">
                 <div className="flex-1 text-white pr-12">
-                    <p className="font-bold text-sm mb-2">@socialhub.official</p>
+                    <p className="font-bold text-sm mb-2">@{account?.username || "seu_perfil"}</p>
                     <p className="text-xs leading-relaxed line-clamp-3 mb-2">{post.content}</p>
                     <div className="flex items-center gap-2">
                         <span className="inline-block w-3 h-3 border border-white/50 animate-spin-slow rotate-45" />
@@ -438,6 +468,7 @@ const TikTokPreview = ({ post }: { post: ScheduledPost }) => (
                 </div>
                 <div className="flex flex-col items-center gap-4 text-white">
                     <div className="w-10 h-10 rounded-full border-2 border-white overflow-hidden mb-2 relative">
+                        {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
                         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#ff0050] text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">+</div>
                     </div>
                     <div className="flex flex-col items-center">
@@ -458,7 +489,7 @@ const TikTokPreview = ({ post }: { post: ScheduledPost }) => (
     </div>
 );
 
-const YouTubePreview = ({ post }: { post: ScheduledPost }) => (
+const YouTubePreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
     <div className="flex flex-col bg-white text-zinc-900 border-zinc-200 font-sans">
         <div className="aspect-video bg-zinc-100 overflow-hidden relative">
             {post.media_ids && post.media_ids[0] ? (
@@ -469,10 +500,12 @@ const YouTubePreview = ({ post }: { post: ScheduledPost }) => (
             <div className="absolute bottom-2 right-2 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded-sm font-medium">10:45</div>
         </div>
         <div className="p-3 flex gap-3">
-            <div className="w-10 h-10 rounded-full bg-zinc-100 shrink-0 border border-zinc-200" />
+            <div className="w-10 h-10 rounded-full bg-zinc-100 shrink-0 border border-zinc-200 overflow-hidden">
+                {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+            </div>
             <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-[0.95rem] leading-tight line-clamp-2 mb-1">{post.content.split('\n')[0] || "Sem título"}</h4>
-                <p className="text-[0.75rem] text-zinc-500">SocialHub Pro • 0 visualizações • agora</p>
+                <p className="text-[0.75rem] text-zinc-500">{account?.username || "Seu Canal"} • 0 visualizações • agora</p>
                 <div className="mt-2 text-xs text-zinc-600 line-clamp-2 leading-relaxed italic">{post.content}</div>
             </div>
             <MoreHorizontal className="w-5 h-5 text-zinc-400" />
@@ -480,7 +513,7 @@ const YouTubePreview = ({ post }: { post: ScheduledPost }) => (
     </div>
 );
 
-const PinterestPreview = ({ post }: { post: ScheduledPost }) => (
+const PinterestPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
     <div className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-sm border border-zinc-100">
         <div className="relative">
             {post.media_ids && post.media_ids[0] ? (
@@ -494,14 +527,16 @@ const PinterestPreview = ({ post }: { post: ScheduledPost }) => (
             <h4 className="font-bold text-lg mb-2 text-zinc-900">{post.content.split('\n')[0] || "Seu Pin"}</h4>
             <p className="text-sm text-zinc-600 mb-4 line-clamp-3">{post.content}</p>
             <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-zinc-200" />
-                <span className="text-sm font-medium text-zinc-900">SocialHub</span>
+                <div className="w-6 h-6 rounded-full bg-zinc-200 overflow-hidden">
+                    {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+                </div>
+                <span className="text-sm font-medium text-zinc-900">{account?.username || "Seu Perfil"}</span>
             </div>
         </div>
     </div>
 );
 
-const SnapchatPreview = ({ post }: { post: ScheduledPost }) => (
+const SnapchatPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
     <div className="flex flex-col bg-[#FFFC00] h-full min-h-[500px] relative font-sans overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center">
             {post.media_ids && post.media_ids[0] ? (
@@ -513,9 +548,11 @@ const SnapchatPreview = ({ post }: { post: ScheduledPost }) => (
         
         {/* Overlay Content */}
         <div className="absolute top-4 left-4 flex items-center gap-2 drop-shadow-md">
-            <div className="w-10 h-10 rounded-full border-2 border-white bg-zinc-300" />
+            <div className="w-10 h-10 rounded-full border-2 border-white bg-zinc-300 overflow-hidden">
+                {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+            </div>
             <div className="text-white">
-                <p className="text-sm font-bold leading-none">SocialHub Pro</p>
+                <p className="text-sm font-bold leading-none">{account?.username || "Perfil"}</p>
                 <p className="text-[10px] font-medium leading-none mt-1 uppercase">Agora</p>
             </div>
         </div>
@@ -532,7 +569,7 @@ const SnapchatPreview = ({ post }: { post: ScheduledPost }) => (
     </div>
 );
 
-const WebsitePreview = ({ post }: { post: ScheduledPost }) => (
+const WebsitePreview = ({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => (
     <div className="flex flex-col bg-white border border-zinc-200 rounded-xl overflow-hidden shadow-lg max-w-sm">
         <div className="bg-zinc-100 p-2 flex items-center gap-2 border-b border-zinc-200">
             <div className="flex gap-1.5 ml-1">
@@ -556,7 +593,7 @@ const WebsitePreview = ({ post }: { post: ScheduledPost }) => (
             <h4 className="font-display font-bold text-xl leading-tight text-zinc-900 mb-3">{post.content.split('\n')[0] || "Título Sugerido"}</h4>
             <p className="text-sm text-zinc-600 leading-relaxed line-clamp-4">{post.content}</p>
             <div className="mt-6 flex items-center justify-between">
-                <span className="text-xs text-zinc-400">Escrito por SocialHub</span>
+                <span className="text-xs text-zinc-400">Escrito por {account?.username || "Você"}</span>
                 <Button variant="outline" size="sm" className="h-8 text-xs font-bold px-4 rounded-full">Ler mais</Button>
             </div>
         </div>

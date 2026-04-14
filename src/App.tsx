@@ -22,6 +22,7 @@ import ManualPage from "./pages/ManualPage";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const News = lazy(() => import("./pages/News"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
+const SystemEvolutionPage = lazy(() => import("./pages/SystemEvolutionPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,34 +54,39 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+import { TrackingProvider } from "./components/analytics/TrackingProvider";
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <SystemProvider>
       <AuthProvider>
         <NotificationProvider>
           <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <ThemeEngine />
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <Suspense fallback={<LoadingFallback />}>
-                <Routes>
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                  <Route path="/oauth/callback" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
-                  <Route path="/oauth/callback/:platform" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
-                  <Route path="/news" element={<News />} />
-                  <Route path="/news/:slug" element={<ArticlePage />} />
-                  <Route path="/terms" element={<TermsPage />} />
-                  <Route path="/privacy" element={<PrivacyPage />} />
-                  <Route path="/manual" element={<ManualPage />} />
-                  <Route path="/profile/bruno-flacon" element={<BrunoProfile />} />
-                  <Route path="*" element={<Navigate to="/profile/bruno-flacon" replace />} />
-                </Routes>
-              </Suspense>
-            </BrowserRouter>
+            <TrackingProvider>
+              <Toaster />
+              <Sonner />
+              <ThemeEngine />
+              <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <Suspense fallback={<LoadingFallback />}>
+                  <Routes>
+                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/login" element={<Login />} />
+                    <Route path="/register" element={<Register />} />
+                    <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                    <Route path="/oauth/callback" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
+                    <Route path="/oauth/callback/:platform" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
+                    <Route path="/news" element={<News />} />
+                    <Route path="/news/:slug" element={<ArticlePage />} />
+                    <Route path="/terms" element={<TermsPage />} />
+                    <Route path="/privacy" element={<PrivacyPage />} />
+                    <Route path="/manual" element={<ManualPage />} />
+                    <Route path="/profile/bruno-flacon" element={<BrunoProfile />} />
+                    <Route path="/system-history" element={<ProtectedRoute><SystemEvolutionPage /></ProtectedRoute>} />
+                    <Route path="*" element={<Navigate to="/profile/bruno-flacon" replace />} />
+                  </Routes>
+                </Suspense>
+              </BrowserRouter>
+            </TrackingProvider>
           </TooltipProvider>
         </NotificationProvider>
       </AuthProvider>

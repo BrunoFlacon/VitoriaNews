@@ -47,8 +47,9 @@ export function usePublisher() {
         throw new Error("Sessão inválida");
       }
 
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/publish-post`,
+        `${baseUrl}/functions/v1/publish-post`,
         {
           method: "POST",
           headers: {

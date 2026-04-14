@@ -133,12 +133,12 @@ export default function BrunoProfile() {
             id: data.id,
             name: data.name || '',
             bio: data.bio || '',
-            social_links: data.social_links || [],
-            website: data.website || '',
+            social_links: (data as any).social_links || [],
+            website: (data as any).website || '',
             avatar_url: data.avatar_url || ''
           });
-          if (data.profile_content && Object.keys(data.profile_content).length > 0) {
-            setContent({ ...INITIAL_CONTENT, ...(data.profile_content as any) });
+          if ((data as any).profile_content && Object.keys((data as any).profile_content).length > 0) {
+            setContent({ ...INITIAL_CONTENT, ...((data as any).profile_content as any) });
           }
         }
         setLoading(false);

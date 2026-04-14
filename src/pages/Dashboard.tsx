@@ -48,6 +48,7 @@ import { Button } from "@/components/ui/button";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useNavigate } from "react-router-dom";
 import { useAnalytics } from "@/hooks/useAnalytics";
+import { useSocialStats } from "@/hooks/useSocialStats";
 import { SystemFooter } from "@/components/SystemFooter";
 
 // Lazy load heavy views - wrap named exports for React.lazy
@@ -95,6 +96,13 @@ const Dashboard = () => {
   const { data: analyticsData, loading: analyticsLoading, platform, setPlatform, syncAnalytics } = useAnalytics();
   const scheduledPosts = useScheduledPosts();
 
+  // Local fallback stats when Edge Function fails
+  const { stats: localStats, totalFollowers: localFollowers } = useSocialStats();
+  const localTotalPosts = scheduledPosts.posts?.length ?? 0;
+  const localEngagement = useMemo(() =>
+    localStats.reduce((sum, s) => sum + s.likes_count + s.comments_count + s.shares_count, 0),
+  [localStats]);
+
   // Realtime subscription for scheduled_posts - shared across all views
   const refetchRef = useRef(scheduledPosts.refetch);
   useEffect(() => { refetchRef.current = scheduledPosts.refetch; }, [scheduledPosts.refetch]);
@@ -127,11 +135,9 @@ const Dashboard = () => {
     const isOAuth = platform?.type === 'social' && platformId !== 'site' && platformId !== 'telegram';
     
     if (!isOAuth) {
-      toast({
-        title: "Configuração de API",
-        description: `Para conectar ao ${platform?.name || platformId}, configure as chaves de API nas Configurações.`,
-      });
-      setActiveTab("settings");
+      // For Telegram and other API-key based platforms, just navigate to API config tab
+      setSettingsSubTab('api');
+      setActiveTab('settings');
       return;
     }
 
@@ -143,7 +149,8 @@ const Dashboard = () => {
     } finally {
       setConnectingPlatform(null);
     }
-  }, [initiateOAuth, toast]);
+  }, [initiateOAuth]);
+
 
   const socialPlatformsList = useMemo(() => 
     socialPlatforms.filter(p => p.type === 'social'), 
@@ -231,7 +238,14 @@ const Dashboard = () => {
         );
 
       case "analytics":
-        return <Suspense fallback={<ViewLoader />}><AdvancedAnalytics /></Suspense>;
+        return (
+          <Suspense fallback={<ViewLoader />}>
+            <AdvancedAnalytics onNavigate={(tab, subTab) => {
+              setActiveTab(tab);
+              if (subTab) setSettingsSubTab(subTab);
+            }} />
+          </Suspense>
+        );
 
       case "calendar":
         return (
@@ -382,7 +396,7 @@ const Dashboard = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <StatsCard 
                 title="Total de Posts" 
-                value={analyticsData?.overview.totalPosts ?? "0"} 
+                value={(analyticsData?.overview.totalPosts ?? localTotalPosts).toString()} 
                 icon={TrendingUp} 
                 trend={parseFloat(analyticsData?.engagement.growth || "0")} 
                 trendLabel="este mês" 
@@ -391,7 +405,7 @@ const Dashboard = () => {
               />
               <StatsCard 
                 title="Visualizações" 
-                value={(analyticsData?.engagement.views || 0).toLocaleString() ?? "0"} 
+                value={(analyticsData?.engagement.views || 0).toLocaleString()} 
                 icon={Eye} 
                 trend={parseFloat(analyticsData?.engagement.growth || "0")} 
                 trendLabel="vs mês anterior" 
@@ -400,34 +414,48 @@ const Dashboard = () => {
               />
               <StatsCard 
                 title="Engajamento" 
-                value={((analyticsData?.engagement.likes || 0) + (analyticsData?.engagement.comments || 0) + (analyticsData?.engagement.shares || 0)).toLocaleString()} 
+                value={(
+                  (analyticsData?.engagement.likes || 0) + 
+                  (analyticsData?.engagement.comments || 0) + 
+                  (analyticsData?.engagement.shares || 0) ||
+                  localEngagement
+                ).toLocaleString()} 
                 icon={Heart} 
                 trend={parseFloat(analyticsData?.engagement.engagementRate || "0")} 
                 trendLabel="taxa" 
                 color="success" 
-                delay={0.2} 
+                delay={0.1} 
               />
               <StatsCard 
                 title="Seguidores" 
-                value={(analyticsData?.followerData?.reduce((acc, curr) => acc + curr.currentFollowers, 0) || 0).toLocaleString() ?? "0"} 
+                value={(
+                  analyticsData?.overview.totalFollowers ||
+                  analyticsData?.followerData?.reduce((acc, curr) => acc + curr.currentFollowers, 0) || 
+                  localFollowers ||
+                  connections.reduce((acc, c) => acc + (c.followers_count || 0), 0)
+                ).toLocaleString()} 
                 icon={Users} 
-                trend={15.3} 
+                trend={analyticsData?.overview.followersGrowth !== undefined ? parseFloat(analyticsData.overview.followersGrowth.toString()) : undefined}
                 trendLabel="este mês" 
                 color="warning" 
-                delay={0.3} 
+                delay={0.1} 
               />
             </div>
 
+            {/* Account List and Chart */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
-                <AnalyticsChart data={analyticsData?.chartData} />
+                <AnalyticsChart 
+                  data={analyticsData?.chartData} 
+                  loading={analyticsLoading} 
+                />
               </div>
-              <div>
+              <div className="h-full">
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 }}
-                  className="glass-card rounded-2xl border border-border p-6"
+                  className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col justify-between"
                 >
                   <h3 className="font-display font-bold text-lg mb-4">Redes Conectadas</h3>
                   <div className="space-y-3">

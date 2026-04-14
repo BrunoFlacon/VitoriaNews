@@ -1,0 +1,18 @@
+"Atue como um Desenvolvedor Front-end Sênior. Crie uma Landing Page de alto impacto em um único arquivo (HTML/CSS/JS).
+CONFIGURAÇÃO RÁPIDA (IMPORTANTE):
+No início do código, crie uma seção de comentários clara indicando onde o usuário deve:
+Link da Logo: Substituir o src da imagem da logo (URL direta do WordPress).
+Link do WhatsApp: Substituir o link do botão de CTA (Use o formato https://wa.me/seunumerocomddd ).
+ESTRUTURA DE 7 SEÇÕES (COPY PERSUASIVA):
+Header Fixo: Logo à esquerda, Menu central e Botão WhatsApp à direita.
+Hero Section: Título magnético, Subtítulo focado em benefício e Botão CTA 'Falar com Especialista' com efeito de pulso.
+Social Proof: Banner elegante com logos de empresas parceiras.
+Benefícios (Glassmorphism): 3 Cards com ícones flutuantes (Lucide Icons) e efeito de vidro.
+Como Funciona: Passo a passo visual (1, 2, 3) com animações de entrada.
+FAQ: Acordeão moderno para quebrar as principais objeções.
+Footer: Links, Redes Sociais e Copyright.
+REQUISITOS TÉCNICOS E BLINDAGEM:
+Cores: Fundo #0f172a !important, Texto #f8fafc !important, Destaque #22c55e !important.
+Blindagem WP: Use #lp-elite como prefixo no CSS e all: unset; no container principal para o WordPress NÃO sobrescrever nada.
+Animações: Use AOS Library para entradas suaves e CSS para elementos flutuantes no fundo.
+Entregue o código completo em um único bloco, com copy persuasiva em português."

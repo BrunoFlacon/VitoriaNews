@@ -5,9 +5,23 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 declare const Deno: any;
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-authorization',
 };
+
+async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
+  try {
+    const { data } = await supabase
+      .from("api_credentials")
+      .select("credentials")
+      .eq("user_id", userId)
+      .eq("platform", platform)
+      .maybeSingle();
+    return data?.credentials || {};
+  } catch {
+    return {};
+  }
+}
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -20,279 +34,259 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Get all connected social accounts (OAuth)
-    const { data: connections } = await supabase
-      .from("social_connections")
-      .select("*")
-      .eq("is_connected", true);
-
-    // Get manual credentials for platforms like Kwai, Rumble, etc.
-    const { data: manualCreds } = await supabase
-      .from("api_credentials")
-      .select("*");
-
-    const results: Record<string, unknown>[] = [];
-    
-    // Combine OAuth connections and Manual credentials into a processing queue
-    const processingQueue: any[] = [...(connections || [])];
-    
-    // Manual platforms that don't usually have OAuth
-    const manualOnlyPlatforms = ["kwai", "rumble", "gettr", "truthsocial", "spotify", "googlenews"];
-    
-    if (manualCreds) {
-      for (const cred of manualCreds) {
-        if (manualOnlyPlatforms.includes(cred.platform)) {
-          // Check if we already have an OAuth connection for this (e.g. Spotify)
-          const exists = processingQueue.some(c => c.platform === cred.platform && c.user_id === cred.user_id);
-          if (!exists) {
-            processingQueue.push({
-              user_id: cred.user_id,
-              platform: cred.platform,
-              is_connected: true,
-              platform_user_id: cred.credentials?.username || `user_${cred.platform}`,
-              page_name: cred.credentials?.username || cred.platform,
-              is_virtual: true
-            });
-          }
-        }
-      }
-    }
-
-    if (processingQueue.length === 0) {
-      return new Response(JSON.stringify({ message: "No accounts to collect" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Authorization required" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
+
+    const token = authHeader.replace(/^Bearer\s+/i, "");
+    const adminClient = supabase;
+    let userId: string | undefined;
+
+    // --- ROBUST AUTH ---
+    try {
+      const parts = token.split('.');
+      if (parts.length === 3) {
+        const decoded = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        if (decoded?.sub) userId = decoded.sub;
+      }
+    } catch {}
+
+    if (!userId) {
+      try {
+        const { data: { user } } = await adminClient.auth.getUser(token);
+        if (user) userId = user.id;
+      } catch {}
+    }
+
+    // Fallback body
+    let bodyPayload: any = {};
+    try {
+       const clone = req.clone();
+       bodyPayload = await clone.json();
+    } catch {}
+
+    if (!userId && bodyPayload?.userId) {
+      userId = bodyPayload.userId;
+    }
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const baseUrl = `${supabaseUrl}/functions/v1`;
+
+    // 1. Fetch Credentials
+    const whatsappCreds = await getCredentials(adminClient, userId, "whatsapp");
+    const metaAdsCreds = await getCredentials(adminClient, userId, "meta_ads");
+    const googleCreds = await getCredentials(adminClient, userId, "google");
+
+    const waPhoneId = whatsappCreds?.phone_number_id || whatsappCreds?.phoneNumberId;
+    const waToken = whatsappCreds?.access_token || whatsappCreds?.accessToken;
+
+    // 2. Delegate Telegram (Awaiting to ensure completion)
+    try {
+      await fetch(`${baseUrl}/sync-telegram-chats`, {
+        method: "POST",
+        headers: { 
+          "Authorization": `Bearer ${token}`, 
+          "X-Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json" 
+        },
+        body: JSON.stringify({ userId, platform: "telegram" })
+      });
+      console.log("[COLLECT] Delegated Telegram sync successfully");
+    } catch (e) {
+      console.error("[COLLECT] Failed to delegate Telegram sync:", e);
+    }
+
+    // 3. Main Collection
+    const { data: connections } = await adminClient
+      .from("social_connections")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("is_connected", true);
+
+    const processingQueue = (connections || []).filter((c: any) => c.platform !== "telegram");
+    const results: any[] = [];
 
     for (const conn of processingQueue) {
       try {
         let metrics: any = null;
-        let recentPostsMetrics: any[] = [];
 
-        // Fetch metrics based on platform
         switch (conn.platform) {
           case "facebook": {
             if (!conn.access_token) continue;
             const pageId = conn.page_id || conn.platform_user_id;
-            const fields = "followers_count,fan_count,picture.type(large),posts.limit(10){id,created_time,message,insights.metric(post_impressions_unique,post_engaged_users,post_reactions_by_type_total)}";
+            const fields = "followers_count,fan_count,picture.type(large),cover,posts.limit(0).summary(total_count)";
             const resp = await fetch(`https://graph.facebook.com/v21.0/${pageId}?fields=${fields}&access_token=${conn.access_token}`);
-            
             if (resp.ok) {
               const data = await resp.json();
               metrics = {
-                followers_count: data.followers_count || data.fan_count || 0,
-                media_count: data.posts?.data?.length || 0,
-                views_count: 500 + Math.floor(Math.random() * 1000), // Simulated aggregate views
-                profile_picture: data.picture?.data?.url || null
+                followers: data.followers_count || data.fan_count || 0,
+                posts_count: data.posts?.summary?.total_count || 0,
+                profile_picture: data.picture?.data?.url || null,
+                cover_photo: data.cover?.source || null
               };
-
-              if (data.posts?.data) {
-                for (const post of data.posts.data) {
-                  const insights = post.insights?.data || [];
-                  const impressions = insights.find((i: any) => i.name === 'post_impressions_unique')?.values?.[0]?.value || 0;
-                  const reactions = insights.find((i: any) => i.name === 'post_reactions_by_type_total')?.values?.[0]?.value || {};
-                  const likes = Object.values(reactions).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
-
-                  recentPostsMetrics.push({
-                    external_id: post.id,
-                    platform: "facebook",
-                    impressions: impressions || Math.floor(Math.random() * 200),
-                    likes,
-                    comments: Math.floor(Math.random() * 10),
-                    shares: Math.floor(Math.random() * 5),
-                    content: post.message || null,
-                    collected_at: new Date(post.created_time).toISOString()
-                  });
-                }
-              }
             }
             break;
           }
           case "instagram": {
             if (!conn.access_token) continue;
             const igUserId = conn.platform_user_id;
-            const fields = "followers_count,media_count,name,username,profile_picture_url,media.limit(10){id,media_type,like_count,comments_count,insights.metric(impressions,reach,engagement),caption,media_url}";
+            const fields = "followers_count,media_count,name,username,profile_picture_url";
             const resp = await fetch(`https://graph.facebook.com/v21.0/${igUserId}?fields=${fields}&access_token=${conn.access_token}`);
-            
             if (resp.ok) {
               const data = await resp.json();
               metrics = {
-                followers_count: data.followers_count || 0,
-                media_count: data.media_count || 0,
-                views_count: 800 + Math.floor(Math.random() * 3000),
-                profile_picture: data.profile_picture_url || null
+                followers: data.followers_count || 0,
+                posts_count: data.media_count || 0,
+                profile_picture: data.profile_picture_url || null,
+                username: data.username || null
               };
-
-              if (data.media?.data) {
-                for (const media of data.media.data) {
-                  const insights = media.insights?.data || [];
-                  const impressions = insights.find((i: any) => i.name === 'impressions')?.values?.[0]?.value || 0;
-                  const reach = insights.find((i: any) => i.name === 'reach')?.values?.[0]?.value || 0;
-                  const engagement = insights.find((i: any) => i.name === 'engagement')?.values?.[0]?.value || 0;
-                  
-                  recentPostsMetrics.push({
-                    external_id: media.id,
-                    platform: "instagram",
-                    impressions: impressions || Math.floor(Math.random() * 500),
-                    likes: media.like_count || 0,
-                    comments: media.comments_count || 0,
-                    reach,
-                    engagement,
-                    content: media.caption || null,
-                    media_url: media.media_url || null,
-                    collected_at: new Date().toISOString()
-                  });
-                }
-              }
             }
             break;
           }
           case "youtube": {
             if (!conn.access_token) continue;
-            const resp = await fetch(
-              "https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true",
-              { headers: { Authorization: `Bearer ${conn.access_token}` } }
-            );
+            const channelId = conn.platform_user_id || conn.page_id;
+            const url = channelId 
+              ? `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings&id=${channelId}`
+              : `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,brandingSettings&mine=true`;
+            const resp = await fetch(url, { headers: { Authorization: `Bearer ${conn.access_token}` } });
             if (resp.ok) {
               const data = await resp.json();
               const ch = data.items?.[0];
               if (ch) {
                 metrics = {
-                  followers_count: parseInt(ch.statistics?.subscriberCount || "0"),
-                  media_count: parseInt(ch.statistics?.videoCount || "0"),
+                  followers: parseInt(ch.statistics?.subscriberCount || "0"),
+                  posts_count: parseInt(ch.statistics?.videoCount || "0"),
                   views_count: parseInt(ch.statistics?.viewCount || "0"),
-                  profile_picture: ch.snippet?.thumbnails?.high?.url || ch.snippet?.thumbnails?.default?.url || null
+                  profile_picture: ch.snippet?.thumbnails?.high?.url || null,
                 };
               }
             }
             break;
           }
           case "twitter": {
-             if (conn.platform_user_id && conn.access_token) {
-                const res = await fetch(
-                  `https://api.x.com/2/users/${conn.platform_user_id}?user.fields=public_metrics`,
-                  { headers: { Authorization: `Bearer ${conn.access_token}` } }
-                );
-                if (res.ok) {
-                  const data = await res.json();
-                  if (data.data) {
-                    const m = data.data.public_metrics || {};
-                    metrics = {
-                      followers_count: m.followers_count || 0,
-                      media_count: m.tweet_count || 0,
-                      views_count: Math.floor(m.followers_count * 1.5) || 0,
-                      likes: 0
-                    };
-                  }
-                }
-             }
-             break;
-          }
-          case "spotify": {
-            const spotifyToken = conn.access_token;
-            if (spotifyToken) {
-              const resp = await fetch("https://api.spotify.com/v1/me", { headers: { Authorization: `Bearer ${spotifyToken}` } });
-              if (resp.ok) {
-                const data = await resp.json();
-                metrics = { 
-                  followers_count: data.followers?.total || 0, 
-                  views_count: 5000 + Math.floor(Math.random() * 2000),
-                  media_count: 12
+            if (conn.access_token) {
+              const handle = conn.username || conn.platform_user_id;
+              const url = /^\d+$/.test(handle) 
+                ? `https://api.twitter.com/2/users/${handle}?user.fields=public_metrics,profile_image_url`
+                : `https://api.twitter.com/2/users/by/username/${handle}?user.fields=public_metrics,profile_image_url`;
+              const res = await fetch(url, { headers: { Authorization: `Bearer ${conn.access_token}` } });
+              if (res.ok) {
+                const data = await res.json();
+                const u = data.data || {};
+                const m = u.public_metrics || {};
+                metrics = {
+                  followers: m.followers_count || 0,
+                  posts_count: m.tweet_count || 0,
+                  profile_picture: u.profile_image_url || null
                 };
               }
-            } else {
-              // Manual config simulation
-              metrics = { followers_count: 1200, media_count: 8, views_count: 4500 };
             }
             break;
           }
-          case "googlenews": {
-            const { data: artStats } = await supabase.from("articles").select("status").eq("user_id", conn.user_id);
-            metrics = {
-              followers_count: 0,
-              media_count: artStats?.length || 0,
-              views_count: (artStats?.filter(a => a.status === 'published').length || 0) * 150
-            };
-            break;
-          }
-          case "kwai":
-          case "rumble":
-          case "gettr":
-          case "truthsocial": {
-            metrics = {
-              followers_count: 1500 + Math.floor(Math.random() * 5000),
-              media_count: 10 + Math.floor(Math.random() * 40),
-              views_count: 2500 + Math.floor(Math.random() * 10000),
-              likes: 400 + Math.floor(Math.random() * 1000),
-              shares: 50 + Math.floor(Math.random() * 200)
-            };
-            break;
-          }
-        }
-
-        // Upsert social_accounts with latest data
-        if (metrics) {
-          // Update real OAuth connection if it exists
-          if (!conn.is_virtual) {
-            await supabase.from("social_connections").update({
-              profile_image_url: metrics.profile_picture || conn.profile_image_url,
-              followers_count: metrics.followers_count || conn.followers_count
-            }).eq("id", conn.id);
-          }
-
-          const { data: account, error: upsertError } = await supabase.from("social_accounts").upsert({
-            user_id: conn.user_id,
-            platform: conn.platform,
-            platform_user_id: conn.platform_user_id || `manual_${conn.platform}`,
-            username: conn.page_name || conn.username || "",
-            profile_picture: metrics.profile_picture || conn.profile_image_url,
-            followers_count: metrics.followers_count || 0,
-            views: metrics.views_count || 0,
-            likes: metrics.likes || (metrics.followers_count * 0.1) || 0,
-            shares: metrics.shares || (metrics.followers_count * 0.05) || 0,
-            comments: metrics.comments || 0,
-            metadata: { posts_count: metrics.media_count || 0, is_virtual: conn.is_virtual },
-            is_connected: true,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: "user_id,platform,platform_user_id" }).select("id").single();
-
-          if (account) {
-            await supabase.from("account_metrics").insert({
-              user_id: conn.user_id,
-              social_account_id: account.id,
-              platform: conn.platform,
-              followers: metrics.followers_count || 0,
-              posts_count: metrics.media_count || 0,
-              views: metrics.views_count || 0,
-              collected_at: new Date().toISOString()
-            });
-
-            if (recentPostsMetrics.length > 0) {
-              for (const postMetric of recentPostsMetrics) {
-                await supabase.from("post_metrics").upsert({
-                  ...postMetric,
-                  social_account_id: account.id,
-                  user_id: conn.user_id
-                }, { onConflict: "external_id,platform" });
+          case "whatsapp": {
+            const token = conn.access_token || waToken;
+            const phoneId = conn.phone_number_id || waPhoneId;
+            
+            // Fetch verified info from Meta
+            let verifiedName = conn.page_name;
+            if (token && phoneId) {
+              const resp = await fetch(`https://graph.facebook.com/v21.0/${phoneId}?fields=verified_name,display_phone_number&access_token=${token}`);
+              if (resp.ok) {
+                const data = await resp.json();
+                verifiedName = data.display_phone_number || data.verified_name || conn.page_name;
               }
             }
+
+            // Calculate internal metrics (messages + scheduled)
+            // Separate Bot vs Official
+            const [officialMsgs, botMsgs, botAnswers, schedCount, channelMembers] = await Promise.all([
+              adminClient.from("messages").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("platform", "whatsapp").or("metadata->>integration_type.eq.official,metadata.is.null"),
+              adminClient.from("messages").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("platform", "whatsapp").eq("metadata->>integration_type", "bot"),
+              adminClient.from("messages").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("platform", "whatsapp").eq("metadata->>integration_type", "bot_answer"),
+              adminClient.from("scheduled_posts").select("id", { count: "exact", head: true }).eq("user_id", userId).contains("platforms", ["whatsapp"]).eq("status", "published"),
+              adminClient.from("messaging_channels").select("members_count").eq("user_id", userId).eq("platform", "whatsapp")
+            ]);
+
+            const totalChannelMembers = (channelMembers.data || []).reduce((acc: number, curr: any) => acc + (curr.members_count || 0), 0);
+
+            metrics = {
+              followers: (conn.followers_count || 0) + totalChannelMembers, 
+              posts_count: (officialMsgs.count || 0) + (schedCount.count || 0),
+              username: verifiedName,
+              metadata: {
+                bot_posts_count: botMsgs.count || 0,
+                bot_answers_count: botAnswers.count || 0,
+                official_posts_count: (officialMsgs.count || 0) + (schedCount.count || 0)
+              }
+            };
+            break;
           }
+          default:
+            metrics = { followers: conn.followers_count || 0, posts_count: conn.posts_count || 0 };
+            break;
         }
 
-        results.push({ platform: conn.platform, status: "ok", virtual: !!conn.is_virtual });
-      } catch (err) {
-        console.error(`Error collecting for ${conn.platform}:`, err);
-        results.push({ platform: conn.platform, status: "error", error: String(err) });
+        if (metrics) {
+           const { data: account } = await adminClient.from("social_accounts").upsert({
+            user_id: userId,
+            platform: conn.platform,
+            platform_user_id: conn.platform_user_id || `manual_${conn.platform}`,
+            username: metrics.username || conn.username || "",
+            page_name: conn.page_name || "",
+            followers: metrics.followers || 0,
+            posts_count: metrics.posts_count || 0,
+            profile_picture: metrics.profile_picture || conn.profile_image_url,
+            is_connected: true,
+            updated_at: new Date().toISOString(),
+            metadata: { ...(conn.metadata || {}), ...(metrics.metadata || {}) }
+           }, { onConflict: "user_id,platform,platform_user_id" }).select("id").single();
+
+           if (account) {
+             await adminClient.from("account_metrics").insert({
+               user_id: userId, social_account_id: account.id, platform: conn.platform,
+               followers: metrics.followers || 0,
+               posts_count: metrics.posts_count || 0,
+               collected_at: new Date().toISOString()
+             });
+           }
+        }
+        results.push({ platform: conn.platform, status: "ok" });
+      } catch (e) {
+        results.push({ platform: conn.platform, status: "error", error: String(e) });
       }
     }
 
+    // Specialized APIs
+    try {
+      fetch(`${baseUrl}/discover-trends`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" }
+      }).catch(() => {});
+      
+      if (googleCreds?.youtube_api_key || googleCreds?.apiKey) {
+        fetch(`${baseUrl}/collect-youtube-analytics`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` }
+        }).catch(() => {});
+      }
+    } catch {}
+
     return new Response(JSON.stringify({ success: true, results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   } catch (error) {
     return new Response(JSON.stringify({ error: String(error) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 });

@@ -111,8 +111,17 @@ serve(async (req: Request) => {
     let authUrl = "";
 
     if (platform === "google" || platform === "youtube") {
-      // Unifica os escopos do YouTube e do Google Business (Maps, etc) para pedir tudo numa única vez
-      const scopes = "openid profile email https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/business.manage";
+      // Unifica os escopos do YouTube, Contatos e Analytics para o Google
+      const scopes = [
+        "openid", "profile", "email",
+        "https://www.googleapis.com/auth/contacts",
+        "https://www.googleapis.com/auth/youtube",
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/analytics.readonly",
+        "https://www.googleapis.com/auth/business.manage",
+        "https://www.googleapis.com/auth/webmasters.readonly"
+      ].join(" ");
 
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + new URLSearchParams({
         client_id: formattedCreds.client_id,
@@ -125,10 +134,10 @@ serve(async (req: Request) => {
       });
     } else if (["facebook", "instagram", "whatsapp"].includes(platform)) {
       const scopes = platform === "instagram"
-        ? "instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement"
+        ? "instagram_basic,instagram_content_publish,instagram_manage_insights,pages_show_list,pages_read_engagement"
         : platform === "whatsapp" 
           ? "whatsapp_business_management,whatsapp_business_messaging,business_management"
-          : "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata";
+          : "pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,read_insights,ads_read";
       
       authUrl = `https://www.facebook.com/v21.0/dialog/oauth?` + new URLSearchParams({
         client_id: formattedCreds.app_id,
@@ -171,7 +180,7 @@ serve(async (req: Request) => {
       console.log(`[THREADS INIT] Generated URL (Manual): ${authUrl.split('?')[0]}?client_id=${finalAppId.substring(0, 5)}...`);
 
     } else if (platform === "twitter") {
-      const twitterKey = getVal("client_id", "TWITTER_CONSUMER_KEY");
+      const twitterKey = getVal("client_id", "TWITTER_CLIENT_ID");
       if (!twitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
       
       const verifierChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
@@ -194,6 +203,18 @@ serve(async (req: Request) => {
         state: state,
         code_challenge: challenge,
         code_challenge_method: "S256"
+      });
+    } else if (platform === "reddit") {
+      const clientId = getVal("client_id", "REDDIT_CLIENT_ID");
+      if (!clientId) throw new Error("Client ID do Reddit não configurado.");
+      
+      authUrl = `https://www.reddit.com/api/v1/authorize?` + new URLSearchParams({
+        client_id: clientId,
+        response_type: "code",
+        state: state,
+        redirect_uri: redirect_uri,
+        duration: "permanent",
+        scope: "identity,read,submit,mysubreddits"
       });
     } else {
       // Fallback para as outras (LinkedIn, TikTok, etc - mantendo a lógica anterior simplificada)

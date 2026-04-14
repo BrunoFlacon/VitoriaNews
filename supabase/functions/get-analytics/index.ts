@@ -1,17 +1,22 @@
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+declare const Deno: any;
+
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
 function normalizePlatform(platform: string): string {
-  const value = platform.toLowerCase().trim();
+  const value = (platform || "").toLowerCase().trim();
   if (value === "x" || value === "twitter" || value === "x (twitter)") {
     return "twitter";
   }
-  return value;
+  return value || "all";
 }
 
 interface PostMetric {
@@ -42,33 +47,70 @@ serve(async (req: Request) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Authorization header missing from get-analytics request" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
+    const authHeader = req.headers.get("Authorization") || req.headers.get("x-authorization");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid or expired session in get-analytics" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (!authHeader) {
+      console.error('[get-analytics] No Authorization header provided');
+      return new Response(JSON.stringify({ 
+        error: "Authorization header missing",
+        detail: "No token provided in Authorization or x-authorization headers"
+      }), { 
+        status: 401, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
     }
 
-    const url = new URL(req.url);
-    const period = url.searchParams.get("period") || "7d";
-    const requestedPlatform = url.searchParams.get("platform") || "all";
-    const requestedType = url.searchParams.get("type") || "all";
+    const token = authHeader.replace(/^Bearer\s/i, '');
+    console.log(`[get-analytics] Validating token: ${token.substring(0, 10)}...`);
+    
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error("[get-analytics] getUser failed:", authError?.message || "User not found");
+      return new Response(JSON.stringify({ 
+        error: "Unauthorized", 
+        detail: authError?.message || "Invalid or expired session" 
+      }), { 
+        status: 401, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+
+    console.log(`[get-analytics] User authenticated: ${user.id}`);
+
+    // Parameters extraction from Query (GET) or Body (POST)
+    let requestedPeriod = "7d";
+    let requestedPlatform = "all";
+    let requestedType = "all";
+
+    if (req.method === "POST") {
+      try {
+        const body = await req.json();
+        requestedPeriod = body.period || "7d";
+        requestedPlatform = body.platform || "all";
+        requestedType = body.type || "all";
+      } catch (e) {
+        console.warn("[get-analytics] Could not parse JSON body, falling back to query params");
+        const url = new URL(req.url);
+        requestedPeriod = url.searchParams.get("period") || "7d";
+        requestedPlatform = url.searchParams.get("platform") || "all";
+        requestedType = url.searchParams.get("type") || "all";
+      }
+    } else {
+      const url = new URL(req.url);
+      requestedPeriod = url.searchParams.get("period") || "7d";
+      requestedPlatform = url.searchParams.get("platform") || "all";
+      requestedType = url.searchParams.get("type") || "all";
+    }
 
     const now = new Date();
     let days = 7;
     let startDate: Date;
-    switch (period) {
-      case "24h": startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); days = 24; break;
+    switch (requestedPeriod) {
+      case "24h": startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); days = 1; break;
       case "3d": startDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000); days = 3; break;
       case "7d": startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); days = 7; break;
       case "15d": startDate = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000); days = 15; break;
@@ -80,7 +122,6 @@ serve(async (req: Request) => {
       default: startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); days = 7;
     }
 
-    // CONCURRENT FETCH OTIMIZADO DE FONTES DB
     const [
       { data: postsResp },
       { data: realMetricsData },
@@ -88,21 +129,40 @@ serve(async (req: Request) => {
       { data: socialConnections },
       { data: socialAccountsData },
       { data: hourlyPerf },
-      { data: messagesData }
+      { data: messagesData },
+      { data: adsData },
+      { data: gaData },
+      { data: ytData },
+      { data: viralData },
+      { data: trendsData },
+      { data: politicalTrendsData },
+      { data: attacksData },
+      { data: messagingChannelsResp }
     ] = await Promise.all([
       supabase.from("scheduled_posts").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("post_metrics").select("*").eq("user_id", user.id).gte("collected_at", startDate.toISOString()),
       supabase.from("account_metrics").select("*").eq("user_id", user.id).gte("collected_at", startDate.toISOString()).order("collected_at", { ascending: true }),
       supabase.from("social_connections").select("id, platform, username, page_name, followers_count, profile_image_url, is_connected, platform_user_id, page_id").eq("user_id", user.id).eq("is_connected", true),
-      supabase.from("platforms_status").select("*").eq("user_id", user.id),
+      supabase.from("social_accounts").select("id, platform, platform_user_id, username, profile_picture, followers, posts_count, views, likes, shares, comments, metadata, is_connected, updated_at").eq("user_id", user.id),
       supabase.from("platform_hourly_performance").select("*").order("avg_likes", { ascending: false }).limit(10),
-      supabase.from("messages").select("status, platform, created_at").eq("user_id", user.id).gte("created_at", startDate.toISOString())
+      supabase.from("messages").select("id, status, platform, content, recipient_name, recipient_phone, created_at, sent_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: false }),
+      supabase.from("meta_ads_campaigns").select("*").eq("user_id", user.id).gte("created_at", startDate.toISOString()),
+      supabase.from("google_analytics_data").select("*").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
+      supabase.from("youtube_analytics").select("*").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
+      supabase.from("viral_campaigns").select("*").gte("detected_at", startDate.toISOString()),
+      supabase.from("trends").select("*").gte("detected_at", startDate.toISOString()),
+      supabase.from("political_trends").select("*").gte("detected_at", startDate.toISOString()),
+      supabase.from("eventos_de_ataque").select("*").gte("detectado_em", startDate.toISOString()),
+      supabase.from("messaging_channels").select("*").eq("user_id", user.id)
     ]);
 
     const posts = postsResp || [];
+    const messagingChannels = (messagingChannelsResp as any[]) || [];
+    const trends = [...(trendsData || []), ...(politicalTrendsData || [])];
+    // ... filtering posts as before
     const filteredPosts = posts.filter((post: any) => {
       const inDateRange = new Date(post.created_at) >= startDate;
-      const matchType = requestedType === "all" || post.type === requestedType || post.post_type === requestedType; // Support both column variations
+      const matchType = requestedType === "all" || post.type === requestedType || post.post_type === requestedType;
       return inDateRange && matchType;
     });
     
@@ -110,37 +170,62 @@ serve(async (req: Request) => {
       ? filteredPosts
       : filteredPosts.filter((post: any) => post.platforms?.includes(requestedPlatform));
 
-    const totalPosts = platformPosts.length;
-    const publishedPosts = platformPosts.filter((p: any) => p.status === "published").length;
+    const accountMetrics = (accMetricsData as AccountMetric[]) || [];
+    const socialAccounts = (socialAccountsData as any[]) || [];
+
+    // Calculate total posts including external counts
+    const externalPostsCount = socialAccounts.reduce((sum, acc) => sum + (acc.posts_count || 0), 0);
+    const totalPosts = platformPosts.length + externalPostsCount;
+    const publishedPosts = platformPosts.filter((p: any) => p.status === "published").length + externalPostsCount;
     const scheduledPosts = platformPosts.filter((p: any) => p.status === "scheduled").length;
     const failedPosts = platformPosts.filter((p: any) => p.status === "failed").length;
     const draftPosts = platformPosts.filter((p: any) => p.status === "draft").length;
-
     const realMetrics = (realMetricsData as PostMetric[]) || [];
     const filteredMetrics = requestedPlatform === "all"
       ? realMetrics
       : realMetrics.filter(m => normalizePlatform(m.platform) === normalizePlatform(requestedPlatform));
 
-    const accountMetrics = (accMetricsData as AccountMetric[]) || [];
-    const socialAccounts = (socialAccountsData as any[]) || [];
+    // AGGREGATE EXTERNAL ANALYTICS
+    const adsStats = (adsData || []).reduce((acc: any, current: any) => {
+      acc.impressions += Number(current.impressions || 0);
+      acc.reach += Number(current.reach || 0);
+      acc.clicks += Number(current.clicks || 0);
+      acc.spend += Number(current.amount_spent || 0);
+      return acc;
+    }, { impressions: 0, reach: 0, clicks: 0, spend: 0 });
 
-    // TOTALS COMPUTATION
-    const globalFollowers = socialAccounts.reduce((s: number, a: any) => s + (a.followers || a.followers_count || 0), 0);
-    const globalViews = socialAccounts.reduce((s: number, a: any) => s + (a.views || 0), 0);
-    const globalLikes = socialAccounts.reduce((s: number, a: any) => s + (a.likes || 0), 0);
+    const youtubeStats = (ytData || []).reduce((acc: any, current: any) => {
+      acc.views += Number(current.views || 0);
+      acc.likes += Number(current.likes || 0);
+      acc.comments += Number(current.comments || 0);
+      return acc;
+    }, { views: 0, likes: 0, comments: 0 });
+
+    const gaStats = (gaData || []).reduce((acc: any, current: any) => {
+      if (current.metric_name === 'activeUsers' || current.metric_name === 'sessions') {
+        acc.views += Number(current.metric_value || 0);
+      }
+      return acc;
+    }, { views: 0 });
+
+    // TOTALS COMPUTATION (Including external data)
+    const globalFollowers = socialAccounts.reduce((s: number, a: any) => s + (Number(a.followers || 0)), 0);
+    const globalViews = socialAccounts.reduce((s: number, a: any) => s + (a.views || 0), 0) + adsStats.impressions + youtubeStats.views + gaStats.views;
+    const globalLikes = socialAccounts.reduce((s: number, a: any) => s + (a.likes || 0), 0) + youtubeStats.likes;
     const globalShares = socialAccounts.reduce((s: number, a: any) => s + (a.shares || 0), 0);
 
     let engagement;
     let growthValue = "0";
 
     const hasRealMetrics = filteredMetrics.length > 0;
+    const useAccountFallback = !hasRealMetrics && (socialAccounts.length > 0 || (adsData || []).length > 0 || (ytData || []).length > 0);
 
-    const totalViews = Math.max(globalViews, filteredMetrics.reduce((s, m) => s + (m.impressions || 0), 0));
-    const totalLikes = Math.max(globalLikes, filteredMetrics.reduce((s, m) => s + (m.likes || 0), 0));
-    const totalComments = filteredMetrics.reduce((s, m) => s + (m.comments || 0), 0);
-    const totalShares = Math.max(globalShares, filteredMetrics.reduce((s, m) => s + (m.shares || 0), 0));
-    const totalReach = filteredMetrics.reduce((s, m) => s + (m.reach || 0), 0);
-    const totalEngagements = totalLikes + totalComments + totalShares;
+    const totalViews = useAccountFallback ? globalViews : Math.max(globalViews, filteredMetrics.reduce((s, m) => s + (m.impressions || 0), 0));
+    const totalLikes = useAccountFallback ? globalLikes : Math.max(globalLikes, filteredMetrics.reduce((s, m) => s + (m.likes || 0), 0));
+    const totalComments = useAccountFallback ? (socialAccounts.reduce((s: number, a: any) => s + (a.comments || 0), 0) + youtubeStats.comments) : (filteredMetrics.reduce((s, m) => s + (m.comments || 0), 0) + youtubeStats.comments);
+    const totalShares = useAccountFallback ? globalShares : Math.max(globalShares, filteredMetrics.reduce((s, m) => s + (m.shares || 0), 0));
+    const totalReach = useAccountFallback ? (globalFollowers + adsStats.reach) : (filteredMetrics.reduce((s, m) => s + (m.reach || 0), 0) + adsStats.reach);
+    const totalEngagements = totalLikes + totalComments + totalShares + adsStats.clicks;
 
     const engRate = totalViews > 0
       ? (totalEngagements / totalViews * 100).toFixed(2)
@@ -164,18 +249,9 @@ serve(async (req: Request) => {
       engagementRate: engRate,
     };
 
-    // ========== CHART DATA SEM SIMULAÇÃO ==========
-    const isHourly = period === "24h";
+    const isHourly = requestedPeriod === "24h";
     const chartData = [];
 
-    // Se o periodo for muito longo, agrupar por mes ou por semanas? Para >90d pode bugar o grafico linear com 365 pontos
-    const groupInterval = days > 90 ? 'monthly' : days > 30 ? 'weekly' : isHourly ? 'hourly' : 'daily';
-
-    // Para manter simples sem biblioteca de datas, usar buckets lineares conforme `days` 
-    // ou se >90d, usar menos dias no array dividindo por N, mas pro MVP mantendo o loop:
-    const dataPointsCount = days > 90 ? 12 : days > 60 ? 12 : days; // Limitar o numero do gráfico
-
-    // Adjusting rendering loop to not break dashboard with 365 entries
     for (let i = days - 1; i >= 0; i--) {
       const bucketStart = new Date(now);
       const bucketEnd = new Date(now);
@@ -202,13 +278,18 @@ serve(async (req: Request) => {
           engagement: bucketMetrics.reduce((s, m) => s + (m.likes || 0) + (m.comments || 0), 0),
           reach: bucketMetrics.reduce((s, m) => s + (m.reach || 0), 0),
         });
+      } else if (useAccountFallback) {
+        chartData.push({
+          name: label,
+          views: globalViews,
+          engagement: globalLikes + totalComments + globalShares,
+          reach: globalFollowers,
+        });
       } else {
-        // Estritamente 0 se não há métricas arquivadas na data. Nenhuma simulação!
         chartData.push({ name: label, views: 0, engagement: 0, reach: 0 });
       }
     }
 
-    // ========== PLATFORM BREAKDOWN ==========
     const platformBreakdown: Record<string, { posts: number; engagement: number }> = {};
     if (hasRealMetrics) {
       filteredMetrics.forEach(m => {
@@ -222,11 +303,10 @@ serve(async (req: Request) => {
         const normalized = normalizePlatform(a.platform);
         if (!platformBreakdown[normalized]) platformBreakdown[normalized] = { posts: 0, engagement: 0 };
         platformBreakdown[normalized].posts += (a.posts_count || a.metadata?.posts_count || 0);
-        platformBreakdown[normalized].engagement += (a.likes || 0);
+        platformBreakdown[normalized].engagement += (a.likes || 0) + (a.comments || 0) + (a.shares || 0);
       });
     }
 
-    // ========== TOP CONTENT ==========
     let topContent: any[] = [];
     if (hasRealMetrics) {
       const postAgg: Record<string, { likes: number; impressions: number; comments: number; shares: number, content?: string, platform?: string }> = {};
@@ -260,7 +340,6 @@ serve(async (req: Request) => {
       });
     }
 
-    // ========== BEST TIMES ==========
     const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
     let bestTimes: any[] = [];
     if (hourlyPerf && (hourlyPerf as any[]).length > 0) {
@@ -274,36 +353,14 @@ serve(async (req: Request) => {
         dayIdx: h.day_of_week ?? ((i + 1) % 7)
       })).sort((a, b) => a.dayIdx - b.dayIdx);
     } else {
-      bestTimes = [
-        { day: "Domingo", time: "18:00", engagement: 65 },
-        { day: "Segunda", time: "12:00", engagement: 72 },
-        { day: "Terça", time: "11:00", engagement: 85 },
-        { day: "Quarta", time: "09:00", engagement: 82 },
-        { day: "Quinta", time: "14:00", engagement: 78 },
-        { day: "Sexta", time: "10:00", engagement: 80 },
-        { day: "Sábado", time: "20:00", engagement: 70 },
-      ].sort((a, b) => b.engagement - a.engagement).slice(0, 5);
-      
-      // But the user specifically wants the full week represented or correctly ordered
-      // If we only show top 5, we might miss days. The user wants the 1st and 7th days.
-      // Re-sorting by chronological day (0-6) might be better if we show all 7.
-      // Let's show all 7 days for now to satisfy the "missing Sunday/Saturday" request.
-      bestTimes = [
-        { day: "Domingo", time: "18:00", engagement: 65, dayIdx: 0 },
-        { day: "Segunda", time: "12:00", engagement: 72, dayIdx: 1 },
-        { day: "Terça", time: "11:00", engagement: 85, dayIdx: 2 },
-        { day: "Quarta", time: "09:00", engagement: 82, dayIdx: 3 },
-        { day: "Quinta", time: "14:00", engagement: 78, dayIdx: 4 },
-        { day: "Sexta", time: "10:00", engagement: 80, dayIdx: 5 },
-        { day: "Sábado", time: "20:00", engagement: 70, dayIdx: 6 },
-      ].sort((a, b) => a.dayIdx - b.dayIdx);
+      bestTimes = [];
     }
 
-    // ========== FOLLOWER DATA ==========
     const followerData: Array<{
       platform: string;
       username: string | null;
       currentFollowers: number;
+      postsCount: number;
       growth: number;
       profileImage: string | null;
     }> = [];
@@ -314,32 +371,90 @@ serve(async (req: Request) => {
         
         const accountInfo = socialAccounts.find((a: any) => 
           normalizePlatform(a.platform) === normalized && 
-          (a.platform_user_id === conn.platform_user_id || a.platform_user_id === conn.page_id)
+          (a.platform_user_id === conn.platform_user_id || a.platform_user_id === conn.page_id || a.platform_user_id === conn.id)
+        ) || socialAccounts.find((a: any) =>
+          normalizePlatform(a.platform) === normalized &&
+          (a.username === conn.page_name || a.username === conn.username || (a.metadata as any)?.phone_number_id === conn.platform_user_id)
         ) || socialAccounts.find((a: any) => normalizePlatform(a.platform) === normalized);
 
-        const platformAccMetrics = accountMetrics.filter((m: AccountMetric) => m.social_account_id === (accountInfo?.id || conn.id));
+        const platformAccMetrics = accountMetrics.filter((m: AccountMetric) => m.social_account_id === (accountInfo?.id));
         const earliest = platformAccMetrics.length > 0 ? platformAccMetrics[0]?.followers || 0 : 0;
         const latest = platformAccMetrics.length > 0 ? platformAccMetrics[platformAccMetrics.length - 1]?.followers || 0 : 0;
         const growth = earliest > 0 ? Math.round(((latest - earliest) / earliest) * 100) : 0;
 
         followerData.push({
           platform: normalized,
-          username: conn.page_name || accountInfo?.username || null,
-          currentFollowers: accountInfo?.followers || accountInfo?.followers_count || conn.followers_count || 0,
+          username: conn.page_name || accountInfo?.username || conn.username || null,
+          currentFollowers: accountInfo?.followers || conn.followers_count || 0,
+          postsCount: accountInfo?.posts_count || accountInfo?.metadata?.posts_count || 0,
           growth,
           profileImage: accountInfo?.profile_picture || conn.profile_image_url || null,
         });
       }
     }
-    // ========== MESSAGE STATS ==========
+
+    for (const acc of (socialAccounts as any[])) {
+      const normalized = normalizePlatform(acc.platform);
+      const alreadyIncluded = followerData.some(f =>
+        f.platform === normalized &&
+        (f.username === acc.username || Math.abs((f.currentFollowers || 0) - (acc.followers_count || 0)) < 10)
+      );
+      if (!alreadyIncluded) {
+        const platformAccMetrics = accountMetrics.filter((m: AccountMetric) => m.social_account_id === acc.id);
+        const earliest = platformAccMetrics.length > 0 ? platformAccMetrics[0]?.followers || 0 : 0;
+        const latest = platformAccMetrics.length > 0 ? platformAccMetrics[platformAccMetrics.length - 1]?.followers || 0 : 0;
+        const growth = earliest > 0 ? Math.round(((latest - earliest) / earliest) * 100) : 0;
+
+        followerData.push({
+          platform: normalized,
+          username: acc.username || null,
+          currentFollowers: acc.followers || 0,
+          postsCount: acc.posts_count || acc.metadata?.posts_count || 0,
+          growth,
+          profileImage: acc.profile_picture || null,
+        });
+      }
+    }
+
+    // Post-processing: enrich Telegram entries with totalMembers from messaging_channels
+    for (const fd of followerData) {
+      if (fd.platform === 'telegram' || fd.platform === 'whatsapp') {
+        const channelTotal = messagingChannels
+          .filter((ch: any) => ch.platform === fd.platform || !ch.platform)
+          .reduce((sum: number, ch: any) => sum + (Number(ch.members_count) || 0), 0);
+        if (channelTotal > fd.currentFollowers) {
+          fd.currentFollowers = channelTotal;
+        }
+      }
+    }
+    // Ensure Telegram appears even if social_connections is missing but social_accounts has entry
+    const telegramAccounts = socialAccounts.filter((a: any) => normalizePlatform(a.platform) === 'telegram');
+    if (telegramAccounts.length > 0 && !followerData.some(f => f.platform === 'telegram')) {
+      const telegramChannelTotal = messagingChannels
+        .filter((ch: any) => ch.platform === 'telegram')
+        .reduce((sum: number, ch: any) => sum + (Number(ch.members_count) || 0), 0);
+      const tgAcc = telegramAccounts[0];
+      const tgMetrics = accountMetrics.filter((m: AccountMetric) => m.social_account_id === tgAcc.id);
+      const earliest = tgMetrics.length > 0 ? tgMetrics[0]?.followers || 0 : 0;
+      const latest = tgMetrics.length > 0 ? tgMetrics[tgMetrics.length - 1]?.followers || 0 : 0;
+      const growth = earliest > 0 ? Math.round(((latest - earliest) / earliest) * 100) : 0;
+      followerData.push({
+        platform: 'telegram',
+        username: tgAcc.username || null,
+        currentFollowers: telegramChannelTotal || tgAcc.followers || 0,
+        postsCount: tgAcc.posts_count || 0,
+        growth,
+        profileImage: tgAcc.profile_picture || null,
+      });
+    }
+
     const messagesRaw = (messagesData as any[]) || [];
-    const totalSentM = messagesRaw.filter(m => m.status === 'sent').length;
-    const totalFailedM = messagesRaw.filter(m => m.status === 'failed').length;
-    const successRateM = (totalSentM + totalFailedM) > 0 
-      ? Math.round((totalSentM / (totalSentM + totalFailedM)) * 100) 
-      : 0;
+    let totalSentM = messagesRaw.filter(m => m.status === 'sent').length;
+    let totalFailedM = messagesRaw.filter(m => m.status === 'failed').length;
 
     const messagePlatformStats: Record<string, { sent: number, failed: number }> = {};
+    
+    // Add raw messages
     messagesRaw.forEach(m => {
       const p = normalizePlatform(m.platform || 'unknown');
       if (!messagePlatformStats[p]) messagePlatformStats[p] = { sent: 0, failed: 0 };
@@ -347,24 +462,82 @@ serve(async (req: Request) => {
       if (m.status === 'failed') messagePlatformStats[p].failed++;
     });
 
+    // Add scheduled posts to message stats
+    filteredPosts.forEach((post: any) => {
+      if (post.status === 'published' || post.status === 'failed') {
+        const platforms = post.platforms || [];
+        
+        if (post.status === 'published') totalSentM++;
+        if (post.status === 'failed') totalFailedM++;
+        
+        platforms.forEach((p: string) => {
+          const normP = normalizePlatform(p);
+          if (!messagePlatformStats[normP]) messagePlatformStats[normP] = { sent: 0, failed: 0 };
+          if (post.status === 'published') messagePlatformStats[normP].sent++;
+          if (post.status === 'failed') messagePlatformStats[normP].failed++;
+        });
+      }
+    });
+
+    const successRateM = (totalSentM + totalFailedM) > 0 
+      ? Math.round((totalSentM / (totalSentM + totalFailedM)) * 100) 
+      : 0;
+
+
     const analytics = {
       overview: {
         totalPosts, publishedPosts, scheduledPosts, failedPosts, draftPosts,
         publishRate: totalPosts > 0 ? ((publishedPosts / totalPosts) * 100).toFixed(1) : 0,
+        totalFollowers: followerData.reduce((acc, curr) => acc + curr.currentFollowers, 0),
+        followersGrowth: (() => {
+          const totalNow = followerData.reduce((acc, curr) => acc + curr.currentFollowers, 0);
+          let totalThen = 0;
+          
+          followerData.forEach(f => {
+            const account = socialAccounts.find(a => normalizePlatform(a.platform) === f.platform);
+            if (account) {
+              const pMetrics = accountMetrics.filter(m => m.social_account_id === account.id);
+              // Enhanced: Use the first available metric in the window. 
+              // If none in window, it means it's a new account or data hasn't been collected for 30 days.
+              // We default to the current value minus what we think it was (or 0 if totally new).
+              totalThen += pMetrics.length > 0 ? (pMetrics[0].followers || 0) : f.currentFollowers;
+            } else {
+              totalThen += f.currentFollowers;
+            }
+          });
+          
+          if (totalThen === 0) return totalNow > 0 ? "100.0" : "0";
+          const growth = ((totalNow - totalThen) / totalThen) * 100;
+          return growth.toFixed(1);
+        })()
       },
       engagement: { ...engagement, growth: growthValue },
       chartData,
       platformBreakdown,
-      topContent,
       bestTimes,
       followerData,
+      adsStats,
+      youtubeStats,
+      gaStats,
+      viralData: viralData || [],
+      trendsData: trends || [],
+      attacksData: attacksData || [],
       messageStats: {
         totalSent: totalSentM,
         totalFailed: totalFailedM,
         successRate: successRateM,
-        platformStats: messagePlatformStats
+        platformStats: messagePlatformStats,
+        recentMessages: messagesRaw.slice(0, 15).map(m => ({
+          id: m.id,
+          platform: m.platform,
+          content: m.content,
+          recipient: m.recipient_name || m.recipient_phone,
+          status: m.status,
+          created_at: m.created_at
+        }))
       },
-      period,
+      messagingChannels,
+      period: requestedPeriod || "30d",
       generatedAt: new Date().toISOString(),
       dataSource: "real",
     };

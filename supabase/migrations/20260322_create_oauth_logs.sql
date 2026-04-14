@@ -13,9 +13,11 @@ CREATE TABLE IF NOT EXISTS public.oauth_logs (
 ALTER TABLE public.oauth_logs ENABLE ROW LEVEL SECURITY;
 
 -- Política para que usuários vejam apenas seus próprios logs (opcional, mas recomendado)
+DROP POLICY IF EXISTS "Users can view their own oauth logs" ON public.oauth_logs;
 CREATE POLICY "Users can view their own oauth logs" ON public.oauth_logs
     FOR SELECT USING (auth.uid() = user_id);
 
 -- Política para que o sistema (service_role) insira logs
+DROP POLICY IF EXISTS "System can insert oauth logs" ON public.oauth_logs;
 CREATE POLICY "System can insert oauth logs" ON public.oauth_logs
     FOR INSERT WITH CHECK (true);
