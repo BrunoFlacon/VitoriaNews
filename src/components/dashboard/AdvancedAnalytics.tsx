@@ -1262,8 +1262,8 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             Últimos Disparos de Mensagens
           </h4>
           <div className="space-y-3">
-            {(data?.messageStats as any)?.recentMessages && (data.messageStats as any).recentMessages.length > 0 ? (
-              (data.messageStats as any).recentMessages.map((msg: any) => {
+            {data?.messageStats?.recentMessages && data.messageStats.recentMessages.length > 0 ? (
+              data.messageStats.recentMessages.map((msg: any) => {
                 const details = getPlatformDetails(msg.platform);
                 return (
                   <div key={msg.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border border-border/50 group hover:border-primary/30 transition-colors text-left">

@@ -24,7 +24,7 @@ export const usePermissions = () => {
 
     try {
       // 1. Fetch role-based permissions
-      const { data: rolePermsData } = await (supabase as any)
+      const { data: rolePermsData } = await supabase
         .from('role_permissions')
         .select(`
           permissions (
@@ -34,7 +34,7 @@ export const usePermissions = () => {
         .eq('role', profile.role);
 
       // 2. Fetch user-specific (override) permissions
-      const { data: userPermsData } = await (supabase as any)
+      const { data: userPermsData } = await supabase
         .from('user_permissions')
         .select(`
           permissions (

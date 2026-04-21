@@ -1,4 +1,4 @@
-import { useState, useRef, forwardRef } from "react";
+import { useState, useRef } from "react";
 import { Upload, FileText, CheckCircle2, AlertCircle, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,7 +74,7 @@ function parseCSV(text: string): ParsedRow[] {
   }).filter(row => row.content.trim());
 }
 
-export const BulkUploadDialog = forwardRef<HTMLDivElement, BulkUploadDialogProps>(({ open, onOpenChange, onComplete }, _ref) => {
+export const BulkUploadDialog = ({ open, onOpenChange, onComplete }: BulkUploadDialogProps) => {
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -322,5 +322,4 @@ export const BulkUploadDialog = forwardRef<HTMLDivElement, BulkUploadDialogProps
       </DialogContent>
     </Dialog>
   );
-});
-BulkUploadDialog.displayName = "BulkUploadDialog";
+};
