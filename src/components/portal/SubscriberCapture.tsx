@@ -47,7 +47,7 @@ export const SubscriberCapture: React.FC<SubscriberCaptureProps> = ({ articleSlu
     e.preventDefault();
     setLoading(true);
     try {
-      const { error } = await (supabase as any).from('portal_subscribers').insert([{
+      const { error } = await supabase.from('portal_subscribers').insert([{
         email: email || null,
         phone: whatsapp || null,
         full_name: name || null,

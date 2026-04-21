@@ -2012,6 +2012,9 @@ export type Database = {
         Args: { p_platform: string; p_user_id: string }
         Returns: boolean
       }
+      collect_post_analytics:
+        | { Args: never; Returns: undefined }
+        | { Args: { payload: Json }; Returns: undefined }
       collect_post_metrics: { Args: { p_post_id: string }; Returns: undefined }
       collect_social_analytics: { Args: never; Returns: undefined }
       create_api_key: { Args: { p_user: string }; Returns: string }
