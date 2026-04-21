@@ -1,86 +1,30 @@
-# Plano: Fluxo de Aprovacao Editorial + Indicadores Visuais no Calendario
 
-## O que sera feito
 
-continue a geração da instrução anterior e implemente o plano a seguir
+# Plano: Reverter modificações de hoje (limpeza de dados)
 
-### 1. Novo status "pending_approval" no fluxo editorial
+Você quer desfazer as alterações de hoje relacionadas à **limpeza de dados** (remoção das ~313k linhas zeradas em `post_metrics`, alterações em funções de coleta, normalização de plataforma no banco, etc.).
 
-Adicionar um novo status ao fluxo de publicacoes para suportar o ciclo jornalistico: **Rascunho -> Aguardando Aprovacao -> Aprovado/Agendado -> Publicado**.
+## Como reverter
 
-**Migracao de banco de dados:**
+No Lovable, eu **não devo** escrever código para desfazer alterações. A forma correta e segura é usar o histórico nativo do projeto:
 
-- Nenhuma alteracao de schema necessaria: o campo `status` da tabela `scheduled_posts` ja e do tipo `text`, entao novos valores como `pending_approval` e `rejected` podem ser usados diretamente.
+### Opção 1 — Reverter pelo chat
+Role até a mensagem **anterior** ao plano de auditoria/limpeza de hoje e clique no botão **Revert** abaixo da mensagem da IA. Isso restaura o projeto exatamente para aquele estado (código + migrations).
 
-**Arquivo: `src/hooks/useScheduledPosts.ts**`
+### Opção 2 — Aba History
+Abra a aba **History** no topo do chat e selecione a versão imediatamente **anterior** às mudanças de limpeza de dados de hoje.
 
-- Expandir o tipo `status` para incluir `'pending_approval' | 'rejected'`
-- Adicionar funcoes `submitForApproval(postId)` e `approvePost(postId)` / `rejectPost(postId, reason)`
+<lov-actions>
+  <lov-open-history>Abrir Histórico</lov-open-history>
+</lov-actions>
 
-### 2. Atualizar statusConfig no CalendarView
+## Importante sobre dados já apagados
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+O revert restaura **código, migrations e funções do banco**, mas **não recria linhas que foram deletadas** do `post_metrics`. As ~313k linhas zeradas removidas hoje **não voltam automaticamente** — apenas a estrutura e as funções (`collect_post_analytics`, `collect_social_analytics`, normalização `x → twitter`, índice criado) são revertidas conforme o ponto escolhido.
 
-Adicionar configs para os novos status:
+Se você precisa também recuperar as linhas deletadas, me avise depois do revert para verificarmos se existe backup point-in-time disponível no Lovable Cloud.
 
-- `pending_approval`: icone `Clock` com cor laranja, label "Aguardando Aprovacao"
-- `rejected`: icone `AlertCircle` com cor vermelha escura, label "Rejeitado"
+## O que fazer depois do revert
 
-Adicionar acoes no dropdown de cada post:
+Se após reverter você quiser que eu refaça apenas **parte** da auditoria (por exemplo, manter só a correção do `BulkUploadDialog` e do cron, sem deletar métricas), me diga quais itens manter e eu monto um plano novo focado.
 
-- "Enviar para aprovacao" (quando status e `draft`)
-- "Aprovar" e "Rejeitar" (quando status e `pending_approval`)
-
-### 3. Indicadores visuais ricos nos quadradinhos do calendario
-
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
-
-Substituir os pontos coloridos simples por mini-icones de status nos quadradinhos dos dias:
-
-- Cada post mostrara um pequeno icone (CheckCircle2, Clock, Edit, AlertCircle, etc.) colorido dentro do quadradinho do dia
-- Agrupar por status quando houver muitos posts (ex: "2x publicado, 1x rascunho")
-- Mostrar contagem total quando houver mais de 4 posts no dia
-
-### 4. Painel de aprovacao no CreatePostPanel
-
-**Arquivo: `src/components/dashboard/CreatePostPanel.tsx**`
-
-- Adicionar botao "Enviar para Aprovacao" ao lado de "Salvar Rascunho"
-- Quando o post estiver com status `pending_approval`, mostrar botoes "Aprovar" e "Rejeitar" (simulando o papel do editor)
-- Campo de motivo de rejeicao ao rejeitar
-
-### 5. Acoes de aprovacao no dialogo de detalhes
-
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
-
-No dialogo de detalhes do post, adicionar botoes contextuais:
-
-- Post `draft`: "Enviar para Aprovacao"
-- Post `pending_approval`: "Aprovar" e "Rejeitar"
-- Post `rejected`: Mostrar motivo da rejeicao + "Editar e Reenviar"
-
----
-
-## Detalhes Tecnicos
-
-### Arquivos editados:
-
-- `src/hooks/useScheduledPosts.ts` - Novos status e funcoes (submitForApproval, approvePost, rejectPost)
-- `src/components/dashboard/CalendarView.tsx` - Novos status no statusConfig, icones ricos nos dias, acoes de aprovacao
-- `src/components/dashboard/CreatePostPanel.tsx` - Botao "Enviar para Aprovacao"
-
-### Fluxo editorial completo:
-
-1. Jornalista cria pauta (rascunho) no calendario
-2. Desenvolve conteudo no painel de criacao
-3. Clica "Enviar para Aprovacao"
-4. Editor ve posts com status "Aguardando Aprovacao" no calendario (icone laranja)
-5. Editor aprova (muda para "scheduled") ou rejeita (muda para "rejected" com motivo)
-6. Se rejeitado, jornalista edita e reenvia
-7. Se aprovado, pode publicar imediatamente ou aguardar agendamento
-
-### Indicadores visuais nos quadradinhos:
-
-- Cada dia mostrara ate 4 mini-icones coloridos representando os posts daquele dia
-- Se houver mais de 4 posts, mostra 3 icones + badge "+N"
-- Icones usados: CheckCircle2 (publicado/verde), Clock (agendado/azul), Edit (rascunho/amarelo), AlertCircle (falha/vermelho), Loader2 (aguardando aprovacao/laranja), X (rejeitado/vermelho escuro)
