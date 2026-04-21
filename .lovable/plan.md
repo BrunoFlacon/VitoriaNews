@@ -1,86 +1,88 @@
-# Plano: Fluxo de Aprovacao Editorial + Indicadores Visuais no Calendario
 
-## O que sera feito
 
-continue a geração da instrução anterior e implemente o plano a seguir
+# Plano: Auditoria Completa do Sistema — Verificação de APIs, Dados e Renderização
 
-### 1. Novo status "pending_approval" no fluxo editorial
+Realizei uma varredura completa em todas as páginas/menus/ferramentas, conferindo banco de dados, edge functions, jobs agendados e renderização nos gráficos. Abaixo o diagnóstico real e o que precisa ser corrigido para que **os dados que aparecem nos gráficos correspondam ao que está no layout**.
 
-Adicionar um novo status ao fluxo de publicacoes para suportar o ciclo jornalistico: **Rascunho -> Aguardando Aprovacao -> Aprovado/Agendado -> Publicado**.
+## Diagnóstico (estado atual)
 
-**Migracao de banco de dados:**
+### O que está saudável
+- **Sidebar/menus** carregam corretamente (12 itens, fallback funciona)
+- **RLS** está permissive em todas as 12 tabelas auditadas — usuários conseguem CRUD
+- **Edge function `get-analytics`** está deployada e respondendo (healthy)
+- **Tabelas existentes**: `scheduled_posts` (23), `messages` (6), `notifications` (44), `messaging_channels` (4), `media` (1)
+- **Cron `analytics_worker`** roda a cada 6h (último: hoje 12:00)
 
-- Nenhuma alteracao de schema necessaria: o campo `status` da tabela `scheduled_posts` ja e do tipo `text`, entao novos valores como `pending_approval` e `rejected` podem ser usados diretamente.
+### Problemas críticos que distorcem os gráficos
 
-**Arquivo: `src/hooks/useScheduledPosts.ts**`
+| # | Problema | Evidência | Impacto visual |
+|---|----------|-----------|----------------|
+| 1 | **`post_metrics` poluída com 313.949 linhas zeradas** | 5 posts antigos com 20–32 mil linhas cada, todas com likes=0, comments=0, impressions=0. Inseridas a cada 5min desde 15/03 por `collect_post_analytics()` antigo | Gráfico de engajamento aparece **completamente flat (zero)** mesmo havendo "dados reais" |
+| 2 | **`account_metrics` está vazia (0 linhas)** | Cron `analytics_worker` só grava log, nunca chama `collect-social-analytics` | Card "Crescimento de Seguidores" não renderiza tendência |
+| 3 | **`social_accounts` desatualizada** | Telegram e X com followers=0, posts_count=0, último update em 13–14/03 | Cards de "Redes Conectadas" mostram zeros |
+| 4 | **9 jobs `publish_post` falharam/retry** sem `error_message` preenchido | Falhas silenciosas no worker | Posts não publicam, métricas não chegam |
+| 5 | **Apenas 1 conexão social ativa** (Telegram) | Mas há `post_metrics` para X, Facebook, Threads, Twitter — deduplicação inconsistente entre `x` e `twitter` no banco | Breakdown de plataformas mostra plataformas não conectadas |
+| 6 | **`articles=0`, `live_sessions=0`, `live_clips=0`** | Tabelas vazias por design (sem dados de teste) | Telas Notícias / Lives / Cortes aparecem vazias mas funcionais |
+| 7 | **Warning React**: `BulkUploadDialog` recebe ref sem `forwardRef` | Console runtime | Warning visível em DevTools, sem impacto funcional |
 
-- Expandir o tipo `status` para incluir `'pending_approval' | 'rejected'`
-- Adicionar funcoes `submitForApproval(postId)` e `approvePost(postId)` / `rejectPost(postId, reason)`
+## Plano de Correção
 
-### 2. Atualizar statusConfig no CalendarView
+### Etapa 1 — Limpar lixo de métricas (migration)
+- Apagar todas as linhas de `post_metrics` com `likes=0 AND comments=0 AND shares=0 AND impressions=0` (libera ~313k linhas).
+- Desabilitar/remover a função antiga `collect_post_analytics()` que gerava as inserções vazias e qualquer cron que a chamava em loop.
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+### Etapa 2 — Corrigir cron `analytics_worker`
+- Substituir o stub atual (que só grava log) por uma chamada real via `pg_net` ao edge function `collect-social-analytics`, passando o JWT do service role.
+- Manter periodicidade de 6h.
+- Resultado: `social_accounts` e `account_metrics` voltam a ser atualizadas com dados reais das APIs (Telegram + futuras conexões).
 
-Adicionar configs para os novos status:
+### Etapa 3 — Sincronizar dados imediatamente (manual trigger)
+- Após corrigir o cron, invocar `collect-social-analytics` uma vez para popular `social_accounts` e `account_metrics` com o estado atual das APIs.
+- Invocar `sync-telegram-chats` para atualizar contagem de membros dos canais.
 
-- `pending_approval`: icone `Clock` com cor laranja, label "Aguardando Aprovacao"
-- `rejected`: icone `AlertCircle` com cor vermelha escura, label "Rejeitado"
+### Etapa 4 — Limpar jobs zumbi e exibir erro real
+- Marcar como `failed` os 3 jobs em `retry` há semanas.
+- Atualizar `worker_process_jobs()` para gravar `error_message` quando o job falha (hoje grava string vazia).
 
-Adicionar acoes no dropdown de cada post:
+### Etapa 5 — Normalização de plataforma no banco
+- Atualizar `post_metrics` setando `platform='twitter'` onde `platform='x'` (consolida com `normalizePlatform` já existente no frontend e edge function).
+- Adicionar índice em `post_metrics(user_id, collected_at, platform)` para acelerar agregações.
 
-- "Enviar para aprovacao" (quando status e `draft`)
-- "Aprovar" e "Rejeitar" (quando status e `pending_approval`)
+### Etapa 6 — Corrigir warning React do `BulkUploadDialog`
+- Envolver o componente `BulkUploadDialog` com `React.forwardRef` para aceitar a ref que o Dialog do Radix passa internamente.
 
-### 3. Indicadores visuais ricos nos quadradinhos do calendario
+### Etapa 7 — Verificação automatizada (após mudanças)
+- Rodar `get-analytics` via curl autenticado e validar resposta:
+  - `dataSource` deve ser `real` (não `seeded`)
+  - `engagement.views > 0` apenas se houver impressões reais
+  - `followerData` deve listar Telegram com `currentFollowers` real (32 do canal Tupã Livre)
+  - `platformBreakdown` não deve ter chave `x` separada de `twitter`
+- Comparar com o que o componente `AdvancedAnalytics` renderiza visualmente.
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+## Arquivos / Recursos afetados
 
-Substituir os pontos coloridos simples por mini-icones de status nos quadradinhos dos dias:
+**Banco de dados** (uma migração + um insert via tool):
+- DELETE em `post_metrics` (linhas zeradas)
+- DROP/REPLACE função `collect_post_analytics()`
+- REPLACE função `collect_social_analytics()` para chamar `net.http_post` no edge function
+- UPDATE jobs zumbis em `job_queue`
+- UPDATE `post_metrics` para normalizar `x → twitter`
+- CREATE INDEX em `post_metrics`
 
-- Cada post mostrara um pequeno icone (CheckCircle2, Clock, Edit, AlertCircle, etc.) colorido dentro do quadradinho do dia
-- Agrupar por status quando houver muitos posts (ex: "2x publicado, 1x rascunho")
-- Mostrar contagem total quando houver mais de 4 posts no dia
+**Edge functions** (sem mudanças de código — só re-invocar):
+- `collect-social-analytics` (trigger manual pós-correção)
+- `sync-telegram-chats` (trigger manual pós-correção)
 
-### 4. Painel de aprovacao no CreatePostPanel
+**Frontend** (1 arquivo):
+- `src/components/dashboard/BulkUploadDialog.tsx` — adicionar `React.forwardRef`
 
-**Arquivo: `src/components/dashboard/CreatePostPanel.tsx**`
+## Resultado esperado após execução
 
-- Adicionar botao "Enviar para Aprovacao" ao lado de "Salvar Rascunho"
-- Quando o post estiver com status `pending_approval`, mostrar botoes "Aprovar" e "Rejeitar" (simulando o papel do editor)
-- Campo de motivo de rejeicao ao rejeitar
+- Gráficos do **AdvancedAnalytics** deixam de mostrar zeros achatados e passam a refletir métricas reais agregadas.
+- Card **Crescimento de Seguidores** começa a mostrar tendência (após 2 ciclos do cron, ~12h).
+- **Redes Conectadas** mostra o canal Telegram com 32 membros (dados reais).
+- **Breakdown por plataforma** não duplica X/Twitter.
+- **Console** sem o warning de ref.
+- **Jobs falhados** ficam visíveis com mensagem de erro real para debugging.
+- Demais áreas (Notícias, Lives, Cortes) continuam vazias por ausência de conteúdo cadastrado — **funcionando corretamente**, apenas sem dados de teste.
 
-### 5. Acoes de aprovacao no dialogo de detalhes
-
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
-
-No dialogo de detalhes do post, adicionar botoes contextuais:
-
-- Post `draft`: "Enviar para Aprovacao"
-- Post `pending_approval`: "Aprovar" e "Rejeitar"
-- Post `rejected`: Mostrar motivo da rejeicao + "Editar e Reenviar"
-
----
-
-## Detalhes Tecnicos
-
-### Arquivos editados:
-
-- `src/hooks/useScheduledPosts.ts` - Novos status e funcoes (submitForApproval, approvePost, rejectPost)
-- `src/components/dashboard/CalendarView.tsx` - Novos status no statusConfig, icones ricos nos dias, acoes de aprovacao
-- `src/components/dashboard/CreatePostPanel.tsx` - Botao "Enviar para Aprovacao"
-
-### Fluxo editorial completo:
-
-1. Jornalista cria pauta (rascunho) no calendario
-2. Desenvolve conteudo no painel de criacao
-3. Clica "Enviar para Aprovacao"
-4. Editor ve posts com status "Aguardando Aprovacao" no calendario (icone laranja)
-5. Editor aprova (muda para "scheduled") ou rejeita (muda para "rejected" com motivo)
-6. Se rejeitado, jornalista edita e reenvia
-7. Se aprovado, pode publicar imediatamente ou aguardar agendamento
-
-### Indicadores visuais nos quadradinhos:
-
-- Cada dia mostrara ate 4 mini-icones coloridos representando os posts daquele dia
-- Se houver mais de 4 posts, mostra 3 icones + badge "+N"
-- Icones usados: CheckCircle2 (publicado/verde), Clock (agendado/azul), Edit (rascunho/amarelo), AlertCircle (falha/vermelho), Loader2 (aguardando aprovacao/laranja), X (rejeitado/vermelho escuro)
