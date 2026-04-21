@@ -322,4 +322,5 @@ export const BulkUploadDialog = forwardRef<HTMLDivElement, BulkUploadDialogProps
       </DialogContent>
     </Dialog>
   );
-};
+});
+BulkUploadDialog.displayName = "BulkUploadDialog";
