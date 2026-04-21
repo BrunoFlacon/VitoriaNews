@@ -45,10 +45,10 @@ export const FooterTab = () => {
     try {
       const payload = { ...settings, group: 'general' };
       if (!settings.id) {
-        const { error } = await supabase.from('system_settings').insert([payload]);
+        const { error } = await (supabase as any).from('system_settings').insert([payload]);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('system_settings').update(payload).eq('id', settings.id);
+        const { error } = await (supabase as any).from('system_settings').update(payload).eq('id', settings.id);
         if (error) throw error;
       }
       updateSettingsOptimistic(settings);
