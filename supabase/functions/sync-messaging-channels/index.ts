@@ -15,34 +15,24 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    function decodeJwt(t: string) {
-      try {
-        const parts = t.split('.');
-        if (parts.length !== 3) return null;
-        return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      } catch {
-        return null;
-      }
-    }
-
     const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
-    if (!authHeader) throw new Error("No authorization header");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const token = authHeader.replace(/^Bearer\s+/i, "");
-    let actualUserId: string | undefined;
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser(token);
-      if (user) actualUserId = user.id;
-    } catch {}
-
-    if (!actualUserId) {
-      const payload = decodeJwt(token);
-      if (payload?.sub) actualUserId = payload.sub;
+    // Always verify JWT signature via Supabase Auth — never trust unverified tokens
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
-
-    if (!actualUserId) throw new Error("Unauthorized");
-    const userId = actualUserId;
+    const userId = user.id;
 
     // console.log(`Syncing messaging channels for user ${user.id}...`);
 

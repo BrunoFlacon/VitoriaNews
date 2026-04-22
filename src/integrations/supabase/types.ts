@@ -118,21 +118,21 @@ export type Database = {
           created_at: string | null
           id: string
           status: string | null
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           api_key?: string | null
           created_at?: string | null
           id?: string
           status?: string | null
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           api_key?: string | null
           created_at?: string | null
           id?: string
           status?: string | null
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }
