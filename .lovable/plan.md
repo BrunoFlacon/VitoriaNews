@@ -1,86 +1,131 @@
-# Plano: Fluxo de Aprovacao Editorial + Indicadores Visuais no Calendario
 
-## O que sera feito
 
-continue a geração da instrução anterior e implemente o plano a seguir
+# Plano de Correção de Segurança Completa
 
-### 1. Novo status "pending_approval" no fluxo editorial
+Vou corrigir todos os 17 findings de segurança em uma única migração + ajustes pontuais de código.
 
-Adicionar um novo status ao fluxo de publicacoes para suportar o ciclo jornalistico: **Rascunho -> Aguardando Aprovacao -> Aprovado/Agendado -> Publicado**.
+## 1. Habilitar RLS em 14 tabelas desprotegidas
 
-**Migracao de banco de dados:**
+Tabelas hoje com `rowsecurity = false` (acessíveis sem proteção via API pública):
 
-- Nenhuma alteracao de schema necessaria: o campo `status` da tabela `scheduled_posts` ja e do tipo `text`, entao novos valores como `pending_approval` e `rejected` podem ser usados diretamente.
+| Tabela | Estratégia |
+|---|---|
+| `platform_tokens` | RLS on, **revogar acesso** de `anon`/`authenticated`. Apenas service_role. Migrar bearer token X para secret. |
+| `social_comments`, `social_inbox`, `social_leads` | RLS on, policies `SELECT/INSERT/UPDATE/DELETE` por `auth.uid() = user_id` |
+| `social_webhooks`, `social_publish_log`, `platform_api_logs`, `system_audit`, `auto_reply_rules`, `post_analytics` | RLS on, **sem policies para clientes** (apenas service_role acessa via edge functions) |
+| `platform_hourly_performance`, `platform_rate_limits`, `social_platforms` | RLS on, `SELECT` para `authenticated` (dados de leitura compartilhada), escrita só service_role |
+| `api_keys` | RLS on, policy estrita: `auth.uid() = user_id` para SELECT/DELETE; INSERT só via função `create_api_key()` |
 
-**Arquivo: `src/hooks/useScheduledPosts.ts**`
+## 2. Bearer Token Exposto (`platform_tokens`)
 
-- Expandir o tipo `status` para incluir `'pending_approval' | 'rejected'`
-- Adicionar funcoes `submitForApproval(postId)` e `approvePost(postId)` / `rejectPost(postId, reason)`
+- Mover token X atual para o secret `TWITTER_BEARER_TOKEN` (Lovable Cloud). Vou pedir o valor via add_secret.
+- Remover registros sensíveis da tabela após migração.
+- Atualizar edge functions que liam de `platform_tokens` para `Deno.env.get("TWITTER_BEARER_TOKEN")`.
 
-### 2. Atualizar statusConfig no CalendarView
+## 3. Views (Security Definer / Sensitive Exposure)
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+8 views em `public` rodam com privilégios do owner (postgres). Vou recriar todas as 7 que faltam com `WITH (security_invoker = true)`, igual já está em `social_connections_safe`. Isso faz a view respeitar RLS do usuário consultando.
 
-Adicionar configs para os novos status:
+## 4. Materialized View na API (`dashboard_metrics`)
 
-- `pending_approval`: icone `Clock` com cor laranja, label "Aguardando Aprovacao"
-- `rejected`: icone `AlertCircle` com cor vermelha escura, label "Rejeitado"
+Revogar `SELECT` de `anon` e `authenticated`. Acesso só via função wrapper se necessário.
 
-Adicionar acoes no dropdown de cada post:
+## 5. Funções com search_path mutável (37 funções)
 
-- "Enviar para aprovacao" (quando status e `draft`)
-- "Aprovar" e "Rejeitar" (quando status e `pending_approval`)
+Adicionar `SET search_path = public` em todas as funções `public.*` que ainda não têm. Migração `ALTER FUNCTION ... SET search_path = public` em massa.
 
-### 3. Indicadores visuais ricos nos quadradinhos do calendario
+## 6. Trigger `handle_new_user` — validação de input
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+Sanitizar `name`: trim, truncar em 100 chars, remover `<>"'\``. Mantém SECURITY DEFINER (necessário) com search_path fixo.
 
-Substituir os pontos coloridos simples por mini-icones de status nos quadradinhos dos dias:
+## 7. Storage — bucket `media`
 
-- Cada post mostrara um pequeno icone (CheckCircle2, Clock, Edit, AlertCircle, etc.) colorido dentro do quadradinho do dia
-- Agrupar por status quando houver muitos posts (ex: "2x publicado, 1x rascunho")
-- Mostrar contagem total quando houver mais de 4 posts no dia
+- **Bucket privado**: `UPDATE storage.buckets SET public = false WHERE id = 'media'`.
+- **Policy UPDATE**: corrigir para checar `(storage.foldername(name))[1] = auth.uid()::text` (hoje qualquer authenticated sobrescreve qualquer arquivo).
+- **Policy SELECT pública**: remover (impede listagem anônima).
+- **Refatorar `useMediaUpload.ts`**: usar `createSignedUrl(path, 3600)` em vez de `getPublicUrl`. Salvar o path no DB; gerar signed URL on-demand.
+- Criar hook `useSignedMediaUrl(path)` para componentes que exibem mídia.
 
-### 4. Painel de aprovacao no CreatePostPanel
+## 8. Realtime — falta authorization
 
-**Arquivo: `src/components/dashboard/CreatePostPanel.tsx**`
+Adicionar policy em `realtime.messages`:
+```sql
+CREATE POLICY "users_own_topic" ON realtime.messages
+FOR SELECT TO authenticated
+USING (realtime.topic() LIKE 'user:' || auth.uid()::text || ':%');
+```
+E padronizar nomes de canais no frontend (`user:{uid}:notifications`, etc.). Vou auditar `useRealtime` calls e renomear.
 
-- Adicionar botao "Enviar para Aprovacao" ao lado de "Salvar Rascunho"
-- Quando o post estiver com status `pending_approval`, mostrar botoes "Aprovar" e "Rejeitar" (simulando o papel do editor)
-- Campo de motivo de rejeicao ao rejeitar
+## 9. Extensão `pg_net` em `public`
 
-### 5. Acoes de aprovacao no dialogo de detalhes
+Mover para schema `extensions`:
+```sql
+CREATE SCHEMA IF NOT EXISTS extensions;
+ALTER EXTENSION pg_net SET SCHEMA extensions;
+```
+Atualizar funções que referenciam `net.http_post` para usar `extensions.http_post` (ou search_path apropriado).
 
-**Arquivo: `src/components/dashboard/CalendarView.tsx**`
+## 10. Validação de input em Settings
 
-No dialogo de detalhes do post, adicionar botoes contextuais:
+`src/components/dashboard/SettingsView.tsx`:
+- Adicionar zod schema (name 2-100, bio ≤500, website URL https com max 200).
+- Validar no `handleSaveProfile` antes de chamar `updateProfile`.
+- Adicionar contador de caracteres no textarea bio.
+- Constraints no DB: `CHECK (char_length(bio) <= 500)`, `CHECK (char_length(name) BETWEEN 2 AND 100)`.
 
-- Post `draft`: "Enviar para Aprovacao"
-- Post `pending_approval`: "Aprovar" e "Rejeitar"
-- Post `rejected`: Mostrar motivo da rejeicao + "Editar e Reenviar"
+## 11. Leaked Password Protection
+
+Habilitar via `configure_auth` com `password_hibp_enabled: true`.
+
+## 12. Logging de info sensível em edge functions
+
+Substituir `console.log('user:', user.id, ...)` por `console.log('operation completed')` (sem IDs) em: `publish-post`, `social-oauth-callback`, `get-analytics`, `generate-post-content`. Manter logs de erro.
 
 ---
 
-## Detalhes Tecnicos
+## Ordem de execução
 
-### Arquivos editados:
+1. **Pedir secret** `TWITTER_BEARER_TOKEN` (bloqueia migração de platform_tokens).
+2. **Migration 1**: RLS on em 14 tabelas + policies.
+3. **Migration 2**: Recriar views com `security_invoker`, revogar acesso `dashboard_metrics`.
+4. **Migration 3**: `ALTER FUNCTION ... SET search_path = public` em 37 funções; sanitização em `handle_new_user`; constraints em `profiles`.
+5. **Migration 4**: Storage — privatizar bucket, corrigir policy UPDATE, remover SELECT público.
+6. **Migration 5**: Mover `pg_net` para schema `extensions`; ajustar funções que usam `net.*`.
+7. **Migration 6**: RLS policies em `realtime.messages`.
+8. **`configure_auth`**: HIBP on.
+9. **Frontend**:
+   - `useMediaUpload.ts` → signed URLs
+   - novo `src/hooks/useSignedMediaUrl.ts`
+   - componentes que exibem media (audit + replace)
+   - `SettingsView.tsx` → validação zod
+   - canais Realtime → renomear para `user:{uid}:*`
+10. **Edge functions**: trocar `platform_tokens` por env; remover logs com user.id.
 
-- `src/hooks/useScheduledPosts.ts` - Novos status e funcoes (submitForApproval, approvePost, rejectPost)
-- `src/components/dashboard/CalendarView.tsx` - Novos status no statusConfig, icones ricos nos dias, acoes de aprovacao
-- `src/components/dashboard/CreatePostPanel.tsx` - Botao "Enviar para Aprovacao"
+## Detalhes técnicos relevantes
 
-### Fluxo editorial completo:
+- Policies seguem o padrão já vigente: `FOR <op> TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id)`.
+- `platform_tokens` ficará sem nenhuma policy → service_role bypassa RLS automaticamente; clientes recebem 0 rows.
+- `security_invoker = true` em views faz Postgres avaliar RLS na ótica do usuário, eliminando o finding `SUPA_security_definer_view`.
+- Mover `pg_net` requer atualizar `publish_to_x` e `publish_to_telegram` (usam `net.http_post`).
+- Hook `useSignedMediaUrl` usa cache + refresh antes de expirar para não quebrar UX.
 
-1. Jornalista cria pauta (rascunho) no calendario
-2. Desenvolve conteudo no painel de criacao
-3. Clica "Enviar para Aprovacao"
-4. Editor ve posts com status "Aguardando Aprovacao" no calendario (icone laranja)
-5. Editor aprova (muda para "scheduled") ou rejeita (muda para "rejected" com motivo)
-6. Se rejeitado, jornalista edita e reenvia
-7. Se aprovado, pode publicar imediatamente ou aguardar agendamento
+## Arquivos modificados
 
-### Indicadores visuais nos quadradinhos:
+**Migrações novas** (6 arquivos SQL).
 
-- Cada dia mostrara ate 4 mini-icones coloridos representando os posts daquele dia
-- Se houver mais de 4 posts, mostra 3 icones + badge "+N"
-- Icones usados: CheckCircle2 (publicado/verde), Clock (agendado/azul), Edit (rascunho/amarelo), AlertCircle (falha/vermelho), Loader2 (aguardando aprovacao/laranja), X (rejeitado/vermelho escuro)
+**Frontend**:
+- `src/hooks/useMediaUpload.ts`
+- `src/hooks/useSignedMediaUrl.ts` (novo)
+- `src/components/dashboard/SettingsView.tsx`
+- componentes de exibição de mídia (audit pontual)
+- arquivos com `supabase.channel(...)` (rename de tópicos)
+
+**Edge functions**:
+- `supabase/functions/publish-post/index.ts` (logs)
+- `supabase/functions/social-oauth-callback/index.ts` (logs)
+- `supabase/functions/get-analytics/index.ts` (logs)
+- `supabase/functions/generate-post-content/index.ts` (logs)
+- qualquer função que leia `platform_tokens` → trocar por `Deno.env.get('TWITTER_BEARER_TOKEN')`
+
+**Auth config**: HIBP enabled.
+
