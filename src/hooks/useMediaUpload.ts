@@ -78,10 +78,13 @@ export function useMediaUpload() {
 
       setProgress(50);
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
+      // Generate signed URL (bucket is private; valid for 7 days)
+      const { data: signedData, error: signedError } = await supabase.storage
         .from('media')
-        .getPublicUrl(fileName);
+        .createSignedUrl(fileName, 60 * 60 * 24 * 7);
+
+      if (signedError) throw signedError;
+      const publicUrl = signedData.signedUrl;
 
       // Get image/video dimensions
       let width: number | undefined;
