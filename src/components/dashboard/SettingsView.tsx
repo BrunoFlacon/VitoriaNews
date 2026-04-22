@@ -383,12 +383,34 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
   const handleSaveProfile = async () => {
     try {
-      const success = await updateProfile({ 
-        name: `${profileData.first_name} ${profileData.last_name}`.trim(),
+      // Input validation
+      const { z } = await import("zod");
+      const profileSchema = z.object({
+        first_name: z.string().trim().min(1, "Nome é obrigatório").max(50, "Nome deve ter no máximo 50 caracteres"),
+        last_name: z.string().trim().max(50, "Sobrenome deve ter no máximo 50 caracteres").optional().or(z.literal("")),
+        bio: z.string().trim().max(500, "Biografia deve ter no máximo 500 caracteres").optional().or(z.literal("")),
+        phone: z.string().trim().max(20, "Telefone inválido").optional().or(z.literal("")),
+      });
+      const result = profileSchema.safeParse({
         first_name: profileData.first_name,
         last_name: profileData.last_name,
         bio: profileData.bio,
         phone: profileData.phone,
+      });
+      if (!result.success) {
+        toast({ title: "Erro de validação", description: result.error.errors[0].message, variant: "destructive" });
+        return;
+      }
+      // Sanitize HTML-like characters from name fields
+      const sanitize = (s: string) => s.replace(/[<>"'`]/g, "");
+      const cleanFirst = sanitize(result.data.first_name);
+      const cleanLast = sanitize(result.data.last_name || "");
+      const success = await updateProfile({ 
+        name: `${cleanFirst} ${cleanLast}`.trim(),
+        first_name: cleanFirst,
+        last_name: cleanLast,
+        bio: result.data.bio,
+        phone: result.data.phone,
         birthdate: profileData.birthdate,
         gender: profileData.gender,
         social_links: profileData.social_links,
