@@ -697,7 +697,9 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                   <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/50 border border-border/50">
                       <Shield className="w-3.5 h-3.5 text-primary" />
-                      <span className="font-medium">Administrador Master</span>
+                      <span className="font-medium">
+                        {can('system.access') ? 'Administrador Master' : 'Desenvolvedor'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/50 border border-border/50">
                       <Clock className="w-3.5 h-3.5 text-primary" />
