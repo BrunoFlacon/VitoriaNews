@@ -1,73 +1,109 @@
-## Problemas identificados faça uma analize nos erros abaixo e monte uma atualização do plano de correção de segurança
+## Diagnóstico
 
-### 1. Erro crítico em produção: "supabaseKey is required"
+Investigação revelou três classes de problemas que travam atualizações e captação:
 
-O arquivo `src/integrations/supabase/client.ts` faz fallback para a URL `ghtkdkauseesambzqfrd.supabase.co` (projeto antigo), mas o projeto Lovable Cloud atual é `yttsmficdfnbvvuhhdmw`. Quando `VITE_SUPABASE_PUBLISHABLE_KEY` não está injetado no build publicado, o cliente quebra. Além disso o fallback aponta para um projeto errado.
+### 1. Schema incompleto vs. código
+Edge functions e UI referenciam tabelas/colunas que **não existem**:
 
-Faça backup do banco de dados do lovable `yttsmficdfnbvvuhhdmw de todos os dados armazenados e envie para o github e crie uma pasta` de backup do banco de dados com a data do backup esta pasta ficará arquivada para que possamos usar quando precisar usar caso tiver erros no sistema.....
+| Referência no código | Status |
+|---|---|
+| `bot_settings` | ❌ Não existe (erro `PGRST205` no console) |
+| `meta_ads_campaigns` | ❌ Não existe (`get-analytics` quebra) |
+| `google_analytics_data` | ❌ Não existe |
+| `youtube_analytics` | ❌ Não existe |
+| `eventos_de_ataque` | ❌ Não existe |
+| `social_accounts.views/likes/shares/comments/cover_photo/subscribers_count/metadata` | ❌ Colunas faltam (sync-social-data quebra) |
+| `account_metrics.platform/views/likes/shares/comments` | ❌ Colunas faltam |
+| `post_metrics.external_id/content/published_at/media_url/media_type/performance_score` | ❌ Colunas faltam (collect-social-analytics quebra) |
+| `messaging_channels.online_count` | ❌ Coluna falta |
+| `social_connections.cover_photo` | ❌ Coluna falta |
+| `trends` UNIQUE em `keyword` | ❌ Upsert `onConflict: 'keyword'` falha |
+| `trends` UNIQUE em `(keyword, source)` | ❌ Upsert do `collect-google-trends` falha |
+| `social_accounts` UNIQUE em `(user_id, platform, platform_user_id)` | ❌ Upsert quebra |
+| `post_metrics` UNIQUE em `(user_id, platform, external_id)` | ❌ Upsert quebra |
 
-copie os dados do backup e faça uma analise e se tivertabelas iguais ao do backup adicione os dados da tabela do backup na tabela igual ao do novo banco de dados  `ghtkdkauseesambzqfrd.supabase.com`  se não existir a tabela no novo banco de dados crie a tabela no novo banco de dados mas nunca delete nada se os dados forem iguais iguinore os dados da tabela do banco de dados antigo banco de dados `yttsmficdfnbvvuhhdmw`  que for igual identica. depois que finalizar as analises e implementações direcione e passe apartir das correções carregar do novo banco de dados vindo do supabase e integre ao sistema o novo banco de dados sem apagar nada.... 
+### 2. Coletores que retornam dados falsos
+`meta.ts`, `tiktok.ts`, `messaging.ts`, `alt-social.ts` (parcial), `x-twitter.ts` (fallback) inserem **mocks hardcoded** ("Marketing Intelligence", "Sustentabilidade", "Vida Sustentável", "Viral Challenge BR") — poluindo o radar com dados fictícios.
 
-### 2. Storage DELETE policy permite apagar arquivos de outros usuários
-
-Política `Users can delete own media files` permite DELETE quando o primeiro segmento da pasta é `auth.uid()` **OU** uma das pastas compartilhadas (`avatars`, `messages`, `stories`, `documents`). Qualquer usuário autenticado pode deletar qualquer arquivo nessas pastas.
-
-### 3. Tabela `social_publish_log` com RLS habilitado mas sem políticas
-
-Corrija a tabela tem RLS ligado mas zero políticas e nenhuma coluna `user_id` — fica inacessível para qualquer cliente e não pode ser escopada por usuário, faça a tabela funcionar com base novo banco de dados
-
----
-
-## Correções (sem deletar dados)
-
-### A. Corrigir o fallback do client.ts
-
-Substituir a URL (`https://yttsmficdfnbvvuhhdmw.supabase.com`) hardcoded errada pela nova URL (`https://ghtkdkauseesambzqfrd.supabase.com`) correta no projeto atual e adicionar fallback se não tiver a regra novo banco de dados junto com a nova chave anon publicável        (e públicar o design). Isso garante que o app funcione mesmo se o `.env` não estiver populado no build.
-
-```ts
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://yttsmficdfnbvvuhhdmw.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '<anon key publicável>';
-```
-
-### B. Migration SQL (apenas alterações de policy — sem DROP de dados)
-
-```sql
--- Fix 1: DELETE policy do storage restringir SOMENTE à pasta do próprio usuário
-DROP POLICY IF EXISTS "Users can delete own media files" ON storage.objects;
-CREATE POLICY "Users can delete own media files"
-ON storage.objects FOR DELETE TO authenticated
-USING (
-  bucket_id = 'media'
-  AND (storage.foldername(name))[1] = auth.uid()::text
-);
-
--- Fix 2: social_publish_log — restringir a service_role (escrito por edge functions / triggers)
-REVOKE ALL ON public.social_publish_log FROM anon, authenticated;
-GRANT ALL ON public.social_publish_log TO service_role;
-CREATE POLICY "service_role_full_access"
-ON public.social_publish_log FOR ALL TO service_role
-USING (true) WITH CHECK (true);
--- Leitura para o dono do post associado (via join com scheduled_posts)
-CREATE POLICY "users_read_own_publish_logs"
-ON public.social_publish_log FOR SELECT TO authenticated
-USING (
-  EXISTS (
-    SELECT 1 FROM public.scheduled_posts sp
-    WHERE sp.id = social_publish_log.post_id
-      AND sp.user_id = auth.uid()
-  )
-);
-```
-
-Nenhum `DROP TABLE`, `DELETE FROM`, ou `TRUNCATE`. Apenas reconfiguração de políticas.
-
-### C. Marcar findings como corrigidos
-
-Após aplicar a migration, marcar os 2 findings de segurança como `mark_as_fixed`. se não tiver esta regra no novo banco de dados se já existir iguinore 
+### 3. Sem agendamento automático
+Não há `cron.job` ativo — coletas só rodam quando o usuário clica manualmente em "Sincronizar". `pg_cron` e `pg_net` precisam ser habilitados e agendamentos criados.
 
 ---
 
-## Arquivos alterados
+## Plano de Correção
 
-1. `src/integrations/supabase/client.ts` — corrigir URL/key de fallback
-2. Nova migration SQL — fixes A e B acima
+### Etapa 1 — Migração de schema (uma única migração)
+
+**Adicionar colunas faltantes** (ALTER TABLE … ADD COLUMN IF NOT EXISTS, sem apagar dados):
+
+- `social_accounts`: `views BIGINT DEFAULT 0`, `likes BIGINT DEFAULT 0`, `shares BIGINT DEFAULT 0`, `comments BIGINT DEFAULT 0`, `cover_photo TEXT`, `subscribers_count INTEGER DEFAULT 0`, `metadata JSONB DEFAULT '{}'`, `is_connected BOOLEAN DEFAULT true`, `followers_count INTEGER DEFAULT 0`, `page_id TEXT`, `page_name TEXT`
+- `account_metrics`: `platform TEXT`, `views BIGINT DEFAULT 0`, `likes BIGINT DEFAULT 0`, `shares BIGINT DEFAULT 0`, `comments BIGINT DEFAULT 0`
+- `post_metrics`: `external_id TEXT`, `content TEXT`, `published_at TIMESTAMPTZ`, `media_url TEXT`, `media_type TEXT`, `performance_score NUMERIC DEFAULT 0`
+- `messaging_channels`: `online_count INTEGER DEFAULT 0`
+- `social_connections`: `cover_photo TEXT`, `views BIGINT DEFAULT 0`, `likes BIGINT DEFAULT 0`, `shares BIGINT DEFAULT 0`, `comments BIGINT DEFAULT 0`, `subscribers_count INTEGER DEFAULT 0`
+
+**Constraints UNIQUE para upserts funcionarem**:
+- `social_accounts (user_id, platform, platform_user_id)`
+- `post_metrics (user_id, platform, external_id)` (parcial: WHERE external_id IS NOT NULL)
+- `trends (user_id, keyword, source)` (compatível com ambos coletores)
+
+**Tabelas novas com RLS owner-scoped**:
+- `bot_settings (user_id, settings JSONB, …)` — owner-only
+- `meta_ads_campaigns (user_id, campaign_id, name, impressions, reach, clicks, amount_spent, date, …)` — owner-only
+- `google_analytics_data (user_id, property_id, metric_name, metric_value, dimension_value, date, …)` — owner-only
+- `youtube_analytics (user_id, channel_id, video_id, views, likes, comments, subscribers_gained, estimated_minutes_watched, date, …)` — owner-only
+- `eventos_de_ataque (user_id, tipo, descricao, plataforma, severity, detectado_em, metadata, …)` — owner-only
+
+Todas com RLS, política `auth.uid() = user_id` para SELECT/INSERT/UPDATE/DELETE.
+
+### Etapa 2 — Coletores reais (substituir mocks)
+
+- **`meta.ts`**: buscar Page Insights reais via `graph.facebook.com/v21.0/{pageId}/insights`; remover mocks. Se sem credencial, retornar `[]`.
+- **`tiktok.ts`**: buscar trending hashtags via Creative Center público (RSS/JSON); remover mocks. Se falhar, `[]`.
+- **`messaging.ts`**: derivar do banco (`messaging_channels` ordenado por `members_count`); remover mock WhatsApp.
+- **`alt-social.ts`**: manter Reddit (já real); remover mocks Kwai/Rumble.
+- **`x-twitter.ts`**: manter API real; remover fallback hardcoded.
+
+### Etapa 3 — Padronização do client Supabase nas edge functions
+
+Trocar imports `@supabase/supabase-js` (sem URL) por `https://esm.sh/@supabase/supabase-js@2` em `meta.ts` (atualmente quebra deploy).
+
+### Etapa 4 — Agendamento automático (pg_cron + pg_net)
+
+Habilitar extensões e criar cron jobs (via insert tool, não migração):
+- `collect-social-analytics` a cada 30 min
+- `radar-api/sync-intelligence` a cada 1 hora  
+- `collect-google-trends` a cada 2 horas
+- `refresh-social-token` diariamente
+- `process-job-queue` a cada 1 min
+- `worker_collect_metrics()` a cada 15 min
+- `enqueue_scheduled_posts()` a cada 1 min
+
+### Etapa 5 — Frontend
+
+- `RobotBuilder.tsx`, `FloatingWhatsApp.tsx`, `useSocialStats.ts`, `NotificationContext.tsx`: passam a funcionar automaticamente quando `bot_settings` existir (sem mudança de código necessária além de regenerar types).
+- `useTrends.ts`: nenhum ajuste — já usa `radar-api`.
+
+---
+
+## Arquivos modificados
+
+**Migração (1 arquivo)**: schema completo  
+**Edge functions reescritas**:
+- `supabase/functions/_shared/automation/collectors/meta.ts`
+- `supabase/functions/_shared/automation/collectors/tiktok.ts`
+- `supabase/functions/_shared/automation/collectors/messaging.ts`
+- `supabase/functions/_shared/automation/collectors/alt-social.ts`
+- `supabase/functions/_shared/automation/collectors/x-twitter.ts`
+
+**Insert SQL (cron jobs)**: 1 chamada via insert tool
+
+---
+
+## Garantias
+
+- ✅ Nenhum `DROP TABLE`, `DROP COLUMN`, `TRUNCATE` ou `DELETE` — só `ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`, `CREATE UNIQUE INDEX IF NOT EXISTS`
+- ✅ Dados existentes preservados
+- ✅ RLS owner-scoped em todas as novas tabelas
+- ✅ Pronto para receber novas APIs: bastará criar credencial em `api_credentials` ou conexão em `social_connections` que os coletores capturam automaticamente
+- ✅ Schema 100% compatível com o código atual de `get-analytics`, `collect-social-analytics`, `sync-social-data`, `radar-api`
