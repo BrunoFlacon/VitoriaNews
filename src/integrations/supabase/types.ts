@@ -860,6 +860,39 @@ export type Database = {
         }
         Relationships: []
       }
+      narratives: {
+        Row: {
+          created_at: string
+          description: string | null
+          detected_at: string
+          id: string
+          metadata: Json | null
+          reach: number | null
+          sentiment: string | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          detected_at?: string
+          id?: string
+          metadata?: Json | null
+          reach?: number | null
+          sentiment?: string | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          detected_at?: string
+          id?: string
+          metadata?: Json | null
+          reach?: number | null
+          sentiment?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
@@ -1040,6 +1073,45 @@ export type Database = {
           created_at?: string | null
           id?: string
           platform?: string | null
+        }
+        Relationships: []
+      }
+      political_trends: {
+        Row: {
+          category: string | null
+          created_at: string
+          detected_at: string
+          id: string
+          keyword: string
+          mentions: number | null
+          metadata: Json | null
+          sentiment: string | null
+          source: string | null
+          velocity: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          detected_at?: string
+          id?: string
+          keyword: string
+          mentions?: number | null
+          metadata?: Json | null
+          sentiment?: string | null
+          source?: string | null
+          velocity?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          detected_at?: string
+          id?: string
+          keyword?: string
+          mentions?: number | null
+          metadata?: Json | null
+          sentiment?: string | null
+          source?: string | null
+          velocity?: number | null
         }
         Relationships: []
       }
@@ -1777,6 +1849,54 @@ export type Database = {
         }
         Relationships: []
       }
+      trends: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          detected_at: string
+          id: string
+          keyword: string
+          metadata: Json | null
+          score: number | null
+          source: string | null
+          sub_source: string | null
+          thumbnail_url: string | null
+          url: string | null
+          user_id: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          detected_at?: string
+          id?: string
+          keyword: string
+          metadata?: Json | null
+          score?: number | null
+          source?: string | null
+          sub_source?: string | null
+          thumbnail_url?: string | null
+          url?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          detected_at?: string
+          id?: string
+          keyword?: string
+          metadata?: Json | null
+          score?: number | null
+          source?: string | null
+          sub_source?: string | null
+          thumbnail_url?: string | null
+          url?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -1792,6 +1912,39 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      viral_campaigns: {
+        Row: {
+          created_at: string
+          detected_at: string
+          hashtag: string | null
+          id: string
+          metadata: Json | null
+          name: string
+          reach: number | null
+          velocity: number | null
+        }
+        Insert: {
+          created_at?: string
+          detected_at?: string
+          hashtag?: string | null
+          id?: string
+          metadata?: Json | null
+          name: string
+          reach?: number | null
+          velocity?: number | null
+        }
+        Update: {
+          created_at?: string
+          detected_at?: string
+          hashtag?: string | null
+          id?: string
+          metadata?: Json | null
+          name?: string
+          reach?: number | null
+          velocity?: number | null
         }
         Relationships: []
       }
