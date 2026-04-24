@@ -1,47 +1,52 @@
-import { createClient } from "@supabase/supabase-js";
-
+// Coletor real Meta (Facebook/Instagram). Sem mocks — retorna [] se não há credencial.
 export async function collectMetaIntelligence(supabaseClient: any, userId: string) {
-  console.log(`[MetaCollector] Starting collection for user: ${userId}`);
-  
-  // 1. Fetch Meta credentials
-  const { data: creds } = await supabaseClient
-    .from('api_credentials')
-    .select('credentials')
-    .eq('user_id', userId)
-    .eq('platform', 'facebook')
-    .single();
-
-  if (!creds?.credentials?.access_token) {
-    console.log('[MetaCollector] No credentials found. Skipping.');
-    return [];
-  }
-
-  const accessToken = creds.credentials.access_token;
   const trends: any[] = [];
 
   try {
-    // 2. Mocking or Fetching from Meta Ads Library / Analytics
-    // In a real scenario, we would use the Graph API for Ad Insights or Trending Topics
-    // For now, we simulate gathering data from Meta Ads and Instagram Trends
-    
-    trends.push({
-      keyword: "Marketing Intelligence",
-      source: "Facebook Ads",
-      sub_source: "Ad Library",
-      category: "Profissional",
-      score: 85,
-      metadata: { reach: "Low", engagement: "High" }
-    });
+    const { data: connections } = await supabaseClient
+      .from('social_connections')
+      .select('*')
+      .eq('user_id', userId)
+      .in('platform', ['facebook', 'instagram'])
+      .eq('is_connected', true);
 
-    trends.push({
-      keyword: "Sustentabilidade",
-      source: "Instagram",
-      sub_source: "Hashtag Trends",
-      category: "Social",
-      score: 92,
-      metadata: { mentions: 15000, velocity: 1.2 }
-    });
+    if (!connections || connections.length === 0) return [];
 
+    for (const conn of connections) {
+      if (!conn.access_token) continue;
+      const pageId = conn.page_id || conn.platform_user_id;
+      if (!pageId) continue;
+
+      try {
+        // Busca posts recentes da página
+        const url = `https://graph.facebook.com/v21.0/${pageId}/posts?fields=message,created_time,shares,likes.summary(true),comments.summary(true),permalink_url,full_picture&limit=10&access_token=${conn.access_token}`;
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+
+        for (const post of (data.data || [])) {
+          const likes = post.likes?.summary?.total_count || 0;
+          const comments = post.comments?.summary?.total_count || 0;
+          const shares = post.shares?.count || 0;
+          const score = likes + (comments * 2) + (shares * 3);
+
+          if (post.message && score > 0) {
+            trends.push({
+              keyword: post.message.substring(0, 100),
+              source: conn.platform === 'instagram' ? 'Instagram' : 'Facebook',
+              sub_source: conn.page_name || pageId,
+              category: 'Engajamento',
+              score,
+              url: post.permalink_url,
+              thumbnail_url: post.full_picture,
+              metadata: { likes, comments, shares, posted_at: post.created_time }
+            });
+          }
+        }
+      } catch (e) {
+        console.error(`[MetaCollector] Failed for ${conn.platform}:`, e);
+      }
+    }
   } catch (err) {
     console.error('[MetaCollector] Error:', err);
   }

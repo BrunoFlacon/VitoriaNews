@@ -17,33 +17,48 @@ export type Database = {
       account_metrics: {
         Row: {
           collected_at: string
+          comments: number | null
           engagement_rate: number | null
           followers: number | null
           following: number | null
           id: string
+          likes: number | null
+          platform: string | null
           posts_count: number | null
+          shares: number | null
           social_account_id: string | null
           user_id: string
+          views: number | null
         }
         Insert: {
           collected_at?: string
+          comments?: number | null
           engagement_rate?: number | null
           followers?: number | null
           following?: number | null
           id?: string
+          likes?: number | null
+          platform?: string | null
           posts_count?: number | null
+          shares?: number | null
           social_account_id?: string | null
           user_id: string
+          views?: number | null
         }
         Update: {
           collected_at?: string
+          comments?: number | null
           engagement_rate?: number | null
           followers?: number | null
           following?: number | null
           id?: string
+          likes?: number | null
+          platform?: string | null
           posts_count?: number | null
+          shares?: number | null
           social_account_id?: string | null
           user_id?: string
+          views?: number | null
         }
         Relationships: [
           {
@@ -267,6 +282,51 @@ export type Database = {
         }
         Relationships: []
       }
+      bot_settings: {
+        Row: {
+          ai_enabled: boolean | null
+          auto_reply: boolean | null
+          business_hours: Json | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string | null
+          settings: Json | null
+          updated_at: string
+          user_id: string
+          welcome_message: string | null
+          whatsapp_number: string | null
+        }
+        Insert: {
+          ai_enabled?: boolean | null
+          auto_reply?: boolean | null
+          business_hours?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string | null
+          settings?: Json | null
+          updated_at?: string
+          user_id: string
+          welcome_message?: string | null
+          whatsapp_number?: string | null
+        }
+        Update: {
+          ai_enabled?: boolean | null
+          auto_reply?: boolean | null
+          business_hours?: Json | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string | null
+          settings?: Json | null
+          updated_at?: string
+          user_id?: string
+          welcome_message?: string | null
+          whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
       campaign_posts: {
         Row: {
           campaign_id: string
@@ -407,6 +467,81 @@ export type Database = {
           file_url?: string
           id?: string
           name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      eventos_de_ataque: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          detectado_em: string
+          id: string
+          metadata: Json | null
+          plataforma: string | null
+          severity: string | null
+          tipo: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          detectado_em?: string
+          id?: string
+          metadata?: Json | null
+          plataforma?: string | null
+          severity?: string | null
+          tipo: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          detectado_em?: string
+          id?: string
+          metadata?: Json | null
+          plataforma?: string | null
+          severity?: string | null
+          tipo?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      google_analytics_data: {
+        Row: {
+          created_at: string
+          date: string
+          dimension_name: string | null
+          dimension_value: string | null
+          id: string
+          metadata: Json | null
+          metric_name: string
+          metric_value: number | null
+          property_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          dimension_name?: string | null
+          dimension_value?: string | null
+          id?: string
+          metadata?: Json | null
+          metric_name: string
+          metric_value?: number | null
+          property_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          dimension_name?: string | null
+          dimension_value?: string | null
+          id?: string
+          metadata?: Json | null
+          metric_name?: string
+          metric_value?: number | null
+          property_id?: string | null
           user_id?: string
         }
         Relationships: []
@@ -835,6 +970,7 @@ export type Database = {
           created_at: string
           id: string
           members_count: number | null
+          online_count: number | null
           platform: string
           user_id: string
         }
@@ -845,6 +981,7 @@ export type Database = {
           created_at?: string
           id?: string
           members_count?: number | null
+          online_count?: number | null
           platform: string
           user_id: string
         }
@@ -855,7 +992,65 @@ export type Database = {
           created_at?: string
           id?: string
           members_count?: number | null
+          online_count?: number | null
           platform?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      meta_ads_campaigns: {
+        Row: {
+          amount_spent: number | null
+          campaign_id: string
+          clicks: number | null
+          cpc: number | null
+          created_at: string
+          ctr: number | null
+          date: string | null
+          id: string
+          impressions: number | null
+          metadata: Json | null
+          name: string | null
+          objective: string | null
+          reach: number | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_spent?: number | null
+          campaign_id: string
+          clicks?: number | null
+          cpc?: number | null
+          created_at?: string
+          ctr?: number | null
+          date?: string | null
+          id?: string
+          impressions?: number | null
+          metadata?: Json | null
+          name?: string | null
+          objective?: string | null
+          reach?: number | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_spent?: number | null
+          campaign_id?: string
+          clicks?: number | null
+          cpc?: number | null
+          created_at?: string
+          ctr?: number | null
+          date?: string | null
+          id?: string
+          impressions?: number | null
+          metadata?: Json | null
+          name?: string | null
+          objective?: string | null
+          reach?: number | null
+          status?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -1153,12 +1348,18 @@ export type Database = {
           clicks: number | null
           collected_at: string
           comments: number | null
+          content: string | null
           engagement_rate: number | null
+          external_id: string | null
           id: string
           impressions: number | null
           likes: number | null
+          media_type: string | null
+          media_url: string | null
+          performance_score: number | null
           platform: string
-          post_id: string
+          post_id: string | null
+          published_at: string | null
           reach: number | null
           shares: number | null
           user_id: string
@@ -1167,12 +1368,18 @@ export type Database = {
           clicks?: number | null
           collected_at?: string
           comments?: number | null
+          content?: string | null
           engagement_rate?: number | null
+          external_id?: string | null
           id?: string
           impressions?: number | null
           likes?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          performance_score?: number | null
           platform: string
-          post_id: string
+          post_id?: string | null
+          published_at?: string | null
           reach?: number | null
           shares?: number | null
           user_id: string
@@ -1181,12 +1388,18 @@ export type Database = {
           clicks?: number | null
           collected_at?: string
           comments?: number | null
+          content?: string | null
           engagement_rate?: number | null
+          external_id?: string | null
           id?: string
           impressions?: number | null
           likes?: number | null
+          media_type?: string | null
+          media_url?: string | null
+          performance_score?: number | null
           platform?: string
-          post_id?: string
+          post_id?: string | null
+          published_at?: string | null
           reach?: number | null
           shares?: number | null
           user_id?: string
@@ -1339,18 +1552,30 @@ export type Database = {
           api_key: string | null
           api_secret: string | null
           chat_id: string | null
+          comments: number | null
+          cover_photo: string | null
           created_at: string
           engagement_rate: number | null
           followers: number | null
+          followers_count: number | null
           following: number | null
           id: string
+          is_connected: boolean | null
           last_synced_at: string | null
+          likes: number | null
+          metadata: Json | null
+          page_id: string | null
+          page_name: string | null
           platform: string
+          platform_user_id: string | null
           posts_count: number | null
           profile_picture: string | null
+          shares: number | null
+          subscribers_count: number | null
           updated_at: string
           user_id: string
           username: string | null
+          views: number | null
         }
         Insert: {
           access_secret?: string | null
@@ -1358,18 +1583,30 @@ export type Database = {
           api_key?: string | null
           api_secret?: string | null
           chat_id?: string | null
+          comments?: number | null
+          cover_photo?: string | null
           created_at?: string
           engagement_rate?: number | null
           followers?: number | null
+          followers_count?: number | null
           following?: number | null
           id?: string
+          is_connected?: boolean | null
           last_synced_at?: string | null
+          likes?: number | null
+          metadata?: Json | null
+          page_id?: string | null
+          page_name?: string | null
           platform: string
+          platform_user_id?: string | null
           posts_count?: number | null
           profile_picture?: string | null
+          shares?: number | null
+          subscribers_count?: number | null
           updated_at?: string
           user_id: string
           username?: string | null
+          views?: number | null
         }
         Update: {
           access_secret?: string | null
@@ -1377,18 +1614,30 @@ export type Database = {
           api_key?: string | null
           api_secret?: string | null
           chat_id?: string | null
+          comments?: number | null
+          cover_photo?: string | null
           created_at?: string
           engagement_rate?: number | null
           followers?: number | null
+          followers_count?: number | null
           following?: number | null
           id?: string
+          is_connected?: boolean | null
           last_synced_at?: string | null
+          likes?: number | null
+          metadata?: Json | null
+          page_id?: string | null
+          page_name?: string | null
           platform?: string
+          platform_user_id?: string | null
           posts_count?: number | null
           profile_picture?: string | null
+          shares?: number | null
+          subscribers_count?: number | null
           updated_at?: string
           user_id?: string
           username?: string | null
+          views?: number | null
         }
         Relationships: []
       }
@@ -1431,11 +1680,14 @@ export type Database = {
       social_connections: {
         Row: {
           access_token: string | null
+          comments: number | null
+          cover_photo: string | null
           created_at: string
           expires_at: string | null
           followers_count: number | null
           id: string
           is_connected: boolean
+          likes: number | null
           metadata: Json | null
           page_id: string | null
           page_name: string | null
@@ -1444,18 +1696,24 @@ export type Database = {
           profile_image_url: string | null
           profile_picture: string | null
           refresh_token: string | null
+          shares: number | null
+          subscribers_count: number | null
           token_expires_at: string | null
           updated_at: string
           user_id: string
           username: string | null
+          views: number | null
         }
         Insert: {
           access_token?: string | null
+          comments?: number | null
+          cover_photo?: string | null
           created_at?: string
           expires_at?: string | null
           followers_count?: number | null
           id?: string
           is_connected?: boolean
+          likes?: number | null
           metadata?: Json | null
           page_id?: string | null
           page_name?: string | null
@@ -1464,18 +1722,24 @@ export type Database = {
           profile_image_url?: string | null
           profile_picture?: string | null
           refresh_token?: string | null
+          shares?: number | null
+          subscribers_count?: number | null
           token_expires_at?: string | null
           updated_at?: string
           user_id: string
           username?: string | null
+          views?: number | null
         }
         Update: {
           access_token?: string | null
+          comments?: number | null
+          cover_photo?: string | null
           created_at?: string
           expires_at?: string | null
           followers_count?: number | null
           id?: string
           is_connected?: boolean
+          likes?: number | null
           metadata?: Json | null
           page_id?: string | null
           page_name?: string | null
@@ -1484,10 +1748,13 @@ export type Database = {
           profile_image_url?: string | null
           profile_picture?: string | null
           refresh_token?: string | null
+          shares?: number | null
+          subscribers_count?: number | null
           token_expires_at?: string | null
           updated_at?: string
           user_id?: string
           username?: string | null
+          views?: number | null
         }
         Relationships: []
       }
@@ -1945,6 +2212,57 @@ export type Database = {
           name?: string
           reach?: number | null
           velocity?: number | null
+        }
+        Relationships: []
+      }
+      youtube_analytics: {
+        Row: {
+          channel_id: string | null
+          comments: number | null
+          created_at: string
+          date: string
+          estimated_minutes_watched: number | null
+          id: string
+          likes: number | null
+          metadata: Json | null
+          shares: number | null
+          subscribers_gained: number | null
+          title: string | null
+          user_id: string
+          video_id: string | null
+          views: number | null
+        }
+        Insert: {
+          channel_id?: string | null
+          comments?: number | null
+          created_at?: string
+          date: string
+          estimated_minutes_watched?: number | null
+          id?: string
+          likes?: number | null
+          metadata?: Json | null
+          shares?: number | null
+          subscribers_gained?: number | null
+          title?: string | null
+          user_id: string
+          video_id?: string | null
+          views?: number | null
+        }
+        Update: {
+          channel_id?: string | null
+          comments?: number | null
+          created_at?: string
+          date?: string
+          estimated_minutes_watched?: number | null
+          id?: string
+          likes?: number | null
+          metadata?: Json | null
+          shares?: number | null
+          subscribers_gained?: number | null
+          title?: string | null
+          user_id?: string
+          video_id?: string | null
+          views?: number | null
         }
         Relationships: []
       }

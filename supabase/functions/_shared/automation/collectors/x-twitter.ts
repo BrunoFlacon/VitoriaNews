@@ -1,12 +1,8 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+// Coletor real X/Twitter. Sem fallback de mock.
 export async function collectXIntelligence(supabaseClient: any, userId: string) {
-  console.log(`[XCollector] Starting collection for user: ${userId}`);
-  
   const trends: any[] = [];
 
   try {
-    // 1. Fetch X credentials
     const { data: creds } = await supabaseClient
       .from('api_credentials')
       .select('credentials')
@@ -14,53 +10,39 @@ export async function collectXIntelligence(supabaseClient: any, userId: string) 
       .eq('platform', 'twitter')
       .maybeSingle();
 
-    const accessToken = creds?.credentials?.access_token || creds?.credentials?.accessToken;
-    const bearerToken = creds?.credentials?.bearer_token || creds?.credentials?.bearerToken;
+    const { data: conn } = await supabaseClient
+      .from('social_connections')
+      .select('access_token')
+      .eq('user_id', userId)
+      .eq('platform', 'twitter')
+      .eq('is_connected', true)
+      .maybeSingle();
 
-    // 2. Fetch Trending Topics
-    // If we have a Bearer token (API v2), we can fetch trends by WOEID (1 for Global, 23424768 for Brazil)
-    // Note: Twitter API v2 'trends' endpoint requires specific access. Fallback to mock/RSS if unavailable.
-    
-    if (bearerToken || accessToken) {
-      try {
-        const woeid = 23424768; // Brazil
-        const res = await fetch(`https://api.twitter.com/1.1/trends/place.json?id=${woeid}`, {
-          headers: { Authorization: `Bearer ${bearerToken || accessToken}` }
-        });
-        
-        if (res.ok) {
-          const data = await res.json();
-          const twitterTrends = data[0]?.trends || [];
-          
-          twitterTrends.slice(0, 10).forEach((t: any) => {
-            trends.push({
-              keyword: t.name,
-              source: 'X-Twitter',
-              sub_source: 'Trending Topics',
-              category: 'Breaking News',
-              url: t.url,
-              score: 95,
-              metadata: { tweet_volume: t.tweet_volume, promoted: !!t.promoted_content }
-            });
-          });
-        }
-      } catch (e) {
-        console.warn('[XCollector] API fetch failed, using fallback.');
-      }
-    }
+    const bearer =
+      creds?.credentials?.bearer_token ||
+      creds?.credentials?.bearerToken ||
+      conn?.access_token;
 
-    // Fallback: Simulation of current viral topics if no API key
-    if (trends.length === 0) {
+    if (!bearer) return [];
+
+    // WOEID 23424768 = Brasil
+    const res = await fetch('https://api.twitter.com/1.1/trends/place.json?id=23424768', {
+      headers: { Authorization: `Bearer ${bearer}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const items = data?.[0]?.trends || [];
+    for (const t of items.slice(0, 15)) {
       trends.push({
-        keyword: "Breaking News: Inteligência Artificial no Brasil",
-        source: "X-Twitter",
-        sub_source: "Viral",
-        category: "Breaking News",
-        score: 98,
-        metadata: { engagement: "Alta", source: "Algoritmo Radar" }
+        keyword: t.name,
+        source: 'X-Twitter',
+        sub_source: 'Trending Topics',
+        category: 'Tendências',
+        score: Math.min(100, Math.floor((t.tweet_volume || 0) / 1000)),
+        url: t.url,
+        metadata: { tweet_volume: t.tweet_volume, promoted: !!t.promoted_content },
       });
     }
-
   } catch (err) {
     console.error('[XCollector] Error:', err);
   }
