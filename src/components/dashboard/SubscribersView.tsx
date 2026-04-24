@@ -34,7 +34,7 @@ export const SubscribersView = () => {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      setSubscribers(data || []);
+      setSubscribers((data as any) || []);
     } catch (e) {
       console.error(e);
     } finally {

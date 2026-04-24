@@ -128,14 +128,14 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
         async (payload) => {
           if (payload.new.status === 'received') {
             // Check bot settings for audio alerts
-            const { data: settings } = await supabase
+            const { data: settings } = await (supabase as any)
               .from('bot_settings')
               .select('audio_alerts_enabled')
               .eq('user_id', user.id)
               .eq('platform', payload.new.platform)
               .maybeSingle();
 
-            if (settings?.audio_alerts_enabled !== false) {
+            if ((settings as any)?.audio_alerts_enabled !== false) {
               const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
               audio.play().catch(e => console.log("Audio play blocked by browser:", e));
             }
