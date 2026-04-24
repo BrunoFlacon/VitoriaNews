@@ -20,7 +20,7 @@ export const FloatingWhatsApp = ({ onOpenMessaging }: FloatingWhatsAppProps) => 
 
     // 1. Check if floating button is enabled in settings
     const checkSettings = async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from('bot_settings')
         .select('floating_button_enabled')
         .eq('user_id', user.id)

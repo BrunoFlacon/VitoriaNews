@@ -106,7 +106,7 @@ export function useSocialStats() {
         .maybeSingle();
       
       if (botSettings) {
-        botActiveStatus = !!botSettings.is_active;
+        botActiveStatus = !!(botSettings as any).is_active;
       }
 
       // Map platform message counts

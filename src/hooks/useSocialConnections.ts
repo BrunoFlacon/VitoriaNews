@@ -49,12 +49,12 @@ export function useSocialConnections() {
 
       // 2. Fetch ALL social_accounts to enrich connections with cached data
       // social_accounts has non-expiring Supabase Storage URLs + real follower counts
-      const { data: allAccounts } = await supabase
+      const { data: allAccounts } = await (supabase as any)
         .from('social_accounts')
         .select('platform, platform_user_id, username, profile_picture, followers_count, followers, posts_count, page_name')
         .eq('user_id', user.id);
 
-      const accounts = allAccounts || [];
+      const accounts: any[] = (allAccounts as any[]) || [];
 
       // Helper: find best matching social_account for a connection (match by page_id or platform_user_id)
       const findAccount = (conn: SocialConnection) => {

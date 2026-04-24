@@ -1,131 +1,73 @@
+## Problemas identificados faça uma analize nos erros abaixo e monte uma atualização do plano de correção de segurança
 
+### 1. Erro crítico em produção: "supabaseKey is required"
 
-# Plano de Correção de Segurança Completa
+O arquivo `src/integrations/supabase/client.ts` faz fallback para a URL `ghtkdkauseesambzqfrd.supabase.co` (projeto antigo), mas o projeto Lovable Cloud atual é `yttsmficdfnbvvuhhdmw`. Quando `VITE_SUPABASE_PUBLISHABLE_KEY` não está injetado no build publicado, o cliente quebra. Além disso o fallback aponta para um projeto errado.
 
-Vou corrigir todos os 17 findings de segurança em uma única migração + ajustes pontuais de código.
+Faça backup do banco de dados do lovable `yttsmficdfnbvvuhhdmw de todos os dados armazenados e envie para o github e crie uma pasta` de backup do banco de dados com a data do backup esta pasta ficará arquivada para que possamos usar quando precisar usar caso tiver erros no sistema.....
 
-## 1. Habilitar RLS em 14 tabelas desprotegidas
+copie os dados do backup e faça uma analise e se tivertabelas iguais ao do backup adicione os dados da tabela do backup na tabela igual ao do novo banco de dados  `ghtkdkauseesambzqfrd.supabase.com`  se não existir a tabela no novo banco de dados crie a tabela no novo banco de dados mas nunca delete nada se os dados forem iguais iguinore os dados da tabela do banco de dados antigo banco de dados `yttsmficdfnbvvuhhdmw`  que for igual identica. depois que finalizar as analises e implementações direcione e passe apartir das correções carregar do novo banco de dados vindo do supabase e integre ao sistema o novo banco de dados sem apagar nada.... 
 
-Tabelas hoje com `rowsecurity = false` (acessíveis sem proteção via API pública):
+### 2. Storage DELETE policy permite apagar arquivos de outros usuários
 
-| Tabela | Estratégia |
-|---|---|
-| `platform_tokens` | RLS on, **revogar acesso** de `anon`/`authenticated`. Apenas service_role. Migrar bearer token X para secret. |
-| `social_comments`, `social_inbox`, `social_leads` | RLS on, policies `SELECT/INSERT/UPDATE/DELETE` por `auth.uid() = user_id` |
-| `social_webhooks`, `social_publish_log`, `platform_api_logs`, `system_audit`, `auto_reply_rules`, `post_analytics` | RLS on, **sem policies para clientes** (apenas service_role acessa via edge functions) |
-| `platform_hourly_performance`, `platform_rate_limits`, `social_platforms` | RLS on, `SELECT` para `authenticated` (dados de leitura compartilhada), escrita só service_role |
-| `api_keys` | RLS on, policy estrita: `auth.uid() = user_id` para SELECT/DELETE; INSERT só via função `create_api_key()` |
+Política `Users can delete own media files` permite DELETE quando o primeiro segmento da pasta é `auth.uid()` **OU** uma das pastas compartilhadas (`avatars`, `messages`, `stories`, `documents`). Qualquer usuário autenticado pode deletar qualquer arquivo nessas pastas.
 
-## 2. Bearer Token Exposto (`platform_tokens`)
+### 3. Tabela `social_publish_log` com RLS habilitado mas sem políticas
 
-- Mover token X atual para o secret `TWITTER_BEARER_TOKEN` (Lovable Cloud). Vou pedir o valor via add_secret.
-- Remover registros sensíveis da tabela após migração.
-- Atualizar edge functions que liam de `platform_tokens` para `Deno.env.get("TWITTER_BEARER_TOKEN")`.
-
-## 3. Views (Security Definer / Sensitive Exposure)
-
-8 views em `public` rodam com privilégios do owner (postgres). Vou recriar todas as 7 que faltam com `WITH (security_invoker = true)`, igual já está em `social_connections_safe`. Isso faz a view respeitar RLS do usuário consultando.
-
-## 4. Materialized View na API (`dashboard_metrics`)
-
-Revogar `SELECT` de `anon` e `authenticated`. Acesso só via função wrapper se necessário.
-
-## 5. Funções com search_path mutável (37 funções)
-
-Adicionar `SET search_path = public` em todas as funções `public.*` que ainda não têm. Migração `ALTER FUNCTION ... SET search_path = public` em massa.
-
-## 6. Trigger `handle_new_user` — validação de input
-
-Sanitizar `name`: trim, truncar em 100 chars, remover `<>"'\``. Mantém SECURITY DEFINER (necessário) com search_path fixo.
-
-## 7. Storage — bucket `media`
-
-- **Bucket privado**: `UPDATE storage.buckets SET public = false WHERE id = 'media'`.
-- **Policy UPDATE**: corrigir para checar `(storage.foldername(name))[1] = auth.uid()::text` (hoje qualquer authenticated sobrescreve qualquer arquivo).
-- **Policy SELECT pública**: remover (impede listagem anônima).
-- **Refatorar `useMediaUpload.ts`**: usar `createSignedUrl(path, 3600)` em vez de `getPublicUrl`. Salvar o path no DB; gerar signed URL on-demand.
-- Criar hook `useSignedMediaUrl(path)` para componentes que exibem mídia.
-
-## 8. Realtime — falta authorization
-
-Adicionar policy em `realtime.messages`:
-```sql
-CREATE POLICY "users_own_topic" ON realtime.messages
-FOR SELECT TO authenticated
-USING (realtime.topic() LIKE 'user:' || auth.uid()::text || ':%');
-```
-E padronizar nomes de canais no frontend (`user:{uid}:notifications`, etc.). Vou auditar `useRealtime` calls e renomear.
-
-## 9. Extensão `pg_net` em `public`
-
-Mover para schema `extensions`:
-```sql
-CREATE SCHEMA IF NOT EXISTS extensions;
-ALTER EXTENSION pg_net SET SCHEMA extensions;
-```
-Atualizar funções que referenciam `net.http_post` para usar `extensions.http_post` (ou search_path apropriado).
-
-## 10. Validação de input em Settings
-
-`src/components/dashboard/SettingsView.tsx`:
-- Adicionar zod schema (name 2-100, bio ≤500, website URL https com max 200).
-- Validar no `handleSaveProfile` antes de chamar `updateProfile`.
-- Adicionar contador de caracteres no textarea bio.
-- Constraints no DB: `CHECK (char_length(bio) <= 500)`, `CHECK (char_length(name) BETWEEN 2 AND 100)`.
-
-## 11. Leaked Password Protection
-
-Habilitar via `configure_auth` com `password_hibp_enabled: true`.
-
-## 12. Logging de info sensível em edge functions
-
-Substituir `console.log('user:', user.id, ...)` por `console.log('operation completed')` (sem IDs) em: `publish-post`, `social-oauth-callback`, `get-analytics`, `generate-post-content`. Manter logs de erro.
+Corrija a tabela tem RLS ligado mas zero políticas e nenhuma coluna `user_id` — fica inacessível para qualquer cliente e não pode ser escopada por usuário, faça a tabela funcionar com base novo banco de dados
 
 ---
 
-## Ordem de execução
+## Correções (sem deletar dados)
 
-1. **Pedir secret** `TWITTER_BEARER_TOKEN` (bloqueia migração de platform_tokens).
-2. **Migration 1**: RLS on em 14 tabelas + policies.
-3. **Migration 2**: Recriar views com `security_invoker`, revogar acesso `dashboard_metrics`.
-4. **Migration 3**: `ALTER FUNCTION ... SET search_path = public` em 37 funções; sanitização em `handle_new_user`; constraints em `profiles`.
-5. **Migration 4**: Storage — privatizar bucket, corrigir policy UPDATE, remover SELECT público.
-6. **Migration 5**: Mover `pg_net` para schema `extensions`; ajustar funções que usam `net.*`.
-7. **Migration 6**: RLS policies em `realtime.messages`.
-8. **`configure_auth`**: HIBP on.
-9. **Frontend**:
-   - `useMediaUpload.ts` → signed URLs
-   - novo `src/hooks/useSignedMediaUrl.ts`
-   - componentes que exibem media (audit + replace)
-   - `SettingsView.tsx` → validação zod
-   - canais Realtime → renomear para `user:{uid}:*`
-10. **Edge functions**: trocar `platform_tokens` por env; remover logs com user.id.
+### A. Corrigir o fallback do client.ts
 
-## Detalhes técnicos relevantes
+Substituir a URL (`https://yttsmficdfnbvvuhhdmw.supabase.com`) hardcoded errada pela nova URL (`https://ghtkdkauseesambzqfrd.supabase.com`) correta no projeto atual e adicionar fallback se não tiver a regra novo banco de dados junto com a nova chave anon publicável        (e públicar o design). Isso garante que o app funcione mesmo se o `.env` não estiver populado no build.
 
-- Policies seguem o padrão já vigente: `FOR <op> TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id)`.
-- `platform_tokens` ficará sem nenhuma policy → service_role bypassa RLS automaticamente; clientes recebem 0 rows.
-- `security_invoker = true` em views faz Postgres avaliar RLS na ótica do usuário, eliminando o finding `SUPA_security_definer_view`.
-- Mover `pg_net` requer atualizar `publish_to_x` e `publish_to_telegram` (usam `net.http_post`).
-- Hook `useSignedMediaUrl` usa cache + refresh antes de expirar para não quebrar UX.
+```ts
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://yttsmficdfnbvvuhhdmw.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '<anon key publicável>';
+```
 
-## Arquivos modificados
+### B. Migration SQL (apenas alterações de policy — sem DROP de dados)
 
-**Migrações novas** (6 arquivos SQL).
+```sql
+-- Fix 1: DELETE policy do storage restringir SOMENTE à pasta do próprio usuário
+DROP POLICY IF EXISTS "Users can delete own media files" ON storage.objects;
+CREATE POLICY "Users can delete own media files"
+ON storage.objects FOR DELETE TO authenticated
+USING (
+  bucket_id = 'media'
+  AND (storage.foldername(name))[1] = auth.uid()::text
+);
 
-**Frontend**:
-- `src/hooks/useMediaUpload.ts`
-- `src/hooks/useSignedMediaUrl.ts` (novo)
-- `src/components/dashboard/SettingsView.tsx`
-- componentes de exibição de mídia (audit pontual)
-- arquivos com `supabase.channel(...)` (rename de tópicos)
+-- Fix 2: social_publish_log — restringir a service_role (escrito por edge functions / triggers)
+REVOKE ALL ON public.social_publish_log FROM anon, authenticated;
+GRANT ALL ON public.social_publish_log TO service_role;
+CREATE POLICY "service_role_full_access"
+ON public.social_publish_log FOR ALL TO service_role
+USING (true) WITH CHECK (true);
+-- Leitura para o dono do post associado (via join com scheduled_posts)
+CREATE POLICY "users_read_own_publish_logs"
+ON public.social_publish_log FOR SELECT TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.scheduled_posts sp
+    WHERE sp.id = social_publish_log.post_id
+      AND sp.user_id = auth.uid()
+  )
+);
+```
 
-**Edge functions**:
-- `supabase/functions/publish-post/index.ts` (logs)
-- `supabase/functions/social-oauth-callback/index.ts` (logs)
-- `supabase/functions/get-analytics/index.ts` (logs)
-- `supabase/functions/generate-post-content/index.ts` (logs)
-- qualquer função que leia `platform_tokens` → trocar por `Deno.env.get('TWITTER_BEARER_TOKEN')`
+Nenhum `DROP TABLE`, `DELETE FROM`, ou `TRUNCATE`. Apenas reconfiguração de políticas.
 
-**Auth config**: HIBP enabled.
+### C. Marcar findings como corrigidos
 
+Após aplicar a migration, marcar os 2 findings de segurança como `mark_as_fixed`. se não tiver esta regra no novo banco de dados se já existir iguinore 
+
+---
+
+## Arquivos alterados
+
+1. `src/integrations/supabase/client.ts` — corrigir URL/key de fallback
+2. Nova migration SQL — fixes A e B acima
