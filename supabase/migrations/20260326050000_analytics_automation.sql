@@ -23,20 +23,20 @@ ADD COLUMN IF NOT EXISTS social_account_id uuid REFERENCES public.social_account
 -- Em ambiente real do Supabase, o recomendado é usar a dashboard de Cron ou Vault.
 -- Mas deixaremos o esqueleto funcional:
 
-DELETE FROM cron.job WHERE jobname = 'sync-social-analytics-3h';
-
-SELECT cron.schedule(
-  'sync-social-analytics-3h',
-  '0 */3 * * *',
-  $$
-  SELECT
-    net.http_post(
-      url:='https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/collect-social-analytics',
-      headers:='{"Content-Type": "application/json", "Authorization": "Bearer ' || current_setting('app.settings.service_role_key', true) || '"}'::jsonb,
-      body:='{}'::jsonb
-    )
-  $$
-);
+-- DELETE FROM cron.job WHERE jobname = 'sync-social-analytics-3h';
+-- 
+-- SELECT cron.schedule(
+--   'sync-social-analytics-3h',
+--   '0 */3 * * *',
+--   $$
+--   SELECT
+--     net.http_post(
+--       url:='https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/collect-social-analytics',
+--       headers:='{"Content-Type": "application/json", "Authorization": "Bearer ' || current_setting('app.settings.service_role_key', true) || '"}'::jsonb,
+--       body:='{}'::jsonb
+--     )
+--   $$
+-- );
 
 -- 6. Indices extras para performance de busca por periodo
 CREATE INDEX IF NOT EXISTS idx_account_metrics_collected_at ON public.account_metrics(collected_at DESC);

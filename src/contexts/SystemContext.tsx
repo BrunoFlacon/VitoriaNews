@@ -54,54 +54,57 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchSettings = useCallback(async () => {
     try {
-      // PERFORMANCE: Consolidando em uma única chamada ao banco
-      // select("*") é resiliente pois traz o que existir, sem dar erro 400 por colunas específicas
+      // PERFORMANCE: Chamada consolidada e tipada
       const { data: allData, error } = await (supabase as any)
         .from("system_settings")
         .select("*");
 
       if (error) {
         console.error("Error fetching system settings:", error);
-        // Mesmo com erro, mantemos o loading false para mostrar fallbacks locais
+        return;
       }
 
       const rows = (allData || []) as any[];
+      if (rows.length === 0) {
+        setLoading(false);
+        return;
+      }
 
-      // Separar dados em memória com segurança (usando group se existir)
-      const generalRow = rows.find(r => r.group === 'general' || r.key === 'platform_name'); // Fallback para r.key se group não existir
-      const navigationRows = rows.filter(r => r.group === 'navigation');
-      const permissionRows = rows.filter(r => r.group === 'permissions');
+      // OTIMIZAÇÃO: Processamento em um único loop para evitar múltiplos .filter()
+      let generalData: SystemSettings | null = null;
+      const navItems: NavSetting[] = [];
+      const permsMap: Record<string, string[]> = {};
+      const uniqueNavKeys = new Set();
 
-      if (generalRow) {
-        setSettings(generalRow as SystemSettings);
-        applyThemeStyles(generalRow as SystemSettings);
+      for (const row of rows) {
+        if (row.group === 'general' || row.key === 'platform_name') {
+          generalData = row;
+        } else if (row.group === 'navigation') {
+          if (!uniqueNavKeys.has(row.key)) {
+            uniqueNavKeys.add(row.key);
+            navItems.push({
+              id: row.id,
+              key: row.key,
+              value: row.value,
+              active: row.active !== false,
+              order_index: row.order_index || 0,
+              allowed_roles: row.allowed_roles || ['admin_master', 'dev_master', 'editor', 'user']
+            });
+          }
+        } else if (row.group === 'permissions') {
+          permsMap[row.key] = row.allowed_roles || [];
+        }
+      }
+
+      if (generalData) {
+        setSettings(generalData);
+        applyThemeStyles(generalData);
       }
       
-      if (navigationRows.length > 0) {
-        // DEDUPLICATION: Garantir chaves únicas
-        const uniqueNav = new Map();
-        navigationRows.forEach(n => {
-          if (!uniqueNav.has(n.key)) {
-            uniqueNav.set(n.key, n);
-          }
-        });
-
-        setNavSettings(Array.from(uniqueNav.values())
-          .sort((a, b) => ((a as any).order_index || 0) - ((b as any).order_index || 0))
-          .map(n => ({
-            id: (n as any).id,
-            key: (n as any).key,
-            value: (n as any).value,
-            active: (n as any).active !== false,
-            order_index: (n as any).order_index || 0,
-            allowed_roles: (n as any).allowed_roles || ['admin_master', 'dev_master', 'editor', 'user']
-          })));
+      if (navItems.length > 0) {
+        setNavSettings(navItems.sort((a, b) => a.order_index - b.order_index));
       }
 
-      const permsMap: Record<string, string[]> = {};
-      permissionRows.forEach(p => {
-        permsMap[(p as any).key] = (p as any).allowed_roles || [];
-      });
       setSectionPermissions(permsMap);
 
     } catch (e) {

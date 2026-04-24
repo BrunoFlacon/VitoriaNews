@@ -1,0 +1,2 @@
+-- Placeholder para resolver conflito de histórico de migração
+-- A migração real já existe no banco remoto.
