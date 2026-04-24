@@ -429,6 +429,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     }
   };
 
+  const handleSaveProfile = useCallback(async () => {
     try {
       // Input validation
       const { z } = await import("zod");
