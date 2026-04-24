@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2.5 -2.5 69 69" width="32px" height="32px">
+  <defs>
+    <linearGradient id="vitoriaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="10%" stop-color="#4090FF"/>
+      <stop offset="100%" stop-color="#9933FF"/>
+    </linearGradient>
+    <linearGradient id="premiumStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#5C82FF"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+    <filter id="premiumShadow" x="-15%" y="-9%" width="120%" height="140%">
+      <feDropShadow dx="1" dy="0.9" stdDeviation="1.2" flood-color="#000000" flood-opacity="0.50"/>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="32" fill="url(#vitoriaGrad)" stroke="url(#premiumStroke)" stroke-width="0.8" filter="url(#premiumShadow)"/>
+  <g fill="#010202">
+    <path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z"/>
+    <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z"/>
+  </g>
+</svg>

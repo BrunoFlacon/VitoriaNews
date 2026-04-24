@@ -23,11 +23,14 @@ export const LinkedinIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-    <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-  </svg>
-);
+export const YoutubeIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg viewBox="0 0 24 24" fill={isActive ? "#FFFFFF" : "currentColor"} className={className || "h-full w-full"} style={{ ...style, filter: isActive ? 'drop-shadow(0px 2px 5px rgba(0,0,0,0.7))' : 'grayscale(100%)', transition: 'all 0.3s ease' }} {...props}>
+      <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  );
+};
 
 export const TikTokIcon = ({ 'data-active': active, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
   // Official TikTok brand icon path (Simple Icons / official brand assets, 24x24)
@@ -198,13 +201,135 @@ export const GiphyIcon = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export const GoogleNewsIcon = (props: React.SVGProps<SVGSVGElement>) => (
-  <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
-    <path d="M20 2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM8 20H4v-4h4v4zm0-6H4v-4h4v4zm0-6H4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4zm6 12h-4v-4h4v4zm0-6h-4v-4h4v4zm0-6h-4V4h4v4z" />
-  </svg>
-);
+
 export const RedditIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg viewBox="0 0 24 24" fill="currentColor" {...props}>
     <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.056 1.597.04.21.06.427.06.646 0 2.734-3.516 4.952-7.84 4.952-4.323 0-7.84-2.218-7.84-4.952 0-.22.021-.435.059-.646A1.757 1.757 0 0 1 3.43 12.00a1.754 1.754 0 0 1 1.754-1.754c.478 0 .9.182 1.208.491 1.192-.855 2.842-1.415 4.67-1.488l.862-4.048c.03-.141.143-.244.283-.244l3.1.655c.099-.51.542-.892 1.074-.892zm-9.076 7.256c-.721 0-1.302.583-1.302 1.302 0 .721.581 1.302 1.302 1.302s1.302-.581 1.302-1.302-.581-1.302-1.302-1.302zm7.98 0c-.721 0-1.302.583-1.302 1.302 0 .721.581 1.302 1.302 1.302s1.302-.581 1.302-1.302-.581-1.302-1.302-1.302zm-3.96 3.73a.311.311 0 0 1 .444 0c.05.05.17.156.315.245.238.148.557.249.892.249.334 0 .653-.1.892-.249.145-.089.265-.194.315-.245a.311.311 0 1 1 .444.444c-.05.05-.213.217-.434.351-.311.19-.734.32-.1.218.32 0 .741-.131 1.052-.321.221-.134.383-.301.434-.351a.31.31 0 0 1 0-.444z" />
   </svg>
 );
+
+export const GoogleIcon = ({ 'data-active': active, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false";
+  return (
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" {...props}>
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill={isActive ? "#4285F4" : "currentColor"}/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-1 .67-2.28 1.07-3.71 1.07-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill={isActive ? "#34A853" : "currentColor"}/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill={isActive ? "#FBBC05" : "currentColor"}/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill={isActive ? "#EA4335" : "currentColor"}/>
+    </svg>
+  );
+};
+
+export const GoogleNewsIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg viewBox="1200 1800 4200 3300" fill="none" className={className || "h-full w-full"} style={{ ...style, transition: 'all 0.3s ease' }} {...props}>
+      <path fill={isActive ? "#4285F4" : "currentColor"} style={{ opacity: isActive ? 1 : 0.6 }} d="M2223.9 3238.2v335.7h481.7c-39.8 204.5-219.6 352.8-481.7 352.8-292.4 0-529.5-247.3-529.5-539.7s237.1-539.7 529.5-539.7c131.7 0 249.6 45.3 342.7 134v.2l254.9-254.9c-154.8-144.3-356.7-232.8-597.7-232.8-493.3 0-893.3 399.9-893.3 893.3s399.9 893.3 893.3 893.3c515.9 0 855.3-362.7 855.3-873 0-58.5-5.4-114.9-14.1-169.2h-841.1z"/>
+      <path fill={isActive ? "#EA4335" : "currentColor"} style={{ opacity: isActive ? 1 : 0.6 }} d="M4903.8 2866H3489.4v-372.2h1414.4c41.1 0 74.4 33.3 74.4 74.4v223.3c0 41.1-33.3 74.5-74.4 74.5zM4903.8 4280.3H3489.4v-372.2h1414.4c41.1 0 74.4 33.3 74.4 74.4v223.3c0 41.2-33.3 74.5-74.4 74.5zM5127.1 3573.1H3489.4v-372.2h1637.7c41.1 0 74.4 33.3 74.4 74.4v223.3c0 41.2-33.3 74.5-74.4 74.5z"/>
+    </svg>
+  );
+};
+
+export const AnalyticsIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" className={className || "h-full w-full"} style={{ ...style, transition: 'all 0.3s ease' }} {...props}>
+      <path fill={isActive ? "#F9AB00" : "currentColor"} style={{ opacity: isActive ? 1 : 0.6 }} d="M45.3,41.6c0,3.2-2.6,5.9-5.8,5.9c-0.2,0-0.5,0-0.7,0c-3-0.4-5.2-3.1-5.1-6.1V6.6c-0.1-3,2.1-5.6,5.1-6.1 c3.2-0.4,6.1,1.9,6.5,5.1c0,0.2,0,0.5,0,0.7V41.6z"/>
+      <path fill={isActive ? "#E37400" : "currentColor"} style={{ opacity: isActive ? 1 : 0.6 }} d="M8.6,35.9c3.2,0,5.8,2.6,5.8,5.8c0,3.2-2.6,5.8-5.8,5.8s-5.8-2.6-5.8-5.8c0,0,0,0,0,0 C2.7,38.5,5.4,35.9,8.6,35.9z M23.9,18.2c-3.2,0.2-5.7,2.9-5.7,6.1V40c0,4.2,1.9,6.8,4.6,7.4c3.2,0.6,6.2-1.4,6.9-4.6 c0.1-0.4,0.1-0.8,0.1-1.2V24.1c0-3.2-2.6-5.9-5.8-5.9C24,18.2,23.9,18.2,23.9,18.2z"/>
+   </svg>
+  );
+};
+
+export const AdsIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg viewBox="0 -13 256 256" version="1.1" preserveAspectRatio="xMidYMid" xmlns="http://www.w3.org/2000/svg" className={className || "h-full w-full"} style={{ ...style, transition: 'all 0.3s ease' }} {...props}>
+      <g style={{ opacity: isActive ? 1 : 0.6 }}>
+        <path d="M5.888,166.405103 L90.88,20.9 C101.676138,27.2558621 156.115862,57.3844138 164.908138,63.1135172 L79.9161379,208.627448 C70.6206897,220.906621 -5.888,185.040138 5.888,166.396276 L5.888,166.405103 Z" fill={isActive ? "#FBBC04" : "currentColor"} />
+        <path d="M250.084224,166.401789 L165.092224,20.9055131 C153.210293,1.13172 127.619121,-6.05393517 106.600638,5.62496138 C85.582155,17.3038579 79.182155,42.4624786 91.0640861,63.1190303 L176.056086,208.632961 C187.938017,228.397927 213.52919,235.583582 234.547672,223.904686 C254.648086,212.225789 261.966155,186.175582 250.084224,166.419444 L250.084224,166.401789 Z" fill={isActive ? "#4285F4" : "currentColor"} />
+        <ellipse fill={isActive ? "#34A853" : "currentColor"} cx="42.6637241" cy="187.924414" rx="42.6637241" ry="41.6044138" />
+      </g>
+    </svg>
+  );
+};
+
+export const MapsIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg viewBox="550 0 900 1300" className={className || "h-full w-full"} style={{ ...style, transition: 'all 0.3s ease' }} {...props}>
+      <g style={{ opacity: isActive ? 1 : 0.6 }}>
+        <path d="M831 909.9c37.9 47.4 76.5 107 96.7 143 24.6 46.8 34.8 78.4 53.1 135 10.7 31 20.9 40.4 42.3 40.4 23.4 0 34.1-15.8 42.3-40.4 17.1-53.1 30.3-93.5 51.2-132 80.6-152 212-260 286-408 0 0 48.7-90.4 48.7-217 0-118-48-200-48-200l-572 680z" fill={isActive ? "#34a853" : "currentColor"}/>
+        <path d="M637 631.9c46.1 105 134 197 194 278l318-377s-44.9 58.8-126 58.8c-90.4 0-164-72-164-163 0-62.6 37.3-106 37.3-106-234 34.8-221 91.5-260 309z" fill={isActive ? "#fbbc04" : "currentColor"}/>
+        <path d="M1153 19.6c106 34.1 196 106 250 211l-254 303s37.3-43.6 37.3-106c0-92.9-78.4-163-163-163-80.3 0-126 58.1-126 58.1 19.5-44.4 221-288 256-303z" fill={isActive ? "#4285f4" : "currentColor"}/>
+        <path d="M695 152.9c63.2-75.2 174-153 327-153 73.9 0 130 19.6 130 19.6l-255 303c-17.2-9.33-185-140-202-170z" fill={isActive ? "#1a73e8" : "currentColor"}/>
+        <path d="M637 631.9s-41.7-82.8-41.7-202c0-113 44.2-212 100-276l202 170-260 308z" fill={isActive ? "#ea4335" : "currentColor"}/>
+      </g>
+    </svg>
+  );
+};  
+
+export const PeopleIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg viewBox="0 0 500 500" className={className || "h-full w-full"} style={{ ...style, transition: 'all 0.3s ease' }} {...props}>
+      <g style={{ opacity: isActive ? 1 : 0.6 }}>
+        <path fill={isActive ? "#86a9ff" : "currentColor"} d="M199 244c-89 0-161 71-161 160v67c0 16 13 29 29 29h77l77-256z"/>
+        <path fill={isActive ? "#578cff" : "currentColor"} d="M462 349c0-58-48-105-106-105h-77v256h77c58 0 106-47 106-106"/>
+        <path fill={isActive ? "#0057cc" : "currentColor"} d="M115 349c0-58 48-105 106-105h58c58 0 106 47 106 105v45c0 59-48 106-106 106H144c-16 0-29-13-29-29z"/>
+        <circle cx="250" cy="99.4" r="99.4" fill={isActive ? "#0057cc" : "currentColor"}/>
+      </g>
+    </svg>
+  );
+};  
+
+export const MetaIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  
+  return (
+    <svg 
+      viewBox="0 0 290 191" 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill={isActive ? "#FFFFFF" : "currentColor"} 
+      className={className || "h-full"}
+      style={{
+        ...style,
+        backgroundColor: isActive ? '#0081FB' : 'transparent',
+        opacity: isActive ? 1 : 0.6,
+        padding: '0.2rem',
+        borderRadius: 'inherit',
+        width: '48px',
+        height: '48px', 
+      }}
+      {...props}
+    >
+      <path d="m31.06,125.96c0,10.98 2.41,19.41 5.56,24.51 4.13,6.68 10.29,9.51 16.57,9.51 8.1,0 15.51-2.01 29.79-21.76 11.44-15.83 24.92-38.05 33.99-51.98l15.36-23.6c10.67-16.39 23.02-34.61 37.18-46.96 11.56-10.08 24.03-15.68 36.58-15.68 21.07,0 41.14,12.21 56.5,35.11 16.81,25.08 24.97,56.67 24.97,89.27 0,19.38-3.82,33.62-10.32,44.87-6.28,10.88-18.52,21.75-39.11,21.75l0-31.02c17.63,0 22.03-16.2 22.03-34.74 0-26.42-6.16-55.74-19.73-76.69-9.63-14.86-22.11-23.94-35.84-23.94-14.85,0-26.8,11.2-40.23,31.17-7.14,10.61-14.47,23.54-22.7,38.13l-9.06,16.05c-18.2,32.27-22.81,39.62-31.91,51.75-15.95,21.24-29.57,29.29-47.5,29.29-21.27,0-34.72-9.21-43.05-23.09-6.8-11.31-10.14-26.15-10.14-43.06z"/>
+      <path d="m24.49,37.3c14.24-21.95 34.79-37.3 58.36-37.3 13.65,0 27.22,4.04 41.39,15.61 15.5,12.65 32.02,33.48 52.63,67.81l7.39,12.32c17.84,29.72 27.99,45.01 33.93,52.22 7.64,9.26 12.99,12.02 19.94,12.02 17.63,0 22.03-16.2 22.03-34.74l27.4-.86c0,19.38-3.82,33.62-10.32,44.87-6.28,10.88-18.52,21.75-39.11,21.75-12.8,0-24.14-2.78-36.68-14.61-9.64-9.08-20.91-25.21-29.58-39.71l-25.79-43.08c-12.94-21.62-24.81-37.74-31.68-45.04-7.39-7.85-16.89-17.33-32.05-17.33-12.27,0-22.69,8.61-31.41,21.78z"/>
+      <path d="m82.35,31.23c-12.27,0-22.69,8.61-31.41,21.78-12.33,18.61-19.88,46.33-19.88,72.95 0,10.98 2.41,19.41 5.56,24.51l-26.48,17.44c-6.8-11.31-10.14-26.15-10.14-43.06 0-30.75 8.44-62.8 24.49-87.55 14.24-21.95 34.79-37.3 58.36-37.3z"/>
+    </svg>
+  );
+};
+
+export const NewsapiIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  
+  return (
+    <svg 
+      viewBox="0 0 64 64" 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill={isActive ? "rgba(94, 177, 255, 1)" : "currentColor"} 
+      style={{
+        ...style,
+        backgroundColor: isActive ? 'transparent' : 'transparent',
+        opacity: isActive ? 1 : 0.2,
+        width: '48px',
+        height: '48px',   
+      }}
+      {...props}
+    ><g transform="translate(0.000000,64.000000) scale(0.100000,-0.100000)" stroke="none">
+      <path d="M130 490 c0 -20 5 -30 15 -30 13 0 15 -22 15 -141 0 -132 -1 -141 -20 -146 -13 -3 -20 -14 -20 -29 0 -23 2 -24 80 -24 79 0 80 0 80 26 0 17 -6 28 -20 31 -18 5 -20 14 -20 107 l0 101 82 -132 81 -133 39 0 38 0 0 169 c0 160 1 169 20 174 14 3 20 14 20 31 0 26 -1 26 -80 26 -79 0 -80 0 -80 -26 0 -17 6 -28 20 -31 18 -5 20 -14 20 -101 0 -52 -3 -93 -6 -89 -3 3 -38 59 -78 124 l-73 118 -56 3 -57 3 0 -31z"/>
+    </g>
+    </svg>
+  );
+};  
+
+  

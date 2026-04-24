@@ -1,0 +1,549 @@
+/* Tema Premium Ultramoderno - Portal Landing */
+
+.portal-landing-root {
+    --bg-dark: #06090F;
+    --bg-card: rgba(21, 26, 37, 0.65);
+    --text-light: #f8fafc;
+    --text-muted: #94a3b8;
+    --brand-primary: #6FA8FF;
+    --brand-secondary: #A27BFF;
+    --brand-vip: #FFD700;
+    --brand-vip-glow: rgba(255, 215, 0, 0.3);
+    --border-color: rgba(255, 255, 255, 0.1);
+
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow-x: hidden;
+    position: relative;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Efeitos Visuais de Fundo (Luzes de Neon Suaves) */
+.portal-landing-root::before {
+    content: '';
+    position: absolute;
+    top: -10%; left: 50%;
+    transform: translateX(-50%);
+    width: 80vw; height: 80vh;
+    background: radial-gradient(circle, rgba(111, 168, 255, 0.08) 0%, rgba(162, 123, 255, 0.05) 30%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.portal-landing-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1.5rem;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+}
+
+.portal-landing-container {
+    max-width: 800px;
+    width: 100%;
+    text-align: center;
+}
+
+/* Cabeçalho Baseado no Print */
+.portal-landing-root .brand-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    animation: fadeInDown 1s ease-out;
+}
+
+.portal-landing-root .brand-header svg {
+    width: 64px;
+    height: 64px;
+    filter: drop-shadow(0 0 15px rgba(111, 168, 255, 0.4));
+}
+
+.portal-landing-root .brand-header h1 {
+    font-size: 3rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(90deg, var(--brand-primary) 0%, var(--brand-secondary) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+    line-height: 1.1;
+}
+
+/* Layout Lado a Lado Desktop */
+.portal-landing-root .hero-and-form-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3rem;
+    width: 100%;
+}
+
+/* Seção de Textos Hero */
+.portal-landing-root .hero-section {
+    margin-bottom: 2rem;
+    animation: fadeIn 1.2s ease-out;
+}
+
+.portal-landing-root .pre-title {
+    display: inline-block;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #fff;
+    font-weight: 900;
+    margin: 0 auto 3rem auto;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.8rem 2.5rem;
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.portal-landing-root .main-title {
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1.4;
+    margin-bottom: 1.2rem;
+    color: var(--text-muted);
+}
+
+.portal-landing-root .main-title strong {
+    color: var(--text-light);
+    font-weight: 800;
+}
+
+.portal-landing-root .highlight-features {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+    margin-bottom: 2rem;
+    margin-top: 3rem;
+}
+
+.portal-landing-root .feature-list-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-light);
+    width: max-content;
+}
+
+.portal-landing-root .cta-text {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--brand-vip);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.4);
+}
+
+/* Card de Formulário (Pré-Cadastro) Premium - Glassmorphism */
+.portal-landing-root .card-wrapper {
+    position: relative;
+    max-width: 550px;
+    margin: 0 auto 5rem auto;
+    animation: fadeInUp 1s ease-out 0.3s backwards;
+}
+
+.portal-landing-root .card-wrapper::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, var(--brand-primary), transparent, var(--brand-secondary));
+    z-index: -1;
+    opacity: 0.5;
+    filter: blur(8px);
+}
+
+.portal-landing-root .card {
+    background-color: var(--bg-card);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 1.8rem 1.8rem;
+    text-align: left;
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6);
+}
+
+.portal-landing-root .card-header {
+    text-align: center;
+    margin-bottom: 1.2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.portal-landing-root .card-header h3 {
+    font-size: 1.2rem;
+    color: var(--text-light);
+    font-weight: 800;
+    line-height: 1.3;
+}
+
+.portal-landing-root .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+}
+
+.portal-landing-root input[type="text"],
+.portal-landing-root input[type="email"],
+.portal-landing-root input[type="tel"] {
+    width: 100%;
+    padding: 0.8rem 1rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background-color: rgba(0,0,0,0.4);
+    color: var(--text-light);
+    outline: none;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.portal-landing-root input::placeholder {
+    color: #64748b;
+}
+
+.portal-landing-root input:focus {
+    border-color: var(--brand-primary);
+    background-color: rgba(0,0,0,0.6);
+    box-shadow: 0 0 0 4px rgba(111, 168, 255, 0.15), inset 0 0 10px rgba(0,0,0,0.5);
+}
+
+/* Checkboxes Customizados */
+.portal-landing-root .channel-selectors {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0.2rem 0 0.8rem 0;
+}
+
+.portal-landing-root .channel-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(255,255,255,0.03);
+    padding: 0.6rem 0.8rem;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.portal-landing-root .channel-option:hover {
+    border-color: rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.06);
+    transform: translateX(5px);
+}
+
+.portal-landing-root .channel-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-light);
+    cursor: pointer;
+    width: 100%;
+}
+
+.portal-landing-root .channel-label svg {
+    width: 18px;
+    height: 18px;
+}
+
+.portal-landing-root .channel-option input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--brand-primary);
+    border-radius: 4px;
+}
+
+.portal-landing-root button.btn-primary {
+    width: 100%;
+    padding: 0.9rem;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+    color: rgb(0, 0, 0);
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 10px 15px rgba(111, 168, 255, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+.portal-landing-root button.btn-primary::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%; width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transform: skewX(-25deg);
+    transition: 0.5s;
+}
+
+.portal-landing-root button.btn-primary:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 30px rgba(111, 168, 255, 0.4);
+}
+
+.portal-landing-root button.btn-primary:hover::after {
+    left: 150%;
+}
+
+.portal-landing-root button.btn-primary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+/* Seção VIP */
+.portal-landing-root .vip-section {
+    text-align: center;
+    padding: 4rem 0;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    width: 100%;
+    max-width: 900px;
+}
+
+.portal-landing-root .vip-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--brand-vip);
+    border: 1px solid var(--brand-vip);
+    padding: 0.5rem 1.2rem;
+    border-radius: 30px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 2rem;
+    background: rgba(255, 215, 0, 0.05);
+}
+
+.portal-landing-root .vip-section h2 {
+    font-size: 3.2rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    letter-spacing: -1.5px;
+}
+
+.portal-landing-root .vip-section h2 span { color: var(--brand-vip); text-shadow: 0 0 30px var(--brand-vip-glow); }
+
+.portal-landing-root .vip-price {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: var(--text-light);
+    margin-bottom: 2.5rem;
+}
+
+.portal-landing-root button.btn-vip {
+    background-color: var(--brand-vip);
+    color: #000;
+    border: none;
+    padding: 1.2rem 4rem;
+    font-size: 1.3rem;
+    font-weight: 900;
+    border-radius: 50px;
+    cursor: pointer;
+    box-shadow: 0 0 25px var(--brand-vip-glow);
+    transition: all 0.3s ease;
+}
+
+.portal-landing-root button.btn-vip:hover {
+    transform: scale(1.05) translateY(-2px);
+    box-shadow: 0 10px 40px rgba(255, 215, 0, 0.5);
+}
+
+/* Rodapé Oficial */
+.portal-landing-root .site-footer {
+    background-color: #04060A;
+    border-top: 1px solid rgba(255,255,255,0.03);
+    padding: 3rem 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    position: relative;
+    z-index: 2;
+}
+
+.portal-landing-root .footer-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    flex-wrap: wrap;
+    gap: 2rem;
+}
+
+.portal-landing-root .social-links {
+    display: flex;
+    gap: 1.2rem;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.portal-landing-root .social-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.03);
+    color: var(--text-light);
+    text-decoration: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.portal-landing-root .social-icon:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: var(--brand-primary);
+    transform: translateY(-4px) scale(1.1);
+    color: var(--brand-primary);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+}
+
+.portal-landing-root .social-icon svg {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+}
+
+.portal-landing-root .btn-suporte {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.15);
+    color: var(--text-muted);
+    padding: 0.8rem 1.5rem;
+    border-radius: 30px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.portal-landing-root .btn-suporte:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-light);
+    border-color: var(--text-light);
+}
+
+.portal-landing-root .footer-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    padding-top: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.portal-landing-root .footer-bottom a {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+    font-weight: 500;
+}
+
+.portal-landing-root .footer-bottom a:hover { color: var(--brand-primary); }
+
+/* Animações Keyframes */
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Responsividade Extrema */
+@media (min-width: 992px) {
+    .portal-landing-root .hero-and-form-wrapper {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 4rem;
+        text-align: left;
+    }
+    
+    .portal-landing-root .hero-section {
+        flex: 1;
+        margin-bottom: 0;
+        margin-top: 2rem; /* Alinha melhor com o centro do form */
+    }
+
+    .portal-landing-root .card-wrapper {
+        flex: 1;
+        max-width: 450px; /* Reduz ligeiramente a largura do card no lado a lado */
+        margin-bottom: 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .portal-landing-root .brand-header {
+        flex-direction: column;
+        gap: 0.6rem;
+        margin-bottom: 1rem;
+    }
+    .portal-landing-root .brand-header { flex-direction: row !important; flex-wrap: nowrap; gap: 0.8rem; margin-bottom: 1.5rem; }
+    .portal-landing-root .brand-header h1 { font-size: 1.8rem; white-space: nowrap; }
+    .portal-landing-root .brand-header svg { width: 48px; height: 48px; flex-shrink: 0; }
+    .portal-landing-root .pre-title { font-size: 0.8rem; margin-bottom: 2rem !important; }
+    .portal-landing-root .social-links { gap: 0.5rem; justify-content: center; width: 100%; }
+    .portal-landing-root .social-icon { width: 30px; height: 30px; }
+    .portal-landing-root .social-icon svg { width: 12px; height: 12px; }
+    .portal-landing-root .footer-content { flex-direction: column; align-items: center; text-align: center; gap: 1.5rem; }
+    .portal-landing-root .footer-left { align-items: center !important; }
+    .portal-landing-root .footer-right { align-items: center !important; }
+    .portal-landing-root .main-title { font-size: 1.3rem; }
+    .portal-landing-root .feature-list-item { font-size: 1rem; width: 100%; justify-content: center; }
+    .portal-landing-root .card { padding: 1.5rem 1.2rem; border-radius: 16px; }
+    .portal-landing-root .vip-section h2 { font-size: 2.4rem; }
+    .portal-landing-root .footer-top, .portal-landing-root .footer-bottom { 
+        flex-direction: column; 
+        text-align: center; 
+        justify-content: center; 
+    }
+    .portal-landing-root .social-links { justify-content: center; width: 100%; }
+}

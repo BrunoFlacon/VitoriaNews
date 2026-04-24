@@ -1,4 +1,4 @@
-// @ts-ignore
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -13,9 +13,13 @@ const corsHeaders = {
 
 function normalizePlatform(platform: string): string {
   const value = (platform || "").toLowerCase().trim();
-  if (value === "x" || value === "twitter" || value === "x (twitter)") {
+  if (value === "x" || value === "twitter" || value === "x (twitter)" || value === "x_twitter") {
     return "twitter";
   }
+  if (value === "truth social") return "truthsocial";
+  if (value === "google news") return "googlenews";
+  if (value === "google" || value === "google analytics") return "google";
+  if (value === "youtube" || value === "yt") return "youtube";
   return value || "all";
 }
 
@@ -38,6 +42,11 @@ interface AccountMetric {
   social_account_id: string;
   platform: string;
   followers: number;
+  posts_count: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
   collected_at: string;
 }
 
@@ -63,21 +72,31 @@ serve(async (req: Request) => {
       });
     }
 
-    const token = authHeader.replace(/^Bearer\s/i, '');
+    const token = authHeader.replace(/^Bearer\s+/i, "");
     console.log(`[get-analytics] Validating token: ${token.substring(0, 10)}...`);
     
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-
-    if (authError || !user) {
-      console.error("[get-analytics] getUser failed:", authError?.message || "User not found");
+    let userId: string | undefined;
+    
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+      if (authError || !user) throw new Error("Invalid Auth");
+      userId = user.id;
+    } catch {
+      userId = undefined;
+    }
+    
+    if (!userId) {
+      console.error("[get-analytics] getUser failed: User not found");
       return new Response(JSON.stringify({ 
         error: "Unauthorized", 
-        detail: authError?.message || "Invalid or expired session" 
+        detail: "Invalid or expired session" 
       }), { 
         status: 401, 
         headers: { ...corsHeaders, "Content-Type": "application/json" } 
       });
     }
+    
+    const user = { id: userId };
 
     console.log(`[get-analytics] User authenticated: ${user.id}`);
 
@@ -85,6 +104,7 @@ serve(async (req: Request) => {
     let requestedPeriod = "7d";
     let requestedPlatform = "all";
     let requestedType = "all";
+    let requestedSource = "dashboard"; // 'dashboard' or 'api'
 
     if (req.method === "POST") {
       try {
@@ -92,25 +112,28 @@ serve(async (req: Request) => {
         requestedPeriod = body.period || "7d";
         requestedPlatform = body.platform || "all";
         requestedType = body.type || "all";
+        requestedSource = body.source || "dashboard";
       } catch (e) {
         console.warn("[get-analytics] Could not parse JSON body, falling back to query params");
         const url = new URL(req.url);
         requestedPeriod = url.searchParams.get("period") || "7d";
         requestedPlatform = url.searchParams.get("platform") || "all";
         requestedType = url.searchParams.get("type") || "all";
+        requestedSource = url.searchParams.get("source") || "dashboard";
       }
     } else {
       const url = new URL(req.url);
       requestedPeriod = url.searchParams.get("period") || "7d";
       requestedPlatform = url.searchParams.get("platform") || "all";
       requestedType = url.searchParams.get("type") || "all";
+      requestedSource = url.searchParams.get("source") || "dashboard";
     }
 
     const now = new Date();
     let days = 7;
     let startDate: Date;
     switch (requestedPeriod) {
-      case "24h": startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); days = 1; break;
+      case "24h": startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000); days = 24; break; // Use 24 points for hours
       case "3d": startDate = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000); days = 3; break;
       case "7d": startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); days = 7; break;
       case "15d": startDate = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000); days = 15; break;
@@ -118,7 +141,7 @@ serve(async (req: Request) => {
       case "60d": startDate = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000); days = 60; break;
       case "90d": startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); days = 90; break;
       case "120d": startDate = new Date(now.getTime() - 120 * 24 * 60 * 60 * 1000); days = 120; break;
-      case "365d": startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000); days = 365; break;
+      case "365d": startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000); days = 12; break; // Use 12 months
       default: startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); days = 7;
     }
 
@@ -140,11 +163,11 @@ serve(async (req: Request) => {
       { data: messagingChannelsResp }
     ] = await Promise.all([
       supabase.from("scheduled_posts").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-      supabase.from("post_metrics").select("*").eq("user_id", user.id).gte("collected_at", startDate.toISOString()),
+      supabase.from("post_metrics").select("*").eq("user_id", user.id).or(`published_at.gte.${startDate.toISOString()},collected_at.gte.${startDate.toISOString()}`),
       supabase.from("account_metrics").select("*").eq("user_id", user.id).gte("collected_at", startDate.toISOString()).order("collected_at", { ascending: true }),
-      supabase.from("social_connections").select("id, platform, username, page_name, followers_count, profile_image_url, is_connected, platform_user_id, page_id").eq("user_id", user.id).eq("is_connected", true),
-      supabase.from("social_accounts").select("id, platform, platform_user_id, username, profile_picture, followers, posts_count, views, likes, shares, comments, metadata, is_connected, updated_at").eq("user_id", user.id),
-      supabase.from("platform_hourly_performance").select("*").order("avg_likes", { ascending: false }).limit(10),
+      supabase.from("social_connections").select("id, platform, username, page_name, followers_count, profile_image_url, is_connected, platform_user_id, page_id").eq("user_id", user.id),
+      supabase.from("social_accounts").select("id, platform, platform_user_id, username, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, metadata, updated_at").eq("user_id", user.id),
+      supabase.from("platform_hourly_performance").select("*").order("avg_likes", { ascending: false }).limit(50),
       supabase.from("messages").select("id, status, platform, content, recipient_name, recipient_phone, created_at, sent_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: false }),
       supabase.from("meta_ads_campaigns").select("*").eq("user_id", user.id).gte("created_at", startDate.toISOString()),
       supabase.from("google_analytics_data").select("*").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
@@ -173,20 +196,32 @@ serve(async (req: Request) => {
     const accountMetrics = (accMetricsData as AccountMetric[]) || [];
     const socialAccounts = (socialAccountsData as any[]) || [];
 
+    const filteredSocialAccounts = requestedPlatform === "all"
+      ? socialAccounts
+      : socialAccounts.filter((a: any) => normalizePlatform(a.platform) === normalizePlatform(requestedPlatform));
+
     // Calculate total posts including external counts
-    const externalPostsCount = socialAccounts.reduce((sum, acc) => sum + (acc.posts_count || 0), 0);
+    const externalPostsCount = filteredSocialAccounts.reduce((sum, acc) => sum + (acc.posts_count || 0), 0);
     const totalPosts = platformPosts.length + externalPostsCount;
     const publishedPosts = platformPosts.filter((p: any) => p.status === "published").length + externalPostsCount;
     const scheduledPosts = platformPosts.filter((p: any) => p.status === "scheduled").length;
     const failedPosts = platformPosts.filter((p: any) => p.status === "failed").length;
     const draftPosts = platformPosts.filter((p: any) => p.status === "draft").length;
+    // platform-aware filtering: since DB may store 'x' or 'twitter' for same platform
+    const normalizedRequestedPlatform = normalizePlatform(requestedPlatform);
     const realMetrics = (realMetricsData as PostMetric[]) || [];
+
     const filteredMetrics = requestedPlatform === "all"
       ? realMetrics
-      : realMetrics.filter(m => normalizePlatform(m.platform) === normalizePlatform(requestedPlatform));
+      : realMetrics.filter(m => normalizePlatform(m.platform) === normalizedRequestedPlatform);
 
-    // AGGREGATE EXTERNAL ANALYTICS
-    const adsStats = (adsData || []).reduce((acc: any, current: any) => {
+    // AGGREGATE ADS, YOUTUBE, GOOGLE ANALYTICS (respect platform filter)
+    const normalizedReqPlatform = normalizedRequestedPlatform;
+    const filteredAdsData = (requestedPlatform === "all" || normalizedReqPlatform === "google" || normalizedReqPlatform === "meta" || normalizedReqPlatform === "facebook")
+      ? (adsData || [])
+      : [];
+    
+    const adsStats = filteredAdsData.reduce((acc: any, current: any) => {
       acc.impressions += Number(current.impressions || 0);
       acc.reach += Number(current.reach || 0);
       acc.clicks += Number(current.clicks || 0);
@@ -194,25 +229,31 @@ serve(async (req: Request) => {
       return acc;
     }, { impressions: 0, reach: 0, clicks: 0, spend: 0 });
 
-    const youtubeStats = (ytData || []).reduce((acc: any, current: any) => {
+    const filteredYtData = (requestedPlatform === "all" || normalizedReqPlatform === "youtube") ? (ytData || []) : [];
+    const youtubeStats = filteredYtData.reduce((acc: any, current: any) => {
       acc.views += Number(current.views || 0);
       acc.likes += Number(current.likes || 0);
       acc.comments += Number(current.comments || 0);
+      acc.subscribers_gained = (acc.subscribers_gained || 0) + Number(current.subscribers_gained || 0);
+      acc.watch_time_minutes = (acc.watch_time_minutes || 0) + Number(current.estimated_minutes_watched || 0);
       return acc;
-    }, { views: 0, likes: 0, comments: 0 });
+    }, { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 });
 
-    const gaStats = (gaData || []).reduce((acc: any, current: any) => {
-      if (current.metric_name === 'activeUsers' || current.metric_name === 'sessions') {
+    const filteredGaData = (requestedPlatform === "all" || normalizedReqPlatform === "google") ? (gaData || []) : [];
+    const gaStats = filteredGaData.reduce((acc: any, current: any) => {
+      if (current.metric_name === 'activeUsers' || current.metric_name === 'sessions' || current.metric_name === 'screenPageViews') {
         acc.views += Number(current.metric_value || 0);
       }
+      acc.sessions = (acc.sessions || 0) + (current.metric_name === 'sessions' ? Number(current.metric_value || 0) : 0);
+      acc.users = (acc.users || 0) + (current.metric_name === 'activeUsers' ? Number(current.metric_value || 0) : 0);
       return acc;
-    }, { views: 0 });
+    }, { views: 0, sessions: 0, users: 0 });
 
     // TOTALS COMPUTATION (Including external data)
-    const globalFollowers = socialAccounts.reduce((s: number, a: any) => s + (Number(a.followers || 0)), 0);
-    const globalViews = socialAccounts.reduce((s: number, a: any) => s + (a.views || 0), 0) + adsStats.impressions + youtubeStats.views + gaStats.views;
-    const globalLikes = socialAccounts.reduce((s: number, a: any) => s + (a.likes || 0), 0) + youtubeStats.likes;
-    const globalShares = socialAccounts.reduce((s: number, a: any) => s + (a.shares || 0), 0);
+    const globalFollowers = filteredSocialAccounts.reduce((s: number, a: any) => s + (Number(a.followers || a.followers_count || 0)), 0);
+    const globalViews = filteredSocialAccounts.reduce((s: number, a: any) => s + (a.views || 0), 0) + adsStats.impressions + youtubeStats.views + gaStats.views;
+    const globalLikes = filteredSocialAccounts.reduce((s: number, a: any) => s + (a.likes || 0), 0) + youtubeStats.likes;
+    const globalShares = filteredSocialAccounts.reduce((s: number, a: any) => s + (a.shares || 0), 0);
 
     let engagement;
     let growthValue = "0";
@@ -250,14 +291,19 @@ serve(async (req: Request) => {
     };
 
     const isHourly = requestedPeriod === "24h";
+    const isYearly = requestedPeriod === "365d";
     const chartData = [];
 
     for (let i = days - 1; i >= 0; i--) {
       const bucketStart = new Date(now);
       const bucketEnd = new Date(now);
+      
       if (isHourly) {
-        bucketStart.setHours(bucketStart.getHours() - i - 1);
-        bucketEnd.setHours(bucketEnd.getHours() - i);
+        bucketStart.setHours(bucketStart.getHours() - i - 1, 0, 0, 0);
+        bucketEnd.setHours(bucketEnd.getHours() - i, 0, 0, 0);
+      } else if (isYearly) {
+        bucketStart.setMonth(bucketStart.getMonth() - i - 1, 1);
+        bucketEnd.setMonth(bucketEnd.getMonth() - i, 1);
       } else {
         bucketStart.setDate(bucketStart.getDate() - i - 1);
         bucketEnd.setDate(bucketEnd.getDate() - i);
@@ -265,29 +311,46 @@ serve(async (req: Request) => {
 
       const label = isHourly
         ? bucketEnd.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-        : bucketEnd.toLocaleDateString("pt-BR", { weekday: "short", day: "numeric" });
+        : isYearly 
+          ? bucketEnd.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
+          : bucketEnd.toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
 
-      if (hasRealMetrics) {
-        const bucketMetrics = filteredMetrics.filter(m => {
-          const d = new Date(m.collected_at);
-          return d >= bucketStart && d < bucketEnd;
-        });
-        chartData.push({
-          name: label,
-          views: bucketMetrics.reduce((s, m) => s + (m.impressions || 0), 0),
-          engagement: bucketMetrics.reduce((s, m) => s + (m.likes || 0) + (m.comments || 0), 0),
-          reach: bucketMetrics.reduce((s, m) => s + (m.reach || 0), 0),
-        });
-      } else if (useAccountFallback) {
-        chartData.push({
-          name: label,
-          views: globalViews,
-          engagement: globalLikes + totalComments + globalShares,
-          reach: globalFollowers,
-        });
-      } else {
-        chartData.push({ name: label, views: 0, engagement: 0, reach: 0 });
-      }
+      const bucketPosts = filteredMetrics.filter(m => {
+        const d = m.published_at ? new Date(m.published_at) : new Date(m.collected_at);
+        return d >= bucketStart && d < bucketEnd;
+      });
+
+      const bucketAccMetrics = accountMetrics.filter(m => {
+        const d = new Date(m.collected_at);
+        return d >= bucketStart && d < bucketEnd;
+      });
+      
+      const platformFilteredAcc = requestedPlatform === "all" 
+        ? bucketAccMetrics 
+        : bucketAccMetrics.filter(m => normalizePlatform(m.platform) === normalizePlatform(requestedPlatform));
+
+      // Strategy: 
+      // 1. Use account metrics for Followers/Reach (evolution)
+      // 2. Use post metrics for Views/Engagement (activity)
+      // 3. If source is 'api', prioritize raw metrics
+      
+      const viewsCount = requestedSource === 'api' 
+        ? Math.max(bucketPosts.reduce((s, m) => s + (m.impressions || 0), 0), platformFilteredAcc.reduce((s, m) => s + (m.views || 0), 0))
+        : platformFilteredAcc.reduce((s, m) => s + (m.views || 0), 0) || bucketPosts.reduce((s, m) => s + (m.impressions || 0), 0);
+
+      const engagementCount = bucketPosts.reduce((s, m) => s + (m.likes || 0) + (m.comments || 0) + (m.shares || 0), 0) || 
+                               platformFilteredAcc.reduce((s, m) => s + (m.likes || 0) + (m.comments || 0) + (m.shares || 0), 0);
+
+      const reachCount = platformFilteredAcc.length > 0 
+        ? platformFilteredAcc.reduce((s, m) => s + (m.followers || 0), 0) / platformFilteredAcc.length // Average in bucket
+        : (bucketPosts.reduce((s, m) => s + (m.reach || 0), 0) || globalFollowers);
+
+      chartData.push({
+        name: label,
+        views: Math.round(viewsCount),
+        engagement: Math.round(engagementCount),
+        reach: Math.round(reachCount),
+      });
     }
 
     const platformBreakdown: Record<string, { posts: number; engagement: number }> = {};
@@ -323,7 +386,7 @@ serve(async (req: Request) => {
 
       const sortedKeys = Object.entries(postAgg)
         .sort((a, b) => (b[1].likes + b[1].comments + b[1].shares) - (a[1].likes + a[1].comments + a[1].shares))
-        .slice(0, 5)
+        .slice(0, 30)
         .map(e => e[0]);
 
       topContent = sortedKeys.map(key => {
@@ -343,15 +406,50 @@ serve(async (req: Request) => {
     const dayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
     let bestTimes: any[] = [];
     if (hourlyPerf && (hourlyPerf as any[]).length > 0) {
-      bestTimes = (hourlyPerf as any[]).slice(0, 7).map((h, i) => ({
+      bestTimes = (hourlyPerf as any[]).map((h, i) => ({
         day: dayNames[h.day_of_week ?? ((i + 1) % 7)],
         time: `${String(h.hour || 0).padStart(2, "0")}:00`,
+        platform: h.platform,
         engagement: Math.round(
           ((h.avg_likes || 0) + (h.avg_comments || 0) + (h.avg_shares || 0)) /
           Math.max((h.avg_impressions || 1), 1) * 100
         ),
         dayIdx: h.day_of_week ?? ((i + 1) % 7)
       })).sort((a, b) => a.dayIdx - b.dayIdx);
+    } else if (realMetrics && realMetrics.length > 0) {
+      // FALLBACK: Calculate from real post metrics
+      const hourlyStats: Record<string, { engagement: number; count: number }> = {};
+      
+      realMetrics.forEach(m => {
+        const d = new Date(m.published_at || m.collected_at);
+        const day = d.getUTCDay();
+        const hour = d.getUTCHours();
+        const key = `${day}-${hour}`;
+        
+        if (!hourlyStats[key]) hourlyStats[key] = { engagement: 0, count: 0 };
+        hourlyStats[key].engagement += (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+        hourlyStats[key].count++;
+      });
+      
+      bestTimes = Object.entries(hourlyStats).map(([key, val]) => {
+        const [day, hour] = key.split("-").map(Number);
+        return {
+          day: dayNames[day],
+          time: `${String(hour).padStart(2, "0")}:00`,
+          engagement: Math.round(val.engagement / val.count),
+          dayIdx: day
+        };
+      }).sort((a, b) => (b.engagement - a.engagement)).slice(0, 10);
+      
+      if (bestTimes.length === 0) {
+         // Final fallback if no metrics in range
+         bestTimes = dayNames.map((day, i) => ({
+           day,
+           time: "18:00",
+           engagement: 0,
+           dayIdx: i
+         }));
+      }
     } else {
       bestTimes = [];
     }
@@ -363,6 +461,7 @@ serve(async (req: Request) => {
       postsCount: number;
       growth: number;
       profileImage: string | null;
+      is_connected: boolean;
     }> = [];
 
     if (socialConnections && (socialConnections as any[]).length > 0) {
@@ -385,10 +484,11 @@ serve(async (req: Request) => {
         followerData.push({
           platform: normalized,
           username: conn.page_name || accountInfo?.username || conn.username || null,
-          currentFollowers: accountInfo?.followers || conn.followers_count || 0,
-          postsCount: accountInfo?.posts_count || accountInfo?.metadata?.posts_count || 0,
+          currentFollowers: Number(accountInfo?.followers || accountInfo?.followers_count || conn.followers_count || 0),
+          postsCount: Number(accountInfo?.posts_count || accountInfo?.metadata?.posts_count || (conn.metadata as any)?.posts_count || 0),
           growth,
           profileImage: accountInfo?.profile_picture || conn.profile_image_url || null,
+          is_connected: conn.is_connected !== false,
         });
       }
     }
@@ -408,10 +508,11 @@ serve(async (req: Request) => {
         followerData.push({
           platform: normalized,
           username: acc.username || null,
-          currentFollowers: acc.followers || 0,
-          postsCount: acc.posts_count || acc.metadata?.posts_count || 0,
+          currentFollowers: Number(acc.followers || acc.followers_count || 0),
+          postsCount: Number(acc.posts_count || acc.metadata?.posts_count || 0),
           growth,
           profileImage: acc.profile_picture || null,
+          is_connected: true, // Fallback for accounts found only in social_accounts
         });
       }
     }
@@ -445,6 +546,7 @@ serve(async (req: Request) => {
         postsCount: tgAcc.posts_count || 0,
         growth,
         profileImage: tgAcc.profile_picture || null,
+        is_connected: true,
       });
     }
 
@@ -484,11 +586,19 @@ serve(async (req: Request) => {
       : 0;
 
 
+    const lastSyncedAt = socialAccountsData && (socialAccountsData as any[]).length > 0 
+      ? (socialAccountsData as any[]).reduce((max, acc) => {
+          const syncDate = acc.last_synced_at || acc.updated_at;
+          return syncDate && (!max || syncDate > max) ? syncDate : max;
+        }, null as string | null)
+      : null;
+
     const analytics = {
       overview: {
         totalPosts, publishedPosts, scheduledPosts, failedPosts, draftPosts,
         publishRate: totalPosts > 0 ? ((publishedPosts / totalPosts) * 100).toFixed(1) : 0,
         totalFollowers: followerData.reduce((acc, curr) => acc + curr.currentFollowers, 0),
+        lastSyncedAt,
         followersGrowth: (() => {
           const totalNow = followerData.reduce((acc, curr) => acc + curr.currentFollowers, 0);
           let totalThen = 0;
@@ -498,8 +608,6 @@ serve(async (req: Request) => {
             if (account) {
               const pMetrics = accountMetrics.filter(m => m.social_account_id === account.id);
               // Enhanced: Use the first available metric in the window. 
-              // If none in window, it means it's a new account or data hasn't been collected for 30 days.
-              // We default to the current value minus what we think it was (or 0 if totally new).
               totalThen += pMetrics.length > 0 ? (pMetrics[0].followers || 0) : f.currentFollowers;
             } else {
               totalThen += f.currentFollowers;
@@ -514,8 +622,15 @@ serve(async (req: Request) => {
       engagement: { ...engagement, growth: growthValue },
       chartData,
       platformBreakdown,
+      topContent: topContent.map(c => ({
+        ...c,
+        metrics: realMetricsData?.filter((m: any) => m.external_id === c.id || m.post_id === c.id)
+      })),
       bestTimes,
-      followerData,
+      followerData: followerData.map(f => {
+        const acc = socialAccountsData?.find((a: any) => normalizePlatform(a.platform) === f.platform);
+        return { ...f, last_synced_at: acc?.last_synced_at || acc?.updated_at };
+      }),
       adsStats,
       youtubeStats,
       gaStats,
@@ -527,7 +642,7 @@ serve(async (req: Request) => {
         totalFailed: totalFailedM,
         successRate: successRateM,
         platformStats: messagePlatformStats,
-        recentMessages: messagesRaw.slice(0, 15).map(m => ({
+        recentMessages: messagesRaw.slice(0, 15).map((m: any) => ({
           id: m.id,
           platform: m.platform,
           content: m.content,

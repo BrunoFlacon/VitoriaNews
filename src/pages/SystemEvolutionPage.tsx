@@ -8,7 +8,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { PresentationMode } from "@/components/PresentationMode";
-
 interface Milestone {
   id: string;
   date: string;
@@ -19,6 +18,88 @@ interface Milestone {
   is_major_milestone: boolean;
   version: string;
 }
+
+const MilestoneItem = React.memo(({ m, showTech }: { m: Milestone, showTech: boolean }) => (
+  <motion.div 
+    initial={{ opacity: 0, x: -10 }}
+    whileInView={{ opacity: 1, x: 0 }}
+    viewport={{ once: true, margin: "-50px" }}
+    className="relative pl-12 group"
+  >
+    {/* Ponto na linha */}
+    <div className={`absolute -left-[9px] top-4 w-4 h-4 rounded-full border-4 border-[#020617] transition-all duration-500 z-10 ${m.is_major_milestone ? 'bg-theme shadow-[0_0_15px_var(--color-primary)] scale-125' : 'bg-slate-700'}`} />
+    
+    {/* Data e Versão (Destaque Interativo) */}
+    <div className="flex flex-wrap items-center gap-3 mb-4">
+       <div className="flex bg-[#0A0F1C]/80 border border-theme/20 rounded-lg overflow-hidden shadow-lg shadow-theme/5 hover:border-theme/50 transition-colors cursor-default">
+         <div className="bg-theme/20 px-3 py-1.5 flex items-center justify-center border-r border-theme/20">
+           <span className="text-theme font-black text-xs md:text-sm uppercase tracking-widest">{new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
+         </div>
+         <div className="px-3 py-1.5 flex items-center bg-black/40">
+           <span className="text-slate-400 font-mono text-xs">{new Date(m.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+         </div>
+         <div className="px-3 py-1.5 flex items-center bg-white/5 border-l border-theme/20">
+           <span className="text-slate-300 font-mono text-[10px] font-bold">{new Date(m.date).getFullYear()}</span>
+         </div>
+       </div>
+       
+       <span className="text-[10px] font-mono font-black text-theme bg-theme/10 border border-theme/20 px-2.5 py-1.5 rounded-md">RELEASE v{m.version}</span>
+       {m.is_major_milestone && (
+         <span className="bg-gradient-to-r from-theme to-green-600 text-[9px] font-black px-3 py-1.5 rounded-md text-white shadow-[0_0_10px_rgba(34,197,94,0.3)] tracking-widest uppercase">Major Release</span>
+       )}
+    </div>
+
+    {/* Card de Conteúdo Principal */}
+    <div className="bg-[#0A0F1C]/40 backdrop-blur-md border border-white/5 p-6 md:p-8 rounded-2xl hover:border-theme/30 transition-all duration-500 group-hover:bg-[#0A0F1C]/80 group-hover:shadow-[0_10px_40px_-20px_rgba(var(--theme),0.3)] relative overflow-hidden">
+       {/* Efeito de brilho no hover */}
+       <div className="absolute inset-0 bg-gradient-to-br from-theme/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+       
+       <div className="relative z-10">
+         <div className="flex items-center gap-3 mb-3">
+           <h3 className="text-xl md:text-2xl font-black text-white tracking-tighter uppercase">{m.title}</h3>
+           <div className="bg-white/5 border border-white/10 px-2 py-1 rounded text-[9px] font-bold text-slate-400 tracking-widest uppercase">{m.phase}</div>
+         </div>
+         
+         <p className="text-slate-300 leading-relaxed text-base md:text-lg mb-2">{m.description}</p>
+         
+         {/* Tech Details (Terminal Box Ocultável) */}
+         <AnimatePresence>
+           {showTech && m.tech_details && (
+             <motion.div 
+               initial={{ height: 0, opacity: 0 }}
+               animate={{ height: "auto", opacity: 1 }}
+               exit={{ height: 0, opacity: 0 }}
+               transition={{ duration: 0.2 }}
+               className="overflow-hidden mt-6"
+             >
+               <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0D1117] shadow-2xl relative group/terminal">
+                 {/* Mac OS Style Header */}
+                 <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 border-b border-white/5">
+                   <div className="flex gap-2">
+                     <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
+                     <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></div>
+                     <div className="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
+                   </div>
+                   <div className="text-[9px] text-slate-500 font-mono uppercase tracking-widest flex items-center gap-2">
+                     <Terminal className="w-3 h-3"/> system_{m.phase.toLowerCase()}.sh
+                   </div>
+                   <Code className="w-3.5 h-3.5 text-slate-600" />
+                 </div>
+                 
+                 {/* Código Fonte Formatado */}
+                 <div className="p-5 font-mono text-[11px] md:text-xs text-theme/90 overflow-x-auto custom-scrollbar">
+                   <pre className="inline-block min-w-full">
+                     <code className="leading-relaxed whitespace-pre-wrap">{m.tech_details}</code>
+                   </pre>
+                 </div>
+               </div>
+             </motion.div>
+           )}
+         </AnimatePresence>
+       </div>
+    </div>
+  </motion.div>
+));
 
 export default function SystemEvolutionPage() {
   const { profile, user } = useAuth();
@@ -185,90 +266,11 @@ export default function SystemEvolutionPage() {
 
         {/* Timeline */}
         <div className="relative border-l border-white/10 ml-4 space-y-16">
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence>
             {isLoading ? (
               <div className="animate-pulse text-theme font-mono">Lendo registros de memória...</div>
-            ) : milestones?.map((m, idx) => (
-              <motion.div 
-                key={m.id}
-                initial={{ opacity: 0, x: -20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                className="relative pl-12 group"
-              >
-                {/* Ponto na linha */}
-                <div className={`absolute -left-[9px] top-4 w-4 h-4 rounded-full border-4 border-[#020617] transition-all duration-500 z-10 ${m.is_major_milestone ? 'bg-theme shadow-[0_0_15px_var(--color-primary)] scale-125' : 'bg-slate-700'}`} />
-                
-                {/* Data e Versão (Destaque Interativo) */}
-                <div className="flex flex-wrap items-center gap-3 mb-4">
-                   <div className="flex bg-[#0A0F1C]/80 border border-theme/20 rounded-lg overflow-hidden shadow-lg shadow-theme/5 hover:border-theme/50 transition-colors cursor-default">
-                     <div className="bg-theme/20 px-3 py-1.5 flex items-center justify-center border-r border-theme/20">
-                       <span className="text-theme font-black text-xs md:text-sm uppercase tracking-widest">{new Date(m.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}</span>
-                     </div>
-                     <div className="px-3 py-1.5 flex items-center bg-black/40">
-                       <span className="text-slate-400 font-mono text-xs">{new Date(m.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
-                     </div>
-                     <div className="px-3 py-1.5 flex items-center bg-white/5 border-l border-theme/20">
-                       <span className="text-slate-300 font-mono text-[10px] font-bold">{new Date(m.date).getFullYear()}</span>
-                     </div>
-                   </div>
-                   
-                   <span className="text-[10px] font-mono font-black text-theme bg-theme/10 border border-theme/20 px-2.5 py-1.5 rounded-md">RELEASE v{m.version}</span>
-                   {m.is_major_milestone && (
-                     <span className="bg-gradient-to-r from-theme to-green-600 text-[9px] font-black px-3 py-1.5 rounded-md text-white shadow-[0_0_10px_rgba(34,197,94,0.3)] tracking-widest uppercase">Major Release</span>
-                   )}
-                </div>
-
-                {/* Card de Conteúdo Principal */}
-                <div className="bg-[#0A0F1C]/40 backdrop-blur-md border border-white/5 p-6 md:p-8 rounded-2xl hover:border-theme/30 transition-all duration-500 group-hover:bg-[#0A0F1C]/80 group-hover:shadow-[0_10px_40px_-20px_rgba(var(--theme),0.3)] relative overflow-hidden">
-                   {/* Efeito de brilho no hover */}
-                   <div className="absolute inset-0 bg-gradient-to-br from-theme/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                   
-                   <div className="relative z-10">
-                     <div className="flex items-center gap-3 mb-3">
-                       <h3 className="text-xl md:text-2xl font-black text-white tracking-tighter uppercase">{m.title}</h3>
-                       <div className="bg-white/5 border border-white/10 px-2 py-1 rounded text-[9px] font-bold text-slate-400 tracking-widest uppercase">{m.phase}</div>
-                     </div>
-                     
-                     <p className="text-slate-300 leading-relaxed text-base md:text-lg mb-2">{m.description}</p>
-                     
-                     {/* Tech Details (Terminal Box Ocultável) */}
-                     <AnimatePresence>
-                       {showTech && m.tech_details && (
-                         <motion.div 
-                           initial={{ height: 0, opacity: 0, y: -10 }}
-                           animate={{ height: "auto", opacity: 1, y: 0 }}
-                           exit={{ height: 0, opacity: 0, y: -10 }}
-                           transition={{ duration: 0.3 }}
-                           className="overflow-hidden mt-6"
-                         >
-                           <div className="rounded-xl border border-white/10 overflow-hidden bg-[#0D1117] shadow-2xl relative group/terminal">
-                             {/* Mac OS Style Header */}
-                             <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 border-b border-white/5">
-                               <div className="flex gap-2">
-                                 <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
-                                 <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></div>
-                                 <div className="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
-                               </div>
-                               <div className="text-[9px] text-slate-500 font-mono uppercase tracking-widest flex items-center gap-2">
-                                 <Terminal className="w-3 h-3"/> system_{m.phase.toLowerCase()}.sh
-                               </div>
-                               <Code className="w-3.5 h-3.5 text-slate-600" />
-                             </div>
-                             
-                             {/* Código Fonte Formatado */}
-                             <div className="p-5 font-mono text-[11px] md:text-xs text-theme/90 overflow-x-auto custom-scrollbar">
-                               <pre className="inline-block min-w-full">
-                                 <code className="leading-relaxed whitespace-pre-wrap">{m.tech_details}</code>
-                               </pre>
-                             </div>
-                           </div>
-                         </motion.div>
-                       )}
-                     </AnimatePresence>
-                   </div>
-                </div>
-              </motion.div>
+            ) : milestones?.map((m) => (
+              <MilestoneItem key={m.id} m={m} showTech={showTech} />
             ))}
           </AnimatePresence>
         </div>

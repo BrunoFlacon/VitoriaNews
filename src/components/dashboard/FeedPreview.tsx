@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useSocialStats, SocialAccountStat } from "@/hooks/useSocialStats";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface FeedPreviewProps {
   post: ScheduledPost;
@@ -183,7 +184,7 @@ export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
                   <div className="grid grid-cols-2 gap-2">
                     {post.media_ids.map((url, i) => (
                       <div key={i} className="aspect-square rounded-lg overflow-hidden bg-muted border border-border/50">
-                        <img src={url} className="w-full h-full object-cover" />
+                        <SafeImage src={url} className="w-full h-full object-cover" />
                       </div>
                     ))}
                   </div>
@@ -207,7 +208,7 @@ const InstagramPreview = ({ post, account }: { post: ScheduledPost, account?: So
         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600 p-[1.5px] overflow-hidden">
           <div className="w-full h-full rounded-full bg-white p-[1.5px] overflow-hidden">
             {account?.profile_picture ? (
-              <img src={account.profile_picture} className="w-full h-full object-cover rounded-full" />
+              <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover rounded-full" />
             ) : (
               <div className="w-full h-full rounded-full bg-zinc-200" />
             )}
@@ -221,7 +222,7 @@ const InstagramPreview = ({ post, account }: { post: ScheduledPost, account?: So
     {/* IG Media */}
     <div className="aspect-square bg-zinc-50 flex items-center justify-center overflow-hidden">
       {post.media_ids && post.media_ids[0] ? (
-        <img src={post.media_ids[0]} className="w-full h-full object-cover" />
+        <SafeImage src={post.media_ids[0]} className="w-full h-full object-cover" />
       ) : (
         <Instagram className="w-12 h-12 text-zinc-300" />
       )}
@@ -255,7 +256,7 @@ const FacebookPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     <div className="p-3">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-10 h-10 rounded-full bg-zinc-100 border border-zinc-200 overflow-hidden">
-          {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+          {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
         </div>
         <div>
           <p className="text-sm font-bold text-zinc-900">{account?.username || "Sua Página"}</p>
@@ -271,7 +272,7 @@ const FacebookPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     </div>
     <div className="aspect-[1.91/1] bg-zinc-50 overflow-hidden border-y border-zinc-100">
         {post.media_ids && post.media_ids[0] ? (
-            <img src={post.media_ids[0]} className="w-full h-full object-cover" />
+            <SafeImage src={post.media_ids[0]} className="w-full h-full object-cover" />
         ) : (
             <div className="w-full h-full flex items-center justify-center opacity-10">
                 <Facebook className="w-16 h-16" />
@@ -296,7 +297,7 @@ const XPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAcco
   <div className="flex flex-col p-4 bg-white text-zinc-900 border-zinc-200">
     <div className="flex items-start gap-3">
       <div className="w-12 h-12 rounded-full bg-zinc-100 border border-zinc-200 shrink-0 overflow-hidden">
-        {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+        {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 mb-0.5">
@@ -310,7 +311,7 @@ const XPreview = ({ post, account }: { post: ScheduledPost, account?: SocialAcco
                 <div className={cn("grid w-full", post.media_ids.length > 1 ? "grid-cols-2 aspect-[16/9]" : "grid-cols-1")}>
                     {post.media_ids.slice(0, 4).map((url, i) => (
                         <div key={i} className="relative aspect-square border-[0.5px] border-zinc-200 overflow-hidden">
-                            <img src={url} className="w-full h-full object-cover" />
+                            <SafeImage src={url} className="w-full h-full object-cover" />
                         </div>
                     ))}
                 </div>
@@ -348,7 +349,7 @@ const LinkedInPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     <div className="p-4">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-12 h-12 rounded bg-zinc-100 border border-zinc-200 shrink-0 overflow-hidden">
-          {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+          {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
         </div>
         <div className="min-w-0">
           <p className="text-sm font-bold text-zinc-900">{account?.username || "Seu Perfil Profissional"}</p>
@@ -359,7 +360,7 @@ const LinkedInPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     </div>
     {post.media_ids && post.media_ids[0] && (
       <div className="aspect-[1.91/1] bg-zinc-50 overflow-hidden border-y border-zinc-100">
-        <img src={post.media_ids[0]} className="w-full h-full object-cover" />
+        <SafeImage src={post.media_ids[0]} className="w-full h-full object-cover" />
       </div>
     )}
     <div className="p-1 px-3 flex items-center gap-1 border-t border-zinc-100">
@@ -388,7 +389,7 @@ const TelegramPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     <div className="absolute top-0 left-0 right-0 h-12 bg-[#54a9eb] border-b border-white/10 flex items-center px-4 justify-between z-10">
         <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-white/20 border border-white/10 overflow-hidden">
-              {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+              {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
             </div>
             <div>
                 <p className="text-white text-sm font-bold leading-tight">{account?.username || "Seu Canal/Grupo"}</p>
@@ -401,7 +402,7 @@ const TelegramPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     <div className="mt-12 max-w-[85%] bg-white rounded-xl overflow-hidden shadow-md self-start relative border-l-4 border-[#54a9eb]">
       {post.media_ids && post.media_ids[0] && (
         <div className="overflow-hidden">
-          <img src={post.media_ids[0]} className="w-full h-auto object-cover max-h-[300px]" />
+          <SafeImage src={post.media_ids[0]} className="w-full h-auto object-cover max-h-[300px]" />
         </div>
       )}
       <div className="p-3">
@@ -420,7 +421,7 @@ const WhatsAppPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     <div className="absolute top-0 left-0 right-0 h-14 bg-[#075e54] flex items-center px-4 justify-between z-10">
         <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-zinc-300 overflow-hidden">
-                {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+                {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
             </div>
             <span className="text-white text-[0.95rem] font-medium">{account?.username || "Contato / Grupo"}</span>
         </div>
@@ -433,7 +434,7 @@ const WhatsAppPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     <div className="mt-14 max-w-[85%] bg-white rounded-lg p-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] self-start relative after:content-[''] after:absolute after:top-0 after:-left-2 after:w-0 after:h-0 after:border-t-[8px] after:border-t-white after:border-l-[8px] after:border-l-transparent">
       {post.media_ids && post.media_ids[0] && (
         <div className="rounded-md overflow-hidden mb-2">
-          <img src={post.media_ids[0]} className="w-full h-auto object-cover max-h-[300px]" />
+          <SafeImage src={post.media_ids[0]} className="w-full h-auto object-cover max-h-[300px]" />
         </div>
       )}
       <p className="text-[0.9rem] leading-relaxed whitespace-pre-wrap text-zinc-900 px-1">{post.content}</p>
@@ -449,7 +450,7 @@ const TikTokPreview = ({ post, account }: { post: ScheduledPost, account?: Socia
     <div className="flex flex-col bg-black h-full min-h-[500px] relative font-sans overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center opacity-30">
             {post.media_ids && post.media_ids[0] ? (
-                <img src={post.media_ids[0]} className="w-full h-full object-cover grayscale blur-sm" />
+                <SafeImage src={post.media_ids[0]} className="w-full h-full object-cover grayscale blur-sm" />
             ) : (
                 <div className="text-white/10 italic">Video Preview</div>
             )}
@@ -468,7 +469,7 @@ const TikTokPreview = ({ post, account }: { post: ScheduledPost, account?: Socia
                 </div>
                 <div className="flex flex-col items-center gap-4 text-white">
                     <div className="w-10 h-10 rounded-full border-2 border-white overflow-hidden mb-2 relative">
-                        {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+                        {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
                         <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#ff0050] text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">+</div>
                     </div>
                     <div className="flex flex-col items-center">
@@ -493,7 +494,7 @@ const YouTubePreview = ({ post, account }: { post: ScheduledPost, account?: Soci
     <div className="flex flex-col bg-white text-zinc-900 border-zinc-200 font-sans">
         <div className="aspect-video bg-zinc-100 overflow-hidden relative">
             {post.media_ids && post.media_ids[0] ? (
-                <img src={post.media_ids[0]} className="w-full h-full object-cover" />
+                <SafeImage src={post.media_ids[0]} className="w-full h-full object-cover" />
             ) : (
                 <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-white font-bold">Video Thumbnail</div>
             )}
@@ -501,7 +502,7 @@ const YouTubePreview = ({ post, account }: { post: ScheduledPost, account?: Soci
         </div>
         <div className="p-3 flex gap-3">
             <div className="w-10 h-10 rounded-full bg-zinc-100 shrink-0 border border-zinc-200 overflow-hidden">
-                {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+                {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
             </div>
             <div className="flex-1 min-w-0">
                 <h4 className="font-bold text-[0.95rem] leading-tight line-clamp-2 mb-1">{post.content.split('\n')[0] || "Sem título"}</h4>
@@ -517,7 +518,7 @@ const PinterestPreview = ({ post, account }: { post: ScheduledPost, account?: So
     <div className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-sm border border-zinc-100">
         <div className="relative">
             {post.media_ids && post.media_ids[0] ? (
-                <img src={post.media_ids[0]} className="w-full h-full object-cover" />
+                <SafeImage src={post.media_ids[0]} className="w-full h-full object-cover" />
             ) : (
                 <div className="aspect-[2/3] bg-zinc-50 flex items-center justify-center italic text-zinc-300">Pin Image</div>
             )}
@@ -528,7 +529,7 @@ const PinterestPreview = ({ post, account }: { post: ScheduledPost, account?: So
             <p className="text-sm text-zinc-600 mb-4 line-clamp-3">{post.content}</p>
             <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-zinc-200 overflow-hidden">
-                    {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+                    {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
                 </div>
                 <span className="text-sm font-medium text-zinc-900">{account?.username || "Seu Perfil"}</span>
             </div>
@@ -540,7 +541,7 @@ const SnapchatPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
     <div className="flex flex-col bg-[#FFFC00] h-full min-h-[500px] relative font-sans overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center">
             {post.media_ids && post.media_ids[0] ? (
-                <img src={post.media_ids[0]} className="w-full h-full object-cover" />
+                <SafeImage src={post.media_ids[0]} className="w-full h-full object-cover" />
             ) : (
                 <div className="text-black/50 font-bold uppercase tracking-widest text-2xl rotate-45 opacity-10">Snap Preview</div>
             )}
@@ -549,7 +550,7 @@ const SnapchatPreview = ({ post, account }: { post: ScheduledPost, account?: Soc
         {/* Overlay Content */}
         <div className="absolute top-4 left-4 flex items-center gap-2 drop-shadow-md">
             <div className="w-10 h-10 rounded-full border-2 border-white bg-zinc-300 overflow-hidden">
-                {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" />}
+                {account?.profile_picture && <SafeImage src={account.profile_picture} alt={account.username || "perfil"} className="w-full h-full object-cover" />}
             </div>
             <div className="text-white">
                 <p className="text-sm font-bold leading-none">{account?.username || "Perfil"}</p>
@@ -583,7 +584,7 @@ const WebsitePreview = ({ post, account }: { post: ScheduledPost, account?: Soci
         </div>
         <div className="p-0 border-b border-zinc-100">
             {post.media_ids && post.media_ids[0] ? (
-                <img src={post.media_ids[0]} className="w-full h-48 object-cover" />
+                <SafeImage src={post.media_ids[0]} className="w-full h-48 object-cover" />
             ) : (
                 <div className="w-full h-48 bg-zinc-50 flex items-center justify-center text-zinc-300 italic">Post Image</div>
             )}

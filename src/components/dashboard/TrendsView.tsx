@@ -33,7 +33,7 @@ import { TrendDetailDrawer } from "./TrendDetailDrawer";
 
 const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
-export const TrendsView = () => {
+export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode: 'full' | 'summary') => void }) => {
   const { trends, loading, syncTrends } = useTrends();
   const [searchTerm, setSearchTerm] = useState("");
   const [activePlatform, setActivePlatform] = useState("googlenews");
@@ -96,7 +96,7 @@ export const TrendsView = () => {
 
       {!loading && topTrendsChartData.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-6 lg:col-span-2 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[300px] rounded-[32px]">
+          <Card className="p-6 lg:col-span-2 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[300px] rounded-[32px]" style={{ contain: "content" }}>
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="font-black text-lg flex items-center gap-2 uppercase tracking-tight">
@@ -134,7 +134,7 @@ export const TrendsView = () => {
             </div>
           </Card>
 
-          <Card className="p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[300px] rounded-[32px]">
+          <Card className="p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[300px] rounded-[32px]" style={{ contain: "content" }}>
             <h3 className="font-black text-lg mb-4 flex items-center gap-2 uppercase tracking-tight">
               <Zap className="w-5 h-5 text-yellow-500" />
               Volume AI
@@ -203,7 +203,7 @@ export const TrendsView = () => {
             return acc;
           }, { 'googlenews': [] })
         ).map(([id, platformTrends]: [string, any]) => (
-          <TabsContent key={id} value={id} className="mt-0 focus-visible:outline-none">
+          <TabsContent key={id} value={id} className="mt-0 focus-visible:outline-none" style={{ contain: "layout style" }}>
             <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-xl backdrop-blur-xl">
               <div className="divide-y divide-white/5">
                 {(platformTrends as TrendItem[]).length > 0 ? (
@@ -215,6 +215,8 @@ export const TrendsView = () => {
                       key={item.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ contain: "layout style" }}
                       onClick={() => {
                         setSelectedTrend(item);
                         setIsDrawerOpen(true);
@@ -286,9 +288,11 @@ export const TrendsView = () => {
         trend={selectedTrend}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        onProduce={(trend) => {
+        onProduce={(trend, mode) => {
           setIsDrawerOpen(false);
-          // Redirecionamento de produção aqui se necessário
+          if (onProduce) {
+            onProduce(trend, mode);
+          }
         }}
       />
     </div>

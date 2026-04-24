@@ -1,4 +1,7 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { 
   BarChart, 
@@ -69,7 +72,8 @@ import {
   ExternalLink,
   Sparkles,
   Award,
-  Users2
+  Users2,
+  FileDown
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -103,6 +107,7 @@ import {
 } from "@/components/ui/tooltip";
 import { TrendsView } from "./TrendsView";
 import { useSocialStats } from "@/hooks/useSocialStats";
+import { SafeImage } from "@/components/ui/SafeImage";
 import {
   Table,
   TableBody,
@@ -112,6 +117,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
@@ -139,30 +151,103 @@ const POST_TYPES = [
   { value: 'audio', label: 'Áudio' }
 ];
 interface AdvancedAnalyticsProps {
-  onNavigate?: (tab: string, subTab?: string) => void;
+  onNavigate?: (tab: string, settingsSubTab?: string) => void;
 }
 
 export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) => {
-  const { data, loading, error, period, setPeriod, platform, setPlatform, syncAnalytics, refetch } = useAnalytics();
+  const { 
+    data, loading, error, 
+    period, setPeriod, 
+    platform, setPlatform, 
+    source, setSource,
+    syncAnalytics, refetch 
+  } = useAnalytics();
   const { logout } = useAuth();
-  const { audienceBreakdown, loading: statsLoading } = useSocialStats();
+  const { audienceBreakdown, lastUpdated, loading: statsLoading } = useSocialStats();
   const [postType, setPostType] = useState('all');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<'analytics' | 'trends'>('analytics');
+  const [isExporting, setIsExporting] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
   // Scroll Helpers – wrapped in useCallback to prevent per-render recreation
   const scrollContainer = useCallback((id: string, direction: 'left' | 'right') => {
-    // Use requestAnimationFrame to batch DOM reads/writes, avoiding forced reflow
+    const container = document.getElementById(id);
+    if (!container) return;
+    
+    // Performance: Use requestAnimationFrame to batch the write operation after render
     requestAnimationFrame(() => {
-      const container = document.getElementById(id);
-      if (container) {
-        container.scrollBy({ left: direction === 'left' ? -300 : 300, behavior: 'smooth' });
-      }
+      container.scrollBy({ left: direction === 'left' ? -300 : 300, behavior: 'smooth' });
     });
   }, []);
 
   const [topContentFilter, setTopContentFilter] = useState<string>('all');
+  const [bestTimesFilter, setBestTimesFilter] = useState<string>('all');
+
+  const handleExportPDF = useCallback(async () => {
+    if (!reportRef.current) return;
+    try {
+      setIsExporting(true);
+      toast({
+        title: "Gerando PDF",
+        description: "Aguarde enquanto preparamos seu relatório...",
+      });
+
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#0f172a',
+        windowWidth: reportRef.current.scrollWidth,
+        windowHeight: reportRef.current.scrollHeight
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgWidth = pdfWidth;
+      const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+
+      pdf.save(`Relatorio_SocialHub_${period}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      
+      toast({
+        title: "Sucesso!",
+        description: "Relatório exportado com sucesso.",
+      });
+    } catch (err) {
+      console.error("PDF Export failed:", err);
+      toast({
+        title: "Erro na exportação",
+        description: "Houve um problema ao gerar o PDF. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [period, toast]);
+
+  const globalPeakHour = useMemo(() => {
+    if (!data?.bestTimes || data.bestTimes.length === 0) return null;
+    const highest = [...data.bestTimes].sort((a, b) => b.engagement - a.engagement)[0];
+    return `${highest.day} às ${highest.time}`;
+  }, [data?.bestTimes]);
   
   // Drill-down filters
   const [audienceNetworkInfo, setAudienceNetworkInfo] = useState<string>('all');
@@ -177,6 +262,18 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     // Group by platform
     const grouped = (data.followerData as any[]).reduce((acc: Record<string, any>, curr: any) => {
       const platformKey = curr.platform;
+
+      // TELEGRAM FIX: Allow all accounts but prioritize bots in the later UI sorting
+      if (platformKey === 'telegram') {
+        // We include all, including groups/channels for full visibility
+      }
+
+      // WHATSAPP FIX: Try to identify the main bot/number and skip loose channels
+      if (platformKey === 'whatsapp') {
+        // Main WhatsApp API accounts typically have valid usernames or are the primary connection
+        if (!curr.username && !curr.profileImage) return acc;
+      }
+
       if (!acc[platformKey]) {
         acc[platformKey] = {
           platform: platformKey,
@@ -202,7 +299,24 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     );
   }, [selectedProfileId, data?.followerData]);
 
-  // 1. Move the data extraction useMemo to the TOP (before returns)
+  // TELEGRAM BOT PRIORITIZATION: Automatically select the newsbot if available
+  useEffect(() => {
+    if (!data?.followerData || platformActiveProfile['telegram']) return;
+    
+    const telegramProfiles = (data.followerData as any[]).filter(p => p.platform === 'telegram');
+    const newsbot = telegramProfiles.find(p => 
+      (p.username || p.page_name || '').toLowerCase().includes('newsbot') && 
+      Number(p.platform_user_id || 0) > 0
+    );
+
+    if (newsbot) {
+      const pId = `${newsbot.platform}-${newsbot.username || newsbot.platform_user_id}`;
+      setPlatformActiveProfile(prev => ({ ...prev, telegram: pId }));
+      if (!selectedProfileId) setSelectedProfileId(pId);
+    }
+  }, [data?.followerData, platformActiveProfile]);
+
+  // Extract and normalize all analytics data fields with safe defaults
   const { 
     overview,
     engagement,
@@ -240,6 +354,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       messageStats: d.messageStats || { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {} }
     };
   }, [data]);
+
 
   // 2. Early returns happen only AFTER hooks
   if (loading) {
@@ -349,7 +464,23 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
               </span>
             )}
           </h1>
-          <p className="text-muted-foreground">
+          <div className="flex items-center gap-4 text-sm text-muted-foreground font-medium">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary/70" />
+              <span>Sincronizado pela última vez: </span>
+              <span className="text-foreground">
+                {overview.lastSyncedAt 
+                  ? new Date(overview.lastSyncedAt).toLocaleString('pt-BR', {
+                      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+                    })
+                  : "Não sincronizado"
+                }
+              </span>
+            </div>
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" title="Sincronização automática ativa" />
+            <span className="text-xs opacity-70">Próxima em ~4h via Cron</span>
+          </div>
+          <p className="text-muted-foreground mt-2">
             Acompanhe o desempenho de suas publicações e perfis em tempo real com base em relatórios reais.
           </p>
           <div className="flex items-center gap-1 mt-6 p-1 bg-muted/30 rounded-xl inline-flex border border-border/50">
@@ -373,28 +504,68 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             </button>
           </div>
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={period} onValueChange={(val: any) => setPeriod(val)}>
-            <SelectTrigger className="w-[180px] bg-background font-medium">
-              <Calendar className="w-4 h-4 mr-2 text-primary" />
-              <SelectValue placeholder="Período" />
-            </SelectTrigger>
-            <SelectContent>
-              {PERIOD_OPTIONS.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* SOURCE TOGGLE */}
+          <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border border-border/50">
+            <button 
+              onClick={() => setSource('dashboard')}
+              className={cn(
+                "px-3 py-1.5 text-xs font-bold rounded-lg transition-all",
+                source === 'dashboard' ? "bg-background shadow-sm text-foreground border border-border/50" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Dashboard
+            </button>
+            <button 
+              onClick={() => setSource('api')}
+              className={cn(
+                "px-3 py-1.5 text-xs font-bold rounded-lg transition-all",
+                source === 'api' ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              API Feed
+            </button>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl border-border/50 bg-card hover:bg-accent transition-all">
+                <Calendar className="w-4 h-4 text-primary" />
+                <span className="text-xs font-bold">{PERIOD_OPTIONS.find(p => p.value === period)?.label}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[180px] p-1">
+              <DropdownMenuRadioGroup value={period} onValueChange={setPeriod}>
+                {PERIOD_OPTIONS.map((option) => (
+                  <DropdownMenuRadioItem key={option.value} value={option.value} className="text-xs">
+                    {option.label}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => syncAnalytics()}
+              disabled={loading}
+              className="h-9 gap-2 rounded-xl border-border/50 bg-card hover:bg-accent transition-all"
+            >
+              <RefreshCw className={cn("w-4 h-4 text-primary", loading && "animate-spin")} />
+              <span className="text-xs font-bold hidden sm:inline">Sincronizar APIs</span>
+            </Button>
 
           <Popover open={isPlatformMenuOpen} onOpenChange={setIsPlatformMenuOpen}>
             <PopoverTrigger asChild>
               <button 
-                className="flex items-center gap-2 px-4 py-2 bg-background border border-border rounded-md hover:border-primary/50 transition-colors font-medium text-sm group mr-1"
+                className="flex items-center gap-2 px-4 py-2 bg-card border border-border/50 rounded-xl hover:border-primary/50 transition-all font-medium text-sm shadow-sm group"
                 onMouseEnter={() => setIsPlatformMenuOpen(true)}
               >
                 <Settings className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform duration-500" />
-                <span>{platform === 'all' ? 'Todas as Redes' : getPlatformDetails(platform).name}</span>
+                <span>{platform === 'all' ? 'Todas as Redes' : socialPlatforms.find(p => p.id === platform)?.name}</span>
               </button>
             </PopoverTrigger>
             <PopoverContent 
@@ -441,48 +612,45 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
               </div>
             </PopoverContent>
           </Popover>
-          
-          <Select value={postType} onValueChange={setPostType}>
-            <SelectTrigger className="w-[180px] bg-background font-medium">
-              <Activity className="w-4 h-4 mr-2 text-primary" />
-              <SelectValue placeholder="Tipo de Post" />
-            </SelectTrigger>
-            <SelectContent>
-              {POST_TYPES.map(opt => (
-                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
 
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
-                  className="rounded-full hover:bg-primary/5 hover:text-primary transition-all border-primary/20"
-                  onClick={syncAnalytics}
-                  disabled={loading}
-                >
-                  <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Sincronizar dados das APIs</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Button 
+            variant="default" 
+            size="sm" 
+            onClick={handleExportPDF}
+            disabled={isExporting}
+            className="h-9 gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-md transition-all shrink-0 ml-auto"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <FileDown className="w-4 h-4" />
+            )}
+            <span className="text-xs font-bold hidden sm:inline">Exportar Relatório</span>
+          </Button>
         </div>
-      </div>
+
 
       {activeView === 'trends' ? (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <TrendsView />
+          <TrendsView onProduce={(trend, mode) => {
+            if (onNavigate) {
+              const content = mode === 'summary' 
+                ? `[RESUMO IA]: ${trend.description || trend.keyword}\n\n#${trend.category?.replace(/\s+/g, '')} #IA`
+                : `${trend.keyword}\n\nFonte: ${trend.url || trend.source}\n\n${trend.description || ''}`;
+              
+              localStorage.setItem('draft_trend_context', JSON.stringify({
+                title: trend.keyword,
+                content,
+                image: trend.thumbnail_url
+              }));
+              onNavigate('create');
+            }
+          }} />
         </div>
       ) : (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div ref={reportRef} className="space-y-8 animate-in fade-in duration-500 p-1">
           {/* TOP WIDGETS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" style={{ contain: "layout style" }}>
         {[
           { label: "Total de Visualizações", value: engagement.views, icon: Eye, color: "text-blue-500", bg: "bg-blue-500/10" },
           { label: "Engajamento Total", value: engagement.likes + engagement.comments, icon: Heart, color: "text-purple-500", bg: "bg-purple-500/10" },
@@ -491,9 +659,10 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
+            transition={{ duration: 0.3, delay: i * 0.05 }}
+            style={{ contain: "layout style" }}
             className="p-6 rounded-2xl bg-card border border-border shadow-sm flex flex-col hover:border-primary/30 transition-colors"
           >
             <div className="flex justify-between items-start mb-4">
@@ -512,7 +681,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" style={{ contain: "layout style" }}>
          <div className="p-4 rounded-xl bg-card border border-border text-center">
             <p className="text-muted-foreground text-xs uppercase tracking-wider mb-1">Total Posts</p>
             <p className="text-2xl font-bold text-primary">{overview.totalPosts}</p>
@@ -541,16 +710,17 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
       {/* CHARTS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-6 col-span-2 shadow-sm border-border bg-card">
+        <Card className="p-6 col-span-2 shadow-sm border-border bg-card" style={{ contain: "content" }}>
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h3 className="font-display font-bold text-lg text-card-foreground">Visão Geral</h3>
               <p className="text-sm text-muted-foreground">Evolução do engajamento no período</p>
             </div>
           </div>
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          <div className="h-[350px] w-full relative" style={{ contain: "strict", aspectRatio: "16/9" }}>
+            <div className="absolute inset-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -573,15 +743,16 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
               </AreaChart>
             </ResponsiveContainer>
           </div>
+          </div>
         </Card>
 
         {/* Restore Platform Breakdown Chart */}
-        <Card className="p-6 shadow-sm border-border bg-card">
+        <Card className="p-6 shadow-sm border-border bg-card" style={{ contain: "content" }}>
           <h3 className="font-display font-bold text-lg mb-2 text-card-foreground">Por Plataforma</h3>
           <p className="text-sm text-muted-foreground mb-6">Distribuição de publicações e métricas</p>
           
           {Object.keys(platformBreakdown).length > 0 ? (
-            <div className="h-[250px] w-full relative">
+            <div className="h-[250px] w-full relative" style={{ contain: "strict" }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -708,16 +879,30 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
       {/* AUDIENCE BREAKDOWN ADVANCED (CARDS & FILTERS) */}
       {audienceBreakdown && audienceBreakdown.length > 0 && (
-        <Card className="p-6 shadow-sm border-border bg-card mb-8">
+        <Card className="p-6 shadow-sm border-border bg-card mb-8" style={{ contain: "layout style" }}>
           <div className="flex flex-col xl:flex-row xl:items-center justify-between mb-6 gap-4">
             <div>
               <h3 className="font-display font-bold text-lg text-card-foreground flex items-center gap-2">
                 <Users2 className="w-5 h-5 text-indigo-500" />
                 Audiência do chat Real-Time
               </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Acompanhe o tempo de tela e tracking de presença online de seus chats.
-              </p>
+              <div className="flex flex-col gap-1 mt-1">
+                <p className="text-xs text-muted-foreground">
+                  Acompanhe o tempo de tela e tracking de presença online de seus chats.
+                </p>
+                {lastUpdated && (
+                  <p className="text-[10px] font-bold text-muted-foreground/70 flex items-center gap-1 uppercase tracking-widest mt-1">
+                     <RefreshCw className="w-3 h-3" />
+                     Sincronizado: {new Date(lastUpdated).toLocaleDateString('pt-BR')} às {new Date(lastUpdated).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                )}
+                {globalPeakHour && (
+                  <p className="text-[10px] font-bold text-indigo-400 flex items-center gap-1 uppercase tracking-widest mt-0.5">
+                     <Clock className="w-3 h-3" />
+                     Pico Estimado de Retenção: {globalPeakHour}
+                  </p>
+                )}
+              </div>
             </div>
             
             <div className="flex items-center gap-4 self-end xl:self-auto">
@@ -802,7 +987,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                    <div className="flex items-start justify-between mb-4">
                      <div className="flex items-center gap-3">
                        {ch.profile_picture ? (
-                         <img src={ch.profile_picture} alt="" className="w-10 h-10 rounded-full object-cover border border-border" />
+                         <SafeImage src={ch.profile_picture} alt="" className="w-10 h-10 rounded-full object-cover border border-border" />
                        ) : (
                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
                            {(dispName)[0]?.toUpperCase() || 'C'}
@@ -902,6 +1087,18 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                const PlatformIcon = platformInfo.icon;
                const group = groupedFollowers?.find((g: any) => g.platform === platformInfo.id) as any;
                const isConnected = !!group && group.profiles && group.profiles.length > 0;
+               
+               if (isConnected && platformInfo.id === 'telegram' && group.profiles) {
+                 group.profiles.sort((a: any, b: any) => {
+                   const aName = (a.username || a.page_name || '').toLowerCase();
+                   const bName = (b.username || b.page_name || '').toLowerCase();
+                   const aIsBot = aName.includes('newsbot') && Number(a.platform_user_id || 0) > 0;
+                   const bIsBot = bName.includes('newsbot') && Number(b.platform_user_id || 0) > 0;
+                   if (aIsBot && !bIsBot) return -1;
+                   if (!aIsBot && bIsBot) return 1;
+                   return 0;
+                 });
+               }
 
             if (!isConnected) {
               return (
@@ -978,9 +1175,9 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                      </Select>
                    ) : (
                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                       {group.profiles[0]?.profileImage ? (
-                          <img src={group.profiles[0].profileImage} alt="" className="w-4 h-4 rounded-full object-cover" />
-                       ) : (
+                        {group.profiles[0]?.profileImage ? (
+                           <SafeImage src={group.profiles[0].profileImage} alt="" className="w-4 h-4 rounded-full object-cover" />
+                        ) : (
                           <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center">?</div>
                        )}
                        <span className="truncate">@{group.profiles[0]?.username || 'Perfil único'}</span>
@@ -1002,7 +1199,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                            <>
                              <div className="flex items-center gap-2 mb-1">
                                 {prof.profileImage ? (
-                                   <img src={prof.profileImage} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                   <SafeImage src={prof.profileImage} alt="" className="w-5 h-5 rounded-full object-cover" />
                                 ) : (
                                    <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[8px]">?</div>
                                 )}
@@ -1040,7 +1237,17 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
               <Clock className="w-5 h-5 text-purple-500" />
               Melhores Horários
             </h3>
-            <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">Omnichannel</span>
+            <Select value={bestTimesFilter} onValueChange={setBestTimesFilter}>
+              <SelectTrigger className="w-[140px] h-8 text-xs bg-muted/30 border-border">
+                <SelectValue placeholder="Todas Redes" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as Redes</SelectItem>
+                {socialPlatforms.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Members Online Now Banner */}
@@ -1072,17 +1279,29 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                 'Friday': 5, 'Saturday': 6, 'Sunday': 0
               };
               
-              const sortedTimes = [...(bestTimes || [])].sort((a, b) => {
+              const filteredTimes = bestTimesFilter === 'all' 
+                ? (bestTimes || [])
+                : (bestTimes || []).filter(bt => bt.platform === bestTimesFilter);
+
+              const sortedTimes = [...filteredTimes].sort((a, b) => {
                 const orderA = dayOrder[a.day] ?? 99;
                 const orderB = dayOrder[b.day] ?? 99;
                 return orderA - orderB;
-              });
+              }).slice(0, 7);
 
-              return sortedTimes.length > 0 ? sortedTimes.map((bt: any, i: number) => (
+              return sortedTimes.length > 0 ? sortedTimes.map((bt: any, i: number) => {
+                const pd = bt.platform ? getPlatformDetails(bt.platform) : null;
+                const PIcon = pd?.icon || Activity;
+                return (
                 <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/30">
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold">
+                    <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold relative group cursor-default">
                       {i + 1}
+                      {pd && (
+                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center ${pd.color}`}>
+                           <PIcon className="w-2.5 h-2.5 text-white" />
+                        </div>
+                      )}
                     </div>
                     <div>
                       <h4 className="font-medium text-card-foreground">{bt.day}</h4>
@@ -1094,14 +1313,15 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                     <p className="text-xs text-muted-foreground">índice engajamento</p>
                   </div>
                 </div>
-              )) : (
-                <div className="text-center py-8 text-muted-foreground text-sm">Sem métricas de horários capturadas</div>
+                );
+              }) : (
+                <div className="text-center py-8 text-muted-foreground text-sm">Sem métricas de horários capturadas para este filtro</div>
               );
             })()}
           </div>
         </Card>
 
-        <Card className="p-6 shadow-sm border-border bg-card flex flex-col">
+        <Card className="p-6 shadow-sm border-border bg-card flex flex-col" style={{ contain: "content" }}>
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-display font-bold text-lg text-card-foreground flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-green-500" />
@@ -1121,7 +1341,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             </Select>
           </div>
 
-          <div className="space-y-4 overflow-y-auto max-h-[400px] pr-2 flex-1">
+          <div className="space-y-4 overflow-y-auto max-h-[400px] pr-2 flex-1" style={{ contain: "strict" }}>
             {(() => {
               const filteredContent = topContentFilter === 'all' 
                 ? (topContent || []) 

@@ -15,34 +15,15 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    function decodeJwt(t: string) {
-      try {
-        const parts = t.split('.');
-        if (parts.length !== 3) return null;
-        return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      } catch {
-        return null;
-      }
-    }
-
     const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
     if (!authHeader) throw new Error("No authorization header");
 
     const token = authHeader.replace(/^Bearer\s+/i, "");
-    let actualUserId: string | undefined;
+    let userId: string | undefined;
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser(token);
-      if (user) actualUserId = user.id;
-    } catch {}
-
-    if (!actualUserId) {
-      const payload = decodeJwt(token);
-      if (payload?.sub) actualUserId = payload.sub;
-    }
-
-    if (!actualUserId) throw new Error("Unauthorized");
-    const userId = actualUserId;
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) throw new Error("Unauthorized: Invalid Token Signature");
+    userId = user.id;
 
     const { platform } = await req.json();
     if (platform !== "telegram") throw new Error("Only telegram supported for this trigger");
@@ -121,6 +102,18 @@ serve(async (req: Request) => {
     }, { onConflict: "user_id,platform,platform_user_id" });
 
     if (upsertError) throw upsertError;
+
+    // 3. SET WEBHOOK (Ativação Automática do Robô)
+    const functionUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/telegram-webhook?token=${botToken}`;
+    console.log(`[TELEGRAM SYNC] Setting WEBHOOK to: ${functionUrl}`);
+    
+    try {
+      const webhookRes = await fetch(`https://api.telegram.org/bot${botToken}/setWebhook?url=${encodeURIComponent(functionUrl)}`);
+      const webhookData = await webhookRes.json();
+      console.log(`[TELEGRAM SYNC] setWebhook Result:`, webhookData);
+    } catch (whErr) {
+      console.error(`[TELEGRAM SYNC] setWebhook failed:`, whErr);
+    }
 
     // console.log(`Telegram sync successful for @${botInfo.username}`);
 

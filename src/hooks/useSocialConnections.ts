@@ -47,7 +47,52 @@ export function useSocialConnections() {
 
       const oauthConnections = (data || []) as unknown as SocialConnection[];
 
-      // 2. Check api_credentials for Telegram and WhatsApp bot tokens/keys
+      // 2. Fetch ALL social_accounts to enrich connections with cached data
+      // social_accounts has non-expiring Supabase Storage URLs + real follower counts
+      const { data: allAccounts } = await supabase
+        .from('social_accounts')
+        .select('platform, platform_user_id, username, profile_picture, followers_count, followers, posts_count, page_name')
+        .eq('user_id', user.id);
+
+      const accounts = allAccounts || [];
+
+      // Helper: find best matching social_account for a connection (match by page_id or platform_user_id)
+      const findAccount = (conn: SocialConnection) => {
+        // First try exact match by page_id (Facebook pages)
+        if (conn.page_id) {
+          const byPageId = accounts.find(a => a.platform === conn.platform && a.platform_user_id === conn.page_id);
+          if (byPageId) return byPageId;
+        }
+        // Then try by platform_user_id
+        if (conn.platform_user_id) {
+          const byUserId = accounts.find(a => a.platform === conn.platform && a.platform_user_id === conn.platform_user_id);
+          if (byUserId) return byUserId;
+        }
+        // Fallback: first account for this platform
+        return accounts.find(a => a.platform === conn.platform) || null;
+      };
+
+      // 3. Enrich each OAuth connection with cached data from social_accounts
+      let enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
+        const acc = findAccount(conn);
+        if (!acc) return conn;
+
+        const cachedPic = acc.profile_picture || null;
+        const enrichedFollowers = acc.followers_count ?? (acc as any).followers ?? conn.followers_count;
+        const enrichedPosts = acc.posts_count ?? conn.posts_count;
+        const enrichedPageName = conn.page_name || acc.page_name || acc.username || null;
+
+        return {
+          ...conn,
+          // Use cached (Supabase Storage) URL if available, otherwise keep existing
+          profile_image_url: cachedPic || conn.profile_image_url || null,
+          profile_picture: cachedPic || conn.profile_picture || null,
+          followers_count: enrichedFollowers ?? conn.followers_count,
+          posts_count: enrichedPosts ?? conn.posts_count,
+          page_name: enrichedPageName,
+        };
+      });
+
       const { data: credsData } = await supabase
         .from('api_credentials' as any)
         .select('platform, credentials')
@@ -66,25 +111,29 @@ export function useSocialConnections() {
         (typeof waCreds.app_id === 'string' && waCreds.app_id.trim() !== '' ||
          typeof waCreds.access_token === 'string' && waCreds.access_token.trim() !== '');
 
-      // 3. Inject synthetic connections if missing
-      const alreadyHasTelegramConn = oauthConnections.some(c => c.platform === 'telegram' && c.is_connected);
-      const alreadyHasWhatsAppConn = oauthConnections.some(c => c.platform === 'whatsapp' && c.is_connected);
+      // 5. Inject synthetic connections if missing
+      const alreadyHasTelegramBot = enrichedConnections.some(c => 
+        c.platform === 'telegram' && 
+        c.is_connected && 
+        Number(c.platform_user_id || 0) > 0
+      );
+      const alreadyHasWhatsAppConn = enrichedConnections.some(c => c.platform === 'whatsapp' && c.is_connected);
 
-      let finalConnections = [...oauthConnections];
+      let finalConnections = [...enrichedConnections];
 
-      if ((hasTGToken && !alreadyHasTelegramConn) || (hasWAToken && !alreadyHasWhatsAppConn)) {
-        // Fetch extra info from social_accounts (synced by the edge function)
-        const { data: accounts } = await supabase
-          .from('social_accounts')
-          .select('id, platform, username, profile_picture, followers, posts_count')
-          .eq('user_id', user.id)
-          .in('platform', ['telegram', 'whatsapp']);
+      if ((hasTGToken && !alreadyHasTelegramBot) || (hasWAToken && !alreadyHasWhatsAppConn)) {
+        // Use already-fetched accounts (filtered by platform below)
 
-        if (hasTGToken && !alreadyHasTelegramConn) {
-          const platformAccounts = accounts?.filter(a => a.platform === 'telegram') || [];
-          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers) || 0), 0);
+        if (hasTGToken && !alreadyHasTelegramBot) {
+          const platformAccounts = accounts.filter(a => a.platform === 'telegram');
+          // Prioritize WebRadioVitoria_Newsbot specifically if available
+          const firstAcc = platformAccounts.find(a => 
+            (a.page_name?.toLowerCase().includes('newsbot') || a.username?.toLowerCase().includes('newsbot')) && 
+            Number(a.platform_user_id || 0) > 0
+          ) || platformAccounts.find(a => Number(a.platform_user_id || 0) > 0) || platformAccounts[0];
+          
+          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || Number((a as any).followers) || 0), 0);
           const totalPosts = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
-          const firstAcc = platformAccounts[0];
           const botToken: string = Array.isArray(tgCreds?.tokens) ? tgCreds.tokens[0] : (tgCreds?.bot_token || tgCreds?.token || '');
           
           finalConnections.push({
@@ -92,7 +141,7 @@ export function useSocialConnections() {
             platform: 'telegram',
             is_connected: true,
             page_name: firstAcc?.username ? `@${firstAcc.username}` : 'Bot Telegram',
-            platform_user_id: firstAcc?.id || null,
+            platform_user_id: firstAcc?.platform_user_id || null,
             token_expires_at: null,
             page_id: null,
             profile_image_url: firstAcc?.profile_picture || null,
@@ -105,8 +154,8 @@ export function useSocialConnections() {
         }
 
         if (hasWAToken && !alreadyHasWhatsAppConn) {
-          const platformAccounts = accounts?.filter(a => a.platform === 'whatsapp') || [];
-          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers) || 0), 0);
+          const platformAccounts = accounts.filter(a => a.platform === 'whatsapp');
+          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || 0), 0);
           const totalPosts = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
           const firstAcc = platformAccounts[0];
 
@@ -114,8 +163,8 @@ export function useSocialConnections() {
             id: `whatsapp-api-${user.id}`,
             platform: 'whatsapp',
             is_connected: true,
-            page_name: firstAcc?.username || 'WhatsApp Business',
-            platform_user_id: firstAcc?.id || null,
+            page_name: firstAcc?.username || firstAcc?.page_name || 'WhatsApp Business',
+            platform_user_id: firstAcc?.platform_user_id || null,
             token_expires_at: null,
             page_id: null,
             profile_image_url: firstAcc?.profile_picture || null,
@@ -136,7 +185,26 @@ export function useSocialConnections() {
 
   useEffect(() => {
     fetchConnections();
-  }, [user]);
+
+    // Listen for changes in both tables to keep UI in sync across different component instances
+    const connectionsChannel = supabase
+      .channel('connections-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'social_connections' },
+        () => fetchConnections()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'api_credentials' },
+        () => fetchConnections()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(connectionsChannel);
+    };
+  }, [user, fetchConnections]);
 
   const initiateOAuth = async (platform: string) => {
     try {

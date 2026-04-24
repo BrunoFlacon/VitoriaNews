@@ -1,4 +1,4 @@
-// deno-lint-ignore-file
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -107,34 +107,16 @@ serve(async (req: Request) => {
       });
     }
 
-    function decodeJwt(t: string) {
-      try {
-        const parts = t.split('.');
-        if (parts.length !== 3) return null;
-        return JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-      } catch {
-        return null;
-      }
-    }
-
     const token = authHeader.replace(/^Bearer\s+/i, "");
     let actualUserId: string | undefined;
 
-    try {
-      const { data: { user } } = await supabase.auth.getUser(token);
-      if (user) actualUserId = user.id;
-    } catch {}
-
-    if (!actualUserId) {
-      const payload = decodeJwt(token);
-      if (payload?.sub) actualUserId = payload.sub;
-    }
-
-    if (!actualUserId) {
-      return new Response(JSON.stringify({ error: "Invalid session" }), {
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Invalid session or signature" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
+    actualUserId = user.id;
 
     const { chatIds = [], platform = "telegram", userId: bodyUserId } = await req.json().catch(() => ({}));
     const userId = bodyUserId || actualUserId;

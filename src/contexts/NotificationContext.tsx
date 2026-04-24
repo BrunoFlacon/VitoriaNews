@@ -71,6 +71,18 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
     fetchNotifications();
   }, [fetchNotifications]);
 
+  const addNotification = useCallback(async (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+    if (!user) return;
+    await supabase.from('notifications').insert({
+      user_id: user.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      platform: notification.platform || null,
+    });
+    // Realtime will trigger refetch
+  }, [user]);
+
   // Realtime subscription
   useEffect(() => {
     if (!user) return;
@@ -108,24 +120,45 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
       )
       .subscribe();
 
+    const messagesChannel = supabase
+      .channel('messages-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${user.id}` },
+        async (payload) => {
+          if (payload.new.status === 'received') {
+            // Check bot settings for audio alerts
+            const { data: settings } = await supabase
+              .from('bot_settings')
+              .select('audio_alerts_enabled')
+              .eq('user_id', user.id)
+              .eq('platform', payload.new.platform)
+              .maybeSingle();
+
+            if (settings?.audio_alerts_enabled !== false) {
+              const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
+              audio.play().catch(e => console.log("Audio play blocked by browser:", e));
+            }
+
+            addNotification({
+              type: 'info',
+              title: `Nova mensagem (${payload.new.platform})`,
+              message: payload.new.content?.substring(0, 100) || 'Clique para ver',
+              platform: payload.new.platform
+            });
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(messagesChannel);
     };
-  }, [user, fetchNotifications]);
+  }, [user, fetchNotifications, addNotification]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const addNotification = useCallback(async (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
-    if (!user) return;
-    await supabase.from('notifications').insert({
-      user_id: user.id,
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      platform: notification.platform || null,
-    });
-    // Realtime will trigger refetch
-  }, [user]);
 
   const markAsRead = useCallback(async (id: string) => {
     await supabase.from('notifications').update({ read: true }).eq('id', id);

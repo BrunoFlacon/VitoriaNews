@@ -1,9 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cacheProfileImage } from "_shared/media.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
@@ -60,8 +62,12 @@ serve(async (req: Request) => {
     const ytAccessToken = ytConnection?.access_token;
 
     if (!ytAccessToken && !ytApiKey) {
-      return new Response(JSON.stringify({ error: "YouTube OAuth connection or API key not configured" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      return new Response(JSON.stringify({ 
+        success: true, 
+        synced: 0, 
+        reason: "YouTube OAuth connection or API key not configured" 
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
@@ -85,8 +91,12 @@ serve(async (req: Request) => {
     }
 
     if (!channelId) {
-      return new Response(JSON.stringify({ error: "Could not determine YouTube channel ID" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      return new Response(JSON.stringify({ 
+        success: true, 
+        synced: 0, 
+        reason: "Could not determine YouTube channel ID" 
+      }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
@@ -103,6 +113,11 @@ serve(async (req: Request) => {
         const snippet = ch.snippet || {};
         const branding = ch.brandingSettings?.image || {};
 
+        const [cachedAvatar, cachedCover] = await Promise.all([
+          cacheProfileImage(supabase, userId, "youtube", snippet.thumbnails?.high?.url, channelId),
+          cacheProfileImage(supabase, userId, "youtube", branding.bannerExternalUrl, `${channelId}_cover`)
+        ]);
+
         // Update social_accounts with latest data
         await supabase.from("social_accounts").upsert({
           user_id: userId,
@@ -110,8 +125,8 @@ serve(async (req: Request) => {
           platform_user_id: channelId,
           username: snippet.customUrl || snippet.title || "",
           page_name: snippet.title || "",
-          profile_picture: snippet.thumbnails?.high?.url || "",
-          cover_photo: branding.bannerExternalUrl || "",
+          profile_picture: cachedAvatar || snippet.thumbnails?.high?.url || "",
+          cover_photo: cachedCover || branding.bannerExternalUrl || "",
           followers_count: parseInt(stats.subscriberCount || "0"),
           subscribers_count: parseInt(stats.subscriberCount || "0"),
           posts_count: parseInt(stats.videoCount || "0"),
@@ -136,11 +151,12 @@ serve(async (req: Request) => {
     // Step 3: Get recent videos with detailed stats
     if (ytAccessToken) {
       const now = new Date();
-      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      const publishedAfter = thirtyDaysAgo.toISOString();
+      const fiveYearsAgo = new Date(now.getTime() - 5 * 365 * 24 * 60 * 60 * 1000);
+      // YouTube API expects RFC 3339 formatted date-time values (e.g. 1970-01-01T00:00:00Z)
+      const publishedAfter = fiveYearsAgo.toISOString().split('.')[0] + "Z";
 
       const searchRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&channelId=${channelId}&order=date&maxResults=20&publishedAfter=${publishedAfter}`,
+        `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&channelId=${channelId}&order=date&maxResults=50&publishedAfter=${publishedAfter}`,
         { headers: { Authorization: `Bearer ${ytAccessToken}` } }
       );
       const searchData = await searchRes.json();
@@ -213,14 +229,19 @@ serve(async (req: Request) => {
         const snippet = ch.snippet || {};
         const branding = ch.brandingSettings?.image || {};
 
+        const [cachedAvatar, cachedCover] = await Promise.all([
+          cacheProfileImage(supabase, userId, "youtube", snippet.thumbnails?.high?.url, channelId),
+          cacheProfileImage(supabase, userId, "youtube", branding.bannerExternalUrl, `${channelId}_cover`)
+        ]);
+
         await supabase.from("social_accounts").upsert({
           user_id: userId,
           platform: "youtube",
           platform_user_id: channelId,
           username: snippet.customUrl || snippet.title || "",
           page_name: snippet.title || "",
-          profile_picture: snippet.thumbnails?.high?.url || "",
-          cover_photo: branding.bannerExternalUrl || "",
+          profile_picture: cachedAvatar || snippet.thumbnails?.high?.url || "",
+          cover_photo: cachedCover || branding.bannerExternalUrl || "",
           followers_count: parseInt(stats.subscriberCount || "0"),
           subscribers_count: parseInt(stats.subscriberCount || "0"),
           posts_count: parseInt(stats.videoCount || "0"),

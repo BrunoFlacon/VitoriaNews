@@ -1,28 +1,9 @@
-export function getThreadsOAuthUrl() {
-  const clientId = import.meta.env.VITE_META_APP_ID;
-
-  if (!clientId) {
-    throw new Error("META_APP_ID não configurado");
-  }
-
-  const redirectUri = `${window.location.origin}/oauth/callback/threads`;
-
-  const url = new URL("https://www.facebook.com/v21.0/dialog/oauth");
-
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("scope", "threads_basic");
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("state", crypto.randomUUID());
-
-  return url.toString();
-}
-
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { getThreadsOAuthUrl } from "@/utils/oauth";
 
 const OAuthCallback = () => {
   const [searchParams] = useSearchParams();

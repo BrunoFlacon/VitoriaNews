@@ -18,11 +18,14 @@ import BrunoProfile from "./pages/BrunoProfile";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import ManualPage from "./pages/ManualPage";
+import PortalLanding from "./pages/PortalLanding";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const News = lazy(() => import("./pages/News"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const SystemEvolutionPage = lazy(() => import("./pages/SystemEvolutionPage"));
+const Radar2 = lazy(() => import("./pages/radar2"));
+const RadarNews = lazy(() => import("./pages/radarnews"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,7 +72,7 @@ const App = () => (
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <Suspense fallback={<LoadingFallback />}>
                   <Routes>
-                    <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                    <Route path="/" element={<PortalLanding />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
                     <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -82,6 +85,8 @@ const App = () => (
                     <Route path="/manual" element={<ManualPage />} />
                     <Route path="/profile/bruno-flacon" element={<BrunoProfile />} />
                     <Route path="/system-history" element={<ProtectedRoute><SystemEvolutionPage /></ProtectedRoute>} />
+                    <Route path="/radar2" element={<ProtectedRoute><Radar2 /></ProtectedRoute>} />
+                    <Route path="/radarnews" element={<ProtectedRoute><RadarNews /></ProtectedRoute>} />
                     <Route path="*" element={<Navigate to="/profile/bruno-flacon" replace />} />
                   </Routes>
                 </Suspense>

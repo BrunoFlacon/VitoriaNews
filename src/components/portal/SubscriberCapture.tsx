@@ -1,197 +1,213 @@
-import React, { useState, useEffect } from "react";
-import { 
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter 
-} from "@/components/ui/dialog";
-import { 
-  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger 
-} from "@/components/ui/sheet";
+import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Bell, Mail, Phone, Sparkles, CheckCircle2, Loader2, Send } from "lucide-react";
+import { 
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription 
+} from "@/components/ui/dialog";
+import { CheckCircle2, Send, Loader2, Bell, Sparkles, ArrowRight, MessageSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useSystem } from "@/contexts/SystemContext";
+import { motion } from "framer-motion";
 
 interface SubscriberCaptureProps {
-  articleSlug?: string;
-  sourcePlatform?: string;
+  planType?: 'free' | 'paid';
+  onSuccess?: () => void;
+  triggerLabel?: string;
+  showTrigger?: boolean;
+  showFloating?: boolean;
+  triggerClassName?: string;
+  children?: React.ReactNode;
 }
 
-export const SubscriberCapture: React.FC<SubscriberCaptureProps> = ({ articleSlug, sourcePlatform }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [viewType, setViewType] = useState<'drawer' | 'modal'>('drawer');
-  const [planType, setPlanType] = useState<'free' | 'paid'>('free');
-  const [email, setEmail] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-  const [name, setName] = useState("");
+export const SubscriberCapture = ({ 
+  planType: initialPlan = 'free', 
+  onSuccess, 
+  triggerLabel, 
+  showTrigger = false, 
+  showFloating = true,
+  triggerClassName,
+  children
+}: SubscriberCaptureProps) => {
+  const { toast } = useToast();
+  const { settings } = useSystem();
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
-  const { toast } = useToast();
-
-  // Auto-show after 15 seconds as per user request
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      handleOpen('free');
-    }, 15000);
-    return () => clearTimeout(timer);
-  }, []);
+  const [planType, setPlanType] = useState(initialPlan);
+  
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  
+  const [planDuration, setPlanDuration] = useState<'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [messengerPref, setMessengerPref] = useState<'whatsapp' | 'telegram'>('whatsapp');
 
   const handleOpen = (type: 'free' | 'paid') => {
     setPlanType(type);
-    setViewType(type === 'free' ? 'drawer' : 'modal');
-    setIsOpen(true);
-    setSuccess(false);
+    setOpen(true);
   };
 
   const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    
     try {
       const { error } = await (supabase as any).from('portal_subscribers').insert([{
-        email: email || null,
+        email: email || `${whatsapp}@vitoria.net`,
         phone: whatsapp || null,
         full_name: name || null,
-        plan_type: planType,
-        source_platform: sourcePlatform || 'web_portal',
-        source_content_id: articleSlug || null
+        plan_type: planType === 'paid' ? 'paid_sub' : 'lead',
+        metadata: { plan_duration: planDuration, preferred_messenger: messengerPref }
       }]);
 
       if (error) throw error;
+      
+      // Save preference to localStorage for Footer/Support access
+      localStorage.setItem('vitoria_messenger_pref', messengerPref);
 
       setSuccess(true);
-      toast({ title: "Assinatura confirmada!", description: "Você receberá nossos alertas em breve." });
-      
-      // Reset form after a few seconds and close
-      setTimeout(() => {
-        setIsOpen(false);
-        setEmail("");
-        setWhatsapp("");
-        setName("");
-      }, 3000);
-
-    } catch (e: any) {
-      toast({ 
-        title: "Erro ao assinar", 
-        description: e.message?.includes('unique') ? "Este contato já está cadastrado!" : "Tente novamente em instantes.", 
-        variant: "destructive" 
-      });
+      toast({ title: "Bem-vindo à Elite!", description: "Sua assinatura foi confirmada." });
+      if (onSuccess) onSuccess();
+    } catch (error: any) {
+      toast({ title: "Erro na assinatura", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const FormContent = () => (
-    <form onSubmit={handleSubscribe} className="space-y-4 mt-6">
-      {!success ? (
-        <>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Nome Completo</label>
-            <Input 
-              required 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              placeholder="Como podemos te chamar?" 
-              className="bg-muted/50 border-white/10 h-10 rounded-xl"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">E-mail</label>
-            <Input 
-              type="email" 
-              required 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              placeholder="seu@email.com" 
-              className="bg-muted/50 border-white/10 h-10 rounded-xl"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">WhatsApp / Celular</label>
-            <Input 
-              type="tel" 
-              value={whatsapp} 
-              onChange={(e) => setWhatsapp(e.target.value)} 
-              placeholder="(00) 00000-0000" 
-              className="bg-muted/50 border-white/10 h-10 rounded-xl"
-            />
-          </div>
-          <Button 
-            className={cn(
-              "w-full h-12 rounded-xl font-bold gap-2 text-sm transition-all",
-              planType === 'paid' ? "bg-primary hover:bg-primary/90" : "bg-slate-900 hover:bg-slate-800"
-            )}
-            disabled={loading}
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {planType === 'paid' ? "Confirmar Assinatura Premium" : "Quero Receber Alertas Grátis"}
-          </Button>
-          <p className="text-[9px] text-center text-muted-foreground uppercase tracking-tighter">
-            Ao assinar, você concorda com nossos termos e política de privacidade.
-          </p>
-        </>
-      ) : (
-        <div className="py-10 text-center flex flex-col items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center animate-bounce">
-            <CheckCircle2 className="w-8 h-8 text-green-500" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="font-bold text-lg">Tudo certo, {name.split(' ')[0]}!</h3>
-            <p className="text-sm text-muted-foreground">Sua assinatura foi confirmada com sucesso.</p>
-          </div>
-        </div>
-      )}
-    </form>
-  );
-
   return (
     <>
-      {/* Floating Sino (Bell) Trigger */}
-      <div className="fixed bottom-8 left-8 z-50 group">
+      {showTrigger && (
         <button
-          onClick={() => handleOpen('free')}
-          className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-2xl shadow-primary/40 flex items-center justify-center hover:scale-110 active:scale-95 transition-all relative"
+          onClick={() => handleOpen(planType)}
+          className={cn(
+            !children && "bg-yellow-400 text-black font-black uppercase text-[10px] px-8 py-4 rounded-full transition-all hover:scale-105 active:scale-95",
+            triggerClassName
+          )}
         >
-          <Bell className="w-6 h-6 group-hover:rotate-12 transition-transform" />
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-[10px] font-black flex items-center justify-center rounded-full border-2 border-primary-foreground animate-pulse">
-            1
-          </span>
+          {children || triggerLabel || (planType === 'paid' ? 'Assine Já!' : 'Inscrever-se')}
         </button>
-        <div className="absolute bottom-full left-0 mb-4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none translate-y-2 group-hover:translate-y-0 duration-300">
-          <div className="bg-popover border border-border p-3 rounded-2xl shadow-xl whitespace-nowrap">
-            <p className="text-xs font-bold">Ativar Alertas de Inteligência 🚀</p>
-          </div>
+      )}
+
+      {showFloating && (
+        <div className="fixed bottom-12 right-12 z-50 flex flex-col items-end gap-4">
+          <button
+            onClick={() => handleOpen('paid')}
+            className={cn(
+              "bg-yellow-400 text-black font-black uppercase text-[10px] px-6 py-3.5 rounded-xl shadow-[0_0_30px_rgba(250,204,21,0.3)] hover:scale-105 active:scale-95 transition-all tracking-widest flex items-center gap-2 group border-b-2 border-yellow-600",
+              triggerClassName
+            )}
+          >
+            <Sparkles className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" /> {triggerLabel || "Assinar Agora"}
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* Free Subscription Drawer (Right) */}
-      <Sheet open={isOpen && viewType === 'drawer'} onOpenChange={setIsOpen}>
-        <SheetContent side="right" className="sm:max-w-md bg-card">
-          <SheetHeader className="text-left">
-            <div className="p-3 w-fit rounded-2xl bg-primary/10 mb-4">
-              <Mail className="w-6 h-6 text-primary" />
-            </div>
-            <SheetTitle className="text-2xl font-black font-display uppercase tracking-tight">Newsletter Gratuita</SheetTitle>
-            <SheetDescription className="text-sm">
-              Fique por dentro das maiores tendências e escândalos políticos detectados pela nossa IA antes de todo mundo.
-            </SheetDescription>
-          </SheetHeader>
-          <FormContent />
-        </SheetContent>
-      </Sheet>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md bg-[#0A0F1E] border-white/5 rounded-[2rem] shadow-2xl p-0 overflow-hidden text-white">
+          <div className="h-1.5 w-full bg-gradient-to-r from-yellow-400 via-primary to-yellow-400" />
+          <div className="p-8">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-2xl font-display font-black uppercase tracking-tighter">
+                {planType === 'paid' ? "Seja um Assinante VIP" : "Alertas Web Rádio Vitória"}
+              </DialogTitle>
+              <DialogDescription className="text-slate-400 text-xs">
+                {planType === 'paid' ? "Escolha seu plano e tenha acesso total ao ecossistema." : "Receba notícias e alertas importantes gratuitamente."}
+              </DialogDescription>
+            </DialogHeader>
 
-      {/* Paid Subscription Modal (Center) */}
-      <Dialog open={isOpen && viewType === 'modal'} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-md bg-card border-white/5 shadow-2xl">
-          <DialogHeader className="text-center flex flex-col items-center">
-            <div className="p-4 rounded-[24px] bg-gradient-to-br from-primary to-accent shadow-lg shadow-primary/30 mb-4">
-              <Sparkles className="w-8 h-8 text-primary-foreground" />
-            </div>
-            <DialogTitle className="text-2xl font-black font-display uppercase tracking-tight">Acesso Exclusivo Premium</DialogTitle>
-            <DialogDescription className="text-sm text-center">
-              Receba furos de reportagem, o Radar de Poder e análises de ataques em tempo real diretamente no seu WhatsApp e E-mail.
-            </DialogDescription>
-          </DialogHeader>
-          <FormContent />
+            <form onSubmit={handleSubscribe} className="space-y-5 mt-6">
+              {success ? (
+                <div className="py-8 text-center space-y-6 animate-in fade-in zoom-in duration-500">
+                  <div className="w-20 h-20 bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-yellow-400/30">
+                    <CheckCircle2 className="w-10 h-10 text-yellow-400" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold uppercase tracking-tighter">Assinatura Ativa!</h3>
+                    <p className="text-sm text-slate-400">Você será redirecionado para o {messengerPref === 'whatsapp' ? 'WhatsApp' : 'Telegram'}.</p>
+                  </div>
+                  <Button 
+                    className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-black h-12 rounded-xl uppercase tracking-widest text-[10px]"
+                    onClick={() => {
+                      const link = messengerPref === 'whatsapp' ? settings?.whatsapp_link : settings?.telegram_link;
+                      window.open(link || (messengerPref === 'whatsapp' ? 'https://wa.me/suporte' : 'https://t.me/suporte'), '_blank');
+                    }}
+                  >
+                    Entrar no Grupo de Assinantes <ArrowRight className="ml-2 w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Nome</label>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} required className="bg-white/5 border-white/10 h-10 rounded-xl" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">WhatsApp</label>
+                      <Input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} required className="bg-white/5 border-white/10 h-10 rounded-xl" />
+                    </div>
+                  </div>
+
+                  {planType === 'paid' && (
+                    <div className="space-y-3">
+                      <label className="text-[9px] font-black uppercase tracking-widest text-yellow-400 ml-1">Selecione seu Plano</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {['monthly', 'quarterly', 'yearly'].map((p) => (
+                          <button
+                            key={p} type="button"
+                            onClick={() => setPlanDuration(p as any)}
+                            className={cn(
+                              "py-3 rounded-xl border text-[9px] font-black uppercase transition-all",
+                              planDuration === p ? "bg-yellow-400 border-yellow-400 text-black shadow-lg shadow-yellow-400/20" : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
+                            )}
+                          >
+                            {p === 'monthly' ? 'Mensal' : p === 'quarterly' ? 'Trimestral' : 'Anual'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-1">Receber por onde?</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button" onClick={() => setMessengerPref('whatsapp')}
+                        className={cn(
+                          "flex items-center justify-center gap-2 p-3 rounded-xl border transition-all",
+                          messengerPref === 'whatsapp' ? "bg-green-500/20 border-green-500 text-green-500" : "bg-white/5 border-white/10 text-slate-400"
+                        )}
+                      >
+                        <MessageSquare className="w-4 h-4" /> <span className="text-[10px] font-bold">WhatsApp</span>
+                      </button>
+                      <button
+                        type="button" onClick={() => setMessengerPref('telegram')}
+                        className={cn(
+                          "flex items-center justify-center gap-2 p-3 rounded-xl border transition-all",
+                          messengerPref === 'telegram' ? "bg-blue-500/20 border-blue-500 text-blue-500" : "bg-white/5 border-white/10 text-slate-400"
+                        )}
+                      >
+                        <Send className="w-4 h-4" /> <span className="text-[10px] font-bold">Telegram</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button 
+                    className={cn(
+                      "w-full h-12 rounded-xl font-black uppercase tracking-[0.2em] text-[10px] transition-all mt-4",
+                      planType === 'paid' ? "bg-yellow-400 text-black hover:bg-yellow-500" : "bg-primary text-white hover:bg-primary/90"
+                    )}
+                    disabled={loading}
+                  >
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirmar Assinatura"}
+                  </Button>
+                </>
+              )}
+            </form>
+          </div>
         </DialogContent>
       </Dialog>
     </>

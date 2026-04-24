@@ -1132,6 +1132,17 @@ export default function PresentationPage() {
     }
   };
 
+  if (!isOwner && settings && settings.public_mediakit_active === false) {
+    return (
+      <div className="min-h-screen bg-[#030509] flex flex-col items-center justify-center p-6 text-center text-white">
+        <Rocket className="w-16 h-16 text-primary/20 mb-6 animate-pulse" />
+        <h1 className="text-3xl font-display font-black tracking-tighter mb-2 uppercase">Mídia Kit em Manutenção</h1>
+        <p className="text-slate-400 max-w-md font-medium">Esta página de perfil está temporariamente offline. Por favor, tente novamente mais tarde.</p>
+        <Link to="/" className="mt-8 text-primary font-bold hover:scale-105 transition-transform">VOLTAR AO INÍCIO</Link>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen text-slate-50 relative overflow-x-hidden" style={{ backgroundColor: content.style.bgColor, fontFamily: content.style.fontFamily, fontSize: content.style.fontSize, color: content.style.fontColor }}>
       
@@ -1248,13 +1259,14 @@ export default function PresentationPage() {
       )}
 
       {/* ── NAVBAR ── */}
+      {settings?.portal_header_visible !== false && (
       <nav className={`w-full z-50 transition-all duration-500 border-b border-white/5 bg-[#080C16]/80 backdrop-blur-md sticky top-0 ${isEditing ? 'translate-y-[100px] lg:translate-y-[60px]' : ''}`}>
         <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
           
           {/* Logo Customizável */}
           <Link to="/dashboard" className="flex items-center gap-2 md:gap-3 group/logo relative drop-shadow-[0_0_20px_rgba(var(--color-primary-rgb),0.5)] transition-transform hover:scale-105 z-50">
-            {settings?.logo_url ? (
-              <img src={settings.logo_url} alt="Logo" className="w-9 h-9 md:w-11 md:h-11 object-contain shrink-0 rounded-xl shadow-xl" />
+            {(settings?.portal_logo_url || settings?.logo_url) ? (
+              <img src={settings.portal_logo_url || settings.logo_url} alt="Logo" className="w-9 h-9 md:w-11 md:h-11 object-contain shrink-0 rounded-xl shadow-xl" />
             ) : (
               <div className="w-9 h-9 md:w-11 md:h-11 rounded-xl bg-gradient-to-br from-primary to-accent border border-white/20 flex items-center justify-center shrink-0 shadow-lg">
                 <span className="text-black font-black text-xl">V</span>
@@ -1264,7 +1276,6 @@ export default function PresentationPage() {
                {settings?.platform_name || "Vitória Net"}
             </div>
           </Link>
-
           <div className="flex items-center gap-6">
             {!isEditing && isOwner && (
               <button onClick={enterEditMode} className="border-2 border-theme/50 text-theme hover:bg-theme/10 px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2 transition-all shadow-theme">
@@ -1274,12 +1285,14 @@ export default function PresentationPage() {
           </div>
         </div>
       </nav>
+      )}
 
       {/* ── MAIN CONTENT (Mapeando o Layout Arrastável) ── */}
       <main className="flex flex-col items-center min-h-[50vh]">
         {content.layout.map((sectionId, index) => renderSection(sectionId, index))}
 
         {/* ── FOOTER Fixo no final ── */}
+        {settings?.portal_footer_visible !== false && (
         <footer className="w-full border-t border-white/[0.05] bg-[#050810] py-12 px-6 flex flex-col relative overflow-hidden mt-12">
            <style>{`
              @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
@@ -1343,6 +1356,7 @@ export default function PresentationPage() {
              <span className="signature-watermark text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] whitespace-nowrap">Bruno Flacon</span>
            </div>
         </footer>
+        )}
       </main>
     </div>
   );

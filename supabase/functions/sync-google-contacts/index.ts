@@ -19,7 +19,7 @@ serve(async (req: Request) => {
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Authorization required" }), {
+      return new Response(JSON.stringify({ error: "Authorization required - Header ausente" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
@@ -27,17 +27,58 @@ serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid session" }), {
+      return new Response(JSON.stringify({ error: `Invalid session: ${authError?.message || 'Usuario nao encontrado no JWT'}` }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    const { members = [], googleToken } = await req.json().catch(() => ({}));
+    let { members = [], googleToken } = await req.json().catch(() => ({}));
     
+    // Se o token não vier no body (como via SettingsView), buscar no Banco de Dados
     if (!googleToken) {
-      return new Response(JSON.stringify({ error: "Google OAuth token required. Please connect your Google account." }), {
+      // 1. Tentar pegar o token OAuth da tabela de conexões sociais
+      const { data: conn } = await supabase
+        .from('social_connections')
+        .select('access_token')
+        .eq('user_id', user.id)
+        .in('platform', ['google', 'youtube'])
+        .eq('is_connected', true)
+        .limit(1);
+
+      if (conn && conn.length > 0 && conn[0].access_token) {
+        googleToken = conn[0].access_token;
+      } else {
+        // 2. Se não houver login social, buscar nas credenciais manuais (Google Cloud)
+        const { data: creds } = await supabase
+          .from('api_credentials')
+          .select('credentials')
+          .eq('user_id', user.id)
+          .in('platform', ['google', 'youtube', 'google_cloud'])
+          .limit(1);
+
+        if (creds && creds.length > 0) {
+          const credsObj = creds[0].credentials as Record<string, string>;
+          googleToken = credsObj?.access_token || credsObj?.people_api_key;
+        }
+      }
+    }
+
+    if (!googleToken) {
+      return new Response(JSON.stringify({ error: "API do Google Contatos bloqueada. Conecte sua Conta Google ou YouTube em Configurações > APIs." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
+    }
+
+    // Se "members" estiver vazio, buscar todos os membros locais para sincronização em massa
+    if (members.length === 0) {
+      const { data: allMembers } = await supabase
+        .from('messaging_members')
+        .select('*')
+        .eq('user_id', user.id);
+        
+      if (allMembers && allMembers.length > 0) {
+        members = allMembers;
+      }
     }
 
     const results: any[] = [];

@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+
 
 # Editor directories and files
 .vscode/*
@@ -59,3 +62,12 @@ check_whatsapp*.ps1
 
 # TypeScript incremental build info (auto-generated)
 tsconfig.tsbuildinfo
+
+# Development Archive
+_archive_temp/
+
+# TestSprite
+.testsprite/
+.testsprite_backup/
+testsprite_tests/
+

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { 
@@ -186,116 +186,116 @@ export const DocumentsView = () => {
     }
   };
 
-  const handlePreview = (doc: DocumentItem) => {
+  const handlePreview = useCallback((doc: DocumentItem) => {
     setSelectedDoc(doc);
-  };
+  }, []);
 
-  const handleDownload = (doc: DocumentItem) => {
+  const handleDownload = useCallback((doc: DocumentItem) => {
     window.open(doc.file_url, "_blank");
-  };
+  }, []);
 
-  const filteredDocs = docs.filter(doc => {
-    const matchesFilter = activeFilter === "all" || doc.file_type === activeFilter;
-    const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  }).sort((a, b) => {
-    if (sortBy === "size") return b.file_size - a.file_size;
-    if (sortBy === "duration") return (b.metadata?.duration || 0) - (a.metadata?.duration || 0);
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
+  const filteredDocs = React.useMemo(() => {
+    return docs.filter(doc => {
+      const matchesFilter = activeFilter === "all" || doc.file_type === activeFilter;
+      const matchesSearch = doc.name.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesFilter && matchesSearch;
+    }).sort((a, b) => {
+      if (sortBy === "size") return b.file_size - a.file_size;
+      if (sortBy === "duration") return (b.metadata?.duration || 0) - (a.metadata?.duration || 0);
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [docs, activeFilter, searchQuery, sortBy]);
 
-  const renderGridItem = (doc: DocumentItem) => {
-    const Icon = getFileIcon(detectFileType(doc.name));
-    const type = detectFileType(doc.name);
-    
-    return (
-      <motion.div
-        key={doc.id}
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="group relative aspect-square rounded-2xl overflow-hidden bg-card/40 border border-border hover:border-primary/50 transition-all cursor-pointer shadow-sm active:scale-95"
-        onClick={() => handlePreview(doc)}
-      >
-        {type === "image" ? (
-          <img 
-            src={doc.file_url} 
-            alt={doc.name} 
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center p-4">
-            <div className={cn("w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-110", getFileColor(type))}>
-              <Icon className="w-8 h-8" />
-            </div>
-          </div>
-        )}
-        
-        {type === "video" && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/5 transition-colors">
-            <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-lg border border-white/10">
-              <Play className="w-6 h-6 text-white fill-white/20" />
-            </div>
-          </div>
-        )}
-
-        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent translate-y-full group-hover:translate-y-0 transition-transform">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold text-white truncate mb-0.5">{doc.name}</p>
-              <p className="text-[9px] text-white/60 font-medium uppercase tracking-wider">
-                {formatSize(doc.file_size)}
-              </p>
-            </div>
-            <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-white" onClick={(e) => { e.stopPropagation(); handleDownload(doc) }}>
-              <Download className="w-3.5 h-3.5" />
-            </Button>
+const GridItem = React.memo(({ doc, onPreview, onDownload }: { doc: DocumentItem, onPreview: (d: DocumentItem) => void, onDownload: (d: DocumentItem) => void }) => {
+  const type = detectFileType(doc.name);
+  const Icon = getFileIcon(type);
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="group relative aspect-square rounded-2xl overflow-hidden bg-card/40 border border-border hover:border-primary/50 transition-all cursor-pointer shadow-sm active:scale-95"
+      onClick={() => onPreview(doc)}
+    >
+      {type === "image" ? (
+        <img 
+          src={doc.file_url} 
+          alt={doc.name} 
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center p-4">
+          <div className={cn("w-16 h-16 rounded-xl flex items-center justify-center mb-3 transition-transform group-hover:scale-110", getFileColor(type))}>
+            <Icon className="w-8 h-8" />
           </div>
         </div>
-      </motion.div>
-    );
-  };
-
-  const renderListItem = (doc: DocumentItem) => {
-    const Icon = getFileIcon(detectFileType(doc.name));
-    const type = detectFileType(doc.name);
-    
-    return (
-      <motion.div
-        key={doc.id}
-        initial={{ opacity: 0, x: -10 }}
-        animate={{ opacity: 1, x: 0 }}
-        className="flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-border hover:border-primary/30 transition-all group cursor-pointer"
-        onClick={() => handlePreview(doc)}
-      >
-        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", getFileColor(type))}>
-          <Icon className="w-6 h-6" />
-        </div>
-        
-        <div className="flex-1 min-w-0">
-          <h4 className="font-bold text-base text-white group-hover:text-primary transition-colors truncate">{doc.name}</h4>
-          <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground font-medium uppercase tracking-wider">
-            <span className="flex items-center gap-1"><User className="w-3 h-3" /> {doc.profiles?.name || 'Bruno Flacon'}</span>
-            <span className="w-1 h-1 rounded-full bg-border" />
-            <span>{formatSize(doc.file_size)}</span>
-            <span className="w-1 h-1 rounded-full bg-border" />
-            <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+      )}
+      
+      {type === "video" && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/5 transition-colors">
+          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-lg border border-white/10">
+            <Play className="w-6 h-6 text-white fill-white/20" />
           </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white/5" onClick={(e) => { e.stopPropagation(); handlePreview(doc) }}>
-            <Eye className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white/5" onClick={(e) => { e.stopPropagation(); handleDownload(doc) }}>
-            <Download className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-red-500/10 text-red-500" onClick={(e) => { e.stopPropagation(); handleDelete(doc.id) }}>
-            <Trash2 className="w-4 h-4" />
+      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/80 to-transparent translate-y-full group-hover:translate-y-0 transition-transform">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-white truncate mb-0.5">{doc.name}</p>
+            <p className="text-[9px] text-white/60 font-medium uppercase tracking-wider">
+              {formatSize(doc.file_size)}
+            </p>
+          </div>
+          <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/20 text-white" onClick={(e) => { e.stopPropagation(); onDownload(doc) }}>
+            <Download className="w-3.5 h-3.5" />
           </Button>
         </div>
-      </motion.div>
-    );
-  };
+      </div>
+    </motion.div>
+  );
+});
+
+const ListItem = React.memo(({ doc, onPreview, onDownload, onDelete }: { doc: DocumentItem, onPreview: (d: DocumentItem) => void, onDownload: (d: DocumentItem) => void, onDelete: (id: string) => void }) => {
+  const type = detectFileType(doc.name);
+  const Icon = getFileIcon(type);
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="flex items-center gap-4 p-4 rounded-2xl bg-card/40 border border-border hover:border-primary/30 transition-all group cursor-pointer"
+      onClick={() => onPreview(doc)}
+    >
+      <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", getFileColor(type))}>
+        <Icon className="w-6 h-6" />
+      </div>
+      
+      <div className="flex-1 min-w-0">
+        <h4 className="font-bold text-base text-white group-hover:text-primary transition-colors truncate">{doc.name}</h4>
+        <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground font-medium uppercase tracking-wider">
+          <span className="flex items-center gap-1"><User className="w-3 h-3" /> {doc.profiles?.name || 'Bruno Flacon'}</span>
+          <span className="w-1 h-1 rounded-full bg-border" />
+          <span>{formatSize(doc.file_size)}</span>
+          <span className="w-1 h-1 rounded-full bg-border" />
+          <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white/5" onClick={(e) => { e.stopPropagation(); onPreview(doc) }}>
+          <Eye className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-white/5" onClick={(e) => { e.stopPropagation(); onDownload(doc) }}>
+          <Download className="w-4 h-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-red-500/10 text-red-500" onClick={(e) => { e.stopPropagation(); onDelete(doc.id) }}>
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+    </motion.div>
+  );
+});
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-6 space-y-6">
@@ -384,11 +384,15 @@ export const DocumentsView = () => {
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 md:gap-6">
-          {filteredDocs.map(renderGridItem)}
+          {filteredDocs.map(doc => (
+            <GridItem key={doc.id} doc={doc} onPreview={handlePreview} onDownload={handleDownload} />
+          ))}
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-           {filteredDocs.map(renderListItem)}
+           {filteredDocs.map(doc => (
+             <ListItem key={doc.id} doc={doc} onPreview={handlePreview} onDownload={handleDownload} onDelete={handleDelete} />
+           ))}
         </div>
       )}
 

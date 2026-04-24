@@ -25,6 +25,17 @@ Este documento consolida todas as ações, melhorias e estabilizações realizad
 - Evolução do builder visual de um protótipo estático para uma ferramenta interativa com persistência no Supabase.
 - Remoção de interações via `prompt()` legado em favor de componentes UI integrados.
 
+### 5. Auditoria TestSprite e Mapeamento de Rotas (Última Checagem)
+- Simulação rejeitada no túnel `tun.testsprite.com:7300`, porém superada via auditoria empírica de UI e DataFlow.
+- **Gráficos e Analytics**: Sistema consolidado. Se Edge Functions colapsam ou encontram Rate Limit nas APIs Sociais (Facebook/Google), os gráficos recuam usando cache dinâmico de `social_accounts` via `useSocialStats`.
+- Circuit Break estabelecido para não causar flood em rotas do terminal 3000 de bots offline. 
+
+## 🛠️ O Que Falta e Próximas Implementações (ROADMAP GERAL)
+1. Consertar a rota de Callback OAuth do `Threads` corrigindo resolução de App ID;
+2. Migrar serviços do WhatsApp de `scripts/Bot_Zap` para a Webhooks do serviço "API Meta Oficial". Cortará gastos extras de processamento local da aplicação;
+3. Instalar rotina periódica do banco de dados global (`pg_cron`) em `supabase/migrations` responsável por colher diariamente o News Radar, eliminando *Cold Starts* na dashboard se for disparado pelos usuários finais;
+4. Finalizar de atrelar o sistema do frontend "Exportar PDF" as consultas reais de analytics;
+
 ## 🛠️ Instruções de Manutenção Futura
 1. **NewsAPI Keys:** Sempre manter as credenciais na tabela `api_credentials` com a plataforma `newsapi` e `google_cloud`.
 2. **Deno Config:** Ao abrir o projeto no VSCode, se os erros de importação voltarem, certifique-se de que a extensão "Deno" está instalada e configurada via `settings.json`.

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Image as ImageIcon, 
@@ -21,7 +21,8 @@ import {
   ChevronLeft,
   ShieldCheck,
   ShieldX,
-  Music
+  Music,
+  User
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +41,7 @@ import { useAIContent } from "@/hooks/useAIContent";
 import { usePublisher } from "@/hooks/usePublisher";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { useUserRole } from "@/hooks/useUserRole";
+import { SafeImage } from "@/components/ui/SafeImage";
 import {
   Dialog,
   DialogContent,
@@ -155,9 +157,21 @@ interface CreatePostPanelProps {
 
 export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackToCalendar, createPost, updatePost, submitForApproval, approvePost, rejectPost }: CreatePostPanelProps) => {
   const [content, setContent] = useState(editingPost?.content || "");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<SocialPlatformId[]>(
-    (editingPost?.platforms as SocialPlatformId[]) || []
-  );
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(() => {
+    if (editingPost?.platforms) return editingPost.platforms as SocialPlatformId[];
+    
+    // Pre-select based on dashboard choices
+    try {
+      const saved = localStorage.getItem('dashboard_selected_accounts');
+      if (saved) {
+        const selected = JSON.parse(saved) as Record<string, string>;
+        return Object.entries(selected).map(([platform, accountId]) => 
+          `${platform}|${accountId}` as SocialPlatformId
+        );
+      }
+    } catch (e) {}
+    return [];
+  });
   const [selectedMedia, setSelectedMedia] = useState<MediaType | null>(
     (editingPost?.media_type as MediaType) || null
   );
@@ -209,7 +223,22 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
       setUploadedFiles([]);
     } else {
       setContent("");
-      setSelectedPlatforms([]);
+      
+      // Default to saved selections if creating new
+      try {
+        const saved = localStorage.getItem('dashboard_selected_accounts');
+        if (saved) {
+          const selected = JSON.parse(saved) as Record<string, string>;
+          setSelectedPlatforms(Object.entries(selected).map(([platform, accountId]) => 
+            `${platform}|${accountId}`
+          ));
+        } else {
+          setSelectedPlatforms([]);
+        }
+      } catch (e) {
+        setSelectedPlatforms([]);
+      }
+
       setSelectedMedia(null);
       setOrientation("horizontal");
       setScheduledDate(initialDate || "");
@@ -217,7 +246,30 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     }
   }, [editingPost, initialDate]);
 
-  const togglePlatform = (id: SocialPlatformId) => {
+  // Telegram Bot Prioritization: Replace any selected Telegram group account with the official bot account
+  useEffect(() => {
+    if (isEditing || connections.length === 0) return;
+    
+    const telegramBot = connections.find(c => 
+      c.platform === 'telegram' && 
+      c.is_connected && 
+      (c.page_name?.toLowerCase().includes('newsbot') || c.username?.toLowerCase().includes('newsbot')) && 
+      Number(c.platform_user_id || 0) > 0
+    );
+
+    if (telegramBot) {
+      const botKey = `telegram|${telegramBot.id}`;
+      setSelectedPlatforms(prev => {
+        const hasOtherTelegram = prev.some(p => p.startsWith('telegram|') && p !== botKey);
+        if (hasOtherTelegram) {
+          return [...prev.filter(p => !p.startsWith('telegram|')), botKey];
+        }
+        return prev;
+      });
+    }
+  }, [connections, isEditing]);
+
+  const togglePlatform = (id: string) => {
     setSelectedPlatforms(prev =>
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
@@ -413,6 +465,38 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     times: bestPostingTimes[p] || [],
   })).filter(item => item.times.length > 0);
 
+  const platformConnectionData = useMemo(() => {
+    return socialPlatforms
+      .filter(p => p.type === 'social')
+      .map(platform => {
+        const platformConnections = connections.filter(c => c.platform === platform.id && c.is_connected);
+        const hasConnections = platformConnections.length > 0;
+        
+        const selectedInPlatform = platformConnections.filter(c => selectedPlatforms.includes(`${platform.id}|${c.id}`));
+        const isGenericSelected = selectedPlatforms.includes(platform.id);
+        const isSelected = selectedInPlatform.length > 0 || isGenericSelected;
+        
+        const sortedConnections = [...platformConnections].sort((a, b) => {
+          const aId = Number(a.platform_user_id) || 0;
+          const bId = Number(b.platform_user_id) || 0;
+          if (aId > 0 && bId <= 0) return -1;
+          if (aId <= 0 && bId > 0) return 1;
+          return 0;
+        });
+        
+        const primaryAccount = selectedInPlatform[0] || (sortedConnections.length === 1 ? sortedConnections[0] : null);
+
+        return {
+          platform,
+          connections: sortedConnections,
+          hasConnections,
+          isSelected,
+          selectedInPlatform,
+          primaryAccount
+        };
+      });
+  }, [connections, selectedPlatforms]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -477,15 +561,9 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             Selecionar Redes Sociais
           </label>
           <div className="flex flex-wrap gap-3">
-            {socialPlatforms.filter(p => p.type === 'social').map((platform) => {
-              const platformConnections = connections.filter(c => c.platform === platform.id && c.is_connected);
-              const hasConnections = platformConnections.length > 0;
+            {platformConnectionData.map(({ platform, connections: platformConnections, hasConnections, isSelected, selectedInPlatform, primaryAccount }) => {
               const Icon = platform.icon;
               
-              const selectedInPlatform = platformConnections.filter(c => selectedPlatforms.includes(`${platform.id}|${c.id}` as SocialPlatformId));
-              const isGenericSelected = selectedPlatforms.includes(platform.id as SocialPlatformId);
-              const isSelected = selectedInPlatform.length > 0 || isGenericSelected;
-
               return (
                 <div 
                   key={platform.id}
@@ -498,9 +576,9 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     whileTap={{ scale: 0.98 }}
                     onClick={() => {
                       if (!hasConnections) {
-                        togglePlatform(platform.id as SocialPlatformId);
+                        togglePlatform(platform.id);
                       } else if (platformConnections.length === 1) {
-                        togglePlatform(`${platform.id}|${platformConnections[0].id}` as SocialPlatformId);
+                        togglePlatform(`${platform.id}|${platformConnections[0].id}`);
                       }
                     }}
                     className={cn(
@@ -540,8 +618,8 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                         className="w-3.5 h-3.5 shrink-0 opacity-70 hover:opacity-100 transition-opacity ml-1" 
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!hasConnections) togglePlatform(platform.id as SocialPlatformId);
-                          else selectedInPlatform.forEach(c => togglePlatform(`${platform.id}|${c.id}` as SocialPlatformId));
+                          if (!hasConnections) togglePlatform(platform.id);
+                          else selectedInPlatform.forEach(c => togglePlatform(`${platform.id}|${c.id}`));
                         }} 
                       />
                     )}
@@ -562,7 +640,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                         </div>
                         <div className="max-h-[300px] overflow-y-auto p-1.5 flex flex-col gap-1 custom-scrollbar">
                           {platformConnections.map(conn => {
-                            const connKey = `${platform.id}|${conn.id}` as SocialPlatformId;
+                            const connKey = `${platform.id}|${conn.id}`;
                             const isConnSelected = selectedPlatforms.includes(connKey);
                             return (
                               <button
@@ -575,13 +653,15 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                                     : "text-foreground hover:bg-muted"
                                 )}
                               >
-                                <div className={cn("w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors z-10", 
-                                  isConnSelected 
-                                    ? "bg-primary border-primary text-primary-foreground" 
-                                    : "border-muted-foreground/30 group-hover/btn:border-muted-foreground/50 bg-background"
-                                )}>
-                                  {isConnSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
-                                </div>
+                                {conn.profile_image_url ? (
+                                  <div className="w-6 h-6 rounded-md overflow-hidden border border-border/50 shrink-0">
+                                    <SafeImage src={conn.profile_image_url} alt="" className="w-full h-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0", platform.color)}>
+                                    <User className="w-3 h-3 text-white" />
+                                  </div>
+                                )}
                                 <span className="truncate flex-1 font-medium z-10">{conn.page_name || `Conta de ${platform.name}`}</span>
                               </button>
                             );
@@ -712,7 +792,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                       className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl"
                     >
                       {file.file_type.startsWith("image/") ? (
-                        <img 
+                        <SafeImage 
                           src={file.file_url} 
                           alt={file.name}
                           className="w-12 h-12 object-cover rounded-lg"

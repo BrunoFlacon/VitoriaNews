@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, Plus, Settings, Loader2, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface SocialAccount {
   id: string;
@@ -207,7 +208,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                         )}
                       >
                         {account.profile_image_url ? (
-                          <img
+                          <SafeImage
                             src={account.profile_image_url}
                             alt={account.page_name || ""}
                             className="w-8 h-8 rounded-full object-cover border border-border"

@@ -21,9 +21,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface MessagingChannel {
   id: string;
@@ -143,14 +145,81 @@ const getPlatformStyles = (platformId: string|null) => {
 // const getCoverFallback = () => null; // kept as ref to avoid any stale usages
 
 export const MessagingView = () => {
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
   const { addNotification } = useNotifications();
   const { connections } = useSocialConnections();
-  const [channels, setChannels] = useState<MessagingChannel[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [messagesLoading, setMessagesLoading] = useState(true);
+
+  // Fetch Channels with React Query
+  const { data: channels = [], isLoading: loading, refetch: refetchChannels } = useQuery<MessagingChannel[]>({
+    queryKey: ['messaging_channels', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("messaging_channels")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+        
+      if (error) throw error;
+
+      const { data: accounts } = await supabase
+        .from("social_accounts")
+        .select("*")
+        .eq("user_id", user.id);
+
+      const enrichedChannels = (data || []).map((ch: any) => {
+         const chId = ch.channel_id ? ch.channel_id.toString().toLowerCase() : "";
+         const chName = ch.channel_name ? ch.channel_name.toLowerCase() : "";
+         
+         const linkedAccount = accounts?.find(a =>
+            a.platform === ch.platform && (
+               (chId && (a as any).chat_id?.toString().toLowerCase() === chId) ||
+               (chId && (a as any).platform_user_id?.toLowerCase() === chId) ||
+               (chId && (a as any).username?.toLowerCase() === chId) ||
+               (chName && (a as any).username?.toLowerCase() === chName) ||
+               (chName && (a as any).page_name?.toLowerCase() === chName)
+            )
+         );
+
+         return {
+           ...ch,
+           members_count: (linkedAccount as any)?.followers ?? (linkedAccount as any)?.followers_count ?? ch.members_count ?? 0,
+           posts_count: (linkedAccount as any)?.posts_count ?? ch.posts_count ?? 0,
+           profile_picture: ch.profile_picture || linkedAccount?.profile_picture || null,
+           cover_photo: ch.cover_photo || (linkedAccount as any)?.cover_photo || null
+         };
+      });
+
+      // Deduplicate
+      const globalSeen = new Set();
+      return (enrichedChannels as any[]).filter(ch => {
+         const dKey = ch.channel_id ? `${ch.platform}:${ch.channel_id}` : ch.id;
+         if (globalSeen.has(dKey)) return false;
+         globalSeen.add(dKey);
+         return true;
+      }) as MessagingChannel[];
+    },
+    enabled: !!user
+  });
+
+  // Fetch Messages with React Query
+  const { data: messages = [], isLoading: messagesLoading, refetch: refetchMessages } = useQuery<Message[]>({
+    queryKey: ['messaging_messages', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data as unknown as Message[];
+    },
+    enabled: !!user
+  });
+
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("channels");
   const [sidebarTab, setSidebarTab] = useState<"all" | "individual" | "groups" | "channels" | "broadcast">("all");
@@ -168,10 +237,12 @@ export const MessagingView = () => {
       .filter(m => {
         let belongs = false;
         if (activeChatType === "channel") {
-          const ch = channels.find(c => c.channel_id === activeChatId || c.id === activeChatId);
-          belongs = m.channel_id === ch?.id;
+          // activeChatId agora é o UUID direto do canal (ch.id)
+          belongs = m.channel_id === activeChatId;
         } else {
-          belongs = m.recipient_phone === activeChatId || m.recipient_name === activeChatId;
+          // Para individuais, remover prefixo "ind-" do activeChatId
+          const rawKey = activeChatId.startsWith('ind-') ? activeChatId.slice(4) : activeChatId;
+          belongs = m.recipient_phone === rawKey || m.recipient_name === rawKey;
         }
         if (!belongs) return false;
         if (chatSearchQuery.trim()) return m.content.toLowerCase().includes(chatSearchQuery.toLowerCase());
@@ -184,24 +255,37 @@ export const MessagingView = () => {
 
   // 1. Process all chats (channels + individuals)
   const processedChats = useMemo(() => {
-    const channelChats = (channels || []).map(ch => {
+    // Deduplicar canais pelo channel_id para evitar keys duplicadas no React
+    const seen = new Set<string>();
+    const uniqueChannels = (channels || []).filter(ch => {
+      const dedupKey = ch.channel_id ? `${ch.platform}:${ch.channel_id}` : ch.id;
+      if (seen.has(dedupKey)) return false;
+      seen.add(dedupKey);
+      return true;
+    });
+
+    const channelChats = uniqueChannels.map(ch => {
       // Pre-calculate photo URL to avoid storage calls in render loop
       let photoUrl = null;
       if (ch.profile_picture) {
-        if (ch.profile_picture.startsWith('http')) {
+        if (ch.profile_picture.startsWith('http') || ch.profile_picture.startsWith('data:')) {
           photoUrl = ch.profile_picture;
         } else {
           photoUrl = supabase.storage.from("media").getPublicUrl(ch.profile_picture).data.publicUrl;
         }
       }
 
+      // Usar nome legível: priorizar channel_name, depois username (@), depois channel_id
+      const displayName = ch.channel_name || ch.channel_id || ch.id;
+
       return {
-        key: ch.channel_id || ch.id,
+        key: ch.id, // UUID único do banco — nunca duplica
         id: ch.id,
+        channelId: ch.channel_id, // guardar para operações de envio
         type: "channel",
         channel_type: ch.channel_type,
         lastMsg: messages.find(m => m.channel_id === ch.id),
-        name: ch.channel_name,
+        name: displayName,
         photo: ch.profile_picture,
         photoUrl,
         platform: ch.platform,
@@ -215,7 +299,7 @@ export const MessagingView = () => {
       .filter(m => !m.channel_id && (m.recipient_phone || m.recipient_name))
       .reduce((acc: any[], current) => {
         const key = current.recipient_phone || current.recipient_name || "";
-        if (!acc.find(i => i.key === key)) {
+        if (!acc.find(i => i.key === `ind-${key}`)) {
           // Find photo in channels or connections
           const conn = (connections || []).find(c => c.page_name === key || c.platform_user_id === key);
           const ch = (channels || []).find(c => c.channel_name === key || c.channel_id === key);
@@ -223,20 +307,31 @@ export const MessagingView = () => {
           
           let photoUrl = null;
           if (rawPhoto) {
-            if (rawPhoto.startsWith('http')) {
+            if (rawPhoto.startsWith('http') || rawPhoto.startsWith('data:')) {
               photoUrl = rawPhoto;
             } else {
               photoUrl = supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl;
             }
           }
 
+          let displayName = current.recipient_name || current.recipient_phone || key;
+          if (displayName.includes('@s.whatsapp.net') || displayName.includes('@c.us') || displayName.includes('@g.us')) {
+            displayName = displayName.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@g.us', '');
+            // Se for apenas número e tiver código de país do BR, formatar simples
+            if (/^55\d{10,11}$/.test(displayName)) {
+               const ddd = displayName.substring(2, 4);
+               const num = displayName.substring(4);
+               displayName = `(${ddd}) ${num.length === 9 ? num.substring(0, 5) + '-' + num.substring(5) : num.substring(0, 4) + '-' + num.substring(4)}`;
+            }
+          }
+
           acc.push({
-            key,
+            key: `ind-${key}`, // Prefixo para nunca colidir com UUIDs dos canais
             id: current.id,
             type: "individual",
             channel_type: "individual",
             lastMsg: messages.filter(m => (m.recipient_phone === key || m.recipient_name === key)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0],
-            name: current.recipient_name || current.recipient_phone,
+            name: displayName,
             photo: rawPhoto,
             photoUrl,
             platform: current.platform,
@@ -330,57 +425,7 @@ export const MessagingView = () => {
   const [replyMessage, setReplyMessage] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
 
-  const fetchChannels = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from("messaging_channels")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-      
-    const { data: accounts } = await supabase
-      .from("social_accounts")
-      .select("*")
-      .eq("user_id", user.id);
-
-    if (!error && data) {
-      const enrichedChannels = data.map((ch: any) => {
-         const chId = ch.channel_id ? ch.channel_id.toString().toLowerCase() : "";
-         const chName = ch.channel_name ? ch.channel_name.toLowerCase() : "";
-         
-       const linkedAccount = accounts?.find(a =>
-           a.platform === ch.platform && (
-              (chId && (a as any).chat_id?.toString().toLowerCase() === chId) ||
-              (chId && (a as any).platform_user_id?.toLowerCase() === chId) ||
-              (chId && (a as any).username?.toLowerCase() === chId) ||
-              (chName && (a as any).username?.toLowerCase() === chName) ||
-              (chName && (a as any).page_name?.toLowerCase() === chName)
-            )
-         );
-
-         return {
-           ...ch,
-           members_count: (linkedAccount as any)?.followers ?? (linkedAccount as any)?.followers_count ?? ch.members_count ?? 0,
-           posts_count: (linkedAccount as any)?.posts_count ?? ch.posts_count ?? 0,
-           profile_picture: ch.profile_picture || linkedAccount?.profile_picture || null,
-           cover_photo: ch.cover_photo || (linkedAccount as any)?.cover_photo || null
-         };
-      });
-      setChannels(enrichedChannels as unknown as MessagingChannel[]);
-    }
-    setLoading(false);
-  };
-
-  const fetchMessages = async () => {
-    if (!user) return;
-    const { data, error } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    if (!error && data) setMessages(data as unknown as Message[]);
-    setMessagesLoading(false);
-  };
+  // Removed local fetchers as they are replaced by useQuery
 
   const handleOpenInfo = async (channel: MessagingChannel) => {
     if (!user) return;
@@ -502,59 +547,7 @@ export const MessagingView = () => {
     setSyncingGoogle(true);
     
     try {
-      // 1. Get Google access_token - try 'google' first, then 'youtube' platform
-      let account: any = null;
-      
-      // Try social_connections with 'google' platform
-      const { data: googleConn } = await supabase
-        .from('social_connections')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('platform', 'google')
-        .eq('is_connected', true)
-        .maybeSingle();
-      
-      if (googleConn?.access_token) {
-        account = googleConn;
-      } else {
-        // Fallback: try 'youtube' platform (same OAuth)
-        const { data: ytConn } = await supabase
-          .from('social_connections')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('platform', 'youtube')
-          .eq('is_connected', true)
-          .maybeSingle();
-        
-        if (ytConn?.access_token) {
-          account = ytConn;
-        } else {
-          // Last fallback: check api_credentials for stored google creds
-          const { data: creds } = await supabase
-            .from('api_credentials')
-            .select('credentials')
-            .eq('user_id', user.id)
-            .in('platform', ['google', 'youtube', 'google_cloud'])
-            .maybeSingle();
-          
-          const credsObj = creds?.credentials as Record<string, string> | undefined;
-          if (credsObj?.access_token) {
-            account = { access_token: credsObj.access_token };
-          }
-        }
-      }
-
-      if (!account || !account.access_token) {
-        toast({ 
-          title: "Conta Google Não Conectada", 
-          description: "Conecte sua conta Google ou YouTube em Configurações > APIs para habilitar a sincronização.", 
-          variant: "destructive" 
-        });
-        setSyncingGoogle(false);
-        return;
-      }
-
-      // 2. Map members to what the Edge Function expects
+      // 1. Map members to what the Edge Function expects (token fetching and validation is now handled securely on the backend)
       const memberData = infoMembers.map(m => ({
         full_name: m.full_name,
         first_name: m.first_name,
@@ -568,9 +561,11 @@ export const MessagingView = () => {
         channel_id: selectedInfoChannel?.channel_id
       }));
 
-      // 3. Call Edge Function with googleToken parameter
+      // 3. Call Edge Function to sync google contacts (token fetching managed entirely on the backend)
+      const currentSession = (await supabase.auth.getSession()).data.session;
       const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-google-contacts', {
-        body: { members: memberData, googleToken: account.access_token }
+        body: { members: memberData },
+        headers: currentSession ? { Authorization: `Bearer ${currentSession.access_token}` } : undefined
       });
       
       if (syncError || !syncResult?.success) {
@@ -594,7 +589,7 @@ export const MessagingView = () => {
 
   const syncChannels = async (platformArg?: any) => {
     if (!user) return;
-    setLoading(true);
+    // loading state is handled by useQuery's isLoading
     try {
       const platform = typeof platformArg === 'string' ? platformArg : undefined;
       const session = (await supabase.auth.getSession()).data.session;
@@ -609,34 +604,37 @@ export const MessagingView = () => {
       });
 
       if (error) {
+        console.error("[SYNC] Invoke Error:", error);
+        toast({ title: "Erro na sincronização", description: error.message, variant: "destructive" });
       } else if (data?.success) {
-        // Success logic here if needed
+        toast({ title: "Sincronização concluída", description: "Seus canais e mensagens foram atualizados." });
+      } else {
+        toast({ title: "Aviso", description: data?.error || "A sincronização não retornou resultados." });
       }
+    } catch (err: any) {
+      console.error("[SYNC] Catch Error:", err);
+      toast({ title: "Erro fatal", description: err.message, variant: "destructive" });
     } finally {
-      setLoading(false);
-      await fetchChannels();
-      await fetchMessages();
+      refetchChannels();
+      refetchMessages();
     }
   };
 
-  useEffect(() => {
-    fetchChannels();
-    fetchMessages();
-  }, [user]);
+  // Initial fetch handled by useQuery enabled: !!user
 
   useEffect(() => {
     if (!user) return;
     const ch1 = supabase
       .channel("messaging-channels-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, () => fetchChannels())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, () => refetchChannels())
       .subscribe();
     const ch2 = supabase
       .channel("messages-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, () => fetchMessages())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, () => refetchMessages())
       .subscribe();
 
     // Listen for telegram sync events
-    const handleChannelsUpdate = () => { fetchChannels(); };
+    const handleChannelsUpdate = () => { refetchChannels(); };
     window.addEventListener("messaging-channels-updated", handleChannelsUpdate);
 
     return () => { 
@@ -701,9 +699,43 @@ export const MessagingView = () => {
     setSubmitting(false);
   };
 
-  const handleDelete = async (id: string) => {
-    await supabase.from("messaging_channels").delete().eq("id", id);
-    toast({ title: "Canal removido" });
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm("Tem certeza que deseja remover este canal?")) return;
+    
+    // Clear active chat if we're deleting it
+    if (activeChatId === id) {
+      setActiveChatId(null);
+    }
+
+    // Optimistic Update
+    const previousChannels = queryClient.getQueryData<MessagingChannel[]>(['messaging_channels', user?.id]);
+    queryClient.setQueryData(['messaging_channels', user?.id], (old: MessagingChannel[] | undefined) => 
+      old?.filter(c => c.id !== id) || []
+    );
+    
+    const { error } = await supabase.from("messaging_channels").delete().eq("id", id);
+    if (error) {
+       console.error("[DELETE CHANNEL] Error:", error);
+       toast({ title: "Erro ao remover", description: error.message, variant: "destructive" });
+       queryClient.setQueryData(['messaging_channels', user?.id], previousChannels);
+       return;
+    }
+    
+    // Optimistic Update for messages too
+    const previousMessages = queryClient.getQueryData<Message[]>(['messaging_messages', user?.id]);
+    queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+      old?.filter(m => m.channel_id !== id) || []
+    );
+
+    // Also cleanup messages for this channel
+    await supabase.from("messages").delete().eq("channel_id", id);
+    
+    toast({ title: "Canal e histórico removidos com sucesso" });
+    
+    // Immediate state refresh
+    queryClient.invalidateQueries({ queryKey: ['messaging_channels', user?.id] });
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user?.id] });
   };
 
   const resetAddForm = () => {
@@ -855,7 +887,7 @@ export const MessagingView = () => {
       // Update result state locally to show "Linked"
       setDiscoverResults(prev => prev.map(r => r.chatId === result.chatId ? { ...r, registered: true } : r));
       
-      await fetchChannels();
+      await refetchChannels();
       window.dispatchEvent(new Event('social-connections-updated'));
     } catch (e: any) {
       toast({ title: "Erro ao vincular", description: e.message, variant: "destructive" });
@@ -871,22 +903,64 @@ export const MessagingView = () => {
   const handleReply = async () => {
     if (!user || !activeChatId || !replyMessage.trim()) return;
     setSendingReply(true);
+    
+    const now = new Date().toISOString();
+    const tempId = `temp-${Date.now()}`;
+    
+    // Detectar se estamos respondendo em um canal (grupo/channel) ou individual
+    const activeChat = processedChats.find(c => c.key === activeChatId);
+    const isChannel = activeChat?.type === "channel";
+    const channelDbId = isChannel ? activeChat.id : null; // UUID do messaging_channels
+    const chatPlatform = activeChat?.platform || "telegram";
+
+    const optimisticMsg: Message = {
+      id: tempId,
+      user_id: user.id,
+      content: replyMessage.trim(),
+      media_url: null,
+      status: "sending",
+      scheduled_at: null,
+      sent_at: now,
+      recipient_phone: null,
+      recipient_name: isChannel ? null : (activeChatId.startsWith('ind-') ? activeChatId.slice(4) : activeChatId),
+      platform: chatPlatform,
+      created_at: now,
+      channel_id: channelDbId
+    } as Message;
+    
+    // Optimistic: aparece instantaneamente na tela
+    queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => [optimisticMsg, ...(old || [])]);
+    setReplyMessage("");
+    
     try {
-      const { error } = await supabase.from("messages").insert({
+      const insertPayload: any = {
         user_id: user.id,
-        content: replyMessage.trim(),
-        recipient_name: activeChatId, // Simple logic: reply to the "key" we have
+        content: optimisticMsg.content,
         status: "sent",
-        sent_at: new Date().toISOString(),
-        platform: "telegram" // Defaulting or inferring from active chat if possible
-      });
+        sent_at: now,
+        platform: chatPlatform
+      };
+      
+      if (isChannel) {
+        insertPayload.channel_id = channelDbId;
+      } else {
+        insertPayload.recipient_name = activeChatId.startsWith('ind-') ? activeChatId.slice(4) : activeChatId;
+      }
+
+      const { data, error } = await supabase.from("messages").insert(insertPayload).select().single();
 
       if (error) throw error;
       
-      setReplyMessage("");
+      // Substituir o temporário pelo ID real do banco
+      queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+        old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id, status: "sent" } : m) || []
+      );
       toast({ title: "Resposta enviada!" });
-      fetchMessages();
     } catch (e: any) {
+      // Reverter optimistic update em caso de erro
+      queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+        old?.filter(m => m.id !== tempId) || []
+      );
       toast({ title: "Erro ao responder", description: e.message, variant: "destructive" });
     } finally {
       setSendingReply(false);
@@ -941,6 +1015,7 @@ export const MessagingView = () => {
   const handleSendMessage = async () => {
     if (!user) return;
     setComposeSending(true);
+    const now = new Date().toISOString();
 
     try {
       const mediaUrls = attachments.length > 0 ? attachments.map(a => a.url) : [];
@@ -957,6 +1032,24 @@ export const MessagingView = () => {
         if (!composeIndividualPhone.trim() || !composeMessage.trim()) return;
         payload.platforms = [composeIndividualPlatform];
         payload.recipientPhone = composeIndividualPhone.trim();
+
+        // Optimistic update: mostra instantaneamente na tela
+        const tempId = `temp-${Date.now()}`;
+        const optimisticMsg: Message = {
+          id: tempId,
+          user_id: user.id,
+          channel_id: null,
+          content: composeMessage.trim(),
+          media_url: mediaUrls.join(",") || null,
+          status: isScheduled ? "scheduled" : "sending",
+          scheduled_at: composeScheduledAt || null,
+          sent_at: now,
+          recipient_phone: composeIndividualPhone.trim(),
+          recipient_name: composeIndividualName.trim() || null,
+          platform: composeIndividualPlatform,
+          created_at: now
+        };
+        queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => [optimisticMsg, ...(old || [])]);
         
         const { data, error } = await supabase.from("messages").insert({
           user_id: user.id,
@@ -969,7 +1062,17 @@ export const MessagingView = () => {
           platform: composeIndividualPlatform,
         } as any).select().single();
         
-        if (error) throw error;
+        if (error) {
+          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+            old?.filter(m => m.id !== tempId) || []
+          );
+          throw error;
+        }
+
+        // Substituir temp pelo ID real
+        queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+          old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id } : m) || []
+        );
 
         if (!isScheduled) {
           try {
@@ -990,9 +1093,15 @@ export const MessagingView = () => {
             const resultData = await response.json();
             if (!response.ok || !resultData?.success) {
               await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
-              throw new Error(resultData?.message || "Erro ao disparar envio");
+              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+                old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
+              );
+            } else {
+              await supabase.from("messages").update({ status: "sent", sent_at: now } as any).eq("id", data.id);
+              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+                old?.map(m => m.id === (data as any).id ? { ...m, status: "sent" } : m) || []
+              );
             }
-            await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", data.id);
           } catch (e) { console.error("Silent publish error", e); }
         }
 
@@ -1005,6 +1114,24 @@ export const MessagingView = () => {
           const ch = channels.find(c => c.id === channelId);
           if (!ch) continue;
 
+          // Optimistic update por canal
+          const tempId = `temp-${Date.now()}-${channelId}`;
+          const optimisticMsg: Message = {
+            id: tempId,
+            user_id: user.id,
+            channel_id: channelId,
+            content: composeMessage.trim(),
+            media_url: mediaUrls.join(",") || null,
+            status: isScheduled ? "scheduled" : "sending",
+            scheduled_at: composeScheduledAt || null,
+            sent_at: now,
+            recipient_phone: null,
+            recipient_name: null,
+            platform: ch.platform,
+            created_at: now
+          };
+          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => [optimisticMsg, ...(old || [])]);
+
           const { data, error } = await supabase.from("messages").insert({
             user_id: user.id,
             channel_id: channelId,
@@ -1015,7 +1142,15 @@ export const MessagingView = () => {
             platform: ch.platform,
           } as any).select().single();
 
-          if (error) throw error;
+          if (error) {
+            queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => old?.filter(m => m.id !== tempId) || []);
+            throw error;
+          }
+
+          // Substituir temp pelo ID real
+          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+            old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id } : m) || []
+          );
 
           if (!isScheduled) {
             const chanPayload = { 
@@ -1031,8 +1166,14 @@ export const MessagingView = () => {
 
             if (funcError || !resultData?.success) {
               await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
+              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+                old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
+              );
             } else {
-              await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", data.id);
+              await supabase.from("messages").update({ status: "sent", sent_at: now } as any).eq("id", data.id);
+              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+                old?.map(m => m.id === (data as any).id ? { ...m, status: "sent" } : m) || []
+              );
             }
           }
         }
@@ -1091,12 +1232,61 @@ export const MessagingView = () => {
 
   // === CRUD operations for history ===
   const handleDeleteMessage = async (id: string) => {
-    await supabase.from("messages").delete().eq("id", id);
-    toast({ title: "Mensagem removida" });
+    if (!user) return;
+    
+    // Optimistic Update
+    const previousMessages = queryClient.getQueryData<Message[]>(['messaging_messages', user.id]);
+    queryClient.setQueryData(['messaging_messages', user.id], (old: Message[] | undefined) => 
+      old?.filter(m => m.id !== id) || []
+    );
+
+    const { error } = await supabase.from("messages").delete().eq("id", id);
+    
+    if (error) {
+      console.error("[DELETE MESSAGE] Error:", error);
+      toast({ title: "Erro ao remover mensagem", description: error.message, variant: "destructive" });
+      queryClient.setQueryData(['messaging_messages', user.id], previousMessages);
+      return;
+    }
+    
+    toast({ title: "Mensagem removida com sucesso" });
     addNotification({ type: "info", title: "Mensagem excluída", message: "A mensagem foi removida do histórico." });
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
+  };
+
+  const handleDeleteConversation = async (recipientId: string) => {
+    if (!user || !recipientId) return;
+    if (!confirm("Tem certeza que deseja apagar todo o histórico desta conversa?")) return;
+
+    toast({ title: "Apagando conversa..." });
+
+    const actualId = recipientId.startsWith('ind-') ? recipientId.substring(4) : recipientId;
+
+    // Optimistic Update for individual conversation history
+    const previousMessages = queryClient.getQueryData<Message[]>(['messaging_messages', user.id]);
+    queryClient.setQueryData(['messaging_messages', user.id], (old: Message[] | undefined) => 
+      old?.filter(m => m.recipient_phone !== actualId && m.recipient_name !== actualId && m.channel_id !== actualId) || []
+    );
+
+    const { error } = await supabase
+      .from("messages")
+      .delete()
+      .or(`recipient_phone.eq.${actualId},recipient_name.eq.${actualId},channel_id.eq.${actualId}`);
+
+    if (error) {
+      console.error("[DELETE CONVERSATION] Error:", error);
+      toast({ title: "Erro ao apagar", description: error.message, variant: "destructive" });
+      queryClient.setQueryData(['messaging_messages', user.id], previousMessages);
+      return;
+    }
+
+    toast({ title: "Conversa removida com sucesso" });
+    setActiveChatId(null);
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
   };
 
   const handleMarkSent = async (id: string) => {
+    if (!user) return;
     const msg = messages.find(m => m.id === id);
     if (!msg) return;
 
@@ -1127,12 +1317,15 @@ export const MessagingView = () => {
       await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", id);
       toast({ title: "Enviada com sucesso!" });
     }
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
   };
 
   const handleScheduleMessage = async (id: string, scheduledAt: string) => {
+    if (!user) return;
     await supabase.from("messages").update({ status: "scheduled", scheduled_at: scheduledAt } as any).eq("id", id);
     toast({ title: "Mensagem agendada" });
     addNotification({ type: "info", title: "Mensagem agendada", message: `Agendada para ${new Date(scheduledAt).toLocaleString("pt-BR")}` });
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
   };
 
   const openEditMessage = (msg: Message) => {
@@ -1143,7 +1336,7 @@ export const MessagingView = () => {
   };
 
   const handleSaveEditMessage = async () => {
-    if (!editingMessage) return;
+    if (!editingMessage || !user) return;
     const updates: any = { content: editContent.trim() };
     if (editStatus === "scheduled" && editScheduledAt) {
       updates.status = "scheduled";
@@ -1155,10 +1348,17 @@ export const MessagingView = () => {
       updates.status = "draft";
       updates.scheduled_at = null;
     }
-    await supabase.from("messages").update(updates).eq("id", editingMessage.id);
+    
+    const { error } = await supabase.from("messages").update(updates).eq("id", editingMessage.id);
+    if (error) {
+      toast({ title: "Erro ao editar", description: error.message, variant: "destructive" });
+      return;
+    }
+    
     toast({ title: "Mensagem atualizada" });
     addNotification({ type: "success", title: "Mensagem editada", message: "As alterações foram salvas." });
     setEditingMessage(null);
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
   };
 
   const getTypeIcon = (type: string) => channelTypes.find(ct => ct.id === type)?.icon || Users;
@@ -1214,7 +1414,7 @@ export const MessagingView = () => {
               <div className="p-4 border-b border-border space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-lg">Conversas</h3>
-                  <Button variant="ghost" size="icon" onClick={fetchMessages} className="h-8 w-8"><RefreshCw className={cn("w-4 h-4", messagesLoading && "animate-spin")} /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => refetchMessages()} className="h-8 w-8"><RefreshCw className={cn("w-4 h-4", messagesLoading && "animate-spin")} /></Button>
                 </div>
                 
                 {/* Internal Sidebar Tabs */}
@@ -1267,7 +1467,7 @@ export const MessagingView = () => {
                           {/* Capa / Background Photo */}
                           <div className={cn("absolute inset-0 z-0", styles.chatBg)}>
                             {photoUrl ? (
-                              <img src={photoUrl} alt={chat.name} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
+                              <SafeImage src={photoUrl} alt={chat.name} className="w-full h-full object-cover opacity-40 group-hover:opacity-60 transition-opacity" />
                             ) : (
                               <div className={cn("w-full h-full opacity-20", styles.bg)} />
                             )}
@@ -1280,7 +1480,7 @@ export const MessagingView = () => {
                                 "w-14 h-14 rounded-2xl overflow-hidden border border-white/10 shadow-lg flex items-center justify-center backdrop-blur-md bg-white/5",
                               )}>
                                 {photoUrl ? (
-                                  <img src={photoUrl} className="w-full h-full object-cover" />
+                                  <SafeImage src={photoUrl} alt={chat.name} className="w-full h-full object-cover" />
                                 ) : (
                                   <TypeIcon className={cn("w-7 h-7", styles.accent)} />
                                 )}
@@ -1367,7 +1567,7 @@ export const MessagingView = () => {
                             onClick={() => isChannel && channelData ? handleOpenInfo(channelData) : setShowAvatarModal(true)}
                           >
                             {photoUrl ? (
-                              <img src={photoUrl} className="w-full h-full object-cover" />
+                              <SafeImage src={photoUrl} className="w-full h-full object-cover" />
                             ) : <User className={cn("w-6 h-6", styles.accent)} />}
                           </div>
                           <div>
@@ -1411,9 +1611,39 @@ export const MessagingView = () => {
                           <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => { setChatSearchOpen(!chatSearchOpen); setChatSearchQuery(""); }}>
                             <Search className="w-4 h-4 text-muted-foreground" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="rounded-xl" onClick={() => { if (isChannel && channelData) handleOpenInfo(channelData); }}>
-                            <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="rounded-xl">
+                                <MoreHorizontal className="w-4 h-4 text-muted-foreground" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuItem onClick={() => { if (isChannel && channelData) handleOpenInfo(channelData); }} className="cursor-pointer">
+                                <MessageCircle className="w-4 h-4 mr-2" /> Ver Informações
+                              </DropdownMenuItem>
+                              {isChannel && channelData && (
+                                <DropdownMenuItem onClick={() => handleEditChannel(channelData)} className="cursor-pointer">
+                                  <Edit className="w-4 h-4 mr-2" /> Editar Canal
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={(e) => {
+                                  if (isChannel && channelData) {
+                                    handleDelete(channelData.id, e as any);
+                                    setActiveChatId(null);
+                                  } else if (activeChatId) {
+                                    handleDeleteConversation(activeChatId);
+                                  } else {
+                                    toast({ title: "Erro", description: "Nenhuma conversa ativa para excluir." });
+                                  }
+                                }} 
+                                className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4 mr-2" /> Excluir Histórico/Conversa
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
 
@@ -1449,9 +1679,26 @@ export const MessagingView = () => {
                             return (
                               <div key={msg.id} className={cn("flex flex-col", isSelf ? "items-end" : "items-start")}>
                                 <div className={cn(
-                                  "max-w-[85%] px-4 py-2.5 rounded-2xl text-[14px] relative shadow-xl backdrop-blur-md",
+                                  "max-w-[85%] px-4 py-2.5 rounded-2xl text-[14px] relative shadow-xl backdrop-blur-md group/msg",
                                   isSelf ? cn(msgStyles.bubbleSelf, "rounded-tr-none") : cn(msgStyles.bubbleOther, "rounded-tl-none")
                                 )}>
+                                  <div className="absolute top-1 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity z-10 bg-background/20 backdrop-blur-md rounded-md">
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button className="p-1 rounded hover:bg-black/20 text-white/70 hover:text-white transition-all">
+                                          <MoreHorizontal className="w-3.5 h-3.5" />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align={isSelf ? "end" : "start"} className="w-40 bg-background/95 backdrop-blur-xl border-border/50">
+                                        <DropdownMenuItem onClick={() => setEditingMessage(msg)} className="cursor-pointer">
+                                          <Edit className="w-4 h-4 mr-2" /> Editar
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleDeleteMessage(msg.id)} className="text-destructive cursor-pointer focus:bg-destructive/10 focus:text-destructive">
+                                          <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
                                   <p className="leading-relaxed font-medium">{msg.content}</p>
                                   <div className="flex items-center justify-end gap-1.5 mt-1 opacity-40 text-[9px] font-bold uppercase">
                                     <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1600,7 +1847,7 @@ export const MessagingView = () => {
                                 <div className="relative">
                                   <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-background shadow-md bg-muted/30">
                                     {ch.profile_picture ? (
-                                      <img 
+                                      <SafeImage 
                                         src={ch.profile_picture} 
                                         alt={ch.channel_name} 
                                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
@@ -1643,7 +1890,7 @@ export const MessagingView = () => {
                                   className="p-2 rounded-xl opacity-0 group-hover:opacity-100 hover:bg-primary/10 hover:text-primary transition-all duration-200">
                                   <Edit className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleDelete(ch.id)}
+                                <button onClick={(e) => handleDelete(ch.id, e)}
                                   className="p-2 rounded-xl opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all duration-200">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -1707,7 +1954,7 @@ export const MessagingView = () => {
                                   className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-accent transition-all">
                                   <Edit className="w-4 h-4" />
                                 </button>
-                                <button onClick={() => handleDelete(ch.id)} className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all">
+                                <button onClick={(e) => handleDelete(ch.id, e)} className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
@@ -1755,7 +2002,7 @@ export const MessagingView = () => {
                             selected ? "bg-primary/10 border-primary/40 shadow-sm" : "hover:bg-muted/40 border-transparent")}>
                           <div className="relative shrink-0">
                             {ch.profile_picture ? (
-                              <img src={ch.profile_picture} alt={ch.channel_name} className="w-8 h-8 rounded-lg object-cover border border-border" />
+                              <SafeImage src={ch.profile_picture} alt={ch.channel_name} className="w-8 h-8 rounded-lg object-cover border border-border" />
                             ) : (
                               <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", platform?.color || "bg-muted")}>
                                 {PIcon ? <PIcon className="w-4 h-4 text-white" /> : <Hash className="w-4 h-4 text-muted-foreground" />}
@@ -1815,7 +2062,7 @@ export const MessagingView = () => {
                   {attachments.map((att, i) => (
                     <div key={i} className="relative group rounded-lg border border-border p-2 flex items-center gap-2 bg-muted/30">
                       {att.type === "image" ? (
-                        <img src={att.url} alt={att.name} className="w-12 h-12 rounded object-cover" />
+                        <SafeImage src={att.url} alt={att.name} className="w-12 h-12 rounded object-cover" />
                       ) : att.type === "video" ? (
                         <Video className="w-6 h-6 text-blue-500" />
                       ) : att.type === "audio" ? (
@@ -1914,7 +2161,7 @@ export const MessagingView = () => {
                       <div className="flex items-start gap-3">
                         <div className="relative shrink-0">
                           {ch?.profile_picture ? (
-                            <img src={ch.profile_picture} alt={ch.channel_name} className="w-12 h-12 rounded-xl object-cover border border-border shadow-sm" />
+                            <SafeImage src={ch.profile_picture} alt={ch.channel_name} className="w-12 h-12 rounded-xl object-cover border border-border shadow-sm" />
                           ) : (
                             <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", platform?.color || "bg-muted")}>
                               {PIcon ? <PIcon className="w-6 h-6 text-white" /> : <MessageCircle className="w-6 h-6 text-muted-foreground" />}
@@ -2116,7 +2363,7 @@ export const MessagingView = () => {
             <div className="relative cursor-pointer" onClick={() => setShowAvatarModal(true)}>
               <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/10 shadow-xl hover:ring-2 hover:ring-primary/50 transition-all">
                  {selectedInfoChannel?.profile_picture ? (
-                   <img src={getChatPhoto(selectedInfoChannel.profile_picture) || ""} className="w-full h-full object-cover" />
+                   <SafeImage src={getChatPhoto(selectedInfoChannel.profile_picture) || ""} className="w-full h-full object-cover" />
                  ) : (
                    <div className="w-full h-full bg-muted flex items-center justify-center">
                      <User className="w-10 h-10 opacity-30" />
@@ -2245,7 +2492,7 @@ export const MessagingView = () => {
                   <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-colors">
                     <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-white/10">
                        {member.profile_picture ? (
-                         <img src={member.profile_picture} className="w-full h-full object-cover" />
+                         <SafeImage src={member.profile_picture} className="w-full h-full object-cover" />
                        ) : (
                          <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/20 font-bold">{member.full_name?.charAt(0) || "?"}</div>
                        )}
@@ -2283,7 +2530,7 @@ export const MessagingView = () => {
           <div className="flex flex-col items-center p-6 gap-4">
             <div className="w-64 h-64 rounded-2xl overflow-hidden border-2 border-white/10 shadow-2xl">
               {selectedInfoChannel?.profile_picture ? (
-                <img src={getChatPhoto(selectedInfoChannel.profile_picture) || ""} className="w-full h-full object-cover" />
+                <SafeImage src={getChatPhoto(selectedInfoChannel.profile_picture) || ""} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full bg-muted flex items-center justify-center"><User className="w-20 h-20 opacity-20" /></div>
               )}
@@ -2380,7 +2627,7 @@ export const MessagingView = () => {
                   )}>
                     <div className="relative shrink-0">
                       {r.photo ? (
-                        <img src={r.photo} alt={r.name} className="w-10 h-10 rounded-lg object-cover border border-border" />
+                        <SafeImage src={r.photo} alt={r.name} className="w-10 h-10 rounded-lg object-cover border border-border" />
                       ) : (
                         <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
                           {discoverPlatform === "whatsapp" ? <Phone className="w-5 h-5 text-green-500" /> : <Users className="w-5 h-5 text-blue-500" />}

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
+import { Globe } from "lucide-react";
 
 type Platform = typeof socialPlatforms[number];
 
@@ -67,17 +68,20 @@ export function PlatformIconBadge({
         background: !muted && platform.id === 'instagram' ? platform.gradient : undefined,
       }}
     >
-      <Icon
-        className={cn(
-          icon,
-          muted ? "text-slate-400/60" : "text-white"
-        )}
-        data-active={!muted}
-        style={{
-          // Connected: very gentle icon inner shadow (was drop-shadow(1px 2px 2px) before — now halved)
-          filter: muted ? "none" : "drop-shadow(0px 1px 1px rgba(0,0,0,0.25))",
-        }}
-      />
+      {Icon ? (
+        <Icon
+          className={cn(
+            icon,
+            muted ? "text-slate-400/60" : "text-white"
+          )}
+          data-active={!muted}
+          style={{
+            filter: muted ? "none" : "drop-shadow(0px 1px 1px rgba(0,0,0,0.25))",
+          }}
+        />
+      ) : (
+        <Globe className={cn(icon, "text-slate-400/60")} />
+      )}
     </div>
   );
 }

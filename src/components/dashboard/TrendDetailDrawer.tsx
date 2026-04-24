@@ -18,7 +18,8 @@ import {
   Twitter,
   Instagram,
   Youtube,
-  Linkedin as LinkedIn
+  Linkedin as LinkedIn,
+  Activity
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
@@ -26,7 +27,7 @@ interface TrendDetailDrawerProps {
   trend: TrendItem | null;
   isOpen: boolean;
   onClose: () => void;
-  onProduce: (trend: TrendItem) => void;
+  onProduce: (trend: TrendItem, mode: 'full' | 'summary') => void;
 }
 
 // Gera a URL correta de busca para cada rede social
@@ -158,13 +159,23 @@ export const TrendDetailDrawer = ({ trend, isOpen, onClose, onProduce }: TrendDe
           {/* AÇÕES */}
           <div className="space-y-3">
             <h4 className="text-xs font-black uppercase text-muted-foreground tracking-widest ml-1">Ações</h4>
-            <Button
-              onClick={() => onProduce(trend)}
-              className="w-full py-6 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black text-base shadow-lg shadow-primary/20 flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-95"
-            >
-              <Plus className="w-5 h-5" />
-              Criar este Conteúdo Agora
-            </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Button
+                onClick={() => onProduce(trend, 'full')}
+                className="py-6 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                Publicar Íntegra
+              </Button>
+              <Button
+                onClick={() => onProduce(trend, 'summary')}
+                variant="outline"
+                className="py-6 rounded-2xl border-primary/30 hover:bg-primary/5 text-primary font-black text-sm flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Activity className="w-4 h-4" />
+                Resumo IA
+              </Button>
+            </div>
 
             {/* Botão principal: abre o link real sem redirecionamento */}
             <a

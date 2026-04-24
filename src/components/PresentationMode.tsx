@@ -110,19 +110,26 @@ export const PresentationMode: React.FC<PresentationModeProps> = ({ milestones, 
 
         {/* Marca do Sistema Vitória Net - Destaque Nativo */}
         <div className="flex items-center gap-4 drop-shadow-[0_0_20px_rgba(var(--primary),0.5)]">
-           {settings?.logo_url ? (
-             <img 
-               src={settings.logo_url} 
-               alt="Logo" 
-               className="w-16 h-16 object-contain shrink-0 rounded-2xl shadow-xl" 
-             />
-           ) : (
-             <div className="w-12 h-12 rounded-3xl bg-gradient-to-br from-primary to-accent border border-white/20 flex items-center justify-center shrink-0 shadow-lg">
-               <Share2 className="w-6 h-6 text-black font-black" />
-             </div>
+           {settings?.show_logo !== false && (
+             settings?.logo_url ? (
+               <img 
+                 src={settings.logo_url} 
+                 alt="Logo" 
+                 className="w-16 h-16 object-contain shrink-0 rounded-2xl shadow-xl" 
+               />
+             ) : (
+               /* INÍCIO LOGOMARCA PADRÃO DO SISTEMA (SVG NOVO) */
+               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#4F8AFF] to-[#8B5CF6] border border-white/20 flex items-center justify-center shrink-0 shadow-lg">
+                 <svg viewBox="0 0 64 64" className="w-[98%] h-[98%] text-black fill-current font-black">
+                   <path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z" />
+                   <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z" />
+                 </svg>
+               </div>
+               /* FIM LOGOMARCA PADRÃO DO SISTEMA */
+             )
            )}
            
-           <div className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent font-display font-black tracking-tight text-4xl whitespace-nowrap">
+           <div className="text-transparent bg-clip-text bg-gradient-to-r from-[#4F8AFF] to-[#8B5CF6] font-display font-black tracking-tight text-4xl whitespace-nowrap">
               {settings?.platform_name || "Vitória Net"}
            </div>
         </div>

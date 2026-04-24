@@ -56,8 +56,11 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
       console.log('[discoverTrends] Fetching from NewsAPI...');
       // Buscando manchetes globais e do Brasil para dados reais
       const responses = await Promise.all([
-        fetch(`https://newsapi.org/v2/top-headlines?country=br&pageSize=10&apiKey=${newsApiKey}`),
-        fetch(`https://newsapi.org/v2/top-headlines?language=en&pageSize=10&apiKey=${newsApiKey}`)
+        fetch(`https://newsapi.org/v2/top-headlines?country=br&pageSize=15&apiKey=${newsApiKey}`),
+        fetch(`https://newsapi.org/v2/top-headlines?language=en&pageSize=15&apiKey=${newsApiKey}`),
+        // Adicionando filtros de categorias solicitadas (Política, Tecnologia, Geral/Mundo)
+        fetch(`https://newsapi.org/v2/everything?q=geopolitics%20OR%20politica&pageSize=10&apiKey=${newsApiKey}`),
+        fetch(`https://newsapi.org/v2/everything?q=tecnologia%20OR%20tech&pageSize=10&apiKey=${newsApiKey}`)
       ]);
 
       for (const res of responses) {
@@ -134,11 +137,20 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
     }
   } catch (e) { console.error('[discoverTrends] Enrichment block failed:', e); }
 
-  // 4. Radar Político e Ataques
-  try {
-    console.log('[discoverTrends] Running political radar...');
-    await monitorPoliticalTrends(supabaseClient);
-  } catch (e) { console.error('[discoverTrends] Political monitoring failed:', e); }
+    // 4. Radar Político e Ataques
+    try {
+      console.log('[discoverTrends] Running political radar...');
+      await monitorPoliticalTrends(supabaseClient);
+      
+      // Chamada interna para a nova Edge Function de Google Trends se estiver no ambiente Supabase
+      // Isso garante que os dados mundiais e geopolíticos sejam capturados
+      const baseUrl = Deno.env.get('SUPABASE_URL');
+      if (baseUrl) {
+          fetch(`${baseUrl}/functions/v1/collect-google-trends`, {
+              headers: { Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` }
+          }).catch(e => console.error('[discoverTrends] collect-google-trends trigger failed:', e));
+      }
+    } catch (e) { console.error('[discoverTrends] Political monitoring failed:', e); }
 
   // 5. Salvar no banco (Sem duplicatas por keyword no mesmo batch) usando UPSERT em massa
   const uniqueTrends = Array.from(new Map(allTrends.map(item => [item.keyword, item])).values());

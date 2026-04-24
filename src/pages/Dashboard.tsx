@@ -64,6 +64,8 @@ const NotificationsFullView = lazy(() => import("@/components/dashboard/Notifica
 const NewsPortal = lazy(() => import("@/components/dashboard/NewsPortal"));
 const PortalSettingsWrapper = lazy(() => import("@/components/dashboard/settings/PortalSettingsWrapper").then(m => ({ default: m.PortalSettingsWrapper })));
 const ManualView = lazy(() => import("@/components/dashboard/ManualView").then(m => ({ default: m.ManualView })));
+const RobotBuilder = lazy(() => import("./RobotBuilder"));
+const FloatingWhatsApp = lazy(() => import("@/components/dashboard/FloatingWhatsApp").then(m => ({ default: m.FloatingWhatsApp })));
 
 const ViewLoader = () => (
   <div className="flex items-center justify-center py-20">
@@ -85,7 +87,18 @@ const Dashboard = () => {
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const [settingsSubTab, setSettingsSubTab] = useState<string>('profile');
   // Tracks which account (connection) is selected per platform for the gear profile selector
-  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>({});
+  const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('dashboard_selected_accounts');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('dashboard_selected_accounts', JSON.stringify(selectedAccounts));
+  }, [selectedAccounts]);
 
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -207,8 +220,9 @@ const Dashboard = () => {
                     id: c.id,
                     page_name: c.page_name,
                     platform_user_id: c.platform_user_id,
-                    profile_image_url: c.profile_image_url,
+                    profile_image_url: c.profile_image_url || c.profile_picture,
                     followers_count: c.followers_count,
+                    posts_count: c.posts_count,
                     page_id: c.page_id,
                   }));
 
@@ -244,6 +258,13 @@ const Dashboard = () => {
               setActiveTab(tab);
               if (subTab) setSettingsSubTab(subTab);
             }} />
+          </Suspense>
+        );
+
+      case "robot":
+        return (
+          <Suspense fallback={<ViewLoader />}>
+            <RobotBuilder />
           </Suspense>
         );
 
@@ -529,6 +550,9 @@ const Dashboard = () => {
         onClose={() => setShowNotifications(false)}
         onViewAll={() => setActiveTab("notifications")}
       />
+      <Suspense fallback={null}>
+        <FloatingWhatsApp onOpenMessaging={() => setActiveTab("messaging")} />
+      </Suspense>
     </div>
   );
 };

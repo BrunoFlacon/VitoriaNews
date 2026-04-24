@@ -15,10 +15,10 @@ import {
   Newspaper,
   Video,
   Scissors,
-  Users,
-  Globe,
   BookOpen,
-  FolderOpen
+  FolderOpen,
+  Bot,
+  Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
@@ -47,7 +47,8 @@ const ICON_MAP: Record<string, any> = {
   settings: Settings,
   sys_portal: Globe,
   notifications: Bell,
-  manual: BookOpen
+  manual: BookOpen,
+  robot: Bot
 };
 
 export const Sidebar = ({ 
@@ -62,67 +63,63 @@ export const Sidebar = ({
   const userRole = profile?.role || 'user';
 
   const { topMenu, bottomMenu } = useMemo(() => {
-    // If no navSettings or database table isn't fully migrated, use a complete fallback
-    if (navSettings.length === 0) {
-      return { 
-        topMenu: [
-          { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-          { id: "create", icon: PenSquare, label: "Criar Post" },
-          { id: "calendar", icon: Calendar, label: "Calendário" },
-          { id: "analytics", icon: BarChart3, label: "Analytics" },
-          { id: "stories", icon: Radio, label: "Stories & Lives" },
-          { id: "messaging", icon: MessageCircle, label: "Mensagens" },
-          { id: "news", icon: Newspaper, label: "Notícias" },
-          { id: "documents", icon: FolderOpen, label: "Arquivos & Galeria" },
-          { id: "networks", icon: Share2, label: "Redes Sociais" },
-        ], 
-        bottomMenu: [
-          { id: "notifications", icon: Bell, label: "Notificações" },
-          { id: "settings", icon: Settings, label: "Config Dashboard" },
-          { id: "sys_portal", icon: Globe, label: "Portal & Temas" }
-        ] 
-      };
-    }
+    // Definimos os itens padrão (fallback) que DEVEM sempre existir se não houver configuração contrária
+    const defaultTopMenu = [
+      { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
+      { id: "create", icon: PenSquare, label: "Criar Post" },
+      { id: "calendar", icon: Calendar, label: "Calendário" },
+      { id: "analytics", icon: BarChart3, label: "Analytics" },
+      { id: "stories", icon: Radio, label: "Stories & Lives" },
+      { id: "messaging", icon: MessageCircle, label: "Mensagens" },
+      { id: "news", icon: Newspaper, label: "Notícias" },
+      { id: "documents", icon: FolderOpen, label: "Arquivos & Galeria" },
+      { id: "networks", icon: Share2, label: "Redes Sociais" },
+      { id: "robot", icon: Bot, label: "Artesão de Bots" },
+    ];
 
-    // Ensure uniqueness by key to prevent duplication from potential DB synchronization issues
-    const uniqueMap = new Map();
-    navSettings.forEach(s => {
-      if (!uniqueMap.has(s.key)) {
-        uniqueMap.set(s.key, s);
-      }
-    });
-
-    const filtered = Array.from(uniqueMap.values())
-      .filter(s => s.active !== false)
-      .filter(s => !s.allowed_roles || s.allowed_roles.includes(userRole))
-      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
-
-    const allItems = filtered.map(s => ({
-      id: s.key,
-      label: s.value,
-      icon: ICON_MAP[s.key] || LayoutDashboard
-    }));
-
-    // Split items: manual, settings, portal and notifications usually go to bottom and MUST exist
     const mandatoryBottom = [
       { id: "notifications", icon: Bell, label: "Notificações" },
       { id: "settings", icon: Settings, label: "Config Dashboard" },
       { id: "sys_portal", icon: Globe, label: "Portal & Temas" }
     ];
 
-    const bottomKeys = mandatoryBottom.map(m => m.id);
-    
-    const topMenu = allItems.filter(item => !bottomKeys.includes(item.id));
-    
-    // Merge database values with mandatory items to ensure they are always present and correctly labeled
-    const bottomMenu = mandatoryBottom.map(m => {
-      const dbItem = allItems.find(item => item.id === m.id);
-      return {
-        ...m,
-        label: dbItem?.label || m.label,
-        icon: dbItem?.icon || m.icon
+    // Se não houver configurações no banco, retornamos os padrões
+    if (navSettings.length === 0) {
+      return { 
+        topMenu: defaultTopMenu, 
+        bottomMenu: mandatoryBottom 
       };
+    }
+
+    // Se houver configurações, mesclamos: o que está no banco sobrescreve o padrão
+    const uniqueMap = new Map();
+    
+    // Primeiro, preenchemos com os padrões
+    defaultTopMenu.concat(mandatoryBottom).forEach(item => {
+      uniqueMap.set(item.id, { ...item, active: true, order_index: 100 });
     });
+
+    // Depois, sobrepomos com as configurações do banco (navSettings)
+    navSettings.forEach(s => {
+      const existing = uniqueMap.get(s.key);
+      uniqueMap.set(s.key, {
+        id: s.key,
+        label: s.value,
+        icon: ICON_MAP[s.key] || (existing?.icon || LayoutDashboard),
+        active: s.active !== false,
+        order_index: s.order_index,
+        allowed_roles: s.allowed_roles
+      });
+    });
+
+    const allMerged = Array.from(uniqueMap.values())
+      .filter(s => s.active !== false)
+      .filter(s => !s.allowed_roles || s.allowed_roles.includes(userRole))
+      .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+    const bottomKeys = mandatoryBottom.map(m => m.id);
+    const topMenu = allMerged.filter(item => !bottomKeys.includes(item.id));
+    const bottomMenu = allMerged.filter(item => bottomKeys.includes(item.id));
 
     return { topMenu, bottomMenu };
   }, [navSettings, userRole]);
@@ -144,16 +141,23 @@ export const Sidebar = ({
         "flex items-center gap-3 px-4 h-16 border-b border-sidebar-border/30 w-full mb-1 shrink-0 overflow-hidden",
         isCollapsed ? "justify-center" : "justify-start"
       )}>
-        {settings?.logo_url ? (
-          <img 
-            src={settings.logo_url} 
-            alt="Logo" 
-            className="w-9 h-9 object-contain shrink-0 rounded-2xl" 
-          />
-        ) : (
-          <div className="w-10 h-10 rounded-3xl bg-gradient-to-br from-primary to-accent border border-white/20 flex items-center justify-center shrink-0 shadow-lg relative group overflow-hidden active:scale-95 transition-transform duration-300">
-            <Share2 className="w-5 h-5 text-slate-950 font-black" />
-          </div>
+        {settings?.show_logo !== false && (
+          settings?.logo_url ? (
+            <img 
+              src={settings.logo_url} 
+              alt="Logo" 
+              className="w-9 h-9 object-contain shrink-0 rounded-2xl" 
+            />
+          ) : (
+            /* INÍCIO LOGOMARCA PADRÃO DO SISTEMA (SVG NOVO) */
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F8AFF] to-[#8B5CF6] border border-white/20 flex items-center justify-center shrink-0 shadow-lg relative group overflow-hidden active:scale-95 transition-transform duration-300">
+              <svg viewBox="0 0 64 64" className="w-[98%] h-[98%] text-black fill-current">
+                <path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z" />
+                <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z" />
+              </svg>
+            </div>
+            /* FIM LOGOMARCA PADRÃO DO SISTEMA */
+          )
         )}
         {!isCollapsed && (
           <motion.span 
@@ -162,7 +166,7 @@ export const Sidebar = ({
             animate={{ opacity: 1, x: 0, width: "auto" }}
             exit={{ opacity: 0, x: -8, width: 0 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
-            className="font-display font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent overflow-hidden whitespace-nowrap"
+            className="font-display font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[#4F8AFF] to-[#8B5CF6] truncate"
           >
             {settings?.platform_name || "Vitória Net"}
           </motion.span>

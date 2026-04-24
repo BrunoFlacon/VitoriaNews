@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, ThumbsUp, Eye, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface PlatformPreviewProps {
   content: string;
@@ -34,7 +35,7 @@ const InstagramPreview = ({ content, mediaUrl }: PreviewCardProps) => (
     {/* Media */}
     <div className="aspect-square bg-gray-100">
       {mediaUrl ? (
-        <img src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
+        <SafeImage src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-gray-400">
           Sua mídia aqui
@@ -88,7 +89,7 @@ const FacebookPreview = ({ content, mediaUrl }: PreviewCardProps) => (
     {/* Media */}
     {mediaUrl && (
       <div className="aspect-video bg-gray-100">
-        <img src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
+        <SafeImage src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
       </div>
     )}
     
@@ -141,7 +142,7 @@ const TwitterPreview = ({ content, mediaUrl }: PreviewCardProps) => (
         
         {mediaUrl && (
           <div className="mt-3 rounded-2xl overflow-hidden">
-            <img src={mediaUrl} alt="Preview" className="w-full h-auto" />
+            <SafeImage src={mediaUrl} alt="Preview" className="w-full h-auto" />
           </div>
         )}
         
@@ -173,7 +174,7 @@ const YouTubePreview = ({ content, mediaUrl }: PreviewCardProps) => (
     {/* Thumbnail */}
     <div className="aspect-video bg-gray-900 relative">
       {mediaUrl ? (
-        <img src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
+        <SafeImage src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-gray-400">
           Thumbnail do vídeo
@@ -203,7 +204,7 @@ const TikTokPreview = ({ content, mediaUrl }: PreviewCardProps) => (
     {/* Video */}
     <div className="aspect-[9/16] relative">
       {mediaUrl ? (
-        <img src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
+        <SafeImage src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-gray-500 bg-gray-900">
           Seu vídeo
@@ -267,7 +268,7 @@ const LinkedInPreview = ({ content, mediaUrl }: PreviewCardProps) => (
     {/* Media */}
     {mediaUrl && (
       <div className="aspect-video bg-gray-100">
-        <img src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
+        <SafeImage src={mediaUrl} alt="Preview" className="w-full h-full object-cover" />
       </div>
     )}
     

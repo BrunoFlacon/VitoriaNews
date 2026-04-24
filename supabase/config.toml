@@ -33,3 +33,6 @@ enable_refresh_token_rotation = false
 
 [functions.automation-api]
 verify_jwt = false
+
+[functions.sync-telegram-chats]
+verify_jwt = false

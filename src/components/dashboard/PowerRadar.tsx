@@ -195,7 +195,7 @@ export const PowerRadar = () => {
                  </div>
               </CardHeader>
               <CardContent className="p-8">
-                 <div className="h-[400px] w-full bg-black/40 rounded-[32px] border border-white/5 relative group p-4">
+                 <div className="h-[400px] w-full bg-black/40 rounded-[32px] border border-white/5 relative group p-4" style={{ contain: "strict" }}>
                     <ResponsiveContainer width="100%" height="100%">
                        <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                           <XAxis type="number" dataKey="x" hide />

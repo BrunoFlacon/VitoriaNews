@@ -17,7 +17,11 @@ import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { TrendDetailDrawer } from "./TrendDetailDrawer";
 import { PowerRadar } from "./PowerRadar";
 
+import { SubscribersView } from "./SubscribersView";
+
 export const NewsPortal = () => {
+  // ... existing code
+
   const { user } = useAuth();
   const { toast } = useToast();
   const [articles, setArticles] = useState<Article[]>([]);
@@ -119,13 +123,30 @@ export const NewsPortal = () => {
     setShowEditor(true);
   };
 
-  const handleProduceFromTrend = (trend: TrendItem) => {
+  const handleProduceFromTrend = (trend: TrendItem, mode: 'full' | 'summary' = 'full') => {
     setEditing(null);
     const sourceLink = trend.url ? `<p><small>Fonte original: <a href="${trend.url}" target="_blank">${trend.source}</a></small></p>` : "";
+    
+    let content = '';
+    if (mode === 'summary') {
+      content = `<h2>Resumo IA: ${trend.keyword}</h2>
+                 <p>Este é um resumo gerado automaticamente para publicação rápida nas redes sociais:</p>
+                 <p>${trend.description || 'Aguardando processamento de linguagem natural...'}</p>
+                 <br/>
+                 <p>#${trend.category?.replace(/\s+/g, '')} #RadarVitoriaNet #Trend</p>
+                 ${sourceLink}`;
+    } else {
+      content = `<h2>${trend.keyword}</h2>
+                 <p>Baseado na tendência do <strong>${trend.source}</strong>, identificamos o seguinte contexto relevante:</p>
+                 <p>${trend.description || 'Nenhum detalhe adicional capturado pela varredura inicial.'}</p>
+                 ${sourceLink}
+                 <p>Escreva seu conteúdo na íntegra aqui...</p>`;
+    }
+
     setForm({ 
       title: trend.keyword, 
-      content: `<p>Baseado na tendência do <strong>${trend.source}</strong>: ${trend.keyword}</p>${sourceLink}<p>Escreva seu conteúdo aqui...</p>`, 
-      cover_image: "" 
+      content, 
+      cover_image: trend.thumbnail_url || "" 
     });
     setActiveTab("my-articles");
     setShowEditor(true);
@@ -144,10 +165,11 @@ export const NewsPortal = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-6 grid w-full grid-cols-3 max-w-[600px]">
+        <TabsList className="mb-6 grid w-full grid-cols-4 max-w-[800px]">
           <TabsTrigger value="my-articles" className="font-bold">Meus Artigos</TabsTrigger>
           <TabsTrigger value="discovery" className="font-bold">Descoberta & Radar</TabsTrigger>
           <TabsTrigger value="power-radar" className="font-bold">Radar de Poder</TabsTrigger>
+          <TabsTrigger value="subscribers" className="font-bold">Assinantes VIP</TabsTrigger>
         </TabsList>
 
         <TabsContent value="my-articles">
@@ -365,6 +387,10 @@ export const NewsPortal = () => {
         <TabsContent value="power-radar">
            <PowerRadar />
         </TabsContent>
+
+        <TabsContent value="subscribers">
+           <SubscribersView />
+        </TabsContent>
       </Tabs>
 
       <Dialog open={showEditor} onOpenChange={setShowEditor}>
@@ -406,9 +432,9 @@ export const NewsPortal = () => {
         trend={selectedTrend}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        onProduce={(trend) => {
+        onProduce={(trend, mode) => {
           setIsDrawerOpen(false);
-          handleProduceFromTrend(trend);
+          handleProduceFromTrend(trend, mode);
         }}
       />
     </div>

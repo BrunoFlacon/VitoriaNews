@@ -3,7 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
@@ -129,13 +130,13 @@ serve(async (req: Request) => {
 
     // Fetch data from GA4 Reporting API
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const twoYearsAgo = new Date(now.getTime() - 2 * 365 * 24 * 60 * 60 * 1000); // GA4 data retention is usually 14 months or 2 years
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     for (const metricSet of metricSets) {
       try {
         const requestBody = {
-          dateRanges: [{ startDate: thirtyDaysAgo.toISOString().split("T")[0], endDate: yesterday.toISOString().split("T")[0] }],
+          dateRanges: [{ startDate: twoYearsAgo.toISOString().split("T")[0], endDate: yesterday.toISOString().split("T")[0] }],
           metrics: metricSet.metrics.map(m => ({ name: m })),
           dimensions: metricSet.dimensions.map(d => ({ name: d })),
           limit: 100,

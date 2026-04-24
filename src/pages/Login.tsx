@@ -122,14 +122,21 @@ const Login = () => {
           <div className="glass-card rounded-3xl border border-border p-8">
             {/* Logo */}
             <div className="flex items-center justify-center gap-3 mb-8">
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-xl bg-background/50" />
-              ) : (
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                  <Share2 className="w-6 h-6 text-primary-foreground" />
-                </div>
+              {settings?.show_logo !== false && (
+                settings?.logo_url ? (
+                  <img src={settings.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-xl bg-background/50" />
+                ) : (
+                  /* INÍCIO LOGOMARCA PADRÃO DO SISTEMA (SVG NOVO) */
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#4F8AFF] to-[#8B5CF6] flex items-center justify-center">
+                    <svg viewBox="0 0 64 64" className="w-[98%] h-[98%] text-black fill-current">
+                      <path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z" />
+                      <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z" />
+                    </svg>
+                  </div>
+                  /* FIM LOGOMARCA PADRÃO DO SISTEMA */
+                )
               )}
-              <span className="font-display font-bold text-2xl gradient-text truncate">
+              <span className="font-display font-bold text-3xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[#4F8AFF] to-[#8B5CF6] truncate">
                 {settings?.platform_name || "Vitória Net"}
               </span>
             </div>

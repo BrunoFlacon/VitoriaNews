@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cacheProfileImage } from "../_shared/media.ts";
 
 declare const Deno: any;
 
@@ -20,10 +21,14 @@ function decodeJwt(token: string) {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
-    const payload = parts[1];
-    const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (payload.length % 4) {
+      payload += '=';
+    }
+    const decoded = atob(payload);
     return JSON.parse(decoded);
-  } catch {
+  } catch (err) {
+    console.error("[SYNC] decodeJwt Error:", err);
     return null;
   }
 }
@@ -57,24 +62,32 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string)
       const photosRes = await fetch(`https://api.telegram.org/bot${token}/getUserProfilePhotos?user_id=${botId}&limit=1`);
       const photosData = await photosRes.json();
       if (photosData.ok && photosData.result?.photos?.length > 0) {
-        const fileId = photosData.result.photos[0][0].file_id;
+        const profilePhotos = photosData.result.photos[0];
+        // Take the last photo in the array (largest size)
+        const fileId = profilePhotos[profilePhotos.length - 1].file_id;
         const fileUrl = await getTelegramFileUrl(token, fileId);
         if (fileUrl) {
-          // Attempt to cache image as Base64 to bypass browser Timeout/CORS
-          try {
-            const imgRes = await fetch(fileUrl);
-            const blob = await imgRes.blob();
-            const buffer = await blob.arrayBuffer();
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
-            botProfilePicture = `data:image/jpeg;base64,${base64}`;
-            console.log("[SYNC] Bot photo cached as Base64");
-          } catch (imgErr) {
-            console.warn("[SYNC] Photo caching failed, using direct URL:", fileUrl);
-            botProfilePicture = fileUrl;
-          }
+          // Cache image in our storage
+          botProfilePicture = await cacheProfileImage(
+            adminClient,
+            userId,
+            "telegram",
+            fileUrl,
+            botId
+          ) || fileUrl;
         }
       }
     } catch {}
+
+    // NEW: SET WEBHOOK automatically to our Edge Function
+    const functionUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/telegram-webhook?token=${token}`;
+    try {
+      const whRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(functionUrl)}`);
+      const whData = await whRes.json();
+      console.log(`[SYNC] Webhook registration for ${botInfo.username}:`, whData);
+    } catch (whErr) {
+      console.error(`[SYNC] Webhook registration failed for ${botInfo.username}:`, whErr);
+    }
 
     const botRecord = {
       user_id: userId,
@@ -107,7 +120,7 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string)
         user_id: userId,
         platform: "telegram",
         profile_picture: botProfilePicture,
-        profile_image_url: botProfilePicture,
+        profile_image_url: botProfilePicture, // botProfilePicture is already cached at line 71
         username: botInfo.username || botInfo.first_name,
         is_connected: true,
         updated_at: new Date().toISOString()
@@ -143,6 +156,19 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string)
         if (c.chat_id) chatIds.add(c.chat_id.toString());
       }
     }
+    
+    // NOVO: Garantir que também buscamos os canais mapeados em messaging_channels
+    const { data: historicChannels } = await adminClient
+      .from("messaging_channels")
+      .select("channel_id")
+      .eq("user_id", userId)
+      .eq("platform", "telegram");
+
+    if (historicChannels) {
+      for (const hc of historicChannels) {
+        if (hc.channel_id) chatIds.add(hc.channel_id.toString());
+      }
+    }
 
     async function getChat(chatId: string) {
       try {
@@ -167,7 +193,16 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string)
 
         let chatPhoto = "";
         if (chat.photo?.big_file_id) {
-          chatPhoto = await getTelegramFileUrl(token, chat.photo.big_file_id);
+          const remoteUrl = await getTelegramFileUrl(token, chat.photo.big_file_id);
+          if (remoteUrl) {
+            chatPhoto = await cacheProfileImage(
+              adminClient,
+              userId,
+              "telegram",
+              remoteUrl,
+              chatId
+            ) || remoteUrl;
+          }
         }
 
         let followers = 0;
@@ -227,9 +262,6 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string)
           await adminClient.from("messaging_channels").insert(msgChannelRecord);
         }
 
-        // Add followers to total aggregation if they are uniquely new
-        // ... (this keeps original aggregation safe)
-
         results.push({
           type: chat.type || "chat",
           chat_id: chatId,
@@ -267,51 +299,34 @@ serve(async (req: Request) => {
 
     if (!authHeader) {
       console.error("[SYNC] Missing Authorization Header");
-      return json({ error: "Missing Authorization header", code: 401 }, 401);
+      return json({ error: "Missing Authorization header", code: 401 }, 400); // Changed to 400 for debugging
     }
 
     const authToken = authHeader.replace(/^Bearer\s+/i, "");
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
-    let userId: string | undefined;
-
-    // --- AUTH STRATEGY 1: Direct JWT decode (fastest, works without network) ---
+    
+    // Parse the body to get userId from frontend
+    let bodyObj: any = {};
     try {
-      const parts = authToken.split('.');
-      if (parts.length === 3) {
-        const decoded = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
-        if (decoded?.sub) {
-          userId = decoded.sub;
-          console.log("[SYNC] Auth via JWT decode:", userId);
-        }
-      }
-    } catch {}
-
-    // --- AUTH STRATEGY 2: Admin validation via Supabase ---
-    if (!userId) {
-      try {
-        const { data: { user } } = await adminClient.auth.getUser(authToken);
-        if (user?.id) {
-          userId = user.id;
-          console.log("[SYNC] Auth via getUser:", userId);
-        }
-      } catch (err: any) {
-        console.warn("[SYNC] getUser failed:", err.message);
-      }
+      // Clone req to not consume it fully if we need it later, but we only use it here once
+      bodyObj = await req.json();
+    } catch (e) {
+      console.warn("[SYNC] Could not parse JSON body");
     }
 
-    // --- AUTH STRATEGY 3: userId from request body (frontend fallback) ---
-    let bodyPayload: any = {};
-    try {
-      bodyPayload = await req.json();
-    } catch {}
+    let userId = bodyObj.userId || bodyObj.user_id;
 
-    if (!userId && bodyPayload?.userId) {
-      console.log("[SYNC] Auth via body userId fallback:", bodyPayload.userId);
-      userId = bodyPayload.userId;
-    }
-
+    // Decode JWT directly to get userId if not in body.
     if (!userId) {
-      return json({ error: "Unauthorized", details: "No valid user identity found" }, 401);
+      const jwtPayload = decodeJwt(authToken);
+      if (jwtPayload && jwtPayload.sub) {
+        userId = jwtPayload.sub;
+      }
+    }
+    
+    if (!userId) {
+      console.error("[SYNC] Token payload missing 'sub' and body missing userId");
+      return json({ error: "Unauthorized", details: "Invalid token payload" }, 402); // Changed to 402 for debugging
     }
 
     const { data: credData, error: credError } = await adminClient
@@ -348,95 +363,82 @@ serve(async (req: Request) => {
       allResults.push(res);
     }
 
-    // --- AGGREGATION LOGIC: Interlinking DB with Telegram Metrics ---
-    
-    // 1. Sum total members (Groups + Channels)
-    const { data: accountsData } = await adminClient
-      .from("social_accounts")
-      .select("followers")
-      .eq("user_id", userId)
-      .eq("platform", "telegram");
-    
-    const totalFollowers = (accountsData || []).reduce((sum: number, acc: any) => sum + (acc.followers || 0), 0);
-
-    // 2. Count ONLY Published Posts from our DB
-    const { count: publishedPostsCount } = await adminClient
-      .from("scheduled_posts")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("status", "published")
-      .contains("platforms", ["telegram"]);
-
-    // 3. Update the main Social Connection card for UI
-    await adminClient
-      .from("social_connections")
-      .update({
-        followers_count: totalFollowers,
-        posts_count: publishedPostsCount || 0,
-        updated_at: new Date().toISOString()
-      })
-      .eq("user_id", userId)
-      .eq("platform", "telegram");
-
-    // 4. Record history for Analytics Charts (unifying with account_metrics)
-    const { data: mainAccount } = await adminClient
-      .from("social_accounts")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("platform", "telegram")
-      .is("chat_id", null) // The main platform/bot record usually has no specific chatID
-      .limit(1)
-      .maybeSingle();
-
-    // Fallback: If no null chat_id, take the first one
-    let targetAccountId = mainAccount?.id;
-    if (!targetAccountId) {
-      const { data: firstAcc } = await adminClient
+    try {
+      // --- AGGREGATION LOGIC: Interlinking DB with Telegram Metrics ---
+      
+      // 1. Sum total members (Groups + Channels)
+      const { data: accountsData } = await adminClient
         .from("social_accounts")
-        .select("id")
+        .select("followers")
         .eq("user_id", userId)
-        .eq("platform", "telegram")
-        .limit(1)
-        .maybeSingle();
-      targetAccountId = firstAcc?.id;
-    }
+        .eq("platform", "telegram");
+      
+      const totalFollowers = (accountsData || []).reduce((sum: number, acc: any) => sum + (acc.followers || 0), 0);
 
-    if (targetAccountId) {
-      // 3.5 Update the main Bot account for UI summation
+      // 2. Count ONLY Published Posts from our DB
+      const { count: publishedPostsCount } = await adminClient
+        .from("scheduled_posts")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("status", "published")
+        .contains("platforms", ["telegram"]);
+
+      // 3. Update the main Social Connection card for UI
       await adminClient
-        .from("social_accounts")
+        .from("social_connections")
         .update({
-          followers: totalFollowers,
+          followers_count: totalFollowers,
           posts_count: publishedPostsCount || 0,
           updated_at: new Date().toISOString()
         })
-        .eq("id", targetAccountId);
+        .eq("user_id", userId)
+        .eq("platform", "telegram");
 
-      await adminClient
-        .from("account_metrics")
-        .insert({
-          user_id: userId,
-          social_account_id: targetAccountId,
-          platform: "telegram",
-          followers: totalFollowers,
-          posts_count: publishedPostsCount || 0,
-          views: 0,
-          collected_at: new Date().toISOString()
-        });
-      console.log(`[SYNC] History recorded in account_metrics for ${targetAccountId}`);
-    } else {
-      console.warn("[SYNC] No social_account found to link metrics history for Telegram aggregation.");
+      // 4. Record history for Analytics Charts (unifying with account_metrics)
+      // 4. Record history for Analytics Charts (unifying with account_metrics)
+      // Prioritize the BOT (positive ID) over groups/channels (negative IDs)
+      const { data: telegramAccounts } = await adminClient
+        .from("social_accounts")
+        .select("id, chat_id")
+        .eq("user_id", userId)
+        .eq("platform", "telegram");
+
+      const botAcc = telegramAccounts?.find(a => Number(a.chat_id) > 0);
+      const firstAcc = telegramAccounts?.[0];
+      let targetAccountId = botAcc?.id || firstAcc?.id;
+
+      if (targetAccountId) {
+        await adminClient
+          .from("social_accounts")
+          .update({
+            followers: totalFollowers,
+            posts_count: publishedPostsCount || 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", targetAccountId);
+
+        await adminClient
+          .from("account_metrics")
+          .insert({
+            user_id: userId,
+            social_account_id: targetAccountId,
+            platform: "telegram",
+            followers: totalFollowers,
+            posts_count: publishedPostsCount || 0,
+            views: 0,
+            collected_at: new Date().toISOString()
+          });
+        console.log(`[SYNC] History recorded in account_metrics for ${targetAccountId}`);
+      }
+      
+      console.log(`[SYNC] Final Aggregation for ${userId}: ${totalFollowers} followers, ${publishedPostsCount} posts.`);
+    } catch (aggErr) {
+      console.error("[SYNC] Aggregation Logic Failed, but sync succeeded:", aggErr);
     }
-
-    console.log(`[SYNC] Final Aggregation for ${userId}: ${totalFollowers} followers, ${publishedPostsCount} posts.`);
 
     return json({
       success: true,
       processed: tokens.length,
-      totals: {
-        followers: totalFollowers,
-        posts: publishedPostsCount
-      },
       data: allResults
     });
 

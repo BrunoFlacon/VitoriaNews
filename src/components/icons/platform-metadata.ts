@@ -16,9 +16,11 @@ import {
   TruthSocialIcon,
   GettrIcon,
   SpotifyIcon,
-  GiphyIcon,
   GoogleNewsIcon,
-  RedditIcon
+  RedditIcon,
+  GoogleIcon,
+  MetaIcon,
+  GiphyIcon
 } from "./SocialIcons";
 
 export const socialPlatforms = [
@@ -179,13 +181,13 @@ export const socialPlatforms = [
     type: "tool"
   },
   {
-    id: "googlenews",
-    name: "Google News",
-    icon: GoogleNewsIcon,
-    color: "bg-[#4285F4]",
+    id: "google",
+    name: "Google Cloud (Maps, YouTube, Ads, News)",
+    icon: GoogleIcon,
+    color: "bg-white",
     textColor: "text-[#4285F4]",
-    gradient: "from-[#4285F4] via-[#34A853] via-[#FBBC05] to-[#EA4335]",
-    type: "news"
+    gradient: "from-white via-[#f8f9fa] to-white",
+    type: "tool"
   },
   {
     id: "reddit",
@@ -204,6 +206,15 @@ export const socialPlatforms = [
     textColor: "text-primary",
     gradient: "from-primary to-accent",
     type: "social"
+  },
+  {
+    id: "meta_ads",
+    name: "Meta Marketing & Ads API",
+    icon: MetaIcon,
+    color: "bg-[#0081FB]",
+    textColor: "text-[#0081FB]",
+    gradient: "from-[#0081FB] to-[#0165E1]",
+    type: "tool"
   },
 ] as const;
 

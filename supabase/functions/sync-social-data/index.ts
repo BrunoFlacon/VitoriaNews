@@ -1,6 +1,9 @@
 // deno-lint-ignore-file
-import { serve } from "http/server";
-import { createClient } from "@supabase/supabase-js";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cacheProfileImage } from "../_shared/media.ts";
+
+declare const Deno: any;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -102,13 +105,15 @@ serve(async (req: Request) => {
                 }
               } catch {}
               
+              const cachedProfilePic = await cacheProfileImage(supabase, conn.user_id, conn.platform, profilePic, pageId) || profilePic;
+              
               stats = {
                 user_id: conn.user_id,
                 platform: conn.platform,
                 platform_user_id: pageId,
                 username: data.name || conn.page_name || "",
                 page_name: data.name || conn.page_name || "",
-                profile_picture: profilePic,
+                profile_picture: cachedProfilePic,
                 followers_count: followers,
                 posts_count: postsCount,
                 metadata: { posts_count: postsCount },
@@ -120,9 +125,9 @@ serve(async (req: Request) => {
                 updated_at: new Date().toISOString(),
               };
 
-              if (profilePic && profilePic !== conn.profile_image_url) {
+              if (cachedProfilePic !== conn.profile_image_url) {
                 await supabase.from("social_connections")
-                  .update({ profile_image_url: profilePic })
+                  .update({ profile_image_url: cachedProfilePic })
                   .eq("id", conn.id);
               }
             }
@@ -140,7 +145,7 @@ serve(async (req: Request) => {
               stats = {
                 user_id: conn.user_id, platform: "twitter", platform_user_id: conn.platform_user_id,
                 username: data.data.username || "", page_name: data.data.name || "",
-                profile_picture: data.data.profile_image_url?.replace('_normal', '_400x400') || conn.profile_image_url || "",
+                profile_picture: await cacheProfileImage(supabase, conn.user_id, "twitter", data.data.profile_image_url?.replace('_normal', '_400x400'), conn.platform_user_id) || conn.profile_image_url || "",
                 followers_count: metrics.followers_count || 0, 
                 posts_count: metrics.tweet_count || 0,
                 metadata: { posts_count: metrics.tweet_count || 0 },
@@ -163,8 +168,8 @@ serve(async (req: Request) => {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: ch.id,
                 username: ch.snippet?.customUrl || ch.snippet?.title || "",
                 page_name: ch.snippet?.title || "",
-                profile_picture: ch.snippet?.thumbnails?.high?.url || conn.profile_image_url || "",
-                cover_photo: coverPhoto,
+                profile_picture: await cacheProfileImage(supabase, conn.user_id, "youtube", ch.snippet?.thumbnails?.high?.url, ch.id) || conn.profile_image_url || "",
+                cover_photo: await cacheProfileImage(supabase, conn.user_id, "youtube", coverPhoto, `${ch.id}_cover`) || coverPhoto,
                 followers_count: parseInt(ch.statistics?.subscriberCount || "0"),
                 subscribers_count: parseInt(ch.statistics?.subscriberCount || "0"),
                 posts_count: parseInt(ch.statistics?.videoCount || "0"),
@@ -185,7 +190,7 @@ serve(async (req: Request) => {
               stats = {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: data.id,
                 username: data.username || "", page_name: data.username || conn.page_name || "",
-                profile_picture: data.threads_profile_picture_url || conn.profile_image_url || "",
+                profile_picture: await cacheProfileImage(supabase, conn.user_id, "threads", data.threads_profile_picture_url, data.id) || conn.profile_image_url || "",
                 followers_count: data.followers_count || 0, 
                 posts_count: 0,
                 metadata: { posts_count: 0 },
@@ -206,7 +211,7 @@ serve(async (req: Request) => {
               stats = {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: info.open_id,
                 username: info.username || "", page_name: info.display_name || "",
-                profile_picture: info.avatar_url || conn.profile_image_url || "",
+                profile_picture: await cacheProfileImage(supabase, conn.user_id, "tiktok", info.avatar_url, info.open_id) || conn.profile_image_url || "",
                 followers_count: info.follower_count || 0,
                 posts_count: info.video_count || 0,
                 metadata: { posts_count: info.video_count || 0 },
@@ -226,7 +231,7 @@ serve(async (req: Request) => {
               stats = {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: data.sub,
                 username: data.email || "", page_name: data.name || "",
-                profile_picture: data.picture || conn.profile_image_url || "",
+                profile_picture: await cacheProfileImage(supabase, conn.user_id, "linkedin", data.picture, data.sub) || conn.profile_image_url || "",
                 followers_count: 0, posts_count: 0,
                 metadata: { posts_count: 0 },
                 views: 0, likes: 0, shares: 0, comments: 0,
@@ -245,7 +250,7 @@ serve(async (req: Request) => {
               stats = {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: data.username,
                 username: data.username || "", page_name: data.full_name || "",
-                profile_picture: data.profile_image || conn.profile_image_url || "",
+                profile_picture: await cacheProfileImage(supabase, conn.user_id, "pinterest", data.profile_image, data.username) || conn.profile_image_url || "",
                 followers_count: data.follower_count || 0,
                 posts_count: data.pin_count || 0,
                 metadata: { posts_count: data.pin_count || 0 },
@@ -301,7 +306,7 @@ serve(async (req: Request) => {
             platform_user_id: botInfo.id.toString(),
             username: botInfo.username,
             page_name: botInfo.first_name,
-            profile_picture: profilePicture,
+            profile_picture: await cacheProfileImage(supabase, userId, "telegram", profilePicture, botInfo.id.toString()) || profilePicture,
             followers_count: 0,
             posts_count: 0,
             metadata: { posts_count: 0, chat_type: "bot" },

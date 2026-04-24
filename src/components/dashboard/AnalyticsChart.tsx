@@ -62,7 +62,7 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
         </div>
       </div>
 
-      <div className="h-[300px]">
+      <div className="h-[300px]" style={{ contain: "strict" }}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={displayData}>
             <defs>

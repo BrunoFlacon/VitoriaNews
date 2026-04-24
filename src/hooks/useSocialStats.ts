@@ -44,6 +44,7 @@ export interface SocialStatsByPlatform {
   [platform: string]: SocialAccountStat[];
 }
 
+
 /**
  * useSocialStats
  * Centralized hook that fetches real-world social account metrics from
@@ -65,7 +66,7 @@ export function useSocialStats() {
     setLoading(true);
     try {
       // Run all data fetches AND the bot ping in parallel to avoid serial blocking
-      const [statsRes, credsRes, channelsRes, messagesRes, scheduledRes, botPingRes] = await Promise.all([
+      const [statsRes, credsRes, channelsRes, messagesRes, scheduledRes] = await Promise.all([
         supabase
           .from('social_accounts')
           .select('id, platform, platform_user_id, username, profile_picture, followers, posts_count, views, likes, shares, comments, updated_at, chat_id, metadata')
@@ -91,18 +92,21 @@ export function useSocialStats() {
           .eq('user_id', user.id)
           .eq('status', 'published')
           .limit(200),
-        // Bot ping runs in parallel - no longer blocks after DB queries
-        fetch('/api/bot/ping', { signal: AbortSignal.timeout(1500) })
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null)
       ]);
 
       if (statsRes.error) throw statsRes.error;
 
-      // Extract bot active status from parallel ping result
+      // Determine if bot is active based on database settings/messages rather than ping
       let botActiveStatus: boolean | null = null;
-      if (botPingRes && typeof botPingRes === 'object' && 'botActive' in botPingRes) {
-        botActiveStatus = !!botPingRes.botActive;
+      const { data: botSettings } = await supabase
+        .from('bot_settings' as any)
+        .select('is_active')
+        .eq('user_id', user.id)
+        .eq('platform', 'whatsapp')
+        .maybeSingle();
+      
+      if (botSettings) {
+        botActiveStatus = !!botSettings.is_active;
       }
 
       // Map platform message counts

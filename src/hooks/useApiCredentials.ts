@@ -73,6 +73,7 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Google Analytics ID", key: "analytics_id", masked: true },
     { label: "Search Console ID", key: "search_console_id",  masked: true },
     { label: "Google Analytics Pixel ID (G-TAG)", key: "pixel_id", placeholder: "Ex: G-XXXXXXXXXX" },
+    { label: "Google People API Key (Contatos)", key: "people_api_key", masked: true },
   ],
   spotify: [
     { label: "Spotify Client ID", key: "client_id" },
