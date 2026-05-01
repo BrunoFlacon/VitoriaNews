@@ -673,7 +673,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           }} />
         </div>
       ) : (
-        <div ref={reportRef} className="space-y-8 animate-in fade-in duration-500 p-1">
+        <div ref={reportRef} data-report-root className="space-y-8 animate-in fade-in duration-500 p-1">
           {/* TOP WIDGETS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" style={{ contain: "layout style" }}>
         {[
