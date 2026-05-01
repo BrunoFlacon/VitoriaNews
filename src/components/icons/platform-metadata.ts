@@ -1,4 +1,4 @@
-import { Camera } from "lucide-react";
+import { Camera, Newspaper } from "lucide-react";
 import {
   FacebookIcon,
   InstagramIcon,
@@ -20,7 +20,8 @@ import {
   RedditIcon,
   GoogleIcon,
   MetaIcon,
-  GiphyIcon
+  GiphyIcon,
+  NewsapiIcon
 } from "./SocialIcons";
 
 export const socialPlatforms = [
@@ -197,6 +198,33 @@ export const socialPlatforms = [
     textColor: "text-[#FF4500]",
     gradient: "from-[#FF4500] to-[#FF5700]",
     type: "social"
+  },
+  {
+    id: "whatsapp_business",
+    name: "WhatsApp Business",
+    icon: WhatsappIcon,
+    color: "bg-[#075E54]",
+    textColor: "text-[#075E54]",
+    gradient: "from-[#075E54] to-[#128C7E]",
+    type: "social"
+  },
+  {
+    id: "google_news",
+    name: "Google News",
+    icon: GoogleNewsIcon,
+    color: "bg-[#4285F4]",
+    textColor: "text-[#4285F4]",
+    gradient: "from-[#4285F4] to-[#3367D6]",
+    type: "tool"
+  },
+  {
+    id: "newsapi",
+    name: "News API",
+    icon: NewsapiIcon,
+    color: "bg-[#1A1A2E]",
+    textColor: "text-[#E94560]",
+    gradient: "from-[#1A1A2E] to-[#16213E]",
+    type: "tool"
   },
   {
     id: "site",
