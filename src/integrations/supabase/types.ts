@@ -2493,6 +2493,29 @@ export type Database = {
         Returns: undefined
       }
       enqueue_scheduled_posts: { Args: never; Returns: undefined }
+      get_cron_jobs: {
+        Args: never
+        Returns: {
+          active: boolean
+          command: string
+          jobid: number
+          jobname: string
+          schedule: string
+        }[]
+      }
+      get_cron_run_details: {
+        Args: never
+        Returns: {
+          command: string
+          end_time: string
+          job_pid: number
+          jobid: number
+          return_message: string
+          runid: number
+          start_time: string
+          status: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
