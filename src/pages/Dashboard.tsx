@@ -321,6 +321,9 @@ const Dashboard = () => {
       case "manual":
         return <Suspense fallback={<ViewLoader />}><ManualView /></Suspense>;
 
+      case "monitoring":
+        return <Suspense fallback={<ViewLoader />}><CronMonitorView /></Suspense>;
+
       default:
         return (
           <>
