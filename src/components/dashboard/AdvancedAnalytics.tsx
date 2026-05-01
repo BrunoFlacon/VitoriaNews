@@ -195,31 +195,56 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         description: "Aguarde enquanto preparamos seu relatório...",
       });
 
+      // Wait for any pending renders
+      await new Promise(r => setTimeout(r, 500));
+
       const canvas = await html2canvas(reportRef.current, {
         scale: 2,
         useCORS: true,
+        allowTaint: true,
         logging: false,
         backgroundColor: '#0f172a',
         windowWidth: reportRef.current.scrollWidth,
-        windowHeight: reportRef.current.scrollHeight
+        windowHeight: reportRef.current.scrollHeight,
+        onclone: (doc) => {
+          // Ensure all content is visible in the clone
+          const el = doc.querySelector('[data-report-root]') as HTMLElement;
+          if (el) {
+            el.style.overflow = 'visible';
+            el.style.maxHeight = 'none';
+          }
+        }
       });
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
+
+      // Add metadata header on first page
+      pdf.setFontSize(18);
+      pdf.setTextColor(255, 255, 255);
+      pdf.setFillColor(15, 23, 42);
+      pdf.rect(0, 0, pdfWidth, 25, 'F');
+      pdf.text('Relatório de Analytics', 10, 12);
+      pdf.setFontSize(9);
+      pdf.setTextColor(148, 163, 184);
+      const periodLabel = PERIOD_OPTIONS.find(p => p.value === period)?.label || period;
+      const platformLabel = platform === 'all' ? 'Todas as plataformas' : platform;
+      pdf.text(`Período: ${periodLabel} | Plataforma: ${platformLabel} | Gerado: ${new Date().toLocaleString('pt-BR')}`, 10, 20);
+
       const imgProps = pdf.getImageProperties(imgData);
       const imgWidth = pdfWidth;
       const imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
       let heightLeft = imgHeight;
-      let position = 0;
+      let position = 27; // Start after header
 
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pdfHeight;
+      heightLeft -= (pdfHeight - position);
 
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
+      while (heightLeft > 0) {
+        position = -(imgHeight - heightLeft);
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pdfHeight;
@@ -241,7 +266,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     } finally {
       setIsExporting(false);
     }
-  }, [period, toast]);
+  }, [period, platform, toast]);
 
   const globalPeakHour = useMemo(() => {
     if (!data?.bestTimes || data.bestTimes.length === 0) return null;
