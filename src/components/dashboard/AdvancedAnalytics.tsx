@@ -159,12 +159,12 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     data, loading, error, 
     period, setPeriod, 
     platform, setPlatform, 
+    postType, setPostType,
     source, setSource,
     syncAnalytics, refetch 
   } = useAnalytics();
   const { logout } = useAuth();
   const { audienceBreakdown, lastUpdated, loading: statsLoading } = useSocialStats();
-  const [postType, setPostType] = useState('all');
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
