@@ -76,6 +76,7 @@ export const Sidebar = ({
       { id: "documents", icon: FolderOpen, label: "Arquivos & Galeria" },
       { id: "networks", icon: Share2, label: "Redes Sociais" },
       { id: "robot", icon: Bot, label: "Artesão de Bots" },
+      { id: "monitoring", icon: Activity, label: "Monitoramento" },
     ];
 
     const mandatoryBottom = [
