@@ -65,6 +65,7 @@ const NewsPortal = lazy(() => import("@/components/dashboard/NewsPortal"));
 const PortalSettingsWrapper = lazy(() => import("@/components/dashboard/settings/PortalSettingsWrapper").then(m => ({ default: m.PortalSettingsWrapper })));
 const ManualView = lazy(() => import("@/components/dashboard/ManualView").then(m => ({ default: m.ManualView })));
 const RobotBuilder = lazy(() => import("./RobotBuilder"));
+const CronMonitorView = lazy(() => import("@/components/dashboard/CronMonitorView").then(m => ({ default: m.CronMonitorView })));
 const FloatingWhatsApp = lazy(() => import("@/components/dashboard/FloatingWhatsApp").then(m => ({ default: m.FloatingWhatsApp })));
 
 const ViewLoader = () => (
