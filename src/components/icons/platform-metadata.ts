@@ -1,4 +1,4 @@
-import { Camera } from "lucide-react";
+import { Camera, Newspaper } from "lucide-react";
 import {
   FacebookIcon,
   InstagramIcon,
@@ -20,7 +20,8 @@ import {
   RedditIcon,
   GoogleIcon,
   MetaIcon,
-  GiphyIcon
+  GiphyIcon,
+  NewsapiIcon
 } from "./SocialIcons";
 
 export const socialPlatforms = [
