@@ -1,0 +1,16 @@
+﻿                            className="gap-3 p-3 text-red-500 focus:bg-red-500/10 focus:text-red-500 cursor-pointer rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" /> 
+                            <div className="flex flex-col"><span className="text-sm font-bold">Excluir</span><span className="text-[10px] text-red-500/60">Remover permanentemente</span></div>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
+                      <p className="text-white text-xs font-bold line-clamp-2 mb-1 leading-snug drop-shadow-md">{story.title}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-white/60 font-medium">{new Date(story.created_at).toLocaleDateString("pt-BR")}</span>
+                        <div className="flex items-center gap-1 text-[9px] text-white/60">
+                          <Eye className="w-2.5 h-2.5" /> {story.viewers}
+                        </div>
