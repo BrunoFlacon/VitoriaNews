@@ -46,23 +46,35 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
       setNotifications([]);
       return;
     }
-    const { data, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(100);
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50); // Reduzido de 100 para 50 para aliviar carga
 
-    if (!error && data) {
-      setNotifications(data.map((n: any) => ({
-        id: n.id,
-        type: n.type as Notification['type'],
-        title: n.title,
-        message: n.message,
-        timestamp: new Date(n.created_at),
-        read: n.read,
-        platform: n.platform || undefined,
-      })));
+      if (error) {
+        // Não logar 500 como erro crítico para evitar spam no console
+        if (error.code !== '57014') { // ignora statement timeout
+          console.warn('[Notifications] fetch error:', error.message);
+        }
+        return; // Retorna silenciosamente, não quebra o sistema
+      }
+
+      if (data) {
+        setNotifications(data.map((n: any) => ({
+          id: n.id,
+          type: n.type as Notification['type'],
+          title: n.title,
+          message: n.message,
+          timestamp: new Date(n.created_at),
+          read: n.read,
+          platform: n.platform || undefined,
+        })));
+      }
+    } catch (e) {
+      console.warn('[Notifications] fetchNotifications exception:', e);
     }
   }, [user]);
 

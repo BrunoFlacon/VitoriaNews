@@ -26,7 +26,15 @@ export const Header = ({ onNotificationsClick, onNavigate }: HeaderProps) => {
 
   const displayName = profile?.name || user?.email?.split('@')[0] || "Usuário";
   const initials = displayName.charAt(0).toUpperCase();
-  const userRole = (profile as any)?.role || "Administrador"; // Fallback para Admin
+  // Mapeamento de roles técnicos para labels legíveis
+  const ROLE_LABELS: Record<string, string> = {
+    admin_master: 'Admin Master',
+    dev_master: 'Dev Master',
+    editor: 'Editor',
+    user: 'Usuário',
+  };
+  const rawRole = profile?.role || '';
+  const userRole = ROLE_LABELS[rawRole] || rawRole || 'Carregando...';
 
   return (
     <motion.header

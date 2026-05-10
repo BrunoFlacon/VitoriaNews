@@ -70,22 +70,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [onlineUsersMap, setOnlineUsersMap] = useState<Record<string, any>>({});
   const presenceChannelRef = React.useRef<any>(null);
 
-  const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-    
-    if (!error && data) {
-      setProfile(data);
-      // Mark as online whenever the profile is loaded (user is authenticated)
-      await supabase
+  const fetchProfile = async (userId: string, retryTimeout = 4000) => {
+    try {
+      // Race: DB query vs timeout to prevent hanging on slow DB
+      const queryPromise = supabase
         .from('profiles')
-        .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })
-        .eq('user_id', userId);
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error('Profile fetch timeout') }), retryTimeout)
+      );
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
+      if (!error && data) {
+        setProfile(data);
+        // Mark as online — fire-and-forget, não bloqueia o carregamento
+        Promise.resolve(
+          supabase
+            .from('profiles')
+            .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })
+            .eq('user_id', userId)
+        ).catch(() => {});
+      } else if (retryTimeout <= 4000) {
+        // Primeira tentativa falhou por timeout — agenda retry com timeout maior (8s)
+        console.warn('[Auth] Profile timeout, retrying in 3s with longer timeout...');
+        setTimeout(() => fetchProfile(userId, 8000), 3000);
+      }
+    } catch (e) {
+      console.warn('[Auth] fetchProfile failed silently:', e);
     }
   };
+
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -105,14 +123,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     );
 
+    // Safety timeout: force loading to end after 5 seconds no matter what
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        console.warn("[Auth] Initial session check timed out after 5s. Forcing loader off.");
+        setIsLoading(false);
+      }
+    }, 5000);
+
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        await fetchProfile(session.user.id);
       }
       setIsLoading(false);
+      clearTimeout(timeoutId);
+    }).catch(err => {
+      console.error("[Auth] getSession critical error:", err);
+      setIsLoading(false);
+      clearTimeout(timeoutId);
     });
 
     return () => subscription.unsubscribe();

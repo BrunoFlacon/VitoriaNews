@@ -54,13 +54,20 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchSettings = useCallback(async () => {
     try {
-      // PERFORMANCE: Chamada consolidada e tipada
-      const { data: allData, error } = await (supabase as any)
+      // Timeout de 5s: se o banco estiver sobrecarregado, não trava o sistema
+      const queryPromise = (supabase as any)
         .from("system_settings")
         .select("*");
 
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error('system_settings timeout') }), 5000)
+      );
+
+      const { data: allData, error } = await Promise.race([queryPromise, timeoutPromise]);
+
       if (error) {
-        console.error("Error fetching system settings:", error);
+        console.warn("[SystemContext] Usando padrões — DB lento ou offline:", error.message);
+        setLoading(false);
         return;
       }
 
@@ -108,7 +115,7 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
       setSectionPermissions(permsMap);
 
     } catch (e) {
-      console.error("SystemContext Critical Error:", e);
+      console.warn("[SystemContext] Erro ignorado, usando padrões:", e);
     } finally {
       setLoading(false);
     }

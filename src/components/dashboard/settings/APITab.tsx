@@ -2,7 +2,7 @@ import { memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, RefreshCw, ChevronUp, ChevronDown, X, Globe, 
-  Unplug, Link2, Loader2 
+  Unplug, Link2, Loader2, Plug
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -153,8 +153,8 @@ export const APITab = memo(({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {[
                             { name: 'Maps API', key: 'maps_api_key', desc: 'Geolocalização', syncFn: null },
-                            { name: 'News API', key: 'news_api_key', desc: 'Google News', syncFn: 'radar-api' },
-                            { name: 'YouTube API', key: 'youtube_api_key', desc: 'Vídeos/Canal', syncFn: 'collect-youtube-analytics' },
+                            { name: 'Google News', key: 'news_api_key', desc: 'Google News', syncFn: 'radar-api' },
+                            { name: 'Contatos / Leads', key: 'contacts_api_key', desc: 'Leads e Contatos', syncFn: 'collect-google-contacts' },
                             { name: 'Google Ads', key: 'ads_id', desc: 'Campanhas', syncFn: 'collect-meta-ads-analytics' },
                             { name: 'Analytics', key: 'analytics_id', desc: 'Métricas', syncFn: 'collect-google-analytics' },
                             { name: 'Search Console', key: 'search_console_id', desc: 'SEO', syncFn: 'collect-search-console-data' },
@@ -173,14 +173,15 @@ export const APITab = memo(({
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <span className="text-[10px] text-muted-foreground">{svc.desc}</span>
-                                  {svcActive && svc.syncFn && (
+                                  {svc.syncFn && (
                                     <Button 
                                       size="sm" 
                                       variant="ghost" 
-                                      className="h-6 px-2 text-[10px] text-primary hover:bg-primary/10"
-                                      onClick={() => syncSocialStats('google_cloud')}
+                                      className={cn("h-6 w-6 p-0", svcActive ? "text-primary hover:bg-primary/10" : "text-muted-foreground")}
+                                      onClick={() => svcActive ? syncSocialStats('google_cloud') : handleSaveCreds('google_cloud')}
+                                      title={svcActive ? "Conectado / Sincronizar" : "Desconectado / Conectar"}
                                     >
-                                      Sincronizar
+                                      {svcActive ? <Plug className="w-3.5 h-3.5" /> : <Unplug className="w-3.5 h-3.5" />}
                                     </Button>
                                   )}
                                 </div>

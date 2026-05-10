@@ -10,20 +10,24 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     const fetchSettings = async () => {
-      // Use * to be resilient against partial migrations or different schemas
-      const { data, error } = await (supabase as any)
-        .from('system_settings')
-        .select('*')
-        .eq('group', 'general')
-        .maybeSingle();
-      
-      if (error) {
-        console.error('[TrackingProvider] Error fetching settings:', error);
-        return;
-      }
+      try {
+        const { data, error } = await (supabase as any)
+          .from('system_settings')
+          .select('*')
+          .eq('group', 'general')
+          .maybeSingle();
+        
+        // Silenciar erros de timeout — não é crítico para os pixels
+        if (error) {
+          if (error.code !== '57014' && !error.message?.includes('timeout')) {
+            console.warn('[TrackingProvider] settings não disponíveis:', error.message);
+          }
+          return;
+        }
 
-      if (data) {
-        setSettings(data);
+        if (data) setSettings(data);
+      } catch (e) {
+        // Silencioso — pixels são opcionais
       }
     };
 

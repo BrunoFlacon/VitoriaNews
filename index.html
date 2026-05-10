@@ -2,15 +2,27 @@
 <html lang="pt">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Content Security Policy (CSP) Rigorosa + Permissão do Supabase -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* ws://localhost:*;">
 
     <!-- Meta Tags Primárias -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <title>Novo Portal - A Redação Multimídia de Tupã e Região</title>
     <meta name="title" content="Novo Portal - A Redação Multimídia de Tupã e Região">
     <meta name="description" content="A Redação Multimídia de Tupã e Região. Análises de Precisão, Breaking News, Podcasts, Reportagens Exclusivas. Assine!">
     <meta name="theme-color" content="#010202">
+
+    <!-- PWA / Mobile App Experience -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Social Canvas">
+    <meta name="application-name" content="Social Canvas">
+    <meta name="msapplication-TileColor" content="#010202">
+    <meta name="format-detection" content="telephone=no">
 
     <!-- Open Graph / Facebook / WhatsApp (Essencial para a aprovação na Meta) -->
     <meta property="og:type" content="website">

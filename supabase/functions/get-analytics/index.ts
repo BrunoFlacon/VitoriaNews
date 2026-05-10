@@ -162,21 +162,21 @@ serve(async (req: Request) => {
       { data: attacksData },
       { data: messagingChannelsResp }
     ] = await Promise.all([
-      supabase.from("scheduled_posts").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-      supabase.from("post_metrics").select("*").eq("user_id", user.id).or(`published_at.gte.${startDate.toISOString()},collected_at.gte.${startDate.toISOString()}`),
-      supabase.from("account_metrics").select("*").eq("user_id", user.id).gte("collected_at", startDate.toISOString()).order("collected_at", { ascending: true }),
+      supabase.from("scheduled_posts").select("id, status, type, post_type, platforms, created_at, published_at, content").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabase.from("post_metrics").select("id, post_id, external_id, platform, likes, comments, shares, impressions, reach, content, published_at, collected_at").eq("user_id", user.id).or(`published_at.gte.${startDate.toISOString()},collected_at.gte.${startDate.toISOString()}`),
+      supabase.from("account_metrics").select("id, social_account_id, platform, followers, posts_count, views, likes, comments, shares, collected_at").eq("user_id", user.id).gte("collected_at", startDate.toISOString()).order("collected_at", { ascending: true }),
       supabase.from("social_connections").select("id, platform, username, page_name, followers_count, profile_image_url, is_connected, platform_user_id, page_id").eq("user_id", user.id),
       supabase.from("social_accounts").select("id, platform, platform_user_id, username, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, metadata, updated_at").eq("user_id", user.id),
-      supabase.from("platform_hourly_performance").select("*").order("avg_likes", { ascending: false }).limit(50),
-      supabase.from("messages").select("id, status, platform, content, recipient_name, recipient_phone, created_at, sent_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: false }),
-      supabase.from("meta_ads_campaigns").select("*").eq("user_id", user.id).gte("created_at", startDate.toISOString()),
-      supabase.from("google_analytics_data").select("*").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
-      supabase.from("youtube_analytics").select("*").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
-      supabase.from("viral_campaigns").select("*").gte("detected_at", startDate.toISOString()),
-      supabase.from("trends").select("*").gte("detected_at", startDate.toISOString()),
-      supabase.from("political_trends").select("*").gte("detected_at", startDate.toISOString()),
-      supabase.from("eventos_de_ataque").select("*").gte("detectado_em", startDate.toISOString()),
-      supabase.from("messaging_channels").select("*").eq("user_id", user.id)
+      supabase.from("platform_hourly_performance").select("platform, day_of_week, hour, avg_likes, avg_comments, avg_shares, avg_impressions").order("avg_likes", { ascending: false }).limit(50),
+      supabase.from("messages").select("id, status, platform, content, recipient_name, created_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: false }),
+      supabase.from("meta_ads_campaigns").select("id, impressions, reach, clicks, amount_spent, created_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()),
+      supabase.from("google_analytics_data").select("id, metric_name, metric_value, date").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
+      supabase.from("youtube_analytics").select("id, views, likes, comments, subscribers_gained, estimated_minutes_watched, date").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
+      supabase.from("viral_campaigns").select("id, title, platform, reach, detected_at").gte("detected_at", startDate.toISOString()),
+      supabase.from("trends").select("id, keyword, volume, platform, detected_at").gte("detected_at", startDate.toISOString()),
+      supabase.from("political_trends").select("id, keyword, sentiment, detected_at").gte("detected_at", startDate.toISOString()),
+      supabase.from("eventos_de_ataque").select("id, tipo, severidade, detectado_em").gte("detectado_em", startDate.toISOString()),
+      supabase.from("messaging_channels").select("id, platform, members_count").eq("user_id", user.id)
     ]);
 
     const posts = postsResp || [];
