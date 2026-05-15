@@ -207,6 +207,8 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
 
   const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_biography,threads_follower_count&access_token=${accessToken}`);
   const meData = await meRes.json();
+  
+  console.log(`[THREADS DEBUG] Resposta da Meta:`, JSON.stringify(meData));
 
   return [{
     accessToken,
@@ -217,8 +219,8 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
     pageId: "",
     profileImageUrl: meData.threads_profile_picture_url || "",
     username: meData.username,
-    followers: meData.threads_follower_count || 0,
-    postsCount: 0 // A API do Threads ainda não fornece total de posts no endpoint /me de forma direta
+    followers: Number(meData.threads_follower_count) || 0,
+    postsCount: 0 
   }];
 }
 
@@ -581,13 +583,20 @@ serve(async (req: Request) => {
          username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
        }, { onConflict: "user_id,platform,platform_user_id" });
 
-       await supabase.from("social_accounts").upsert({
-         user_id: user.id, platform, platform_user_id: result.platformUserId, username: result.username || result.pageName,
-         page_name: result.pageName, profile_picture: result.profileImageUrl, is_connected: true, 
-         followers_count: result.followers || 0,
-         posts_count: result.postsCount || 0,
-         updated_at: new Date().toISOString(),
-       }, { onConflict: "user_id,platform,platform_user_id" });
+        await supabase.from("social_accounts").upsert({
+          user_id: user.id, platform, platform_user_id: result.platformUserId, username: result.username || result.pageName,
+          page_name: result.pageName, profile_picture: result.profileImageUrl, is_connected: true, 
+          followers_count: result.followers || 0,
+          subscribers_count: result.followers || 0, // Redundância para painéis que usam este campo
+          posts_count: result.postsCount || 0,
+          updated_at: new Date().toISOString(),
+          metadata: { 
+            username: result.username, 
+            followers: result.followers, 
+            posts_count: result.postsCount,
+            profile_image_url: result.profileImageUrl 
+          }
+        }, { onConflict: "user_id,platform,platform_user_id" });
     }
 
     await supabase.from("oauth_states").delete().eq("id", oauthState.id);
