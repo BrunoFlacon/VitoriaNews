@@ -48,7 +48,8 @@ async function logOAuth(supabase: any, data: { user_id: string; provider: string
 }
 
 function assertRedirectUriMatch(saved: string, incoming: string) {
-  if (saved !== incoming) {
+  const normalize = (url: string) => url.replace(/\/$/, "");
+  if (normalize(saved) !== normalize(incoming)) {
     throw new Error(`Divergência de Redirect URI: esperado ${saved}, recebido ${incoming}`);
   }
 }

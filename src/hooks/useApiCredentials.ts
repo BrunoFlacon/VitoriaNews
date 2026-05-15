@@ -19,9 +19,9 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Access Token (Long Lived)", key: "access_token", masked: true },
   ],
   threads: [
-    { label: "Threads App ID", key: "app_id", placeholder: "Ex: 8785..." },
+    { label: "Threads App ID", key: "app_id", placeholder: "ID numérico" },
+    { label: "Threads App Secret", key: "app_secret", masked: true, placeholder: "Seu Secret da Threads API" },
     { label: "Threads User ID (Opcional)", key: "platform_user_id", placeholder: "ID numérico do usuário" },
-    { label: "Token de Acesso Manual (Gerado na Meta)", key: "access_token", masked: true, placeholder: "Cole o token THAAMfAn..." },
   ],
   whatsapp: [
     { label: "Phone Number ID (WhatsApp Business)", key: "phone_number_id", placeholder: "Ex: 123456789012345" },
