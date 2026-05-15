@@ -583,7 +583,10 @@ serve(async (req: Request) => {
 
        await supabase.from("social_accounts").upsert({
          user_id: user.id, platform, platform_user_id: result.platformUserId, username: result.username || result.pageName,
-         page_name: result.pageName, profile_picture: result.profileImageUrl, is_connected: true, updated_at: new Date().toISOString(),
+         page_name: result.pageName, profile_picture: result.profileImageUrl, is_connected: true, 
+         followers_count: result.followers || 0,
+         posts_count: result.postsCount || 0,
+         updated_at: new Date().toISOString(),
        }, { onConflict: "user_id,platform,platform_user_id" });
     }
 

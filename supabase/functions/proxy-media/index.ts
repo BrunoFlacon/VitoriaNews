@@ -28,19 +28,23 @@ serve(async (req: Request) => {
     const allowedDomains = [
       "whatsapp.net",
       "googleusercontent.com",
-      "platform-lookaside.fbsbx.com", 
-      ".fbcdn.net", 
-      ".facebook.com", 
-      ".instagram.com",
-      ".threads.net",
-      "pbs.twimg.com",
+      "fbsbx.com", 
+      "fbcdn.net", 
+      "facebook.com", 
+      "instagram.com",
+      "threads.net",
       "twimg.com",
+      "twitter.com",
       "api.telegram.org",
       "newsapi.org"
     ];
     try {
       const targetUrlObj = new URL(targetUrl);
-      if (!allowedDomains.some(domain => targetUrlObj.hostname.endsWith(domain))) {
+      const isAllowed = allowedDomains.some(domain => 
+        targetUrlObj.hostname === domain || targetUrlObj.hostname.endsWith("." + domain)
+      );
+      
+      if (!isAllowed) {
         return new Response(JSON.stringify({ error: "Domain not allowed for proxy" }), {
           status: 403,
           headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -53,15 +57,27 @@ serve(async (req: Request) => {
       });
     }
 
+    const headers: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
+    };
+
+    // Adiciona Referer para Twitter/Meta se necessário
+    try {
+      const targetUrlObj = new URL(targetUrl);
+      if (targetUrlObj.hostname.includes("twimg.com")) {
+        headers["Referer"] = "https://twitter.com/";
+      } else if (targetUrlObj.hostname.includes("fbcdn.net") || targetUrlObj.hostname.includes("instagram.com")) {
+        headers["Referer"] = "https://www.facebook.com/";
+      }
+    } catch (e) {}
+
     console.log(`[PROXY] Fetching: ${targetUrl}`);
     
     // Fetch the image from the target URL
     const response = await fetch(targetUrl, {
       method: "GET",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
-      }
+      headers
     });
 
     if (!response.ok) {
