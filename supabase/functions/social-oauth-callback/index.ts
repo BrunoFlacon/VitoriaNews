@@ -436,7 +436,7 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication");
 
-    const { code, state, platform, redirect_uri: incomingRedirectUri, manual_token } = await req.json();
+    const { code, state: incomingState, platform, redirect_uri: incomingRedirectUri, manual_token } = await req.json();
 
     // -------------------------------------------------------------------------
     // NOVO: SUPORTE A TOKEN MANUAL (THREADS)
@@ -489,22 +489,26 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: true, pageName: meData.username }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (!code || !state || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required");
+    if (!code || !incomingState || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required");
 
-    // Fetch state from DB — state pode ser composto "stateId~codeVerifier" (PKCE)
-    // ou simples "stateId" (outras plataformas).
+    // Extrair stateId e code_verifier do state composto (ex: "id~verifier")
+    const tildeIndex = incomingState.indexOf("~");
+    const stateId = tildeIndex !== -1 ? incomingState.substring(0, tildeIndex) : incomingState;
+    const extractedVerifierFromState = tildeIndex !== -1 ? incomingState.substring(tildeIndex + 1) : null;
+
+    // Fetch state from DB usando apenas o stateId
     const { data: oauthState, error: stateError } = await supabase
       .from("oauth_states")
       .select("*")
-      .eq("state", state)
+      .eq("state", stateId)
       .eq("user_id", user.id)
       .eq("platform", platform)
       .single();
+      
     if (stateError || !oauthState) return oauthError(platform, "callback", "Invalid or expired OAuth state");
 
-    // Extrair code_verifier do state composto (se existir)
-    const tildeIndex = state.indexOf("~");
-    const extractedVerifier = tildeIndex !== -1 ? state.substring(tildeIndex + 1) : (oauthState.code_verifier || "");
+    // Prioridade para o verifier: (1) o que veio na URL (~), (2) o que está na coluna do banco
+    const finalVerifier = extractedVerifierFromState || oauthState.code_verifier || "";
 
     // Validar Redirect URI
     if (incomingRedirectUri) assertRedirectUriMatch(oauthState.redirect_uri, incomingRedirectUri);
@@ -567,8 +571,8 @@ serve(async (req: Request) => {
         client_id: raw.client_id, 
         client_secret: raw.client_secret 
       }, supabase, user.id); break;
-      case "twitter": results = await exchangeTwitter(code, oauthState.redirect_uri, extractedVerifier, formattedCreds, supabase, user.id); break;
-      case "tiktok": results = await exchangeTikTok(code, oauthState.redirect_uri, extractedVerifier, formattedCreds, supabase, user.id); break;
+      case "twitter": results = await exchangeTwitter(code, oauthState.redirect_uri, finalVerifier, formattedCreds, supabase, user.id); break;
+      case "tiktok": results = await exchangeTikTok(code, oauthState.redirect_uri, finalVerifier, formattedCreds, supabase, user.id); break;
       default:
         throw new Error(`Troca de token para plataforma '${platform}' não implementada.`);
     }
