@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { SUPABASE_ANON_KEY } from "@/integrations/supabase/client";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -49,8 +50,7 @@ export function getPlatformDisplayName(platformId: string): string {
  */
 export function getWhatsAppMediaUrl(mediaId: string, userId: string): string {
   if (!mediaId || !userId) return "";
-  const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/whatsapp-media-proxy?mediaId=${mediaId}&userId=${userId}&apikey=${apiKey}`;
+  return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/whatsapp-media-proxy?mediaId=${mediaId}&userId=${userId}&apikey=${SUPABASE_ANON_KEY}`;
 }
 
 export function getProxyUrl(url: string | null | undefined): string {
@@ -65,6 +65,7 @@ export function getProxyUrl(url: string | null | undefined): string {
     "instagram.fbcdn.net",
     "api.telegram.org",
     "twimg.com",
+    "twitter.com",
     "linkedin.com/media",
     "whatsapp.net",
     "mmg.whatsapp",
@@ -75,8 +76,7 @@ export function getProxyUrl(url: string | null | undefined): string {
   
   if (shouldProxy) {
     if (url.includes('proxy-media?url=')) return url;
-    const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-    return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(url)}&apikey=${apiKey}`;
+    return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(url)}&apikey=${SUPABASE_ANON_KEY}`;
   }
   
   return url;
