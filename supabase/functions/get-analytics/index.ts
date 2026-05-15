@@ -334,16 +334,16 @@ serve(async (req: Request) => {
       // 2. Use post metrics for Views/Engagement (activity)
       // 3. If source is 'api', prioritize raw metrics
       
-      const viewsCount = requestedSource === 'api' 
-        ? Math.max(bucketPosts.reduce((s, m) => s + (m.impressions || 0), 0), platformFilteredAcc.reduce((s, m) => s + (m.views || 0), 0))
-        : platformFilteredAcc.reduce((s, m) => s + (m.views || 0), 0) || bucketPosts.reduce((s, m) => s + (m.impressions || 0), 0);
+      const viewsCount = Math.max(0, requestedSource === 'api' 
+        ? Math.max(bucketPosts.reduce((s, m) => s + (Number(m.impressions) || 0), 0), platformFilteredAcc.reduce((s, m) => s + (Number(m.views) || 0), 0))
+        : (platformFilteredAcc.reduce((s, m) => s + (Number(m.views) || 0), 0) || bucketPosts.reduce((s, m) => s + (Number(m.impressions) || 0), 0)));
 
-      const engagementCount = bucketPosts.reduce((s, m) => s + (m.likes || 0) + (m.comments || 0) + (m.shares || 0), 0) || 
-                               platformFilteredAcc.reduce((s, m) => s + (m.likes || 0) + (m.comments || 0) + (m.shares || 0), 0);
+      const engagementCount = Math.max(0, bucketPosts.reduce((s, m) => s + (Number(m.likes) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0), 0) || 
+                               platformFilteredAcc.reduce((s, m) => s + (Number(m.likes) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0), 0));
 
-      const reachCount = platformFilteredAcc.length > 0 
-        ? platformFilteredAcc.reduce((s, m) => s + (m.followers || 0), 0) / platformFilteredAcc.length // Average in bucket
-        : (bucketPosts.reduce((s, m) => s + (m.reach || 0), 0) || globalFollowers);
+      const reachCount = Math.max(0, platformFilteredAcc.length > 0 
+        ? platformFilteredAcc.reduce((s, m) => s + (Number(m.followers) || 0), 0) / platformFilteredAcc.length
+        : (bucketPosts.reduce((s, m) => s + (Number(m.reach) || 0), 0) || globalFollowers));
 
       chartData.push({
         name: label,
@@ -462,6 +462,7 @@ serve(async (req: Request) => {
       growth: number;
       profileImage: string | null;
       is_connected: boolean;
+      platform_user_id?: string | null;
     }> = [];
 
     if (socialConnections && (socialConnections as any[]).length > 0) {
@@ -489,6 +490,7 @@ serve(async (req: Request) => {
           growth,
           profileImage: accountInfo?.profile_picture || conn.profile_image_url || null,
           is_connected: conn.is_connected !== false,
+          platform_user_id: conn.platform_user_id
         });
       }
     }
@@ -497,7 +499,7 @@ serve(async (req: Request) => {
       const normalized = normalizePlatform(acc.platform);
       const alreadyIncluded = followerData.some(f =>
         f.platform === normalized &&
-        (f.username === acc.username || Math.abs((f.currentFollowers || 0) - (acc.followers_count || 0)) < 10)
+        (f.platform_user_id === acc.platform_user_id || f.username === acc.username)
       );
       if (!alreadyIncluded) {
         const platformAccMetrics = accountMetrics.filter((m: AccountMetric) => m.social_account_id === acc.id);

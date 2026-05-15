@@ -2,12 +2,14 @@ import { memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, RefreshCw, ChevronUp, ChevronDown, X, Globe, 
-  Unplug, Link2, Loader2, Plug
+  Unplug, Link2, Loader2, Plug, Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { APIFields } from "./APIFields";
+import { PLATFORM_CREDENTIAL_FIELDS } from "@/hooks/useApiCredentials";
 
 interface APITabProps {
   UNIQUE_PLATFORM_CONFIGS: any[];
@@ -27,6 +29,8 @@ interface APITabProps {
   toast: any;
   refreshStats: () => void;
   getBrandLogo: (id: string, isActive: boolean) => React.ReactNode;
+  updateFormField: (platform: string, key: string, value: string) => void;
+  formValues: Record<string, Record<string, string>>;
 }
 
 export const APITab = memo(({
@@ -46,7 +50,9 @@ export const APITab = memo(({
   saveCredentials,
   toast,
   refreshStats,
-  getBrandLogo
+  getBrandLogo,
+  updateFormField,
+  formValues
 }: APITabProps) => {
   const toggleExpand = (id: string) => {
     setExpandedPlatform(expandedPlatform === id ? null : id);
@@ -123,7 +129,39 @@ export const APITab = memo(({
                   className="overflow-hidden"
                 >
                   <div className="p-5 border-t border-border bg-background/50 space-y-6">
-                    {/* Aqui entrariam os campos específicos de cada API */}
+                    {/* API Fields Section */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Configurações de Credenciais</p>
+                        <div className="flex items-center gap-2">
+                           <Button 
+                             size="sm" 
+                             variant="outline" 
+                             className="h-8 text-xs gap-1.5"
+                             onClick={() => deleteCredentials(config.id)}
+                             disabled={!hasCreds}
+                           >
+                             <X className="w-3.5 h-3.5 text-destructive" /> Limpar
+                           </Button>
+                           <Button 
+                             size="sm" 
+                             className="h-8 text-xs gap-1.5"
+                             onClick={() => handleSaveCreds(config.id)}
+                           >
+                             <Save className="w-3.5 h-3.5" /> Salvar
+                           </Button>
+                        </div>
+                      </div>
+
+                      <APIFields 
+                        config={config}
+                        credentials={credentials}
+                        fields={PLATFORM_CREDENTIAL_FIELDS[config.id] || []}
+                        updateFormField={updateFormField}
+                        formValues={formValues}
+                      />
+                    </div>
+
                     {/* Platform Specific Controls */}
                     {config.id === 'google_cloud' && (
                       <div className="space-y-4">

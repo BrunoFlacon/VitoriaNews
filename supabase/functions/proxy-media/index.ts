@@ -2,8 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization, x-supabase-auth, x-client-version, x-my-custom-header",
+  "Access-Control-Max-Age": "86400",
+  "Permissions-Policy": "browsing-topics=()",
 };
 
 serve(async (req: Request) => {
@@ -23,7 +25,18 @@ serve(async (req: Request) => {
     }
 
     // Only allow specific domains to prevent SSRF
-    const allowedDomains = ["pps.whatsapp.net", "scontent.whatsapp.net", "platform-lookaside.fbsbx.com", ".fbcdn.net"];
+    const allowedDomains = [
+      "whatsapp.net",
+      "googleusercontent.com",
+      "platform-lookaside.fbsbx.com", 
+      ".fbcdn.net", 
+      ".facebook.com", 
+      ".instagram.com",
+      "pbs.twimg.com",
+      "twimg.com",
+      "api.telegram.org",
+      "newsapi.org"
+    ];
     try {
       const targetUrlObj = new URL(targetUrl);
       if (!allowedDomains.some(domain => targetUrlObj.hostname.endsWith(domain))) {

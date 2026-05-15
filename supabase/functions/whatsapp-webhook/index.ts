@@ -106,11 +106,21 @@ serve(async (req: Request) => {
 
           if (isEcho) continue; // Pula ecos do próprio robô
 
+          const mediaId = msg.image?.id || msg.video?.id || msg.audio?.id || msg.document?.id;
+          const mediaType = msg.type;
+
           // Log da Mensagem Recebida (Inbox)
           await logInteraction(supabase, {
             userId, platform: "whatsapp", chatId: from,
             content: text, status: "received",
-            metadata: { wa_msg_id: msg.id, sender_name: senderName, is_echo: false, is_group: isGroup }
+            metadata: { 
+              wa_msg_id: msg.id, 
+              sender_name: senderName, 
+              is_echo: false, 
+              is_group: isGroup,
+              media_id: mediaId,
+              media_type: mediaType
+            }
           });
 
           // Processar Resposta do Robô (Engine Compartilhada)

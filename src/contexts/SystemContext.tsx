@@ -29,7 +29,7 @@ interface SystemContextType {
   canAccessSection: (sectionKey: string, userRole: string) => boolean;
 }
 
-const SystemContext = createContext<SystemContextType | undefined>(undefined);
+export const SystemContext = createContext<SystemContextType | undefined>(undefined);
 
 export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
@@ -54,19 +54,23 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchSettings = useCallback(async () => {
     try {
-      // Timeout de 5s: se o banco estiver sobrecarregado, não trava o sistema
+      // Timeout de 2s: se o banco estiver sobrecarregado, não trava o sistema
       const queryPromise = (supabase as any)
         .from("system_settings")
         .select("*");
 
       const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: new Error('system_settings timeout') }), 5000)
+        setTimeout(() => resolve({ data: null, error: new Error('system_settings timeout') }), 2000)
       );
 
       const { data: allData, error } = await Promise.race([queryPromise, timeoutPromise]);
 
       if (error) {
-        console.warn("[SystemContext] Usando padrões — DB lento ou offline:", error.message);
+        // Ignora erros de rede no console para evitar poluição (já tratado visualmente via loading=false)
+        const isNetworkError = error.message?.includes('fetch') || error.message?.includes('timeout') || error.message?.includes('CORS');
+        if (!isNetworkError) {
+          console.warn("[SystemContext] Erro ao carregar configurações:", error.message);
+        }
         setLoading(false);
         return;
       }

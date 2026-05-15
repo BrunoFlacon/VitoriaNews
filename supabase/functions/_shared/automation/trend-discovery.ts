@@ -36,21 +36,42 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
 
   // 1. Coleta em Redes Sociais
   console.log('[discoverTrends] Collecting from social networks...');
-  const [metaTrends, googleIntell, tikTokTrends, altTrends, xTrends, msgTrends] = await Promise.all([
-    collectMetaIntelligence(supabaseClient, targetUserId).catch(() => []),
-    collectGoogleIntelligence(supabaseClient, targetUserId).catch(() => []),
-    collectTikTokIntelligence(supabaseClient, targetUserId).catch(() => []),
-    collectAlternativeIntelligence(supabaseClient, targetUserId).catch(() => []),
-    collectXIntelligence(supabaseClient, targetUserId).catch(() => []),
-    collectMessagingIntelligence(supabaseClient, targetUserId).catch(() => [])
-  ]);
+  let googleTrends: any[] = [];
+  try {
+    const results = await Promise.all([
+      collectMetaIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Meta collector failed:', e); return []; }),
+      collectGoogleIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Google collector failed:', e); return []; }),
+      collectTikTokIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] TikTok collector failed:', e); return []; }),
+      collectAlternativeIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Alt collector failed:', e); return []; }),
+      collectXIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] X collector failed:', e); return []; }),
+      collectMessagingIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Messaging collector failed:', e); return []; })
+    ]);
 
-  allTrends.push(...metaTrends, ...googleIntell, ...tikTokTrends, ...altTrends, ...xTrends, ...msgTrends);
+    const [metaTrends, gTrends, tikTokTrends, altTrends, xTrendsResult, msgTrends] = results;
+    
+    // googleTrends is used later for enrichment
+    googleTrends = gTrends as any[];
+    
+    // X collector returns { trends: any[], accounts_stats: any[] }
+    const xTrends = (xTrendsResult && 'trends' in xTrendsResult) ? (xTrendsResult as any).trends : [];
+
+    allTrends.push(...metaTrends, ...googleTrends, ...tikTokTrends, ...altTrends, ...xTrends, ...msgTrends);
+    console.log(`[discoverTrends] Social collection done. Found ${allTrends.length} items.`);
+  } catch (allErr) {
+    console.error('[discoverTrends] Promise.all block failed:', allErr);
+  }
+
+
 
   // 2. Notícias em Tempo Real (NewsAPI - Fonte Principal)
   try {
     const { data: newsApiData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'newsapi').maybeSingle();
-    const newsApiKey = newsApiData?.credentials?.api_key || newsApiData?.credentials?.apiKey || '';
+    let newsApiKey = newsApiData?.credentials?.api_key || newsApiData?.credentials?.apiKey || '';
+
+    if (!newsApiKey) {
+      const { data: googleCloudData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'google_cloud').maybeSingle();
+      newsApiKey = googleCloudData?.credentials?.news_api_key || '';
+    }
 
     if (newsApiKey) {
       console.log('[discoverTrends] Fetching from NewsAPI...');
@@ -67,8 +88,12 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
         if (res.ok) {
           const json = await res.json();
           for (const article of (json.articles || [])) {
+            // Evita erro de .substring em title nulo, muito comum na NewsAPI
+            const title = article.title || 'Sem Título';
+            const contentSnippet = article.content ? String(article.content).substring(0, 200) : null;
+            
             allTrends.push({
-              keyword: article.title.substring(0, 100),
+              keyword: title.substring(0, 100),
               source: 'News',
               sub_source: article.source?.name || 'NewsAPI',
               category: 'Headline',
@@ -79,7 +104,7 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
               metadata: { 
                 published_at: article.publishedAt,
                 author: article.author,
-                content_snippet: article.content ? article.content.substring(0, 200) : null
+                content_snippet: contentSnippet
               }
             });
           }
@@ -91,13 +116,19 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
   // 3. Suporte Adicional a Google News & NewsAPI Enrichment
   try {
     const { data: newsApiData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'newsapi').maybeSingle();
-    const newsApiKey = newsApiData?.credentials?.api_key || newsApiData?.credentials?.apiKey || '';
+    let newsApiKey = newsApiData?.credentials?.api_key || newsApiData?.credentials?.apiKey || '';
+
+    if (!newsApiKey) {
+      const { data: googleCloudData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'google_cloud').maybeSingle();
+      newsApiKey = googleCloudData?.credentials?.news_api_key || '';
+    }
 
     if (newsApiKey) {
       console.log('[discoverTrends] Enriching trends with NewsAPI...');
       
       // Para cada tendência descoberta pelo Google, buscamos mais dados (foto, manchete rica) na NewsAPI
-      const enrichPromises = googleIntell.slice(0, 5).map(async (trend: any) => {
+      const enrichPromises = googleTrends.slice(0, 5).map(async (trend: any) => {
+
         try {
           const res = await fetch(`https://newsapi.org/v2/everything?q=${encodeURIComponent(trend.keyword)}&language=pt&sortBy=relevancy&pageSize=3&apiKey=${newsApiKey}`);
           if (res.ok) {
@@ -105,9 +136,10 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
             const bestArticle = json.articles?.find((a: any) => a.urlToImage) || json.articles?.[0];
             
             if (bestArticle) {
+              const title = bestArticle.title || 'Sem Título';
               return {
                 ...trend,
-                keyword: bestArticle.title.substring(0, 100),
+                keyword: title.substring(0, 100),
                 thumbnail_url: bestArticle.urlToImage,
                 description: bestArticle.description,
                 url: bestArticle.url,
@@ -157,32 +189,57 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
   
   if (uniqueTrends.length > 0) {
     try {
-      const trendsToInsert = uniqueTrends.map(trend => ({
-        user_id: targetUserId,
-        keyword: trend.keyword,
-        source: trend.source,
-        sub_source: trend.sub_source || null,
-        category: trend.category,
-        score: trend.score || 0,
-        url: trend.url || null,
-        thumbnail_url: trend.thumbnail_url || null,
-        description: trend.description || null,
-        metadata: trend.metadata || {},
-        detected_at: new Date().toISOString(),
-      }));
-
-      const { error } = await supabaseClient
+      // Fetch existing keywords to avoid duplicates manually if constraint is missing
+      const { data: existing } = await supabaseClient
         .from('trends')
-        .upsert(trendsToInsert, { 
-          onConflict: 'keyword',
-          ignoreDuplicates: false 
-        });
+        .select('keyword')
+        .in('keyword', uniqueTrends.map(t => t.keyword));
+      
+      const existingKeywords = new Set((existing || []).map((e: any) => e.keyword));
+      
+      const trendsToInsert = uniqueTrends
+        .filter(t => !existingKeywords.has(t.keyword))
+        .map(trend => ({
+          user_id: targetUserId,
+          keyword: trend.keyword,
+          source: trend.source,
+          sub_source: trend.sub_source || null,
+          category: trend.category,
+          score: trend.score || 0,
+          url: trend.url || null,
+          thumbnail_url: trend.thumbnail_url || null,
+          description: trend.description || null,
+          metadata: trend.metadata || {},
+          detected_at: new Date().toISOString(),
+        }));
 
-      if (error) throw error;
+      const trendsToUpdate = uniqueTrends
+        .filter(t => existingKeywords.has(t.keyword))
+        .map(trend => ({
+          keyword: trend.keyword,
+          score: trend.score || 0,
+          url: trend.url || null,
+          thumbnail_url: trend.thumbnail_url || null,
+          description: trend.description || null,
+          metadata: trend.metadata || {},
+          detected_at: new Date().toISOString(),
+        }));
+
+      if (trendsToInsert.length > 0) {
+        const { error: insErr } = await supabaseClient.from('trends').insert(trendsToInsert);
+        if (insErr) console.error('[discoverTrends] Insert error:', insErr.message);
+      }
+
+      // Update existing ones individually (batch update by keyword is hard in Supabase without ID)
+      for (const t of trendsToUpdate) {
+        await supabaseClient.from('trends').update(t).eq('keyword', t.keyword);
+      }
+
       trendsCount = uniqueTrends.length;
     } catch (e: any) {
-      console.error('[discoverTrends] Bulk Upsert error:', e.message);
+      console.error('[discoverTrends] Manual Upsert error:', e.message);
     }
+
   }
 
   console.log(`[discoverTrends] Concluído. Processados: ${trendsCount}/${uniqueTrends.length}`);

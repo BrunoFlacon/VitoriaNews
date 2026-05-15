@@ -5,53 +5,51 @@ import {
   Heart, 
   Users, 
   TrendingUp,
-  Loader2
+  Loader2,
+  Settings, 
+  Activity, 
+  RefreshCw, 
+  Check 
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useWebPushNotifications } from "@/hooks/useWebPushNotifications";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
-import { useScheduledPosts } from "@/hooks/useScheduledPosts";
+import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Sidebar } from "@/components/dashboard/Sidebar";
-import { Header } from "@/components/dashboard/Header";
-import { StatsCard } from "@/components/dashboard/StatsCard";
-import { RecentPosts } from "@/components/dashboard/RecentPosts";
-import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
-import { SocialNetworkCard } from "@/components/dashboard/SocialNetworkCard";
-import { NotificationsPanel } from "@/components/dashboard/NotificationsPanel";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useAnalytics } from "@/hooks/useAnalytics";
+import { useSocialStats } from "@/hooks/useSocialStats";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-} from "@/components/ui/dropdown-menu";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Settings, Activity, RefreshCw, Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ScheduledPost } from "@/hooks/useScheduledPosts";
-import { useNavigate } from "react-router-dom";
-import { useAnalytics } from "@/hooks/useAnalytics";
-import { useSocialStats } from "@/hooks/useSocialStats";
-import { SystemFooter } from "@/components/SystemFooter";
 
-// Lazy load heavy views - wrap named exports for React.lazy
+// Lazy load all components to keep the initial shell lightweight
+import { Sidebar } from "@/components/dashboard/Sidebar";
+import { Header } from "@/components/dashboard/Header";
+import { MobileNav } from "@/components/dashboard/MobileNav";
+
+// Lazy load non-critical components to keep the initial shell lightweight
+const StatsCard = lazy(() => import("@/components/dashboard/StatsCard").then(m => ({ default: m.StatsCard })));
+const RecentPosts = lazy(() => import("@/components/dashboard/RecentPosts").then(m => ({ default: m.RecentPosts })));
+const AnalyticsChart = lazy(() => import("@/components/dashboard/AnalyticsChart").then(m => ({ default: m.AnalyticsChart })));
+const SocialNetworkCard = lazy(() => import("@/components/dashboard/SocialNetworkCard").then(m => ({ default: m.SocialNetworkCard })));
+const NotificationsPanel = lazy(() => import("@/components/dashboard/NotificationsPanel").then(m => ({ default: m.NotificationsPanel })));
+const SystemFooter = lazy(() => import("@/components/SystemFooter").then(m => ({ default: m.SystemFooter })));
+
+// Views already lazy-loaded
 const CreatePostPanel = lazy(() => import("@/components/dashboard/CreatePostPanel").then(m => ({ default: m.CreatePostPanel })));
 const CalendarView = lazy(() => import("@/components/dashboard/CalendarView").then(m => ({ default: m.CalendarView })));
 const AdvancedAnalytics = lazy(() => import("@/components/dashboard/AdvancedAnalytics").then(m => ({ default: m.AdvancedAnalytics })));
@@ -69,69 +67,101 @@ const CronMonitorView = lazy(() => import("@/components/dashboard/CronMonitorVie
 const FloatingWhatsApp = lazy(() => import("@/components/dashboard/FloatingWhatsApp").then(m => ({ default: m.FloatingWhatsApp })));
 
 const ViewLoader = () => (
-  <div className="flex items-center justify-center py-20">
-    <div className="relative">
-      <div className="w-12 h-12 border-4 border-primary/20 rounded-full" />
-      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin absolute top-0 left-0" />
+  <div className="flex items-center justify-center py-10 min-h-[200px]">
+    <div className="relative scale-75">
+      <div className="w-10 h-10 border-4 border-primary/10 rounded-full" />
+      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin absolute top-0 left-0" />
     </div>
   </div>
 );
 
 const Dashboard = () => {
+  const { logout, user } = useAuth();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const [preSelectedDate, setPreSelectedDate] = useState<Date | null>(null);
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
+
+  // TAB INTELLIGENCE: Only fetch data for active tabs
+  const isDashboardTab = activeTab === 'dashboard';
+  const isAnalyticsTab = activeTab === 'analytics' || isDashboardTab;
+  const isCalendarTab = activeTab === 'calendar' || activeTab === 'create' || isDashboardTab;
+  const isSettingsTab = activeTab === 'settings' || activeTab === 'accounts' || activeTab === 'networks';
+
+  const scheduledPosts = useScheduledPosts({ enabled: isCalendarTab });
+
+  // Sync activeTab with URL params
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab);
+    }
+    
+    // Auto-load post for editing if ID is provided
+    const postId = searchParams.get("id");
+    if (postId && tab === "create") {
+      const post = scheduledPosts.posts?.find(p => p.id === postId);
+      if (post && (!editingPost || editingPost.id !== postId)) {
+        setEditingPost(post);
+      }
+    }
+  }, [searchParams, scheduledPosts.posts]);
+
+  // Update URL when tab changes
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tab);
+      if (tab !== "create") next.delete("id");
+      return next;
+    });
+  };
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const [settingsSubTab, setSettingsSubTab] = useState<string>('profile');
-  // Tracks which account (connection) is selected per platform for the gear profile selector
   const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>(() => {
     try {
       const saved = localStorage.getItem('dashboard_selected_accounts');
       return saved ? JSON.parse(saved) : {};
-    } catch (e) {
-      return {};
-    }
+    } catch (e) { return {}; }
   });
 
   useEffect(() => {
     localStorage.setItem('dashboard_selected_accounts', JSON.stringify(selectedAccounts));
   }, [selectedAccounts]);
 
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-
   useWebPushNotifications();
 
-  const { connections, initiateOAuth, disconnect } = useSocialConnections();
-  const { data: analyticsData, loading: analyticsLoading, platform, setPlatform, syncAnalytics } = useAnalytics();
-  const scheduledPosts = useScheduledPosts();
+  const { connections, initiateOAuth, disconnect } = useSocialConnections({ enabled: isDashboardTab || isSettingsTab || activeTab === 'create' });
+  const { data: analyticsData, loading: analyticsLoading, platform, setPlatform, syncAnalytics } = useAnalytics({ enabled: isAnalyticsTab });
+  const { stats: localStats, totalFollowers: localFollowers } = useSocialStats({ enabled: isAnalyticsTab });
 
-  // Local fallback stats when Edge Function fails
-  const { stats: localStats, totalFollowers: localFollowers } = useSocialStats();
   const localTotalPosts = scheduledPosts.posts?.length ?? 0;
   const localEngagement = useMemo(() =>
     localStats.reduce((sum, s) => sum + s.likes_count + s.comments_count + s.shares_count, 0),
   [localStats]);
 
-  // Realtime subscription for scheduled_posts - shared across all views
+  // Optimized Realtime Subscription with Tab Intelligence
   const refetchRef = useRef(scheduledPosts.refetch);
   useEffect(() => { refetchRef.current = scheduledPosts.refetch; }, [scheduledPosts.refetch]);
 
   useEffect(() => {
+    if (!isCalendarTab || !user) return; // Only listen if we are actually viewing or managing posts
+    
     const channel = supabase
       .channel('dashboard-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'scheduled_posts' },
-        () => { refetchRef.current(); }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'scheduled_posts' }, () => { 
+        refetchRef.current(); 
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [isCalendarTab, user]);
 
   const handleLogout = async () => {
     await logout();
@@ -144,12 +174,19 @@ const Dashboard = () => {
   const getPageName = useCallback((platformId: string) =>
     connections.find(c => c.platform === platformId && c.is_connected)?.page_name ?? null, [connections]);
 
+  const socialPlatformsList = useMemo(() => 
+    socialPlatforms.filter(p => p.type === 'social'), 
+  []);
+
+  const connectedPlatforms = useMemo(() => 
+    socialPlatformsList.filter(p => connections.some(c => c.platform === p.id)),
+  [socialPlatformsList, connections]);
+
   const handleConnect = useCallback(async (platformId: string) => {
-    const platform = socialPlatforms.find(p => p.id === platformId);
+    const platform = socialPlatformsList.find(p => p.id === platformId);
     const isOAuth = platform?.type === 'social' && platformId !== 'site' && platformId !== 'telegram';
     
     if (!isOAuth) {
-      // For Telegram and other API-key based platforms, just navigate to API config tab
       setSettingsSubTab('api');
       setActiveTab('settings');
       return;
@@ -163,16 +200,7 @@ const Dashboard = () => {
     } finally {
       setConnectingPlatform(null);
     }
-  }, [initiateOAuth]);
-
-
-  const socialPlatformsList = useMemo(() => 
-    socialPlatforms.filter(p => p.type === 'social'), 
-  []);
-
-  const connectedPlatforms = useMemo(() => 
-    socialPlatforms.filter(p => connections.some(c => c.platform === p.id)),
-  [connections]);
+  }, [initiateOAuth, socialPlatformsList]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -225,6 +253,7 @@ const Dashboard = () => {
                     followers_count: c.followers_count,
                     posts_count: c.posts_count,
                     page_id: c.page_id,
+                    username: c.username,
                   }));
 
                 return (
@@ -279,7 +308,7 @@ const Dashboard = () => {
               submitForApproval={scheduledPosts.submitForApproval}
               approvePost={scheduledPosts.approvePost}
               rejectPost={scheduledPosts.rejectPost}
-              refetch={scheduledPosts.refetch}
+              refetch={async () => { await scheduledPosts.refetch(); }}
               onCreatePost={(date?: Date) => {
                 setEditingPost(null);
                 setPreSelectedDate(date || null);
@@ -327,153 +356,197 @@ const Dashboard = () => {
       default:
         return (
           <>
-            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <motion.h1
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="font-display font-bold text-3xl mb-1"
-                >
-                  Dashboard Principal 👋
-                </motion.h1>
-                <motion.p
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                  className="text-muted-foreground"
-                >
-                  Visão geral e desempenho consolidado de todas as suas redes
-                </motion.p>
-              </div>
+            <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                className="flex items-center justify-between md:block w-full md:w-auto"
+              >
+                <div>
+                  <h1 className="font-display font-bold text-2xl md:text-3xl mb-0.5 md:mb-1">
+                    Dashboard Principal 👋
+                  </h1>
+                  <p className="text-muted-foreground text-[10px] md:text-sm truncate">
+                    Visão geral e desempenho consolidado de todas as suas redes
+                  </p>
+                </div>
 
-              <Popover open={isPlatformMenuOpen} onOpenChange={setIsPlatformMenuOpen}>
-                <PopoverTrigger asChild>
-                  <button 
-                    className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl hover:border-primary/50 transition-all font-medium text-sm shadow-sm group mr-1"
-                    onMouseEnter={() => setIsPlatformMenuOpen(true)}
-                  >
-                    <Settings className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform duration-500" />
-                    <span>{platform === 'all' ? 'Todas as Redes' : socialPlatforms.find(p => p.id === platform)?.name}</span>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent 
-                  align="end" 
-                  className="w-[240px] p-2"
-                  onMouseLeave={() => setIsPlatformMenuOpen(false)}
-                >
-                  <div className="text-xs font-bold text-muted-foreground px-2 py-1 mb-1 uppercase tracking-wider">
-                    Redes Conectadas
-                  </div>
-                  <div className="grid grid-cols-1 gap-1">
-                    <button
-                      onClick={() => setPlatform('all')}
-                      className={cn(
-                        "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors",
-                        platform === 'all' ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Activity className="w-4 h-4" />
-                        Sumarizado (Global)
+                <div className="md:hidden flex items-center gap-2">
+                  <Popover open={isPlatformMenuOpen} onOpenChange={setIsPlatformMenuOpen}>
+                    <PopoverTrigger asChild>
+                      <button 
+                        className="p-2 bg-card border border-border rounded-xl hover:border-primary/50 transition-all shadow-sm"
+                        onClick={() => setIsPlatformMenuOpen(true)}
+                      >
+                        <Settings className="w-4 h-4 text-primary" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-[200px] p-2 glass-card">
+                       <div className="text-[10px] font-bold text-muted-foreground px-2 py-1 mb-1 uppercase tracking-widest">
+                        Redes
                       </div>
-                      {platform === 'all' && <Check className="w-3 h-3" />}
+                      <div className="grid grid-cols-1 gap-1">
+                        <button onClick={() => setPlatform('all')} className={cn("flex items-center justify-between w-full px-3 py-2 text-sm rounded-md", platform === 'all' ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted")}>
+                          <div className="flex items-center gap-2"><Activity className="w-4 h-4" /> Global</div>
+                          {platform === 'all' && <Check className="w-3 h-3" />}
+                        </button>
+                        {connectedPlatforms.map(p => (
+                          <button key={p.id} onClick={() => setPlatform(p.id)} className={cn("flex items-center justify-between w-full px-3 py-2 text-sm rounded-md", platform === p.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted")}>
+                            <div className="flex items-center gap-2"><p.icon className={cn("w-4 h-4", p.textColor)} /> {p.name}</div>
+                            {platform === p.id && <Check className="w-3 h-3" />}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="rounded-xl border-border shadow-sm h-9 w-9"
+                    onClick={() => syncAnalytics?.()}
+                    disabled={analyticsLoading}
+                  >
+                    <RefreshCw className={cn("w-4 h-4", analyticsLoading && "animate-spin")} />
+                  </Button>
+                </div>
+              </motion.div>
+
+              <div className="hidden md:flex items-center gap-2">
+                <Popover open={isPlatformMenuOpen} onOpenChange={setIsPlatformMenuOpen}>
+                  <PopoverTrigger asChild>
+                    <button 
+                      className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl hover:border-primary/50 transition-all font-medium text-sm shadow-sm group"
+                      onMouseEnter={() => setIsPlatformMenuOpen(true)}
+                    >
+                      <Settings className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform duration-500" />
+                      <span>{platform === 'all' ? 'Todas as Redes' : socialPlatforms.find(p => p.id === platform)?.name}</span>
                     </button>
-                    {connectedPlatforms.map(p => (
+                  </PopoverTrigger>
+                  <PopoverContent 
+                    align="end" 
+                    className="w-[240px] p-2 glass-card"
+                    onMouseLeave={() => setIsPlatformMenuOpen(false)}
+                  >
+                    <div className="text-[10px] font-bold text-muted-foreground px-2 py-1 mb-1 uppercase tracking-widest">
+                      Redes Conectadas
+                    </div>
+                    <div className="grid grid-cols-1 gap-1">
                       <button
-                        key={p.id}
-                        onClick={() => setPlatform(p.id)}
+                        onClick={() => setPlatform('all')}
                         className={cn(
-                          "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors text-left",
-                          platform === p.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
+                          "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors",
+                          platform === 'all' ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <p.icon className={cn("w-4 h-4", p.textColor)} />
-                          {p.name}
+                          <Activity className="w-4 h-4" />
+                          Sumarizado (Global)
                         </div>
-                        {platform === p.id && <Check className="w-3 h-3" />}
+                        {platform === 'all' && <Check className="w-3 h-3" />}
                       </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+                      {connectedPlatforms.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => setPlatform(p.id)}
+                          className={cn(
+                            "flex items-center justify-between w-full px-3 py-2 text-sm rounded-md transition-colors text-left",
+                            platform === p.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <p.icon className={cn("w-4 h-4", p.textColor)} />
+                            {p.name}
+                          </div>
+                          {platform === p.id && <Check className="w-3 h-3" />}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
 
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      className="rounded-xl hover:bg-primary/5 hover:text-primary transition-all border-border shadow-sm"
-                      onClick={() => syncAnalytics?.()}
-                      disabled={analyticsLoading}
-                    >
-                      <RefreshCw className={cn("w-4 h-4", analyticsLoading && "animate-spin")} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Sincronizar dados das APIs</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        size="icon" 
+                        className="rounded-xl hover:bg-primary/5 hover:text-primary transition-all border-border shadow-sm h-10 w-10"
+                        onClick={() => syncAnalytics?.()}
+                        disabled={analyticsLoading}
+                      >
+                        <RefreshCw className={cn("w-4 h-4", analyticsLoading && "animate-spin")} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Sincronizar dados</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <StatsCard 
-                title="Total de Posts" 
-                value={(analyticsData?.overview.totalPosts ?? localTotalPosts).toString()} 
-                icon={TrendingUp} 
-                trend={parseFloat(analyticsData?.engagement.growth || "0")} 
-                trendLabel="este mês" 
-                color="primary" 
-                delay={0} 
-              />
-              <StatsCard 
-                title="Visualizações" 
-                value={(analyticsData?.engagement.views || 0).toLocaleString()} 
-                icon={Eye} 
-                trend={parseFloat(analyticsData?.engagement.growth || "0")} 
-                trendLabel="vs mês anterior" 
-                color="accent" 
-                delay={0.1} 
-              />
-              <StatsCard 
-                title="Engajamento" 
-                value={(
-                  (analyticsData?.engagement.likes || 0) + 
-                  (analyticsData?.engagement.comments || 0) + 
-                  (analyticsData?.engagement.shares || 0) ||
-                  localEngagement
-                ).toLocaleString()} 
-                icon={Heart} 
-                trend={parseFloat(analyticsData?.engagement.engagementRate || "0")} 
-                trendLabel="taxa" 
-                color="success" 
-                delay={0.1} 
-              />
-              <StatsCard 
-                title="Seguidores" 
-                value={(
-                  analyticsData?.overview.totalFollowers ||
-                  analyticsData?.followerData?.reduce((acc, curr) => acc + curr.currentFollowers, 0) || 
-                  localFollowers ||
-                  connections.reduce((acc, c) => acc + (c.followers_count || 0), 0)
-                ).toLocaleString()} 
-                icon={Users} 
-                trend={analyticsData?.overview.followersGrowth !== undefined ? parseFloat(analyticsData.overview.followersGrowth.toString()) : undefined}
-                trendLabel="este mês" 
-                color="warning" 
-                delay={0.1} 
-              />
-            </div>
+            <Suspense fallback={<div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6"><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /></div>}>
+              <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6" style={{ contain: 'layout' }}>
+                <StatsCard 
+                  title="Total de Posts" 
+                  value={(analyticsData?.overview.totalPosts ?? localTotalPosts).toString()} 
+                  icon={TrendingUp} 
+                  trend={parseFloat(analyticsData?.engagement.growth || "0")} 
+                  trendLabel="este mês" 
+                  color="primary" 
+                  delay={0} 
+                />
+                <StatsCard 
+                  title="Visualizações" 
+                  value={(analyticsData?.engagement.views || 0).toLocaleString()} 
+                  icon={Eye} 
+                  trend={parseFloat(analyticsData?.engagement.growth || "0")} 
+                  trendLabel="vs mês anterior" 
+                  color="accent" 
+                  delay={0.1} 
+                />
+                <StatsCard 
+                  title="Engajamento" 
+                  value={(
+                    (analyticsData?.engagement.likes || 0) + 
+                    (analyticsData?.engagement.comments || 0) + 
+                    (analyticsData?.engagement.shares || 0) ||
+                    localEngagement
+                  ).toLocaleString()} 
+                  icon={Heart} 
+                  trend={parseFloat(analyticsData?.engagement.engagementRate || "0")} 
+                  trendLabel="taxa" 
+                  color="success" 
+                  delay={0.1} 
+                />
+                <StatsCard 
+                  title="Seguidores" 
+                  value={(
+                    analyticsData?.overview.totalFollowers ||
+                    analyticsData?.followerData?.reduce((acc, curr) => acc + curr.currentFollowers, 0) || 
+                    localFollowers ||
+                    localStats.reduce((acc, c) => acc + (c.followers_count || 0), 0)
+                  ).toLocaleString()} 
+                  icon={Users} 
+                  trend={analyticsData?.overview.followersGrowth !== undefined ? parseFloat(analyticsData.overview.followersGrowth.toString()) : undefined}
+                  trendLabel="este mês" 
+                  color="warning" 
+                  delay={0.1} 
+                />
+              </div>
+            </Suspense>
 
             {/* Account List and Chart */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
-                <AnalyticsChart 
-                  data={analyticsData?.chartData} 
-                  loading={analyticsLoading} 
-                />
+                <Suspense fallback={<div className="h-[350px] bg-muted/30 rounded-2xl animate-pulse" />}>
+                  <AnalyticsChart 
+                    data={analyticsData?.chartData} 
+                    loading={analyticsLoading} 
+                  />
+                </Suspense>
               </div>
               <div className="h-full">
                 <motion.div
@@ -505,7 +578,7 @@ const Dashboard = () => {
                   </div>
                   <button
                     onClick={() => setActiveTab("networks")}
-                    className="w-full mt-4 text-sm text-primary hover:underline"
+                    className="w-full mt-4 text-sm text-primary hover:underline font-bold"
                   >
                     Ver todas as redes →
                   </button>
@@ -514,10 +587,12 @@ const Dashboard = () => {
             </div>
 
             <div className="mt-6">
-              <RecentPosts onEditPost={(post: ScheduledPost) => {
-                setEditingPost(post);
-                setActiveTab("create");
-              }} />
+              <Suspense fallback={<div className="h-64 bg-muted/30 rounded-2xl animate-pulse" />}>
+                <RecentPosts onEditPost={(post: ScheduledPost) => {
+                  setEditingPost(post);
+                  setActiveTab("create");
+                }} />
+              </Suspense>
             </div>
           </>
         );
@@ -527,22 +602,23 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background flex">
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={handleTabChange} 
         onLogout={handleLogout}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
       />
       <div className={cn(
         "flex-1 transition-all duration-300 min-w-0 flex flex-col min-h-screen",
-        isSidebarCollapsed ? "md:pl-20" : "md:pl-64",
-        "pl-0"
+        isMobile ? "pl-0 pb-20" : (isSidebarCollapsed ? "md:pl-20" : "md:pl-64")
       )}>
         <Header 
           onNotificationsClick={() => setShowNotifications(true)} 
-          onNavigate={(tab: string, subTab?: string) => {
-            setActiveTab(tab);
+          onNavigate={(tab, subTab) => {
+            handleTabChange(tab);
             if (subTab) setSettingsSubTab(subTab);
           }}
+          isSidebarCollapsed={isSidebarCollapsed}
+          setIsSidebarCollapsed={setIsSidebarCollapsed}
         />
         <main className="p-4 md:p-8 flex-1">
           {renderContent()}

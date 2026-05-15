@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { safeInvoke } from "@/utils/supabase-utils";
 
 export interface TrendItem {
   id: string;
@@ -31,8 +32,9 @@ export interface PoliticalTrend {
 async function fetchUnifiedTrends(): Promise<TrendItem[]> {
   try {
     // radar-api is the official intelligence source
-    const { data, error } = await supabase.functions.invoke('radar-api', {
-      body: { path: 'intelligence' }
+    const { data, error } = await safeInvoke('radar-api', {
+      body: { path: 'intelligence' },
+      timeoutMs: 30000
     });
 
     if (error || !data) {
@@ -61,8 +63,9 @@ export function useTrends() {
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('radar-api', {
+      const { data, error } = await safeInvoke('radar-api', {
         body: { path: 'sync-intelligence' },
+        timeoutMs: 45000
       });
 
       if (error) throw new Error(`Falha ao sincronizar tendências: ${error.message}`);

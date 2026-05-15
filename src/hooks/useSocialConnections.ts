@@ -233,7 +233,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         origin = `http://${localHostname}${port}`;
       }
 
-      const redirectUri = `${origin}/oauth/callback/${platform}.html`;
+      const redirectUri = `${origin}/oauth/callback/${platform}/`;
 
       const width  = 600;
       const height = 700;

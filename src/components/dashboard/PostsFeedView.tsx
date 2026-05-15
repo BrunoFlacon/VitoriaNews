@@ -86,6 +86,7 @@ function MediaPreview({ mediaIds, mediaType }: MediaPreviewProps) {
                 src={m.url}
                 alt="mídia"
                 className="w-full aspect-square object-cover rounded-lg"
+                referrerPolicy="no-referrer"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
             ) : m.type.startsWith("video/") || m.type.startsWith("audio/") ? (

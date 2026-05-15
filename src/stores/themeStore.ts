@@ -148,9 +148,16 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
     set({ isLoading: true });
     
     try {
-      const { data, error } = await supabase
+      // Race: DB query vs 5s timeout — evita travar quando Supabase está inacessível (522)
+      const queryPromise = supabase
         .from('advanced_themes' as any)
-        .select('*') as unknown as { data: AdvancedTheme[] | null, error: any };
+        .select('*') as unknown as Promise<{ data: AdvancedTheme[] | null, error: any }>;
+
+      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: new Error('Theme fetch timeout (522?)') }), 5000)
+      );
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
         
       if (error) throw error;
       
@@ -159,8 +166,12 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       const draft = draftItem || { ...active, name: 'Rascunho atual', is_draft: true, is_active: false, id: undefined, target: finalTarget };
       
       set({ activeTheme: active, draftTheme: draft, isLoading: false });
-    } catch (err) {
-      console.warn("Theme API error - returning defaults:", err);
+    } catch (err: any) {
+      // Silencia erros de rede — usa padrão local
+      const isNetworkError = err?.message?.includes('fetch') || err?.message?.includes('timeout') || err?.message?.includes('522');
+      if (!isNetworkError) {
+        console.warn("Theme API error - returning defaults:", { message: err?.message, details: String(err), hint: '', code: '' });
+      }
       const active = createDefaultPreset(finalTarget);
       set({ activeTheme: active, draftTheme: { ...active, name: 'Rascunho atual', is_draft: true, is_active: false }, isLoading: false });
     }

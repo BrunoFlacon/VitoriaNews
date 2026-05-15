@@ -19,8 +19,9 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Access Token (Long Lived)", key: "access_token", masked: true },
   ],
   threads: [
-    { label: "Threads User ID", key: "platform_user_id", placeholder: "Ex: 123456789012345" },
-    { label: "Threads Access Token", key: "access_token", masked: true },
+    { label: "Threads App ID", key: "app_id", placeholder: "Ex: 8785..." },
+    { label: "Threads User ID (Opcional)", key: "platform_user_id", placeholder: "ID numérico do usuário" },
+    { label: "Token de Acesso Manual (Gerado na Meta)", key: "access_token", masked: true, placeholder: "Cole o token THAAMfAn..." },
   ],
   whatsapp: [
     { label: "Phone Number ID (WhatsApp Business)", key: "phone_number_id", placeholder: "Ex: 123456789012345" },
@@ -67,7 +68,7 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   ],
   google_cloud: [
     { label: "Google Maps API Key", key: "maps_api_key", masked: true },
-    { label: "Google News API Key", key: "news_api_key", masked: true },
+    { label: "Google News Discovery API Key", key: "news_api_key", masked: true },
     { label: "YouTube API Key", key: "youtube_api_key", masked: true },
     { label: "Google Ads ID", key: "ads_id", masked: true },
     { label: "Google Analytics ID", key: "analytics_id", masked: true },
@@ -101,12 +102,12 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   gettr: [
     { label: "Gettr API Key", key: "api_key", masked: true },
   ],
-  newsapi: [
-    { label: "NewsAPI.org API Key", key: "api_key", masked: true, placeholder: "Cole a sua key (ex: 3a5d8f...)" },
-  ],
   resend: [
     { label: "Resend API Key (Email)", key: "api_key", masked: true, placeholder: "re_..." },
     { label: "Sender Domain/Address", key: "from_email", placeholder: "Ex: Portal <contato@seusite.com>" },
+  ],
+  newsapi: [
+    { label: "NewsAPI.org API Key", key: "api_key", masked: true, placeholder: "Cole sua API Key do NewsAPI.org" },
   ]
 };
 
@@ -122,12 +123,12 @@ export function useApiCredentials() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from("api_credentials" as any)
+        .from("api_credentials")
         .select("platform, credentials")
         .eq("user_id", user.id);
       if (error) throw error;
       const map: Record<string, Record<string, string>> = {};
-      (data as any[])?.forEach((row: any) => {
+      (data as { platform: string; credentials: Record<string, string> }[])?.forEach((row) => {
         map[row.platform] = row.credentials || {};
       });
       setCredentials(map);
@@ -182,13 +183,13 @@ export function useApiCredentials() {
         finalCreds = {
           bot_token: tokens[0] || '',
           tokens,
-        } as any;
+        } as unknown as Record<string, string>;
       }
 
       const { error } = await supabase
-        .from("api_credentials" as any)
+        .from("api_credentials")
         .upsert(
-          { user_id: user.id, platform, credentials: finalCreds } as any,
+          { user_id: user.id, platform, credentials: finalCreds } as { user_id: string; platform: string; credentials: Record<string, string> },
           { onConflict: "user_id,platform" }
         );
       if (error) throw error;
@@ -206,8 +207,8 @@ export function useApiCredentials() {
           
           if (!token) throw new Error("Sessão expirada");
 
-          const baseUrl = (supabase as any).supabaseUrl || import.meta.env.VITE_SUPABASE_URL;
-          const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+          const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+          const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
           
           const response = await fetch(`${baseUrl}/functions/v1/sync-telegram-chats`, {
             method: 'POST',
@@ -227,7 +228,7 @@ export function useApiCredentials() {
           }
 
           // Auto-sync succeeded silently
-        } catch (syncErr: any) {
+        } catch (syncErr: unknown) {
           toast({
             title: "Atenção: Sincronização Pendente",
             description: `Credenciais salvas! Para exibir os dados, clique em "Sincronizar" na aba Telegram.`,
@@ -236,8 +237,8 @@ export function useApiCredentials() {
       }
 
       return true;
-    } catch (e: any) {
-      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao salvar", description: (e as Error).message || "Erro desconhecido", variant: "destructive" });
       return false;
     } finally {
       setSaving(null);
@@ -249,7 +250,7 @@ export function useApiCredentials() {
     setSaving(platform);
     try {
       const { error } = await supabase
-        .from("api_credentials" as any)
+        .from("api_credentials")
         .delete()
         .eq("user_id", user.id)
         .eq("platform", platform);
@@ -261,8 +262,8 @@ export function useApiCredentials() {
       });
       toast({ title: "Credenciais removidas", description: `${platform} removido.` });
       return true;
-    } catch (e: any) {
-      toast({ title: "Erro ao remover", description: e.message, variant: "destructive" });
+    } catch (e: unknown) {
+      toast({ title: "Erro ao remover", description: (e as Error).message || "Erro desconhecido", variant: "destructive" });
       return false;
     } finally {
       setSaving(null);

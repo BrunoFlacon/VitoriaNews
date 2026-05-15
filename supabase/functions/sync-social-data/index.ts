@@ -107,6 +107,10 @@ serve(async (req: Request) => {
               
               const cachedProfilePic = await cacheProfileImage(supabase, conn.user_id, conn.platform, profilePic, pageId) || profilePic;
               
+              const engagementRate = followers > 0
+                ? parseFloat((((likes + comments + shares) / followers) * 100).toFixed(2))
+                : 0;
+
               stats = {
                 user_id: conn.user_id,
                 platform: conn.platform,
@@ -121,7 +125,9 @@ serve(async (req: Request) => {
                 likes,
                 shares,
                 comments,
+                engagement_rate: engagementRate,
                 is_connected: true,
+                last_synced_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               };
 
@@ -136,7 +142,7 @@ serve(async (req: Request) => {
           if (conn.access_token) {
             const userIdParam = conn.platform_user_id;
             const res = await fetch(
-              `https://api.x.com/2/users/${userIdParam}?user.fields=profile_image_url,public_metrics,name,username,description`,
+              `https://api.twitter.com/2/users/${userIdParam}?user.fields=profile_image_url,public_metrics,name,username,description`,
               { headers: { Authorization: `Bearer ${conn.access_token}` } }
             );
             const data = await res.json();
@@ -150,7 +156,8 @@ serve(async (req: Request) => {
                 posts_count: metrics.tweet_count || 0,
                 metadata: { posts_count: metrics.tweet_count || 0 },
                 views: 0, likes: metrics.like_count || 0, shares: 0, comments: 0,
-                is_connected: true, updated_at: new Date().toISOString(),
+                engagement_rate: 0,
+                is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               };
             }
           }
@@ -176,7 +183,8 @@ serve(async (req: Request) => {
                 metadata: { posts_count: parseInt(ch.statistics?.videoCount || "0") },
                 views: parseInt(ch.statistics?.viewCount || "0"),
                 likes: 0, shares: 0, comments: 0,
-                is_connected: true, updated_at: new Date().toISOString(),
+                engagement_rate: 0,
+                is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               };
             }
           }
@@ -195,7 +203,8 @@ serve(async (req: Request) => {
                 posts_count: 0,
                 metadata: { posts_count: 0 },
                 views: 0, likes: 0, shares: 0, comments: 0,
-                is_connected: true, updated_at: new Date().toISOString(),
+                engagement_rate: 0,
+                is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               };
             }
           }
@@ -216,7 +225,8 @@ serve(async (req: Request) => {
                 posts_count: info.video_count || 0,
                 metadata: { posts_count: info.video_count || 0 },
                 views: 0, likes: info.likes_count || 0, shares: 0, comments: 0,
-                is_connected: true, updated_at: new Date().toISOString(),
+                engagement_rate: 0,
+                is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               };
             }
           }
@@ -235,7 +245,8 @@ serve(async (req: Request) => {
                 followers_count: 0, posts_count: 0,
                 metadata: { posts_count: 0 },
                 views: 0, likes: 0, shares: 0, comments: 0,
-                is_connected: true, updated_at: new Date().toISOString(),
+                engagement_rate: 0,
+                is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               };
             }
           }
@@ -255,7 +266,8 @@ serve(async (req: Request) => {
                 posts_count: data.pin_count || 0,
                 metadata: { posts_count: data.pin_count || 0 },
                 views: 0, likes: 0, shares: 0, comments: 0,
-                is_connected: true, updated_at: new Date().toISOString(),
+                engagement_rate: 0,
+                is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
               };
             }
           }

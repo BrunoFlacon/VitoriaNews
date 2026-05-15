@@ -485,7 +485,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                       loop 
                     />
                   ) : (
-                    <img src={activeStory.url} className="w-full h-full object-cover select-none" />
+                    <img src={activeStory.url} className="w-full h-full object-cover select-none" referrerPolicy="no-referrer" />
                   )
                 ) : (
                   <div className="flex flex-col items-center gap-4 text-white/20">
@@ -513,7 +513,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                   });
                 }}
               >
-                <img src={overlay.url} className="max-w-[150px] h-auto rounded-lg shadow-lg pointer-events-auto" />
+                <img src={overlay.url} className="max-w-[150px] h-auto rounded-lg shadow-lg pointer-events-auto" referrerPolicy="no-referrer" />
               </SelectionWrapper>
             ))}
 
@@ -683,11 +683,11 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                   <div className="flex items-center gap-4">
                     <div className="flex-1 flex flex-col gap-2">
                       <span className="text-[10px] text-white/40">Texto</span>
-                      <Input type="color" value={activeStory.textConfig.color} onChange={(e) => updateActiveStory({ textConfig: { ...activeStory.textConfig, color: e.target.value } })} className="h-10 w-full p-1 bg-white/5 border-white/10" />
+                      <Input id="story-text-color" name="text-color" type="color" value={activeStory.textConfig.color} onChange={(e) => updateActiveStory({ textConfig: { ...activeStory.textConfig, color: e.target.value } })} className="h-10 w-full p-1 bg-white/5 border-white/10" />
                     </div>
                     <div className="flex-1 flex flex-col gap-2">
                       <span className="text-[10px] text-white/40">Fundo</span>
-                      <Input type="color" value={activeStory.textConfig.bgColor.startsWith('#') ? activeStory.textConfig.bgColor : '#000000'} onChange={(e) => updateActiveStory({ textConfig: { ...activeStory.textConfig, bgColor: e.target.value } })} className="h-10 w-full p-1 bg-white/5 border-white/10" />
+                      <Input id="story-bg-color" name="bg-color" type="color" value={activeStory.textConfig.bgColor.startsWith('#') ? activeStory.textConfig.bgColor : '#000000'} onChange={(e) => updateActiveStory({ textConfig: { ...activeStory.textConfig, bgColor: e.target.value } })} className="h-10 w-full p-1 bg-white/5 border-white/10" />
                     </div>
                   </div>
                 </div>
@@ -794,7 +794,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                         className="bg-white/5 hover:bg-white/10 rounded-xl p-2 flex flex-col items-center justify-center gap-2 transition-all border border-white/5 min-h-[60px]"
                       >
                         {res.type === 'gif' ? (
-                          <img src={res.url} className="w-full h-24 object-cover rounded-lg" />
+                          <img src={res.url} className="w-full h-24 object-cover rounded-lg" referrerPolicy="no-referrer" />
                         ) : res.type === 'location' ? (
                           <div className="flex flex-col items-center text-center gap-1">
                              <MapPin className="w-4 h-4 text-red-500" />
@@ -935,6 +935,9 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                 <div>
                   <label className="text-[10px] font-bold text-white/40 uppercase mb-2 block">URL do Link</label>
                   <Input 
+                    id="story-link-url"
+                    name="story-link-url"
+                    autoComplete="url"
                     value={linkUrl}
                     onChange={(e) => setLinkUrl(e.target.value)}
                     placeholder="https://exemplo.com"

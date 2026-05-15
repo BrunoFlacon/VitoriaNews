@@ -21,6 +21,11 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // OTIMIZAÇÃO: Prefetch do Dashboard enquanto o usuário digita
+  const prefetchDashboard = () => {
+    import("./Dashboard");
+  };
   const [errors, setErrors] = useState<{ email?: string; password?: string; otp?: string; phone?: string }>({});
   const [show2FA, setShow2FA] = useState(false);
   const [otp, setOtp] = useState("");
@@ -57,7 +62,21 @@ const Login = () => {
 
     setIsLoading(true);
 
-    const { success, error } = await login(email, password);
+    let loginResult: { success: boolean; error?: string };
+    try {
+      loginResult = await login(email, password);
+    } catch (networkErr: any) {
+      // Servidor Supabase inacessível (522/CORS) — evita crash na UI
+      toast({
+        title: "Servidor inacessível",
+        description: "Não foi possível conectar ao servidor. Verifique sua internet ou aguarde alguns minutos.",
+        variant: "destructive"
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    const { success, error } = loginResult;
     
     if (success) {
       // Check for 2FA
@@ -77,7 +96,15 @@ const Login = () => {
         navigate("/dashboard");
       }
     } else {
-      toast({ title: "Erro no login", description: error || "Email ou senha incorretos.", variant: "destructive" });
+      // Detecta se o erro é de rede (522/CORS) ou de credenciais
+      const isNetworkError = error?.includes('fetch') || error?.includes('network') || error?.includes('CORS');
+      toast({
+        title: isNetworkError ? "Servidor inacessível" : "Erro no login",
+        description: isNetworkError
+          ? "Não foi possível conectar. Verifique sua internet."
+          : (error || "Email ou senha incorretos."),
+        variant: "destructive"
+      });
     }
     setIsLoading(false);
   };
@@ -155,16 +182,19 @@ const Login = () => {
                 Digite o código de 6 dígitos enviado para seu telefone.
               </p>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Código de Verificação</label>
+                <label htmlFor="otp-code" className="text-sm font-medium">Código de Verificação</label>
                 <div className="relative">
                   <KeyIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
+                    id="otp-code"
+                    name="otp"
                     type="text"
                     placeholder="000000"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
                     className="pl-10 h-12 bg-muted/50 border-border"
                     maxLength={6}
+                    autoComplete="one-time-code"
                     required
                   />
                 </div>
@@ -255,17 +285,20 @@ const Login = () => {
                   </p>
                   
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">{recoveryMethod === "email" ? "E-mail" : "Celular / WhatsApp"}</label>
+                    <label htmlFor={recoveryMethod === "email" ? "recovery-email" : "recovery-phone"} className="text-sm font-medium">{recoveryMethod === "email" ? "E-mail" : "Celular / WhatsApp"}</label>
                     <div className="relative">
                       {recoveryMethod === "email" ? (
                         <>
                           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                           <Input
+                            id="recovery-email"
+                            name="recovery_email"
                             type="email"
                             placeholder="seu@email.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="pl-10 h-12 bg-muted/50 border-border"
+                            autoComplete="email"
                             required
                           />
                         </>
@@ -273,11 +306,14 @@ const Login = () => {
                         <>
                           <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                           <Input
+                            id="recovery-phone"
+                            name="recovery_phone"
                             type="tel"
                             placeholder="(00) 00000-0000"
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
                             className="pl-10 h-12 bg-muted/50 border-border"
+                            autoComplete="tel"
                             required
                           />
                         </>
@@ -297,14 +333,19 @@ const Login = () => {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Email</label>
+                <label htmlFor="login-email" className="text-sm font-medium">Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
+                    id="login-email"
+                    name="email"
                     type="email"
                     placeholder="seu@email.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (e.target.value.length > 3) prefetchDashboard();
+                    }}
                     className={`pl-10 h-12 bg-muted/50 border-border ${errors.email ? 'border-destructive' : ''}`}
                     autoComplete="username"
                     required
@@ -314,10 +355,12 @@ const Login = () => {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Senha</label>
+                <label htmlFor="login-password" className="text-sm font-medium">Senha</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
+                    id="login-password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     value={password}
@@ -338,8 +381,8 @@ const Login = () => {
               </div>
 
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                  <input type="checkbox" className="rounded border-border" />
+                <label htmlFor="remember-me" className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+                  <input id="remember-me" name="remember_me" type="checkbox" className="rounded border-border" />
                   Lembrar de mim
                 </label>
                 <button 

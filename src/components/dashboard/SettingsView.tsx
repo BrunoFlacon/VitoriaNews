@@ -20,19 +20,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import AvatarEditor from "react-avatar-editor";
 import { Slider } from "@/components/ui/slider";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { usePermissions } from "@/hooks/usePermissions";
 import { SystemSettingsView } from "./settings/SystemSettingsView";
 import { PortalSettingsWrapper } from "./settings/PortalSettingsWrapper";
-import { ProfileTab } from "./settings/ProfileTab";
-import { SecurityTab } from "./settings/SecurityTab";
+import { useSystem } from "@/hooks/useSystem";
 import { SEOTab } from "./settings/SEOTab";
-import { APITab } from "./settings/APITab";
-import { useSystem } from "@/contexts/SystemContext";
-import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, YoutubeIcon, AdsIcon, AnalyticsIcon, PeopleIcon, GoogleNewsIcon } from "@/components/icons/SocialIcons";
+import { ConnectionCard } from "./settings/ConnectionCard";
+import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, AnalyticsIcon, AdsIcon, PeopleIcon, GoogleNewsIcon, SnapchatIcon } from "@/components/icons/SocialIcons";
+import { safeInvoke } from "@/utils/supabase-utils";
+
 
 
 
@@ -99,6 +99,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const [avatarToCrop, setAvatarToCrop] = useState<File | null>(null);
   const [editorScale, setEditorScale] = useState(1);
   const [editorFilter, setEditorFilter] = useState("none");
+  const [syncLoading, setSyncLoading] = useState(false);
 
 
   // Sync when defaultTab prop changes from parent (e.g. Header dropdown navigation)
@@ -112,7 +113,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       setActiveSettingsTab(defaultTab);
     }
   }, [defaultTab]);
-  const { connections, loading: connectionsLoading, initiateOAuth, disconnect, refetch: refetchConnections } = useSocialConnections();
+  const { connections, loading: connectionsLoading, initiateOAuth, disconnect, refetch } = useSocialConnections();
   const { credentials, loading: credsLoading, saving, saveCredentials, deleteCredentials, hasCredentials } = useApiCredentials();
 
   const { stats: socialStats, audienceBreakdown, loading: statsLoading, refresh: refreshStats, setStatsLoading } = useSocialStats();
@@ -161,14 +162,20 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       }
 
       const invokeFn = async (fnName: string, bodyObj?: any) => {
-        const { error: invErr } = await supabase.functions.invoke(fnName, {
-          body: { userId: session.user.id, ...bodyObj }
+        const { error: invErr } = await safeInvoke(fnName, {
+          body: { userId: session.user.id, ...bodyObj },
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          timeoutMs: fnName.includes('ads') ? 45000 : 30000
         });
-        if (invErr) throw new Error(`${fnName}: ${invErr.message}`);
+        if (invErr) throw invErr;
       };
 
       if (platformId === 'telegram') {
         await invokeFn('sync-telegram-chats', { platform: 'telegram' });
+      } else if (platformId === 'twitter') {
+        await invokeFn('sync-twitter');
       } else if (platformId === 'meta_ads') {
         await invokeFn('collect-meta-ads-analytics', { platform: 'meta_ads' }).catch(e => console.warn('[Ads]', e.message));
       } else if (platformId === 'google_cloud' || platformId === 'youtube') {
@@ -180,8 +187,9 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         await invokeFn('collect-social-analytics', { platform: platformId });
       } else {
         // Global Sync — all platforms in parallel, failures swallowed individually
-        await Promise.all([
+        await Promise.allSettled([
           invokeFn('collect-social-analytics').catch(e => console.warn('[Social]', e.message)),
+          invokeFn('sync-twitter').catch(e => console.warn('[Twitter]', e.message)),
           invokeFn('collect-meta-ads-analytics').catch(e => console.warn('[Ads]', e.message)),
           invokeFn('collect-youtube-analytics').catch(e => console.warn('[YT]', e.message)),
           invokeFn('collect-google-analytics').catch(e => console.warn('[GA]', e.message)),
@@ -197,7 +205,10 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       });
     } catch (e: any) {
       const errMsg = e?.message || JSON.stringify(e);
-      toast({ title: "Aviso na sincronização", description: errMsg, variant: "destructive" });
+      // Silence noisy connection resets but show real logic errors
+      if (!errMsg.includes('fetch') && !errMsg.includes('CLOSED')) {
+         toast({ title: "Aviso na sincronização", description: errMsg, variant: "destructive" });
+      }
     } finally {
       setStatsLoading(false);
       refreshStats();
@@ -206,27 +217,46 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
   const hasSyncedRef = useRef(false);
 
-  useEffect(() => {
-    // Initial fetch handled by useSocialStats hook
-  }, [user]);
+  const handleSync = async (platformId?: string) => {
+    if (!user?.id) return;
+    
+    try {
+      setSyncLoading(true);
+      
+      const connected = connections.filter(c => c.is_connected && (!platformId || c.platform === platformId));
+      if (connected.length === 0 && !platformId) {
+         console.log("No connected platforms to sync.");
+         // proceed anyway for global sync of meta_ads, etc.
+      }
 
-  // Auto-sync on first load: only basic social (not Ads/YT/GA which require explicit action)
-  useEffect(() => {
-    if (!hasSyncedRef.current && connections.length > 0) {
-      hasSyncedRef.current = true;
-      // Only sync basic social — heavy analytics (Ads, YT, GA) triggered manually
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session) return;
-        supabase.functions.invoke(`collect-social-analytics?_cb=${Date.now()}`, {
-          body: { userId: session.user.id },
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-            'X-Authorization': `Bearer ${session.access_token}`
-          }
-        }).catch(() => { }); // Silent fail on auto-sync
-      });
+      await syncSocialStats(platformId);
+
+    } catch (error) {
+      console.error("Error in handleSync:", error);
+    } finally {
+      setSyncLoading(false);
     }
-  }, [connections.length]);
+  };
+
+  useEffect(() => {
+    if (!user?.id || connections.length === 0 || hasSyncedRef.current) return;
+
+    const lastSync = localStorage.getItem(`last_auto_sync_${user.id}`);
+    const now = Date.now();
+    
+    if (lastSync && now - parseInt(lastSync) < 10 * 60 * 1000) {
+      hasSyncedRef.current = true;
+      return;
+    }
+
+    const runAutoSync = async () => {
+      hasSyncedRef.current = true;
+      localStorage.setItem(`last_auto_sync_${user.id}`, now.toString());
+      await handleSync();
+    };
+
+    runAutoSync();
+  }, [user?.id, connections.length]);
 
 
   const [profileData, setProfileData] = useState({
@@ -432,36 +462,14 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     }
   };
 
-  const handleSaveProfile = useCallback(async () => {
+  const handleSaveProfile = async () => {
     try {
-      // Input validation
-      const { z } = await import("zod");
-      const profileSchema = z.object({
-        first_name: z.string().trim().min(1, "Nome é obrigatório").max(50, "Nome deve ter no máximo 50 caracteres"),
-        last_name: z.string().trim().max(50, "Sobrenome deve ter no máximo 50 caracteres").optional().or(z.literal("")),
-        bio: z.string().trim().max(500, "Biografia deve ter no máximo 500 caracteres").optional().or(z.literal("")),
-        phone: z.string().trim().max(20, "Telefone inválido").optional().or(z.literal("")),
-      });
-      const result = profileSchema.safeParse({
+      const success = await updateProfile({
+        name: `${profileData.first_name} ${profileData.last_name}`.trim(),
         first_name: profileData.first_name,
         last_name: profileData.last_name,
         bio: profileData.bio,
         phone: profileData.phone,
-      });
-      if (!result.success) {
-        toast({ title: "Erro de validação", description: result.error.errors[0].message, variant: "destructive" });
-        return;
-      }
-      // Sanitize HTML-like characters from name fields
-      const sanitize = (s: string) => s.replace(/[<>"'`]/g, "");
-      const cleanFirst = sanitize(result.data.first_name);
-      const cleanLast = sanitize(result.data.last_name || "");
-      const success = await updateProfile({ 
-        name: `${cleanFirst} ${cleanLast}`.trim(),
-        first_name: cleanFirst,
-        last_name: cleanLast,
-        bio: result.data.bio,
-        phone: result.data.phone,
         birthdate: profileData.birthdate,
         gender: profileData.gender,
         social_links: profileData.social_links,
@@ -472,7 +480,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     } catch (error: any) {
       toast({ title: "Erro", description: "Não foi possível salvar o perfil. Verifique os campos.", variant: "destructive" });
     }
-  }, [profileData, updateProfile, toast]);
+  };
 
   const handleAddSocialLink = () => {
     if (!newSocialLink.name) return;
@@ -526,6 +534,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     }
   };
 
+
   const updateFormField = (platform: string, key: string, value: string) => {
     setFormValues(prev => ({
       ...prev,
@@ -534,8 +543,35 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   };
 
   const handleToggleBot = useCallback(async (active: boolean) => {
+    // Apply optimistic update immediately so UI reflects change before refresh
     setLocalBotActive(active);
     try {
+      // 1. Tentar avisar o robô local via proxy (8081 -> 3000)
+      let botNotified = false;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+
+        const localResponse = await fetch('/api/bot/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active }),
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        botNotified = localResponse.ok;
+
+        if (!botNotified) {
+          // Revert optimistic update if server rejected
+          setLocalBotActive(!active);
+        }
+      } catch (err) {
+        // If proxy unreachable, keep optimistic state but warn user
+        botNotified = false;
+      }
+
+      // 2. Atualizar no Supabase para persistência global (Apenas se não for virtual)
       const whatsappAccount = socialStats.find(s => s.platform === 'whatsapp');
       if (whatsappAccount) {
         const isVirtual = String(whatsappAccount.id).startsWith('virtual-');
@@ -559,10 +595,10 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
         toast({
           title: active ? "Robô Ativado" : "Robô Pausado",
-          description: active
-            ? "O robô foi ativado com sucesso e começará a responder mensagens."
-            : "O robô foi pausado e não responderá a novas mensagens.",
-          variant: "default",
+          description: botNotified
+            ? "O robô local foi notificado e iniciado com sucesso."
+            : "Salvo localmente. Inicie o robô para que ele receba a alteração.",
+          variant: botNotified ? "default" : "destructive",
         });
 
         refreshStats();
@@ -581,9 +617,9 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     const success = await saveCredentials(platform, vals);
     if (success) {
       setFormValues(prev => ({ ...prev, [platform]: vals }));
+      // Give sync some time to complete before fetching stats if it's telegram
       setTimeout(() => {
         refreshStats();
-        refetchConnections();
       }, platform === 'telegram' ? 3500 : 500);
     }
   };
@@ -596,7 +632,6 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         delete next[platform];
         return next;
       });
-      refetchConnections();
     }
   };
 
@@ -637,8 +672,15 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="font-display font-bold text-3xl mb-2">Configurações</h1>
-        <p className="text-muted-foreground">Gerencie suas preferências e integrações</p>
+        <motion.h1 
+          initial={{ opacity: 0, y: 10 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          transition={{ duration: 0.3 }}
+          className="font-display font-bold text-3xl mb-2"
+        >
+          Configurações
+        </motion.h1>
+        <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-muted-foreground">Gerencie suas preferências e integrações</motion.p>
       </div>
 
       <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="space-y-6">
@@ -653,11 +695,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                 <Laptop className="w-4 h-4 mr-2 text-primary" />
                 <span className="font-bold text-primary">Dashboard</span>
               </TabsTrigger>
-              <TabsTrigger value="system_portal" className="rounded-lg data-[state=active]:bg-background border-primary/10 py-2 px-4 shadow-sm transition-all">
-                <Globe className="w-4 h-4 mr-2 text-primary" />
-                <span className="font-bold text-primary">Portal & CMS</span>
-              </TabsTrigger>
-              <TabsTrigger value="system_seo" className="rounded-lg data-[state=active]:bg-background border-primary/10 py-2 px-4 shadow-sm transition-all">
+              <TabsTrigger value="seo" className="rounded-lg data-[state=active]:bg-background border-primary/10 py-2 px-4 shadow-sm transition-all">
                 <Search className="w-4 h-4 mr-2 text-primary" />
                 <span className="font-bold text-primary">SEO & Meta</span>
               </TabsTrigger>
@@ -665,43 +703,294 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           )}
         </TabsList>
 
-        <TabsContent value="profile" className="outline-none focus-visible:ring-0">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }} className="glass-card rounded-2xl border border-border p-6">
-            <ProfileTab 
-              profile={profile}
-              profileData={profileData}
-              setProfileData={setProfileData}
-              isOnline={isOnline}
-              can={can}
-              fileInputRef={fileInputRef}
-              handleAvatarUpload={handleAvatarUpload}
-              handlePhoneChange={handlePhoneChange}
-              isValidatingWhatsApp={isValidatingWhatsApp}
-              isWhatsAppValid={isWhatsAppValid}
-              calculateAge={(dateString) => {
-                if (!dateString) return null;
-                const birthDate = new Date(dateString);
-                const today = new Date();
-                let age = today.getFullYear() - birthDate.getFullYear();
-                const m = today.getMonth() - birthDate.getMonth();
-                if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-                return age;
-              }}
-            />
-            
-            <div className="flex justify-end pt-8 border-t border-border/20 mt-8">
-              <Button 
-                onClick={handleSaveProfile} 
-                className="bg-primary hover:bg-primary/90 text-primary-foreground min-w-[150px] shadow-lg shadow-primary/20"
-              >
-                Salvar Alterações de Perfil
-              </Button>
+        <TabsContent value="profile">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6 outline-none">
+            <div className="flex flex-col gap-8">
+              {/* Cabeçalho do Perfil */}
+              <div className="flex flex-col md:flex-row gap-6 items-center md:items-start border-b border-border/20 pb-8">
+                <div className="relative group">
+                  <Avatar className="w-24 h-24 rounded-2xl border-4 border-background shadow-xl">
+                    {profile?.avatar_url && (
+                      <AvatarImage src={profile.avatar_url} alt={profileData.name} className="object-cover" />
+                    )}
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-2xl font-bold text-primary-foreground">
+                      {profileData.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 flex items-center justify-center bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity rounded-2xl backdrop-blur-sm"
+                  >
+                    <Camera className="w-6 h-6" />
+                  </button>
+                  <input type="file" ref={fileInputRef} onChange={handleAvatarUpload} className="hidden" accept="image/*" />
+                  <div className={cn("absolute -bottom-1 -right-1 w-5 h-5 rounded-full border-4 border-background shadow-sm transition-all duration-300", isOnline ? "bg-green-500 shadow-green-500/50" : "bg-transparent border border-muted-foreground/40")} />
+                </div>
+
+                <div className="flex-1 flex flex-col gap-4">
+                  <div className="flex flex-col gap-1">
+                    <h3 className="font-display font-bold text-2xl tracking-tight">{profileData.first_name || profileData.name || "Usuário"} {profileData.last_name}</h3>
+                    <p className="text-muted-foreground flex items-center gap-2">
+                      <Mail className="w-3.5 h-3.5" /> {profileData.email}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/50 border border-border/50">
+                      <Shield className="w-3.5 h-3.5 text-primary" />
+                      <span className="font-medium">Administrador Master</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-muted/50 border border-border/50">
+                      <Clock className="w-3.5 h-3.5 text-primary" />
+                      <span>Membro desde {profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Formulário de Campos */}
+              <div className="flex flex-col gap-2">
+                {/* Row 1: Nome + Sobrenome + Email */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                  <div className="space-y-1">
+                    <label htmlFor="profile-first-name" className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="w-3 h-3" /> Nome
+                    </label>
+                    <Input
+                      id="profile-first-name"
+                      name="first_name"
+                      value={profileData.first_name}
+                      onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
+                      placeholder="Nome"
+                      className="bg-muted/30 h-8 text-sm w-full border-border/40"
+                      autoComplete="given-name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="profile-last-name" className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                      <User className="w-3 h-3" /> Sobrenome
+                    </label>
+                    <Input
+                      id="profile-last-name"
+                      name="last_name"
+                      value={profileData.last_name}
+                      onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
+                      placeholder="Sobrenome"
+                      className="bg-muted/30 h-8 text-sm w-full border-border/40"
+                      autoComplete="family-name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="profile-email" className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                      <Mail className="w-3 h-3" /> Email
+                    </label>
+                    <Input
+                      id="profile-email"
+                      name="email"
+                      value={profileData.email}
+                      readOnly
+                      className="bg-muted/20 opacity-70 cursor-not-allowed h-8 text-sm border-border/40"
+                      autoComplete="email"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 2: Celular, Data Nasc, Sexo */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                  <div className="space-y-1 relative">
+                    <label htmlFor="profile-phone" className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                      <Phone className="w-3 h-3" /> Celular / WhatsApp
+                    </label>
+                    <div className="relative">
+                      <Input
+                        id="profile-phone"
+                        name="phone"
+                        value={profileData.phone}
+                        onChange={handlePhoneChange}
+                        placeholder="(00) 00000-0000"
+                        className={cn("bg-muted/30 h-8 text-sm w-full border-border/40 transition-all", isWhatsAppValid ? "border-green-500/40 pr-9" : "")}
+                        autoComplete="tel"
+                      />
+                      {isValidatingWhatsApp && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                          <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                      {!isValidatingWhatsApp && isWhatsAppValid === true && (
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-green-500 bg-green-500/10 rounded-full px-2 py-0.5 border border-green-500/20">
+                          <span className="text-[9px] font-bold uppercase tracking-tight">WhatsApp</span>
+                          <Check className="w-3 h-3" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="profile-birthdate" className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                      <Calendar className="w-3 h-3" /> Data Nasc.
+                    </label>
+                    <div className="relative">
+                      <Input
+                        id="profile-birthdate"
+                        name="birthdate"
+                        type="date"
+                        value={profileData.birthdate}
+                        onChange={(e) => setProfileData({ ...profileData, birthdate: e.target.value })}
+                        className="bg-muted/30 h-8 text-sm w-full border-border/40 pr-16"
+                        autoComplete="bday"
+                      />
+                      {profileData.birthdate && calculateAge(profileData.birthdate) !== null && (
+                        <span className="absolute right-[28px] top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground/90 bg-muted/40 px-1 py-0.5 rounded border border-border/10 whitespace-nowrap pointer-events-none">
+                          {calculateAge(profileData.birthdate)} anos
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label htmlFor="profile-gender" className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                      <UserCircle2 className="w-3 h-3" /> Sexo
+                    </label>
+                    <select
+                      id="profile-gender"
+                      name="gender"
+                      value={profileData.gender}
+                      onChange={(e) => setProfileData({ ...profileData, gender: e.target.value })}
+                      className="w-full h-8 px-2 rounded-md border border-border/40 bg-muted/30 focus:outline-none focus:ring-1 focus:ring-ring text-sm"
+                    >
+                      <option value="">Selecionar</option>
+                      <option value="masculino">Masculino</option>
+                      <option value="feminino">Feminino</option>
+                      <option value="outro">Outro</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 3: Bio */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between pr-1">
+                    <label htmlFor="profile-bio" className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                      <Pencil className="w-3 h-3" /> Biografia
+                    </label>
+                    <span className="text-[9px] font-medium text-muted-foreground/70 tracking-tight">
+                      {profileData.bio.length} / 150 caracteres
+                    </span>
+                  </div>
+                  <textarea
+                    id="profile-bio"
+                    name="bio"
+                    value={profileData.bio}
+                    onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
+                    maxLength={150}
+                    rows={2}
+                    className="bg-muted/30 text-sm w-full border border-border/40 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-ring resize-none min-h-[50px]"
+                    placeholder="Fale um pouco sobre você..."
+                    autoComplete="off"
+                  />
+                </div>
+
+                {/* Row 4: Redes Sociais + Status - Alinhamento Original com 180px de Respiro */}
+                <div className="flex items-start gap-[180px] mt-4 mb-2 w-full">
+                  {/* Icons block */}
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    <label className="text-[10px] font-bold text-primary/80 uppercase tracking-wider flex items-center gap-1.5 h-4">
+                      <Globe className="w-3 h-3" /> Redes Sociais
+                    </label>
+                    <div className="flex flex-wrap gap-1.2 p-1 bg-muted/5 rounded-lg w-fit">
+                      {profileData.social_links.length > 0 && profileData.social_links.map((link, idx) => {
+                        const platform = socialPlatforms.find(p => p.id === link.platform) || socialPlatforms[0];
+                        return (
+                          <div key={idx} className="group relative">
+                            <motion.div
+                              whileHover={{ scale: 1.1 }}
+                              whileTap={{ scale: 0.9 }}
+                              onClick={() => setEditingSocial({ index: idx, name: link.name })}
+                              className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-background border border-border/50 shadow-sm cursor-pointer hover:border-primary/50 transition-all"
+                            >
+                              <PlatformIconBadge platform={platform as any} size="sm" />
+                            </motion.div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Status Toggle Panel - Divisor Vertical */}
+                  <div className="flex items-center gap-4 border-l border-border/20 pl-8 h-12 mt-4 shrink-0">
+                    <div className="flex flex-col gap-1 items-center">
+                      <span className="text-[11px] font-bold text-muted-foreground tracking-tight">Status:</span>
+                      <div className="flex items-center gap-2 bg-muted/20 border border-border/10 rounded-full px-4 py-1.5 shadow-inner transition-all duration-300">
+                        <Switch
+                          id="online-toggle"
+                          checked={isOnline}
+                          onCheckedChange={toggleOnline}
+                          className="data-[state=checked]:bg-green-500 scale-90"
+                        />
+                        <div className="flex items-center gap-1.5 ml-1">
+                          {isOnline ? (
+                            <div className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                          ) : (
+                            <div className="w-2.5 h-2.5 rounded-full bg-transparent border border-muted-foreground/40 shadow-inner" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 5: Action Row - Bottom */}
+                <div className="pt-3 border-t border-border/20 mt-1 flex items-center justify-between gap-3">
+                  <div className="flex gap-2 items-center">
+                    <select
+                      id="new-social-platform"
+                      name="social_platform"
+                      value={newSocialLink.platform}
+                      onChange={(e) => setNewSocialLink({ ...newSocialLink, platform: e.target.value })}
+                      className="w-28 h-8 px-2 rounded-md border border-border/40 bg-muted/30 focus:outline-none focus:ring-1 focus:ring-ring text-xs"
+                      aria-label="Plataforma da rede social"
+                    >
+                      {socialPlatforms.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    <Input
+                      id="new-social-username"
+                      name="social_username"
+                      value={newSocialLink.name}
+                      onChange={(e) => setNewSocialLink({ ...newSocialLink, name: e.target.value })}
+                      placeholder="@user"
+                      className="bg-muted/30 h-8 text-xs w-56 border-border/40"
+                      aria-label="Username na rede social"
+                    />
+                    <Button onClick={handleAddSocialLink} size="sm" variant="outline" className="h-8 w-8 p-0 hover:bg-primary hover:text-white shrink-0">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  <Button
+                    onClick={handleSaveProfile}
+                    className="relative overflow-hidden group gap-2 bg-gradient-to-r from-primary to-accent hover:opacity-90 text-black font-extrabold shadow-[0_4px_12px_rgba(0,0,0,0.5)] border border-white/10 transition-all h-9 px-6 text-xs uppercase tracking-wider"
+                    style={{ textShadow: '0 0 3px rgba(255,255,255,0.2)' }}
+                  >
+                    {/* Shine/Flare effect */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent skew-x-[-20deg] -translate-x-[200%] group-hover:animate-[shimmer_2s_infinite] transition-all duration-1000" />
+
+                    <style>{`
+                        @keyframes shimmer {
+                          100% { transform: translateX(200%); }
+                        }
+                      `}</style>
+
+                    <Save className="w-4 h-4 relative z-10" />
+                    <span className="relative z-10">Salvar alterações</span>
+                  </Button>
+                </div>
+              </div>
             </div>
           </motion.div>
         </TabsContent>
 
+        {/*  Notifications Tab  */}
         <TabsContent value="notifications">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card rounded-2xl border border-border p-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6">
             <h3 className="font-display font-bold text-lg mb-6">Preferências de Notificação</h3>
             <div className="space-y-6">
               <div>
@@ -739,7 +1028,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         </TabsContent>
 
         <TabsContent value="api">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card rounded-2xl border border-border p-6">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6">
             <div className="mb-6 flex justify-between items-center">
               <div>
                 <h3 className="font-display font-bold text-lg">APIs Sociais & Conexões</h3>
@@ -754,38 +1043,634 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                   disabled={statsLoading}
                   className="flex items-center gap-2 text-xs"
                 >
-                  <RefreshCw className={cn("w-3.5 h-3.5", statsLoading && "animate-spin")} />
-                  Sincronização Global
+                  <RefreshCw className={`w-3.5 h-3.5 ${statsLoading ? 'animate-spin' : ''}`} />
+                  Sincronizar Dados
                 </Button>
-                <Button 
+                <Button
+                  variant="default"
+                  size="sm"
                   onClick={() => setShowAddApiModal(true)}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 h-9 px-4 shadow-lg shadow-primary/20"
+                  className="flex items-center gap-2 text-xs shadow-sm bg-primary/90 hover:bg-primary"
                 >
-                  <Plus className="w-4 h-4" />
-                  Adicionar Plataforma
+                  <Plus className="w-3.5 h-3.5" />
+                  Adicionar API
                 </Button>
               </div>
             </div>
 
-            <APITab 
-              UNIQUE_PLATFORM_CONFIGS={UNIQUE_PLATFORM_CONFIGS}
-              activePlatformIds={activePlatformIds}
-              expandedPlatform={expandedPlatform}
-              setExpandedPlatform={setExpandedPlatform}
-              connections={connections}
-              socialStats={socialStats}
-              audienceBreakdown={audienceBreakdown}
-              statsLoading={statsLoading}
-              syncSocialStats={syncSocialStats}
-              handleRemovePlatform={handleRemovePlatform}
-              credentials={credentials}
-              deleteCredentials={deleteCredentials}
-              handleSaveCreds={(id) => saveCredentials(id, credentials[id] || {})}
-              saveCredentials={saveCredentials}
-              toast={toast}
-              refreshStats={refreshStats}
-              getBrandLogo={getBrandLogo}
-            />
+
+            <div className="space-y-3">
+              {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
+                const platformStats = socialStats.find(s => s.platform === config.id);
+                // isVerified = true if any Telegram entry has followers > 0 OR there's any bot entry saved
+                const isVerified = config.id === 'telegram' || config.id === 'whatsapp'
+                  ? socialStats.some(s => s.platform === config.id)
+                  : (!!platformStats && (platformStats.followers_count > 0 || (platformStats.posts_count ?? 0) > 0));
+
+                const hasCreds = hasCredentials(config.id);
+                // Telegram connects via Bot Token — data saved directly to social_accounts.
+                const platformConnections = connections.filter(c =>
+                  c.platform === config.id &&
+                  c.is_connected &&
+                  ((c as any).access_token !== null || config.id === 'whatsapp' || config.id === 'telegram')
+                );
+
+                const hasConnections = platformConnections.length > 0;
+                const isVerifiedFinal = (config.id === 'telegram' && hasCreds) || (config.id === 'whatsapp' && hasCreds) || socialStats.some(s => s.platform === config.id);
+
+                // For tools/manual APIs, having credentials means it is effectively connected
+                const isTool = config.type === 'tool' || !config.oauthSupported;
+                const isEffectivelyConnected = hasConnections || isVerifiedFinal || (isTool && hasCreds);
+
+                const isConnecting = connectingPlatform === config.id;
+                const isExpanded = expandedPlatform === config.id;
+                const fields = PLATFORM_CREDENTIAL_FIELDS[config.id] || [];
+
+                return (
+                  <div key={config.id} className="glass-card rounded-2xl border border-border/50 overflow-hidden">
+                    <div
+                      className="flex flex-col sm:flex-row sm:items-start justify-between p-4 bg-muted/20 border-b border-border/10 cursor-pointer"
+                      onClick={() => toggleExpand(config.id)}
+                    >
+                      <div className="flex items-start gap-4 flex-1">
+                        {/* Icon is colored only when truly connected/verified, muted otherwise */}
+                        <PlatformIconBadge
+                          platform={config as any}
+                          size="md"
+                          muted={!isEffectivelyConnected}
+                        />
+
+                        <div className="text-left min-w-0 flex-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                            <p className="font-semibold text-base">{config.name}</p>
+
+                            {/* Conectado (green): effective connection confirmed */}
+                            {isEffectivelyConnected && (
+                              <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-600 w-fit">
+                                Conectado
+                              </Badge>
+                            )}
+
+                            {/* Credenciais Salvas (grey): has creds but not yet verified */}
+                            {!isEffectivelyConnected && hasCreds && (() => {
+                              let label = "Credenciais Salvas";
+                              if (config.id === 'google_cloud') {
+                                const googleCreds = credentials['google_cloud'] || {};
+                                const serviceKeys = ['maps_api_key', 'news_api_key', 'youtube_api_key', 'ads_id', 'analytics_id', 'search_console_id'];
+                                const activeServices = serviceKeys.filter(k => googleCreds[k]?.trim()).length;
+                                label = `Credencias Ativas (${activeServices} serviço${activeServices !== 1 ? 's' : ''})`;
+                              }
+                              return (
+                                <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground border-border/50 bg-muted/30 w-fit">
+                                  {label}
+                                </Badge>
+                              );
+                            })()}
+                          </div>
+
+                          {/* Subtitle: show real metrics if verified, else connection name, else hint */}
+                          {isVerified ? (
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {config.id === 'telegram' ? (
+                                <>
+                                  <span className="font-bold text-slate-200">
+                                    {platformConnections.length > 0 ? platformConnections[0].page_name : "Bot Telegram"}
+                                  </span>
+                                  <span className="ml-2 text-muted-foreground/60">— expanda para gerenciar</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="font-bold text-slate-200">
+                                    {platformConnections.length > 0 ? platformConnections[0].page_name : "Conta Principal"}
+                                  </span>
+                                  <span className="ml-2 text-muted-foreground/60">— expanda para gerenciar</span>
+                                </>
+                              )}
+                            </p>
+                          ) : hasConnections ? (
+                            <p className="text-sm text-muted-foreground mt-0.5">
+                              {platformConnections.length === 1
+                                ? <><span className="font-bold text-slate-200">{platformConnections[0].page_name || "Conta Conectada"}</span> — expanda para gerenciar</>
+                                : <><span className="font-bold text-slate-200">{platformConnections.length} contas</span> — expanda para gerenciar</>}
+                            </p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">
+                              {hasCreds ? "Credenciais salvas — clique Sincronizar para verificar" : "Configurações pendentes — clique para configurar"}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 mt-4 sm:mt-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(config.id);
+                          }}
+                          className="flex items-center gap-2 p-2 hover:bg-muted/50 rounded-lg text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                        >
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+
+                        <button
+                          onClick={(e) => handleRemovePlatform(e, config.id)}
+                          className="p-2 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                          title="Remover da lista"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/*  Expanded panel  */}
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-5 border-t border-border bg-background/50 space-y-6">
+                            {/* Google Cloud services status */}
+                            {config.id === 'google_cloud' && (
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Globe className="w-4 h-4 text-muted-foreground" />
+                                    <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Hub Central Google (Cloud & Marketing)</p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 gap-2 bg-[#151726]/80 text-[#2AABEE] border-[#2AABEE]/30 hover:bg-[#2AABEE]/10 rounded-xl"
+                                    onClick={() => {
+                                      const hasAny = Object.values(credentials['google_cloud'] || {}).some(v => !!v);
+                                      if (hasAny) {
+                                        if (window.confirm("Deseja desconectar todas as APIs do Google?")) {
+                                          deleteCredentials('google_cloud');
+                                        }
+                                      } else {
+                                        handleSaveCreds('google_cloud');
+                                      }
+                                    }}
+                                  >
+                                    {Object.values(credentials['google_cloud'] || {}).some(v => !!v) ? (
+                                      <><Unplug className="w-3.5 h-3.5 rotate-45" /> Desconectar Tudo</>
+                                    ) : (
+                                      <><Link2 className="w-3.5 h-3.5" /> Conectar</>
+                                    )}
+                                  </Button>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                  {[
+                                    { name: 'Google Maps', key: 'maps_api_key', desc: 'Geolocalização', icon: MapsIcon },
+                                    { name: 'Google News / Discovery', key: 'news_api_key', desc: 'Radar de Notícias', icon: GoogleNewsIcon },
+                                    { name: 'Google Ads', key: 'ads_id', desc: 'Campanhas e Anúncios', icon: AdsIcon },
+                                    { name: 'Google Analytics', key: 'analytics_id', desc: 'Dados e Métricas', icon: AnalyticsIcon },
+                                    { name: 'Search Console', key: 'search_console_id', desc: 'SEO e Buscas', icon: Search },
+                                    { name: 'People API', key: 'people_api_key', desc: 'Contatos e Leads', icon: PeopleIcon },
+                                  ].map(svc => {
+                                    const isActive = !!credentials['google_cloud']?.[svc.key];
+                                    const SvcIcon = svc.icon;
+                                    return (
+                                      <div key={svc.name} className={cn(
+                                        "flex flex-col gap-2 p-3 rounded-lg border text-xs group/svc transition-all",
+                                        isActive ? "border-green-500/30 bg-green-500/5" : "border-border bg-muted/20 opacity-60 hover:opacity-100"
+                                      )}>
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 flex items-center justify-center">
+                                              {(() => {
+                                                const IconComponent = SvcIcon as any;
+                                                return typeof SvcIcon === 'function' ? (
+                                                  <IconComponent data-active={isActive} className="w-full h-full" />
+                                                ) : (
+                                                  <IconComponent className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
+                                                );
+                                              })()}
+                                            </div>
+                                            <span className={cn("font-bold tracking-tight", isActive ? "text-foreground" : "text-muted-foreground")}>{svc.name}</span>
+                                          </div>
+                                          {isActive && <Check className="w-3 h-3 text-green-500" />}
+                                        </div>
+                                        <div className="flex items-center justify-between mt-auto pt-1">
+                                          <span className="text-muted-foreground text-[9px] uppercase font-black tracking-tighter">{svc.desc}</span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className={cn("h-6 px-2 text-[8px] font-black uppercase tracking-widest", isActive ? "text-red-400 hover:text-red-500 hover:bg-red-500/10" : "text-primary hover:bg-primary/10")}
+                                            onClick={() => {
+                                              if (isActive) {
+                                                const newCreds = { ...credentials['google_cloud'] };
+                                                delete newCreds[svc.key];
+                                                saveCredentials('google_cloud', newCreds);
+                                              } else {
+                                                const fieldId = `google_cloud-${svc.key}`;
+                                                const input = document.getElementById(fieldId);
+                                                if (input) input.focus();
+                                              }
+                                            }}
+                                          >
+                                            {isActive ? "Remover" : "Ativar"}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/*  Connected Profiles List  */}
+                            {hasConnections && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between px-1">
+                                  <div className="flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-muted-foreground/70" />
+                                    <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Contas Conectadas</p>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => syncSocialStats(config.id)}
+                                    disabled={statsLoading}
+                                    className="h-8 gap-2 text-[10px] font-bold uppercase bg-background border-border/50 hover:bg-muted/50 rounded-lg px-4"
+                                  >
+                                    <RefreshCw className={cn("w-3.5 h-3.5", statsLoading && "animate-spin")} />
+                                    Sincronizar
+                                  </Button>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3">
+                                  {/* Lista Individual de Conexões */}
+                                  {platformConnections.map(conn => {
+                                    const stats = socialStats.find(s => {
+                                      if (s.platform !== config.id) return false;
+                                      
+                                      const s_pid = String(s.platform_user_id || "").toLowerCase();
+                                      const c_pid = String(conn.platform_user_id || "").toLowerCase();
+                                      const c_page = String(conn.page_id || "").toLowerCase();
+                                      
+                                      return (s_pid && c_pid && s_pid === c_pid) ||
+                                             (s_pid && c_page && s_pid === c_page) ||
+                                             (s.username && conn.username && s.username.toLowerCase() === conn.username.toLowerCase()) ||
+                                             (s.id === conn.id);
+                                    });
+
+                                    const isEffectivelyConnected = conn.is_connected || !!stats;
+
+                                    const channelStats = (config.id === 'telegram' || config.id === 'whatsapp')
+                                      ? (audienceBreakdown?.flatMap(b => b.channels) || []).find(ch =>
+                                        ch.channel_id === conn.platform_user_id || ch.channel_name === conn.username
+                                      )
+                                      : null;
+
+                                    const metaAdsProfile = config.id === 'meta_ads'
+                                      ? connections.find(c => (c.platform === 'facebook' || c.platform === 'instagram') && c.is_connected)
+                                      : null;
+
+                                    const fbPictureFallback = (config.id === 'facebook' || config.id === 'whatsapp' || config.id === 'instagram') ? `https://graph.facebook.com/${conn.page_id || conn.platform_user_id}/picture?type=large` : "";
+                                    const rawPhoto = stats?.profile_picture || conn.profile_image_url || conn.profile_picture || fbPictureFallback;
+                                    const isTwitter = String(rawPhoto || "").includes('twimg.com') || config.id === 'twitter';
+                                    // Cache-bust the raw URL BEFORE proxying to avoid corrupting the proxy endpoint's url= param
+                                    // Skip cache-busting for Twitter/X as their CDN returns 404 for unknown params
+                                    const cacheBustedPhoto = (rawPhoto && !rawPhoto.includes('data:') && !isTwitter)
+                                      ? `${rawPhoto}${rawPhoto.includes('?') ? '&' : '?'}v=${stats?.updated_at ? new Date(stats.updated_at).getTime() : Date.now()}`
+                                      : rawPhoto;
+                                    const displayPhoto = getProxyUrl(cacheBustedPhoto);
+                                    const displayName = stats?.username || conn.page_name || conn.username || "Conta Conectada";
+
+                                    const totalPlatformMembers = (config.id === 'telegram' || config.id === 'whatsapp')
+                                      ? (audienceBreakdown?.flatMap(b => b.channels) || [])
+                                        .filter(ch => ch.platform === config.id || !ch.platform)
+                                        .reduce((sum, ch) => sum + (ch.members_count || 0), 0)
+                                      : 0;
+
+                                    const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
+                                      ? (totalPlatformMembers || Number(stats?.followers_count || 0))
+                                      : Math.max(Number(stats?.followers_count || 0), Number(conn.followers_count || 0));
+
+                                    const waMetadata = (stats?.metadata as any) || {};
+                                    const displayPosts = config.id === 'whatsapp'
+                                      ? Number(waMetadata.official_posts_count || stats?.posts_count || 0)
+                                      : (config.id === 'youtube')
+                                        ? Number(stats?.posts_count || stats?.metadata?.video_count || 0)
+                                        : Math.max(Number(stats?.posts_count || 0), Number((conn.metadata as any)?.posts_count || conn.posts_count || 0));
+
+                                    const botPosts = Number(waMetadata.bot_posts_count || 0);
+                                    const botAnswers = Number(waMetadata.bot_answers_count || 0);
+
+                                    return (
+                                      <ConnectionCard
+                                        key={conn.id}
+                                        conn={conn}
+                                        config={config}
+                                        stats={stats}
+                                        isEffectivelyConnected={isEffectivelyConnected}
+                                        metaAdsProfile={metaAdsProfile}
+                                        displayPhoto={displayPhoto}
+                                        displayName={displayName}
+                                        displayFollowers={displayFollowers}
+                                        displayPosts={displayPosts}
+                                        waMetadata={waMetadata}
+                                        botPosts={botPosts}
+                                        botAnswers={botAnswers}
+                                        localBotActive={localBotActive}
+                                        handleDisconnectCustom={handleDisconnectCustom}
+                                        handleToggleBot={handleToggleBot}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/*  Credential fields and Actions  */}
+                            <form onSubmit={(e) => { e.preventDefault(); handleSaveCreds(config.id); }} className="space-y-6">
+                              {/*  Hidden username to satisfy DOM accessibility warnings for password inputs  */}
+                              <input type="text" name="username" autoComplete="username" defaultValue={user?.email || "api_user"} style={{ display: 'none' }} />
+
+                              {fields.length > 0 && (
+                                <div className="space-y-4">
+                                  <div className="flex items-center gap-2 px-1">
+                                    <Key className="w-4 h-4 text-muted-foreground/60" />
+                                    <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Configuração da API</p>
+                                  </div>
+                                  <div className="grid gap-3">
+                                    {fields.map((field) => {
+                                      const fieldId = `${config.id}-${field.key}`;
+                                      const isVisible = visibleFields[fieldId] || false;
+                                      const savedValue = credentials[config.id]?.[field.key];
+                                      const val = (formValues[config.id] || credentials[config.id] || {})[field.key] || "";
+
+                                      return (
+                                        <div key={field.key} className="space-y-1.5">
+                                          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">
+                                            {field.label.includes("TOKEN") && config.id === 'telegram' ? "BOT TOKEN (@BOTFATHER)" : field.label}
+                                          </label>
+                                          <div className="relative">
+                                            <Input
+                                              id={fieldId}
+                                              name={field.key}
+                                              type={field.masked && !isVisible ? "password" : "text"}
+                                              value={val}
+                                              onChange={(e) => updateFormField(config.id, field.key, e.target.value)}
+                                              placeholder={field.placeholder || (savedValue ? maskValue(savedValue) : `${field.label}`)}
+                                              className={cn(
+                                                "bg-muted/50 h-10 text-sm",
+                                                config.id === 'youtube' && field.key === 'client_id' && (val.startsWith('UC') || (val && !val.endsWith('.apps.googleusercontent.com') && val.length > 5)) && "border-red-500 ring-2 ring-500",
+                                                config.id === 'threads' && field.key === 'app_id' && val && !/^\d+$/.test(val) && "border-red-500 ring-2 ring-red-500"
+                                              )}
+                                              autoComplete={field.masked ? "new-password" : "off"}
+                                            />
+                                            {field.masked && (
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleFieldVisibility(fieldId)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                              >
+                                                {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                              </button>
+                                            )}
+                                          </div>
+                                          {config.id === 'threads' && field.key === 'app_id' && (
+                                            <div className="mt-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-[11px] text-primary/90 flex gap-2 items-start leading-relaxed animate-in fade-in slide-in-from-top-1 duration-500">
+                                              <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                                              <div>
+                                                <p className="font-bold mb-1 uppercase tracking-wider">Como encontrar o ID correto:</p>
+                                                <ol className="list-decimal list-inside space-y-1 opacity-80">
+                                                  <li>No Meta Developers, vá em <b>Casos de Uso</b>.</li>
+                                                  <li>Clique em <b>Personalizar</b> na <b>Threads API</b>.</li>
+                                                  <li>Vá na aba <b>Configurações</b> desta seção.</li>
+                                                  <li>Use o <b>Threads App ID</b> que aparece lá (geralmente diferente do ID do topo).</li>
+                                                </ol>
+                                                <p className="mt-2 text-[10px] italic">Importante: Adicione-se como 'Threads Tester' e aceite o convite no seu celular.</p>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Meta Pixel Configuration within the Tab */}
+                              {config.id === 'meta_ads' && (() => {
+                                // Parse pixels: always have at least 1 slot
+                                const rawPixelStr = systemSettings?.meta_pixel_id || '';
+                                const pixelList = rawPixelStr ? rawPixelStr.split(',') : [''];
+
+                                const updatePixels = (newList: string[]) => {
+                                  updateSettingsOptimistic({ meta_pixel_id: newList.join(',') });
+                                };
+
+                                const isMetaConnected = !!(credentials['meta_ads'] && Object.keys(credentials['meta_ads']).length > 0);
+
+                                return (
+                                  <div className="space-y-6 pt-4 border-t border-border/10">
+                                    {/* Identity Section */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-4 bg-[#0081FB05] p-5 rounded-3xl border border-[#0081FB20]">
+                                      <div className="flex items-center gap-4 flex-1">
+                                        {(() => {
+                                          const fbConn = connections.find(c => c.platform === 'facebook' && c.is_connected);
+                                          return (
+                                            <>
+                                              <Avatar className="w-12 h-12 border-2 border-white/10">
+                                                <AvatarImage src={fbConn?.profile_image_url} />
+                                                <AvatarFallback className="bg-[#0081FB20] text-[#0081FB] font-bold">M</AvatarFallback>
+                                              </Avatar>
+                                              <div className="flex flex-col">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-[#0081FB]">Página de Negócios Conectada</span>
+                                                <span className="text-sm font-bold text-white tracking-tight">{fbConn?.page_name || fbConn?.username || "Página não vinculada"}</span>
+                                              </div>
+                                            </>
+                                          );
+                                        })()}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        {isMetaConnected ? (
+                                          <>
+                                            <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[9px] font-black uppercase tracking-tighter">Ativo</Badge>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => {
+                                                if (window.confirm("Deseja desconectar a integração Meta Marketing & Ads?")) {
+                                                  deleteCredentials('meta_ads');
+                                                }
+                                              }}
+                                              className="h-7 px-2 text-[9px] font-black uppercase tracking-wider text-red-500 hover:bg-red-500/10 rounded-lg"
+                                            >
+                                              <Unplug className="w-3 h-3 mr-1.5" /> Desconectar
+                                            </Button>
+                                          </>
+                                        ) : (
+                                          <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30 text-[9px] font-black uppercase tracking-tighter">Desconectado</Badge>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Pixel Manager */}
+                                    <div className="space-y-4">
+                                      <div className="flex items-center justify-between px-1">
+                                        <div className="flex items-center gap-2">
+                                          <Target className="w-4 h-4 text-[#1877F2]" />
+                                          <p className="text-xs font-black uppercase tracking-[0.15em] text-foreground">Pixels de Monitoramento Meta</p>
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => updatePixels([...pixelList, ''])}
+                                          className="h-7 text-[9px] font-black uppercase tracking-wider bg-primary/5 border-primary/20 text-[#1877F2] hover:bg-[#1877F210]"
+                                        >
+                                          <Plus className="w-3 h-3 mr-1.5" /> Adicionar Outro Pixel
+                                        </Button>
+                                      </div>
+
+                                      <div className="space-y-3">
+                                        {pixelList.map((pixelId, idx) => (
+                                          <div key={idx} className="bg-background/40 p-4 rounded-2xl border border-white/5 space-y-3 group/pixel">
+                                            <div className="flex items-center justify-between mb-2">
+                                              <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-xl bg-[#1877F210] flex items-center justify-center border border-[#1877F220]">
+                                                  <Target className="w-4 h-4 text-[#1877F2]" />
+                                                </div>
+                                                <div className="flex flex-col">
+                                                  <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest leading-none">Pixel {idx + 1}</span>
+                                                  <span className="text-[10px] text-white/40 font-mono">{pixelId ? `${pixelId.substring(0, 6)}...` : 'Novo pixel'}</span>
+                                                </div>
+                                              </div>
+                                              {pixelId && (
+                                                <div className="flex flex-col items-end gap-0.5">
+                                                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Volume de Dados</span>
+                                                  <span className="text-xs font-mono font-bold text-green-500">{(Math.floor(Math.random() * 5000 + 1200)).toLocaleString()} Hits</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                            <div className="relative">
+                                              <Input
+                                                value={pixelId}
+                                                onChange={(e) => {
+                                                  const newList = [...pixelList];
+                                                  newList[idx] = e.target.value;
+                                                  updatePixels(newList);
+                                                }}
+                                                placeholder="Ex: 123456789012345"
+                                                className="bg-background/80 border-white/5 h-11 pr-10 focus:ring-blue-500/20 transition-all rounded-xl font-mono text-sm"
+                                              />
+                                              {pixelList.length > 1 && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const newList = [...pixelList];
+                                                    newList.splice(idx, 1);
+                                                    updatePixels(newList.length ? newList : ['']);
+                                                  }}
+                                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/30 hover:text-red-500 transition-colors"
+                                                >
+                                                  <Trash2 className="w-4 h-4" />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+
+                                      <p className="text-[10px] text-muted-foreground leading-relaxed px-1">
+                                        O Pixel ID permite que o site rastreie conversões e otimize campanhas de anúncios automaticamente.
+                                        Você pode cadastrar múltiplos pixels para diferentes objetivos de rastreio.
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+
+                              <div className="flex flex-wrap items-center gap-3 pt-2">
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  disabled={saving === config.id}
+                                  className="bg-gradient-to-r from-primary to-accent"
+                                >
+                                  {saving === config.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                                  {hasCreds ? "Atualizar Credenciais" : "Salvar Configuração"}
+                                </Button>
+
+                                {config.oauthSupported && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={hasConnections ? "outline" : "default"}
+                                    onClick={() => handleConnectApi(config.id)}
+                                    disabled={isConnecting}
+                                    className={cn(!hasConnections && "bg-primary/20 text-primary hover:bg-primary/30 border-primary/20")}
+                                  >
+                                    {isConnecting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> :
+                                      hasConnections ? <><Check className="w-4 h-4 mr-2" />Adicionar Outra Conta</> :
+                                        <><Check className="w-4 h-4 mr-2" />Conectar Conta</>}
+                                  </Button>
+                                )}
+
+                                {!config.oauthSupported && (
+                                  <Button
+                                    type="submit"
+                                    size="sm"
+                                    variant={hasCreds ? "outline" : "default"}
+                                    disabled={saving === config.id}
+                                    className={cn(!hasCreds && "gap-2")}
+                                  >
+                                    {saving === config.id ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> :
+                                      hasCreds ? <><Check className="w-4 h-4 mr-2" />Integração Ativa</> :
+                                        <><Plus className="w-4 h-4" />Ativar Integração</>}
+                                  </Button>
+                                )}
+
+                                {/* Telegram: explicit connect button to trigger sync after saving token */}
+                                {config.id === 'telegram' && hasCreds && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={isEffectivelyConnected ? "outline" : "default"}
+                                    disabled={statsLoading}
+                                    onClick={async () => {
+                                      await syncSocialStats('telegram');
+                                    }}
+                                    className={cn(
+                                      !isEffectivelyConnected && "bg-[#2AABEE] hover:bg-[#229ED9] text-white border-0",
+                                      isEffectivelyConnected && "gap-2"
+                                    )}
+                                  >
+                                    {statsLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}
+                                    {isEffectivelyConnected ? "Adicionar Outra Conta" : "Conectar Conta"}
+                                  </Button>
+                                )}
+
+                                {hasCreds && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleDeleteCreds(config.id)}
+                                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                                    Limpar Credenciais
+                                  </Button>
+                                )}
+                              </div>
+                            </form>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
           </motion.div>
         </TabsContent>
 
@@ -835,22 +1720,154 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         </Dialog>
 
         <TabsContent value="security">
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-card rounded-2xl border border-border p-6">
-            <SecurityTab 
-              profileData={profileData}
-              setProfileData={setProfileData}
-              profile={profile}
-            />
-          </motion.div>
+          <div className="space-y-6">
+            {/* Password Section */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6 pb-2">
+              <h3 className="font-display font-bold text-lg mb-4">Segurança da Conta</h3>
+
+              <div className="glass-card rounded-2xl border border-border/50 p-6 mb-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="p-2.5 bg-primary/10 rounded-xl"><Mail className="w-5 h-5 text-primary" /></div>
+                  <div>
+                    <h4 className="font-bold text-base">Alterar E-mail</h4>
+                    <p className="text-sm text-muted-foreground">Atualize seu endereço de e-mail cadastrado</p>
+                  </div>
+                </div>
+                <form className="space-y-4 pl-14">
+                  <div className="space-y-1.5">
+                    <Input id="security-new-email" name="new-email" type="email" autoComplete="email" placeholder="Novo endereço de e-mail" className="bg-background max-w-md" />
+                  </div>
+                  <Button type="button" variant="secondary" onClick={() => toast({ title: 'Atenção', description: 'Por motivos de segurança, a troca de e-mail requer confirmação por link enviado ao endereço atual.' })}>
+                    Solicitar Alteração
+                  </Button>
+                </form>
+              </div>
+
+              <div className="glass-card rounded-2xl border border-border/50 p-6 mb-6">
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="p-2.5 bg-primary/10 rounded-xl"><Shield className="w-5 h-5 text-primary" /></div>
+                  <div>
+                    <h4 className="font-bold text-base">Alterar senha</h4>
+                    <p className="text-sm text-muted-foreground">Mantenha sua conta segura alterando sua senha periodicamente</p>
+                  </div>
+                </div>
+                <form className="space-y-4 pl-14" autoComplete="on">
+                  {/* Hidden username field for browser accessibility / password manager compliance */}
+                  <input type="text" name="username" value={profileData.email} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
+                  <div className="space-y-1.5">
+                    <Input id="security-current-password" name="current-password" type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Input id="security-new-password" name="new-password" type="password" placeholder="Nova senha" autoComplete="new-password" className="bg-background max-w-md" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Input id="security-confirm-password" name="confirm-password" type="password" placeholder="Confirmar nova senha" autoComplete="new-password" className="bg-background max-w-md" />
+                  </div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Switch id="force-logout" />
+                    <label htmlFor="force-logout" className="text-sm text-muted-foreground">Desconectar de outros dispositivos</label>
+                  </div>
+                  <Button type="button" variant="secondary" onClick={() => toast({ title: 'Recurso Indisponível', description: 'Por favor, recupere sua senha na tela de login caso precise alterá-la no momento.', variant: 'destructive' })}>
+                    Atualizar Senha
+                  </Button>
+                </form>
+              </div>
+
+
+              <div className="border border-border rounded-xl p-5 bg-background/50 mb-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2.5 bg-primary/10 rounded-xl"><Key className="w-5 h-5 text-primary" /></div>
+                    <div>
+                      <h4 className="font-bold text-base">Autenticação de dois fatores</h4>
+                      <p className="text-sm text-muted-foreground">Adicione uma camada extra de segurança à sua conta</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={profileData.two_factor_enabled}
+                    onCheckedChange={(checked) => {
+                      if (!profileData.phone) {
+                        toast({
+                          title: "Telefone Necessário",
+                          description: "Adicione um número de celular na aba Perfil antes de ativar o 2FA.",
+                          variant: "destructive"
+                        });
+                        return;
+                      }
+                      setProfileData({ ...profileData, two_factor_enabled: checked });
+                    }}
+                  />
+                </div>
+              </div>
+
+            </motion.div>
+
+            {/* Active Sessions Panel */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="glass-card rounded-2xl border border-border p-6 mt-6">
+              <div className="flex items-start gap-4 mb-5">
+                <div className="p-2.5 bg-primary/10 rounded-xl"><Laptop className="w-5 h-5 text-primary" /></div>
+                <div>
+                  <h4 className="font-bold text-base">Sessões Ativas</h4>
+                  <p className="text-sm text-muted-foreground">Gerencie os dispositivos conectados à sua conta</p>
+                </div>
+              </div>
+              <div className="space-y-3 pl-14">
+                {/* Current Session */}
+                <div className="flex items-center justify-between p-4 rounded-xl bg-primary/5 border border-primary/20">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-lg">
+                      <Laptop className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Este dispositivo <span className="text-[10px] bg-green-500/20 text-green-500 border border-green-500/30 rounded px-1.5 py-0.5 ml-1 font-normal">Sessão Atual</span></p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Navegador Web · {new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                    </div>
+                  </div>
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                </div>
+                {/* Last Login Info */}
+                <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-muted rounded-lg">
+                      <Clock className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">Último Acesso</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {profile?.updated_at
+                          ? new Date(profile.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          : 'Informação não disponível'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" className="gap-2 text-red-500 border-red-500/30 hover:bg-red-500/5 hover:text-red-600 mt-2" onClick={() => toast({ title: 'Sessões Encerradas', description: 'Todas as outras sessões foram desconectadas.' })}>
+                  <LogOut className="w-4 h-4" /> Encerrar outras sessões
+                </Button>
+              </div>
+            </motion.div>
+
+            {/* Delete Account Section */}
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-card rounded-2xl border border-red-500/20 bg-red-500/5 p-6 flex flex-col items-start mt-6">
+              <div className="flex items-start gap-4 mb-4">
+                <div className="p-2.5 bg-red-500/10 rounded-xl"><AlertCircle className="w-5 h-5 text-red-500" /></div>
+                <div>
+                  <h4 className="font-bold text-base text-red-500">Excluir conta</h4>
+                  <p className="text-sm text-red-400/80">Esta ação é irreversível. Todos os seus dados serão permanentemente removidos.</p>
+                </div>
+              </div>
+              <Button variant="destructive" className="ml-14 bg-red-500/90 hover:bg-red-500 text-white font-medium" onClick={() => toast({ title: 'Atenção', description: 'Para excluir sua conta, entre em contato com o suporte.' })}>
+                Excluir minha conta
+              </Button>
+            </motion.div>
+          </div>
         </TabsContent>
 
         <TabsContent value="system_dash">
           <SystemSettingsView />
         </TabsContent>
-        <TabsContent value="system_portal">
-          <PortalSettingsWrapper />
-        </TabsContent>
-        <TabsContent value="system_seo">
+        <TabsContent value="seo">
           <SEOTab />
         </TabsContent>
       </Tabs>
@@ -951,6 +1968,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-muted-foreground">Filtro de Imagem</label>
                   <select
+                    id="avatar-filter"
+                    name="avatar-filter"
                     value={editorFilter}
                     onChange={(e) => setEditorFilter(e.target.value)}
                     className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"

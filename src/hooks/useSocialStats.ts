@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export interface SocialAccountStat {
   id: string;
@@ -15,6 +15,7 @@ export interface SocialAccountStat {
   likes_count: number;
   shares_count: number;
   comments_count: number;
+  engagement_rate: number;
   updated_at: string | null;
   chat_id?: string | null;
   metadata?: Record<string, any> | null;
@@ -24,7 +25,7 @@ export interface MessagingChannelStat {
   id: string;
   platform: string;
   channel_name: string;
-  channel_type: string; // 'channel' | 'group' | 'supergroup' | 'community' | 'broadcast_list'
+  channel_type: string;
   members_count: number;
   online_count: number;
   profile_picture: string | null;
@@ -44,36 +45,24 @@ export interface SocialStatsByPlatform {
   [platform: string]: SocialAccountStat[];
 }
 
-
-/**
- * useSocialStats
- * Centralized hook that fetches real-world social account metrics from
- * `social_accounts` table and distributes them to all dashboard tabs.
- * Replaces hardcoded/mock data across Analytics, Messaging, Calendar, etc.
- */
-export function useSocialStats() {
+export function useSocialStats(options: { enabled?: boolean } = {}) {
   const { user } = useAuth();
-  const [stats, setStats] = useState<SocialAccountStat[]>([]);
-  const [messagingChannels, setMessagingChannels] = useState<MessagingChannelStat[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const queryClient = useQueryClient();
+  const [manualLoading, setManualLoading] = useState(false);
 
-  const [apiConnections, setApiConnections] = useState<string[]>([]);
-
-  const fetchStats = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      // Run all data fetches AND the bot ping in parallel to avoid serial blocking
-      const [statsRes, credsRes, channelsRes, messagesRes, scheduledRes] = await Promise.all([
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['social_stats_all', user?.id],
+    queryFn: async () => {
+      if (!user) return null;
+      
+      const results = await Promise.allSettled([
         supabase
           .from('social_accounts')
-          .select('id, platform, platform_user_id, username, profile_picture, followers, posts_count, views, likes, shares, comments, updated_at, chat_id, metadata')
+          .select('id, platform, platform_user_id, username, profile_picture, followers, posts_count, views, likes, shares, comments, engagement_rate, updated_at, chat_id, metadata')
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false }),
         supabase
-          .from('api_credentials')
+          .from('api_credentials' as any)
           .select('platform')
           .eq('user_id', user.id),
         supabase
@@ -85,7 +74,7 @@ export function useSocialStats() {
           .select('platform, channel_id, status, metadata')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(500),
+          .limit(100),
         supabase
           .from('scheduled_posts')
           .select('platforms, status')
@@ -94,38 +83,33 @@ export function useSocialStats() {
           .limit(200),
       ]);
 
-      if (statsRes.error) throw statsRes.error;
+      const statsRes = results[0].status === 'fulfilled' ? results[0].value : { data: [], error: results[0].reason };
+      const credsRes = results[1].status === 'fulfilled' ? results[1].value : { data: [], error: results[1].reason };
+      const channelsRes = results[2].status === 'fulfilled' ? results[2].value : { data: [], error: results[2].reason };
+      const messagesRes = results[3].status === 'fulfilled' ? results[3].value : { data: [], error: results[3].reason };
+      const scheduledRes = results[4].status === 'fulfilled' ? results[4].value : { data: [], error: results[4].reason };
 
-      // Determine if bot is active based on database settings/messages rather than ping
       let botActiveStatus: boolean | null = null;
-      const { data: botSettings } = await supabase
-        .from('bot_settings' as any)
-        .select('is_active')
-        .eq('user_id', user.id)
-        .eq('platform', 'whatsapp')
-        .maybeSingle();
+      try {
+        const { data: botSettings } = await supabase
+          .from('bot_settings' as any)
+          .select('is_active')
+          .eq('user_id', user.id)
+          .eq('platform', 'whatsapp')
+          .maybeSingle();
+        if (botSettings) botActiveStatus = !!(botSettings as any).is_active;
+      } catch (err) {}
       
-      if (botSettings) {
-        botActiveStatus = !!(botSettings as any).is_active;
-      }
-
-      // Map platform message counts
       const actionCounts: Record<string, number> = {};
       const botActionCounts: Record<string, number> = {};
       
-      // Add direct messages (including sent/delivered)
       (messagesRes.data || []).forEach((m: any) => {
         const p = (m.platform || 'unknown').toLowerCase().trim();
         const isBot = m.metadata?.integration_type === 'bot';
-        
-        if (isBot) {
-          botActionCounts[p] = (botActionCounts[p] || 0) + 1;
-        } else {
-          actionCounts[p] = (actionCounts[p] || 0) + 1;
-        }
+        if (isBot) botActionCounts[p] = (botActionCounts[p] || 0) + 1;
+        else actionCounts[p] = (actionCounts[p] || 0) + 1;
       });
 
-      // Add published feed posts
       (scheduledRes.data || []).forEach((post: any) => {
         if (post.platforms && Array.isArray(post.platforms)) {
           post.platforms.forEach((p: string) => {
@@ -137,7 +121,6 @@ export function useSocialStats() {
 
       const normalized: SocialAccountStat[] = (statsRes.data || []).map((acc: any) => {
         const platformKey = acc.platform;
-        // Aggregate platform-specific actions (messages + posts) if account counter is low
         const totalActions = actionCounts[platformKey] || 0;
         const totalBotActions = botActionCounts[platformKey] || 0;
         const effectivePosts = Math.max(Number(acc.posts_count ?? 0), totalActions);
@@ -154,6 +137,7 @@ export function useSocialStats() {
           likes_count: Number(acc.likes ?? 0),
           shares_count: Number(acc.shares ?? 0),
           comments_count: Number(acc.comments ?? 0),
+          engagement_rate: Number(acc.engagement_rate ?? 0),
           updated_at: acc.updated_at,
           chat_id: acc.chat_id,
           metadata: {
@@ -176,10 +160,8 @@ export function useSocialStats() {
         channel_id: ch.channel_id || null,
       }));
 
-      // Ensure we have a stat entry for platforms that have messaging channels but no social_accounts row yet
       const finalStats = [...normalized];
       const existingPlatforms = new Set(finalStats.map(s => s.platform));
-      
       channels.forEach(ch => {
         if (!existingPlatforms.has(ch.platform)) {
           const platformKey = ch.platform.toLowerCase();
@@ -197,6 +179,7 @@ export function useSocialStats() {
             likes_count: 0,
             shares_count: 0,
             comments_count: 0,
+            engagement_rate: 0,
             updated_at: new Date().toISOString(),
             chat_id: ch.channel_id,
             metadata: {
@@ -210,24 +193,20 @@ export function useSocialStats() {
         }
       });
 
-      setStats(finalStats);
-      setMessagingChannels(channels);
-      setApiConnections((credsRes.data || []).map(r => r.platform));
-      setLastUpdated(new Date());
-    } catch {
-      // Silent fail
-    } finally {
-      setLoading(false);
-    }
-  }, [user, queryClient]);
+      return {
+        stats: finalStats,
+        messagingChannels: channels,
+        apiConnections: (credsRes.data || []).map(r => r.platform),
+        lastUpdated: new Date()
+      };
+    },
+    enabled: !!user && (options.enabled !== false),
+    staleTime: 60 * 1000, // Fresco por 1 minuto
+  });
 
+  // Real-time subscription - Single global instance via queryClient invalidation
   useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
-
-  // Real-time subscription to social_accounts changes
-  useEffect(() => {
-    if (!user) return;
+    if (!user || options.enabled === false) return;
     const channel = supabase
       .channel('social-stats-realtime')
       .on('postgres_changes', {
@@ -236,14 +215,17 @@ export function useSocialStats() {
         table: 'social_accounts',
         filter: `user_id=eq.${user.id}`,
       }, () => {
-        fetchStats();
+        queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [user, fetchStats]);
+  }, [user, queryClient]);
 
-  /** All stats grouped by platform */
+  const stats = data?.stats || [];
+  const messagingChannels = data?.messagingChannels || [];
+  const apiConnections = data?.apiConnections || [];
+
   const byPlatform: SocialStatsByPlatform = useMemo(() => stats.reduce((acc, s) => {
     if (!acc[s.platform]) acc[s.platform] = [];
     acc[s.platform].push(s);
@@ -256,35 +238,32 @@ export function useSocialStats() {
   const getPlatformStats = (platform: string): SocialAccountStat | null => {
     const accounts = byPlatform[platform];
     if (!accounts || accounts.length === 0) return null;
-      // Check if this platform exists in messaging_channels to complement data
-      const channels = messagingChannels.filter(c => c.platform === platform);
-      const totalMembers = channels.reduce((sum, ch) => sum + ch.members_count, 0);
+    const channels = messagingChannels.filter(c => c.platform === platform);
+    const totalMembers = channels.reduce((sum, ch) => sum + ch.members_count, 0);
 
-      return {
-        id: accounts[0].id,
-        platform,
-        username: accounts[0].username,
-        profile_picture: accounts[0].profile_picture,
-        followers_count: accounts.reduce((sum, a) => sum + a.followers_count, 0) || totalMembers,
-        posts_count: accounts.reduce((sum, a) => sum + a.posts_count, 0),
-        views_count: accounts.reduce((sum, a) => sum + a.views_count, 0),
-        likes_count: accounts.reduce((sum, a) => sum + a.likes_count, 0),
-        shares_count: accounts.reduce((sum, a) => sum + a.shares_count, 0),
-        comments_count: accounts.reduce((sum, a) => sum + a.comments_count, 0),
-        updated_at: accounts[0].updated_at,
-        chat_id: accounts[0].chat_id,
-      };
+    return {
+      id: accounts[0].id,
+      platform,
+      username: accounts[0].username,
+      profile_picture: accounts[0].profile_picture,
+      followers_count: accounts.reduce((sum, a) => sum + a.followers_count, 0) || totalMembers,
+      posts_count: accounts.reduce((sum, a) => sum + a.posts_count, 0),
+      views_count: accounts.reduce((sum, a) => sum + a.views_count, 0),
+      likes_count: accounts.reduce((sum, a) => sum + a.likes_count, 0),
+      shares_count: accounts.reduce((sum, a) => sum + a.shares_count, 0),
+      comments_count: accounts.reduce((sum, a) => sum + a.comments_count, 0),
+      engagement_rate: accounts.reduce((sum, a) => sum + a.engagement_rate, 0),
+      updated_at: accounts[0].updated_at,
+      chat_id: accounts[0].chat_id,
+    };
   };
 
-  /** Check if a platform is connected (has any data OR credentials) */
   const isConnected = (platform: string): boolean => {
     return ((byPlatform[platform]?.length ?? 0) > 0) || apiConnections.includes(platform);
   };
 
-  /** Connected platforms list (merged) */
   const connectedPlatforms = Array.from(new Set([...Object.keys(byPlatform), ...apiConnections]));
 
-  /** Audience breakdown by channel type across all messaging platforms */
   const audienceBreakdown: AudienceBreakdown[] = useMemo(() => {
     const typeMap: Record<string, { label: string; channels: MessagingChannelStat[] }> = {
       channel: { label: 'Canais', channels: [] },
@@ -295,11 +274,8 @@ export function useSocialStats() {
 
     messagingChannels.forEach(ch => {
       const type = ch.channel_type?.toLowerCase() || 'group';
-      // Map supergroup+community together
       const key = type === 'community' ? 'supergroup' : (typeMap[type] ? type : 'group');
-      if (typeMap[key]) {
-        typeMap[key].channels.push(ch);
-      }
+      if (typeMap[key]) typeMap[key].channels.push(ch);
     });
 
     return Object.entries(typeMap)
@@ -319,14 +295,15 @@ export function useSocialStats() {
     byPlatform,
     messagingChannels,
     audienceBreakdown,
-    loading,
-    setStatsLoading: setLoading,
-    lastUpdated,
+    loading: isLoading || manualLoading,
+    setStatsLoading: (loading: boolean) => setManualLoading(loading),
+    lastUpdated: data?.lastUpdated || null,
     totalFollowers,
     totalPosts,
     connectedPlatforms,
     getPlatformStats,
     isConnected,
-    refresh: fetchStats,
+    refresh: refetch,
   };
 }
+

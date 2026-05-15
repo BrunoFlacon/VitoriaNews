@@ -14,6 +14,7 @@ interface SocialAccount {
   followers_count?: number | null;
   posts_count?: number | null;
   page_id?: string | null;
+  username?: string | null;
 }
 
 interface SocialNetworkCardProps {
@@ -119,9 +120,26 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                 {isConnecting
                   ? "Conectando..."
                   : isConnected
-                    ? selectedAccount?.page_name || pageName || "Conectado"
+                    ? (selectedAccount?.username ? `@${selectedAccount.username}` : (selectedAccount?.page_name || pageName || "Conectado"))
                     : "Clique para conectar"}
               </p>
+              {isConnected && selectedAccount && (
+                <div className="flex items-center gap-3 mt-1.5">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Seguidores</span>
+                    <span className="text-xs font-black font-mono text-foreground leading-none">
+                      {Number(selectedAccount.followers_count || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="w-px h-5 bg-border/40" />
+                  <div className="flex flex-col">
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Posts</span>
+                    <span className="text-xs font-black font-mono text-foreground leading-none">
+                      {Number(selectedAccount.posts_count || 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -223,7 +241,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">
-                            {account.page_name || account.platform_user_id || "Perfil"}
+                            {account.username ? `@${account.username}` : (account.page_name || account.platform_user_id || "Perfil")}
                           </p>
                             <div className="flex flex-wrap items-center gap-x-2">
                               {account.followers_count != null && !(platform.id === 'whatsapp' && account.followers_count === 0) && (

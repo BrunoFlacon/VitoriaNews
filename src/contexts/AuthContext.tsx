@@ -70,9 +70,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [onlineUsersMap, setOnlineUsersMap] = useState<Record<string, any>>({});
   const presenceChannelRef = React.useRef<any>(null);
 
-  const fetchProfile = async (userId: string, retryTimeout = 4000) => {
+  const fetchProfile = async (userId: string, retryTimeout = 2000, retryCount = 0) => {
     try {
-      // Race: DB query vs timeout to prevent hanging on slow DB
       const queryPromise = supabase
         .from('profiles')
         .select('*')
@@ -87,63 +86,47 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (!error && data) {
         setProfile(data);
-        // Mark as online — fire-and-forget, não bloqueia o carregamento
         Promise.resolve(
           supabase
             .from('profiles')
             .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })
             .eq('user_id', userId)
         ).catch(() => {});
-      } else if (retryTimeout <= 4000) {
-        // Primeira tentativa falhou por timeout — agenda retry com timeout maior (8s)
-        console.warn('[Auth] Profile timeout, retrying in 3s with longer timeout...');
-        setTimeout(() => fetchProfile(userId, 8000), 3000);
+      } else if (retryCount < 1) {
+        // Reduced retry delay to 1s
+        setTimeout(() => fetchProfile(userId, 4000, retryCount + 1), 1000);
       }
     } catch (e) {
-      console.warn('[Auth] fetchProfile failed silently:', e);
+      // Fail silently, don't log errors for transient network issues
     }
   };
 
-
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Defer profile fetch with setTimeout to avoid deadlock
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
+          fetchProfile(session.user.id);
         } else {
           setProfile(null);
         }
       }
     );
 
-    // Safety timeout: force loading to end after 5 seconds no matter what
-    const timeoutId = setTimeout(() => {
-      if (isLoading) {
-        console.warn("[Auth] Initial session check timed out after 5s. Forcing loader off.");
-        setIsLoading(false);
-      }
-    }, 5000);
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    // Initial check - FAST PATH
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        await fetchProfile(session.user.id);
+        // Fire profile fetch in background, DO NOT await it
+        fetchProfile(session.user.id);
       }
+      // Release loading state IMMEDIATELY after session check
       setIsLoading(false);
-      clearTimeout(timeoutId);
-    }).catch(err => {
-      console.error("[Auth] getSession critical error:", err);
+    }).catch(() => {
       setIsLoading(false);
-      clearTimeout(timeoutId);
     });
 
     return () => subscription.unsubscribe();
@@ -203,16 +186,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [profile, user, isLoading]);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      return { success: false, error: 'Email ou senha incorretos.' };
+      if (error) {
+        // Detecta falha de rede vs credenciais incorretas
+        const isNetworkErr = error.message?.toLowerCase().includes('fetch') || error.status === 0;
+        return {
+          success: false,
+          error: isNetworkErr
+            ? 'Servidor inacessível. Verifique sua conexão.'
+            : 'Email ou senha incorretos.'
+        };
+      }
+
+      return { success: true };
+    } catch (networkErr: any) {
+      // TypeError: Failed to fetch — servidor Supabase inacessível (522/CORS)
+      return { success: false, error: 'Servidor inacessível. Verifique sua conexão.' };
     }
-
-    return { success: true };
   };
 
   const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> => {

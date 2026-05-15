@@ -323,6 +323,98 @@ async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: 
   }];
 }
 
+async function exchangeTikTok(code: string, redirectUri: string, codeVerifier: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
+  const clientKey = creds.client_key || creds.client_id;
+  const clientSecret = creds.client_secret;
+
+  if (!clientKey || !clientSecret) {
+    throw new Error("TikTok Client Key e Client Secret são obrigatórios. Configure-os na aba de APIs.");
+  }
+
+  const payload = new URLSearchParams({
+    client_key: clientKey,
+    client_secret: clientSecret,
+    code: code,
+    grant_type: "authorization_code",
+    redirect_uri: redirectUri,
+    code_verifier: codeVerifier,  // PKCE obrigatório
+  });
+
+  const res = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: payload.toString(),
+  });
+
+  const data = await res.json();
+  await logOAuth(supabase, { user_id: userId, provider: "tiktok", stage: "exchange", request_payload: { client_key: clientKey, redirect_uri: redirectUri }, response_payload: data });
+
+  if (data.error) throw new Error(data.error_description || data.error);
+
+  const accessToken = data.access_token;
+  const refreshToken = data.refresh_token || "";
+  const expiresIn = data.expires_in || 86400; // 24h
+  const openId = data.open_id || "";
+
+  // Buscar informações básicas do perfil do usuário
+  let pageName = "TikTok User";
+  let profileImageUrl = "";
+  let username = "";
+  let followers = 0;
+  let postsCount = 0;
+  let likes = 0;
+
+  try {
+    const userRes = await fetch(
+      "https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username,follower_count,video_count,likes_count",
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const userData = await userRes.json();
+    const userInfo = userData?.data?.user;
+    if (userInfo) {
+      pageName = userInfo.display_name || pageName;
+      username = userInfo.username || "";
+      profileImageUrl = userInfo.avatar_url || "";
+      followers = userInfo.follower_count || 0;
+      postsCount = userInfo.video_count || 0;
+      likes = userInfo.likes_count || 0;
+    }
+  } catch (e) {
+    console.warn("[TikTok] Falha ao buscar perfil:", e);
+  }
+
+  // Também atualizar api_credentials com os tokens gerados
+  try {
+    await supabase.from("api_credentials").upsert({
+      user_id: userId,
+      platform: "tiktok",
+      credentials: {
+        client_key: clientKey,
+        client_secret: clientSecret,
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        open_id: openId,
+      }
+    }, { onConflict: "user_id,platform" });
+  } catch (e) {
+    console.warn("[TikTok] Falha ao salvar tokens em api_credentials:", e);
+  }
+
+  return [{
+    accessToken,
+    refreshToken,
+    expiresIn,
+    platformUserId: openId,
+    pageName,
+    pageId: "",
+    profileImageUrl,
+    username,
+    followers,
+    postsCount,
+    likes
+  }];
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -338,12 +430,75 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication");
 
-    const { code, state, platform, redirect_uri: incomingRedirectUri } = await req.json();
+    const { code, state, platform, redirect_uri: incomingRedirectUri, manual_token } = await req.json();
+
+    // -------------------------------------------------------------------------
+    // NOVO: SUPORTE A TOKEN MANUAL (THREADS)
+    // -------------------------------------------------------------------------
+    if (manual_token && platform === 'threads') {
+      console.log(`[OAUTH CALLBACK] Ativando Threads via token manual para o usuário: ${user.id}`);
+      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url&access_token=${manual_token}`);
+      const meData = await meRes.json();
+
+      if (meData.error) throw new Error(meData.error.message || "Token manual inválido");
+
+      const results: TokenResult[] = [{
+        accessToken: manual_token,
+        refreshToken: "",
+        expiresIn: 5184000,
+        platformUserId: meData.id || "",
+        pageName: meData.username || "",
+        pageId: "",
+        profileImageUrl: meData.threads_profile_picture_url || "",
+        username: meData.username
+      }];
+
+      // Salvar conexão
+      for (const res of results) {
+        await supabase.from("social_connections").upsert({
+          user_id: user.id,
+          platform,
+          is_connected: true,
+          access_token: res.accessToken,
+          refresh_token: res.refreshToken,
+          token_expires_at: new Date(Date.now() + res.expiresIn * 1000).toISOString(),
+          platform_user_id: res.platformUserId,
+          page_name: res.pageName,
+          page_id: res.pageId,
+          profile_image_url: res.profileImageUrl,
+          metadata: { username: res.username, manual: true }
+        }, { onConflict: "user_id,platform,platform_user_id" });
+
+        await supabase.from("social_accounts").upsert({
+          user_id: user.id,
+          platform,
+          platform_user_id: res.platformUserId,
+          username: res.username || res.pageName,
+          page_name: res.pageName,
+          profile_picture: res.profileImageUrl,
+          is_active: true
+        }, { onConflict: "user_id,platform,platform_user_id" });
+      }
+
+      return new Response(JSON.stringify({ success: true, pageName: meData.username }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (!code || !state || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required");
 
-    // Fetch state from DB
-    const { data: oauthState, error: stateError } = await supabase.from("oauth_states").select("*").eq("state", state).eq("user_id", user.id).eq("platform", platform).single();
+    // Fetch state from DB — state pode ser composto "stateId~codeVerifier" (PKCE)
+    // ou simples "stateId" (outras plataformas).
+    const { data: oauthState, error: stateError } = await supabase
+      .from("oauth_states")
+      .select("*")
+      .eq("state", state)
+      .eq("user_id", user.id)
+      .eq("platform", platform)
+      .single();
     if (stateError || !oauthState) return oauthError(platform, "callback", "Invalid or expired OAuth state");
+
+    // Extrair code_verifier do state composto (se existir)
+    const tildeIndex = state.indexOf("~");
+    const extractedVerifier = tildeIndex !== -1 ? state.substring(tildeIndex + 1) : (oauthState.code_verifier || "");
 
     // Validar Redirect URI
     if (incomingRedirectUri) assertRedirectUriMatch(oauthState.redirect_uri, incomingRedirectUri);
@@ -384,6 +539,10 @@ serve(async (req: Request) => {
     } else if (platform === "google" || platform === "youtube") {
       formattedCreds.client_id = raw.client_id || raw.youtube_id || Deno.env.get("GOOGLE_CLIENT_ID");
       formattedCreds.client_secret = raw.client_secret || Deno.env.get("GOOGLE_CLIENT_SECRET");
+    } else if (platform === "tiktok") {
+      // TikTok usa client_key (não client_id)
+      formattedCreds.client_key = raw.client_key || raw.client_id || Deno.env.get("TIKTOK_CLIENT_KEY");
+      formattedCreds.client_secret = raw.client_secret || Deno.env.get("TIKTOK_CLIENT_SECRET");
     } else {
       formattedCreds.app_id = raw.app_id || raw.client_id || Deno.env.get("META_APP_ID") || Deno.env.get("THREADS_CLIENT_ID");
       formattedCreds.app_secret = raw.app_secret || raw.client_secret || Deno.env.get("META_APP_SECRET") || Deno.env.get("THREADS_CLIENT_SECRET");
@@ -402,9 +561,10 @@ serve(async (req: Request) => {
         client_id: raw.client_id, 
         client_secret: raw.client_secret 
       }, supabase, user.id); break;
-      case "twitter": results = await exchangeTwitter(code, oauthState.redirect_uri, oauthState.code_verifier || "", formattedCreds, supabase, user.id); break;
+      case "twitter": results = await exchangeTwitter(code, oauthState.redirect_uri, extractedVerifier, formattedCreds, supabase, user.id); break;
+      case "tiktok": results = await exchangeTikTok(code, oauthState.redirect_uri, extractedVerifier, formattedCreds, supabase, user.id); break;
       default:
-        throw new Error(`Troca de token para plataforma '${platform}' não implementada nesta refatoração.`);
+        throw new Error(`Troca de token para plataforma '${platform}' não implementada.`);
     }
 
     // Upsert connections
@@ -413,7 +573,8 @@ serve(async (req: Request) => {
        await supabase.from("social_connections").upsert({
          user_id: user.id, platform, access_token: result.accessToken, refresh_token: result.refreshToken || null,
          token_expires_at: expiresAt, platform_user_id: result.platformUserId, page_name: result.pageName,
-         page_id: result.pageId || null, profile_image_url: result.profileImageUrl || null, is_connected: true, updated_at: new Date().toISOString(),
+         page_id: result.pageId || null, profile_image_url: result.profileImageUrl || null,
+         username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
        }, { onConflict: "user_id,platform,platform_user_id" });
 
        await supabase.from("social_accounts").upsert({

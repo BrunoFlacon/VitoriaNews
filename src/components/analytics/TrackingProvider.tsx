@@ -19,15 +19,13 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         
         // Silenciar erros de timeout — não é crítico para os pixels
         if (error) {
-          if (error.code !== '57014' && !error.message?.includes('timeout')) {
-            console.warn('[TrackingProvider] settings não disponíveis:', error.message);
-          }
+          // Totalmente silencioso para evitar poluição no console durante quedas de servidor
           return;
         }
 
         if (data) setSettings(data);
-      } catch (e) {
-        // Silencioso — pixels são opcionais
+      } catch (e: any) {
+        // Totalmente silencioso (ignora TypeError: Failed to fetch de CORS/522)
       }
     };
 

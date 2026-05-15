@@ -6,8 +6,10 @@ declare const Deno: any;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization, x-supabase-auth, x-client-version, x-my-custom-header",
+  "Access-Control-Allow-Methods": "POST, OPTIONS, GET, PUT, DELETE",
+  "Access-Control-Max-Age": "86400",
+  "Permissions-Policy": "browsing-topics=()",
 };
 
 function json(data: any, status = 200) {
@@ -83,12 +85,19 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
     accountRecords.push({
       user_id: userId,
       platform: "telegram",
-      platform_user_id: botId, // IMPORTANT: align with constraint
+      platform_user_id: botId,
       chat_id: botId,
       username: botInfo.username || botInfo.first_name || "telegram_bot",
       profile_picture: botProfilePicture,
       followers: 0,
       posts_count: 0,
+      views: 0,
+      likes: 0,
+      shares: 0,
+      comments: 0,
+      engagement_rate: 0,
+      is_connected: true,
+      last_synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
 
@@ -138,12 +147,19 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
         accountRecords.push({
           user_id: userId,
           platform: "telegram",
-          platform_user_id: chatId.toString(), // IMPORTANT: align with constraint
+          platform_user_id: chatId.toString(),
           chat_id: chatId,
           username: chat.username || chat.title || chat.first_name || chatId,
           profile_picture: chatPhoto,
           followers,
           posts_count: 0,
+          views: 0,
+          likes: 0,
+          shares: 0,
+          comments: 0,
+          engagement_rate: 0,
+          is_connected: true,
+          last_synced_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
 
@@ -177,7 +193,7 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
       if (chanErr) console.error("[SYNC] Batch Messaging Channels Error:", chanErr.message);
     }
 
-    return { success: true, bot: botInfo.username, accountsSynced: accountRecords.length };
+    return { success: true, botId, bot: botInfo.username, accountsSynced: accountRecords.length };
   } catch (err) {
     console.error("[SYNC] syncSingleBot Fatal:", err.message);
     return { success: false, error: err.message };
@@ -235,38 +251,54 @@ serve(async (req: Request) => {
     if (tokens.length === 0) return json({ success: false, error: "No Telegram tokens found." });
 
     const allResults = [];
+    const botIds: string[] = [];
     for (const botToken of tokens) {
       const res = await syncSingleBot(adminClient, userId, botToken, supabaseUrl);
       allResults.push(res);
+      if (res.success && res.botId) {
+        botIds.push(res.botId);
+      }
     }
 
     // Final Aggregation for UI
     try {
       const { data: accountsData } = await adminClient
         .from("social_accounts")
-        .select("followers")
+        .select("followers, platform_user_id, chat_id")
         .eq("user_id", userId)
         .eq("platform", "telegram");
       
       const totalFollowers = (accountsData || []).reduce((sum, acc) => sum + (Number(acc.followers) || 0), 0);
+      const mainBotId = botIds[0];
 
-      const { count: postsCount } = await adminClient
-        .from("scheduled_posts")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .eq("status", "published")
-        .contains("platforms", ["telegram"]);
+      // UPDATE THE BOT RECORD with total followers (sum of groups/channels)
+      // This ensures the main dashboard shows the consolidated number for the bot
+      if (totalFollowers > 0 && mainBotId) {
+        await adminClient
+          .from("social_accounts")
+          .update({ followers: totalFollowers, followers_count: totalFollowers })
+          .eq("user_id", userId)
+          .eq("platform", "telegram")
+          .eq("platform_user_id", mainBotId);
 
-      await adminClient
-        .from("social_connections")
-        .update({
-          followers_count: totalFollowers,
-          posts_count: postsCount || 0,
-          updated_at: new Date().toISOString()
-        })
-        .eq("user_id", userId)
-        .eq("platform", "telegram");
+        const { count: postsCount } = await adminClient
+          .from("scheduled_posts")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("status", "published")
+          .contains("platforms", ["telegram"]);
 
+        await adminClient
+          .from("social_connections")
+          .upsert({
+            user_id: userId,
+            platform: "telegram",
+            platform_user_id: mainBotId,
+            followers_count: totalFollowers,
+            posts_count: postsCount || 0,
+            updated_at: new Date().toISOString()
+          }, { onConflict: "user_id,platform,platform_user_id" });
+      }
     } catch (aggErr) { console.warn("[SYNC] Aggregation failed:", aggErr.message); }
 
     return json({ success: true, results: allResults });

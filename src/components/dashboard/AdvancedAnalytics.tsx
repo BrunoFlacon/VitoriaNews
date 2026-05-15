@@ -250,7 +250,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         heightLeft -= pdfHeight;
       }
 
-      pdf.save(`Relatorio_SocialHub_${period}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(`Relatório_SocialHub_${period}_${new Date().toISOString().slice(0, 10)}.pdf`);
       
       toast({
         title: "Sucesso!",
@@ -735,17 +735,17 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
       {/* CHARTS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="p-6 col-span-2 shadow-sm border-border bg-card" style={{ contain: "content" }}>
-          <div className="mb-6 flex items-center justify-between">
+        <Card className="p-6 col-span-1 lg:col-span-2 shadow-sm border-border bg-card relative" style={{ contain: "layout style" }}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
-              <h3 className="font-display font-bold text-lg text-card-foreground">Visão Geral</h3>
-              <p className="text-sm text-muted-foreground">Evolução do engajamento no período</p>
+              <h3 className="font-display font-bold text-lg text-card-foreground">Performance Geral</h3>
+              <p className="text-sm text-muted-foreground">Alcance e engajamento consolidado</p>
             </div>
           </div>
-          <div className="h-[350px] w-full relative" style={{ contain: "strict", aspectRatio: "16/9" }}>
-            <div className="absolute inset-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+          
+          <div className="h-[400px] w-full min-h-[400px]" style={{ contain: "layout size style" }}>
+            <ResponsiveContainer width="100%" height="100%" minHeight={400}>
+              <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -768,17 +768,16 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          </div>
         </Card>
 
         {/* Restore Platform Breakdown Chart */}
-        <Card className="p-6 shadow-sm border-border bg-card" style={{ contain: "content" }}>
+        <Card className="p-6 shadow-sm border-border bg-card" style={{ contain: "layout style" }}>
           <h3 className="font-display font-bold text-lg mb-2 text-card-foreground">Por Plataforma</h3>
           <p className="text-sm text-muted-foreground mb-6">Distribuição de publicações e métricas</p>
           
           {Object.keys(platformBreakdown).length > 0 ? (
-            <div className="h-[250px] w-full relative" style={{ contain: "strict" }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-[250px] w-full relative min-h-[250px]" style={{ contain: "layout size style" }}>
+              <ResponsiveContainer width="100%" height="100%" minHeight={250}>
                 <PieChart>
                   <Pie
                     data={Object.entries(platformBreakdown as Record<string, any>).map(([key, d]) => ({
@@ -826,7 +825,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         {/* Ads and Web Performance Card */}
-        <Card className="p-6 shadow-sm border-border bg-card overflow-hidden relative">
+        <Card className="p-6 shadow-sm border-border bg-card overflow-hidden relative" style={{ contain: "layout" }}>
           <div className="absolute top-0 right-0 p-3 opacity-10">
             <BarChart3 className="w-24 h-24 text-primary" />
           </div>
@@ -853,7 +852,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         </Card>
 
         {/* YouTube Performance Card */}
-        <Card className="p-6 shadow-sm border-border bg-card overflow-hidden relative">
+        <Card className="p-6 shadow-sm border-border bg-card overflow-hidden relative" style={{ contain: "layout" }}>
           <div className="absolute top-0 right-0 p-3 opacity-10">
             <div className="w-24 h-24 text-red-500"><Activity className="w-full h-full" /></div>
           </div>
@@ -1068,7 +1067,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       )}
 
       {/* FOLLOWER CARDS AGGREGATED (ALL NETWORKS) */}
-      <Card className="p-6 shadow-sm border-border bg-card">
+      <Card className="p-6 shadow-sm border-border bg-card" style={{ contain: "layout" }}>
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
           <h3 className="font-display font-bold text-lg text-card-foreground flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" />
@@ -1411,7 +1410,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       </div>
 
       {/* MESSAGE DELIVERY REPORTS - RESTORED */}
-      <Card className="p-6 mt-6 shadow-sm border-border bg-card">
+      <Card className="p-6 mt-6 shadow-sm border-border bg-card" style={{ contain: "layout" }}>
         <h3 className="font-display font-bold text-lg mb-6 text-card-foreground flex items-center gap-2">
           <MessageCircle className="w-5 h-5 text-blue-500" />
           Relatórios de Entrega de Mensagens

@@ -18,7 +18,11 @@ export async function cacheProfileImage(
   try {
     console.log(`[MEDIA] Caching image for ${platform}:${platformUserId} from ${remoteUrl}`);
     
-    const response = await fetch(remoteUrl);
+    const response = await fetch(remoteUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      }
+    });
     if (!response.ok) {
       console.warn(`[MEDIA] Failed to fetch remote image: ${response.statusText}`);
       return remoteUrl;

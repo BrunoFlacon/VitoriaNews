@@ -106,11 +106,14 @@ export const IdentityTab = () => {
       
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nome da Plataforma</label>
+          <label htmlFor="platform-name" className="text-xs font-bold uppercase tracking-wider text-muted-foreground cursor-pointer">Nome da Plataforma</label>
           <Input 
+            id="platform-name"
+            name="platform_name"
             value={settings.platform_name || ""} 
             onChange={(e) => setSettings({ ...settings, platform_name: e.target.value })} 
             className="bg-muted/30 max-w-md"
+            autoComplete="organization"
           />
         </div>
 

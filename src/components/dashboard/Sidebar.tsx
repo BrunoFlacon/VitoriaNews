@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
   LayoutDashboard, 
   PenSquare, 
@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useState, useMemo } from "react";
 import { useSystem } from "@/contexts/SystemContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface SidebarProps {
   activeTab: string;
@@ -49,7 +50,8 @@ const ICON_MAP: Record<string, any> = {
   sys_portal: Globe,
   notifications: Bell,
   manual: BookOpen,
-  robot: Bot
+  robot: Bot,
+  monitoring: Activity
 };
 
 export const Sidebar = ({ 
@@ -62,6 +64,7 @@ export const Sidebar = ({
   const { settings, navSettings } = useSystem();
   const { profile } = useAuth();
   const userRole = profile?.role || 'user';
+  const isMobile = useIsMobile();
 
   const { topMenu, bottomMenu } = useMemo(() => {
     // Definimos os itens padrão (fallback) que DEVEM sempre existir se não houver configuração contrária
@@ -81,7 +84,7 @@ export const Sidebar = ({
 
     const mandatoryBottom = [
       { id: "notifications", icon: Bell, label: "Notificações" },
-      { id: "settings", icon: Settings, label: "Config Dashboard" },
+      { id: "settings", icon: Settings, label: "Configurações" },
       { id: "sys_portal", icon: Globe, label: "Portal & Temas" }
     ];
 
@@ -130,15 +133,32 @@ export const Sidebar = ({
   const dynamicBottomItems = bottomMenu;
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: isCollapsed ? 80 : 256 }}
-      transition={{ type: "spring", stiffness: 280, damping: 32, mass: 0.9 }}
-      className={cn(
-        "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col items-center",
-        isCollapsed ? "py-4 md:py-6" : ""
-      )}
-    >
+    <>
+      {/* Overlay for mobile */}
+      <AnimatePresence>
+        {isMobile && !isCollapsed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsCollapsed(true)}
+            className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.aside
+        initial={false}
+        animate={{ 
+          width: isMobile ? 256 : (isCollapsed ? 80 : 256),
+          x: isMobile ? (isCollapsed ? -256 : 0) : 0
+        }}
+        transition={{ type: "spring", stiffness: 280, damping: 32, mass: 0.9 }}
+        className={cn(
+          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col items-center",
+          (!isMobile && isCollapsed) ? "py-4 md:py-6" : ""
+        )}
+      >
       <div className={cn(
         "flex items-center gap-3 px-4 h-16 border-b border-sidebar-border/30 w-full mb-1 shrink-0 overflow-hidden",
         isCollapsed ? "justify-center" : "justify-start"
@@ -184,7 +204,13 @@ export const Sidebar = ({
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id);
+                // No mobile, recolher o menu ao clicar
+                if (window.innerWidth < 768) {
+                  setIsCollapsed(true);
+                }
+              }}
               className={cn(
                 "w-full flex items-center gap-3 transition-all duration-300 group relative shrink-0",
                 isCollapsed ? "w-11 h-11 justify-center rounded-2xl" : "px-4 py-2 rounded-xl",
@@ -284,5 +310,6 @@ export const Sidebar = ({
         )} />
       </button>
     </motion.aside>
+    </>
   );
 };

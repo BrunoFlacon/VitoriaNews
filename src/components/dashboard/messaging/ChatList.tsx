@@ -117,6 +117,7 @@ export const ChatList = ({
                       src={chat.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name)}&background=random`}
                       alt={chat.name}
                       className="w-full h-full object-cover"
+                      isWhatsAppImage={chat.photoUrl?.includes('whatsapp.net') || chat.platform === 'whatsapp'}
                     />
                   </div>
                   <div className={cn(

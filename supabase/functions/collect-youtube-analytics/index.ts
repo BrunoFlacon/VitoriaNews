@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { cacheProfileImage } from "_shared/media.ts";
+import { cacheProfileImage } from "../_shared/media.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -264,7 +264,7 @@ serve(async (req: Request) => {
       }
     }
 
-    // Get aggregated stats
+    // Get aggregated stats from youtube_analytics
     const { data: aggregatedData } = await supabase
       .from("youtube_analytics")
       .select("views, likes, comments, subscribers_gained")
@@ -286,6 +286,32 @@ serve(async (req: Request) => {
       aggregated.total_comments = aggregatedData.reduce((s: number, r: any) => s + (r.comments || 0), 0);
       aggregated.total_subscribers_gained = aggregatedData.reduce((s: number, r: any) => s + (r.subscribers_gained || 0), 0);
     }
+
+    // Update social_accounts with aggregated metrics and engagement_rate
+    const { data: ytAccount } = await supabase
+      .from("social_accounts")
+      .select("followers, followers_count, subscribers_count")
+      .eq("user_id", userId)
+      .eq("platform", "youtube")
+      .eq("platform_user_id", channelId)
+      .maybeSingle();
+
+    const ytFollowers = ytAccount?.followers || ytAccount?.followers_count || ytAccount?.subscribers_count || 0;
+    const ytEngagementRate = ytFollowers > 0
+      ? parseFloat((((aggregated.total_likes + aggregated.total_comments) / ytFollowers) * 100).toFixed(2))
+      : 0;
+
+    await supabase.from("social_accounts").upsert({
+      user_id: userId,
+      platform: "youtube",
+      platform_user_id: channelId,
+      likes: aggregated.total_likes,
+      comments: aggregated.total_comments,
+      views: aggregated.total_views,
+      engagement_rate: ytEngagementRate,
+      last_synced_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,platform,platform_user_id" });
 
     return new Response(JSON.stringify({
       success: true,

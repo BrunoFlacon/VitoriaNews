@@ -32,7 +32,7 @@ export const SecurityTab = memo(({ profile, profileData, setProfileData }: Secur
           </div>
           <div className="space-y-4 pl-14">
             <div className="space-y-1.5">
-              <Input type="email" placeholder="Novo endereço de e-mail" className="bg-background max-w-md" />
+              <Input id="security-new-email" name="new_email" type="email" autoComplete="email" placeholder="Novo endereço de e-mail" className="bg-background max-w-md" />
             </div>
             <Button type="button" variant="secondary" onClick={() => toast({ title: 'Atenção', description: 'Por motivos de segurança, a troca de e-mail requer confirmação por link enviado ao endereço atual.' })}>
               Solicitar Alteração
@@ -51,10 +51,10 @@ export const SecurityTab = memo(({ profile, profileData, setProfileData }: Secur
           <form className="space-y-4 pl-14" autoComplete="on">
             <input type="text" name="username" value={profileData.email || ""} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
             <div className="space-y-1.5">
-              <Input type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
+              <Input id="security-current-password" name="current_password" type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
             </div>
             <div className="space-y-1.5">
-              <Input type="password" placeholder="Nova senha" autoComplete="new-password" className="bg-background max-w-md" />
+              <Input id="security-new-password" name="new_password" type="password" placeholder="Nova senha" autoComplete="new-password" className="bg-background max-w-md" />
             </div>
             <Button type="button" variant="secondary" onClick={() => toast({ title: 'Recurso Indisponível', description: 'Por favor, recupere sua senha na tela de login caso precise alterá-la no momento.', variant: 'destructive' })}>
               Atualizar Senha

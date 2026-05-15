@@ -101,35 +101,44 @@ export const SEOTab = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">URL Base (Domínio)</label>
+            <label htmlFor="site-url" className="text-xs font-bold uppercase tracking-wider text-muted-foreground cursor-pointer">URL Base (Domínio)</label>
             <Input 
+              id="site-url"
+              name="site_url"
               value={settings.site_url || ""} 
               onChange={(e) => setSettings({ ...settings, site_url: e.target.value })} 
               className="bg-muted/30"
               placeholder="https://suaradio.com.br"
+              autoComplete="url"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Título (Title Tag) - Max 60 chars</label>
+            <label htmlFor="seo-title" className="text-xs font-bold uppercase tracking-wider text-muted-foreground cursor-pointer">Título (Title Tag) - Max 60 chars</label>
             <Input 
+              id="seo-title"
+              name="seo_title"
               value={settings.seo_title || ""} 
               onChange={(e) => setSettings({ ...settings, seo_title: e.target.value })} 
               className="bg-muted/30"
               placeholder="Novo Portal - A Redação Multimídia"
               maxLength={65}
+              autoComplete="organization"
             />
             <div className="text-right text-[10px] text-muted-foreground">{(settings.seo_title || "").length} / 60</div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Descrição (Description Tag) - Max 160 chars</label>
+            <label htmlFor="seo-description" className="text-xs font-bold uppercase tracking-wider text-muted-foreground cursor-pointer">Descrição (Description Tag) - Max 160 chars</label>
             <Textarea 
+              id="seo-description"
+              name="seo_description"
               value={settings.seo_description || ""} 
               onChange={(e) => setSettings({ ...settings, seo_description: e.target.value })} 
               className="bg-muted/30 resize-none h-24"
               placeholder="Acompanhe as últimas notícias, análises de precisão e podcasts exclusivos..."
               maxLength={160}
+              autoComplete="off"
             />
             <div className="text-right text-[10px] text-muted-foreground">{(settings.seo_description || "").length} / 160</div>
           </div>

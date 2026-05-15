@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import * as SupabaseLib from "@/integrations/supabase/client";
+import { safeInvoke } from "@/utils/supabase-utils";
 
 // Ensure supabase is available even if HMR acts up
 const supabase = SupabaseLib.supabase;
@@ -108,8 +109,9 @@ export const DateTimeWeather = () => {
       if (!location || cancelled) return;
 
       try {
-        const { data, error } = await supabase.functions.invoke('get-weather', {
-          body: { lat: location.lat, lon: location.lon }
+        const { data, error } = await safeInvoke('get-weather', {
+          body: { lat: location.lat, lon: location.lon },
+          timeoutMs: 15000
         });
 
         if (error) throw error;
@@ -193,7 +195,7 @@ export const DateTimeWeather = () => {
   const formattedTime = time.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
   return (
-    <div className="w-full flex flex-col h-[40px] md:h-[42px] overflow-hidden" style={{ contain: 'layout style paint' }}>
+    <div className="w-full flex flex-col overflow-hidden" style={{ contain: 'layout style' }}>
       <AnimatePresence>
         {weather?.alert && (
           <motion.div
@@ -213,7 +215,7 @@ export const DateTimeWeather = () => {
       <motion.div 
         initial={{ opacity: 0, y: -5 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between gap-2 px-4 py-0.5 bg-background/40 backdrop-blur-md border-b border-white/5 w-full overflow-hidden shrink-0 z-30 h-full"
+        className="flex items-center justify-center md:justify-between gap-2 py-0 w-full overflow-hidden shrink-0 z-30 pr-[4px]"
       >
         <div className="flex items-center gap-4 md:gap-6">
           <div className="flex items-center gap-3">

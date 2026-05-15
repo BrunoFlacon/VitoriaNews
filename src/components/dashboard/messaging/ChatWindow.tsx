@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from "react";
-import { cn } from "@/lib/utils";
+import { cn, getWhatsAppMediaUrl } from "@/lib/utils";
 import { 
   Send, MoreHorizontal, Search, RefreshCw, X, Edit, Trash2, MessageCircle, 
   User, Paperclip, Image, Video, Mic, MapPin, CheckCircle2, ChevronLeft 
@@ -80,7 +80,12 @@ export const ChatWindow = ({
             onClick={() => onOpenInfo(activeChat)}
           >
             {activeChat.photoUrl ? (
-              <SafeImage src={activeChat.photoUrl} className="w-full h-full object-cover" />
+              <SafeImage 
+                src={activeChat.photoUrl} 
+                alt={activeChat.name}
+                className="w-full h-full object-cover" 
+                isWhatsAppImage={activeChat.photoUrl?.includes('whatsapp.net') || activeChat.platform === 'whatsapp'}
+              />
             ) : <User className={cn("w-6 h-6", styles.accent)} />}
           </div>
           <div>
@@ -186,6 +191,25 @@ export const ChatWindow = ({
                   isSelf ? cn(msgStyles.bubbleSelf, "rounded-tr-none") : cn(msgStyles.bubbleOther, "rounded-tl-none")
                 )}>
                   <p className="leading-relaxed font-medium whitespace-pre-wrap">{msg.content}</p>
+                  
+                  {/* Media Content */}
+                  {msg.metadata?.media_id && msg.platform === 'whatsapp' && (
+                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                      {msg.metadata.media_type === 'image' ? (
+                        <SafeImage 
+                          src={getWhatsAppMediaUrl(msg.metadata.media_id, msg.user_id)} 
+                          alt="Mídia"
+                          className="max-h-[300px] w-full object-contain"
+                        />
+                      ) : (
+                        <div className="p-3 flex items-center gap-2 text-xs opacity-70">
+                          <Paperclip className="w-4 h-4" />
+                          <span>Mídia ({msg.metadata.media_type})</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-end gap-1.5 mt-1 opacity-40 text-[9px] font-bold uppercase">
                     <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     {isSelf && <CheckCircle2 className="w-2.5 h-2.5" />}

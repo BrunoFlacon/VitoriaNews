@@ -54,10 +54,32 @@
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary/20;
     font-family: 'Inter', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-top: env(safe-area-inset-top);
+  }
+
+  html {
+    height: -webkit-fill-available;
+    scroll-behavior: smooth;
   }
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-display;
+  }
+
+  /* Prevent text selection on long-press for nav and buttons */
+  button, 
+  nav, 
+  .sidebar-item-active, 
+  [role="button"] {
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
   }
 }
 
@@ -90,6 +112,11 @@
     scrollbar-width: none !important;
   }
 
+  /* Custom visibility override for muted text */
+  .text-muted-foreground\/40 {
+    color: hsl(215deg 20% 55%) !important;
+  }
+
   .scrollbar-auto-hide {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--border)) transparent;
@@ -111,5 +138,9 @@
   .scrollbar-hide {
     -ms-overflow-style: none; /* IE and Edge */
     scrollbar-width: none; /* Firefox */
+  }
+
+  .search-highlight b {
+    @apply text-primary font-bold bg-primary/10 px-0.5 rounded-sm;
   }
 }

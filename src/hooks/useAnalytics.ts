@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { safeInvoke } from '@/utils/supabase-utils';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 
@@ -112,7 +113,7 @@ export interface AnalyticsData {
   dataSource: 'real' | 'seeded';
 }
 
-export function useAnalytics() {
+export function useAnalytics(options: { enabled?: boolean } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -170,54 +171,27 @@ export function useAnalytics() {
       throw new Error("No user available for query");
     }
 
-      let retries = 2;
-      let lastError: any = null;
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Sessão expirada. Faça login novamente.");
+    setAnalyticsErrorInfo(null);
+    
+    // Use safeInvoke with a generous 45s timeout for analytics calculation
+    const { data: aData, error: aErr } = await safeInvoke('get-analytics', {
+      body: { period, platform, type: postType, source },
+      timeoutMs: 45000
+    });
 
-      setAnalyticsErrorInfo(null);
-      
-      while (retries >= 0) {
-        try {
-          const { data: aData, error: aErr } = await supabase.functions.invoke('get-analytics', {
-            method: 'POST',
-            body: { period, platform, type: postType, source }
-          });
-
-          if (aErr) {
-            lastError = aErr;
-            if (retries > 0) {
-              console.warn(`[useAnalytics] Request failed, retrying... (${retries} retries left)`);
-              await new Promise(r => setTimeout(r, 1200 * (3 - retries)));
-              retries--;
-              continue;
-            }
-            const msg = aErr.message || (aErr as any).detail || "Erro desconhecido";
-            setAnalyticsErrorInfo(msg);
-            throw new Error(msg);
-          }
-          
-          return aData as AnalyticsData;
-        } catch (err: any) {
-          lastError = err;
-          if (retries > 0) {
-            console.warn(`[useAnalytics] Error, retrying... (${retries} retries left)`, err.message?.substring(0, 80));
-            await new Promise(r => setTimeout(r, 1500));
-            retries--;
-            continue;
-          }
-          setAnalyticsErrorInfo(err.message);
-          throw err;
-        }
-      }
-      throw lastError || new Error("Falha na requisição de analytics após múltiplas tentativas");
+    if (aErr) {
+      const msg = aErr.message || "Falha ao carregar analytics";
+      setAnalyticsErrorInfo(msg);
+      throw aErr;
+    }
+    
+    return aData as AnalyticsData;
   };
 
   const { data, isLoading, refetch, isError } = useQuery<AnalyticsData, Error>({
     queryKey: ['analytics', user?.id, period, platform, postType, source],
     queryFn: fetchAnalyticsData,
-    enabled: !!user,
+    enabled: !!user && (options.enabled !== false),
     staleTime: 5 * 60 * 1000,    // considerar fresco por 5 minutos
     gcTime: 10 * 60 * 1000,      // manter em cache por 10 minutos
     retry: 1,
@@ -238,13 +212,15 @@ export function useAnalytics() {
   const syncMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("No user");
-      const { data, error } = await supabase.functions.invoke('collect-social-analytics', {
-        method: 'POST',
-        body: {}
-      });
+      
+      // Parallel sync for main social platforms
+      const [resSocial, resTwitter, resTelegram] = await Promise.allSettled([
+        safeInvoke('collect-social-analytics', { timeoutMs: 60000 }),
+        safeInvoke('sync-twitter', { timeoutMs: 30000 }),
+        safeInvoke('sync-telegram-chats', { body: { platform: "telegram" }, timeoutMs: 30000 })
+      ]);
 
-      if (error) throw error;
-      return data;
+      return { resSocial, resTwitter, resTelegram };
     },
     onSuccess: () => {
       toast({
@@ -268,8 +244,8 @@ export function useAnalytics() {
   const syncMetaAds = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("No user");
-      const { data, error } = await supabase.functions.invoke('collect-meta-ads-analytics', {
-        method: 'POST'
+      const { data, error } = await safeInvoke('collect-meta-ads-analytics', {
+        timeoutMs: 30000
       });
       if (error) throw error;
       return data;
@@ -294,8 +270,8 @@ export function useAnalytics() {
   const syncGoogleAnalytics = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("No user");
-      const { data, error } = await supabase.functions.invoke('collect-google-analytics', {
-        method: 'POST'
+      const { data, error } = await safeInvoke('collect-google-analytics', {
+        timeoutMs: 30000
       });
       if (error) throw error;
       return data;
@@ -319,8 +295,8 @@ export function useAnalytics() {
   const syncYouTubeAnalytics = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("No user");
-      const { data, error } = await supabase.functions.invoke('collect-youtube-analytics', {
-        method: 'POST'
+      const { data, error } = await safeInvoke('collect-youtube-analytics', {
+        timeoutMs: 30000
       });
       if (error) throw error;
       return data;
@@ -345,8 +321,9 @@ export function useAnalytics() {
   const syncTelegramChats = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error("No user");
-      const { data, error } = await supabase.functions.invoke("sync-telegram-chats", {
-        body: { platform: "telegram" }
+      const { data, error } = await safeInvoke("sync-telegram-chats", {
+        body: { platform: "telegram" },
+        timeoutMs: 30000
       });
       if (error) throw error;
       if (data && data.success === false) throw new Error(data.error || "Telegram sync failed");
@@ -355,7 +332,7 @@ export function useAnalytics() {
     onSuccess: (data) => {
       toast({
         title: "Telegram sincronizado",
-        description: `${data.synced || 0} chats atualizados.`,
+        description: `${data.accountsSynced || 0} chats atualizados.`,
       });
       queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
@@ -364,6 +341,32 @@ export function useAnalytics() {
     onError: (e: any) => {
       toast({
         title: "Erro Telegram",
+        description: e.message,
+        variant: "destructive",
+      });
+    }
+  });
+
+  const syncTwitter = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error("No user");
+      const { data, error } = await safeInvoke('sync-twitter', {
+        timeoutMs: 30000
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Twitter sincronizado",
+        description: "Dados do perfil e métricas atualizados.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Erro Twitter",
         description: e.message,
         variant: "destructive",
       });
@@ -388,5 +391,6 @@ export function useAnalytics() {
     syncGoogleAnalytics: () => syncGoogleAnalytics.mutate(),
     syncYouTubeAnalytics: () => syncYouTubeAnalytics.mutate(),
     syncTelegramChats: () => syncTelegramChats.mutate(),
+    syncTwitter: () => syncTwitter.mutate(),
   };
 }

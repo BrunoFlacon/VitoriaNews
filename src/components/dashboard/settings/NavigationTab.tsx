@@ -180,9 +180,12 @@ export const NavigationTab = () => {
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">{item.key}</p>
                 <Input 
+                  id={`nav-item-${item.key}`}
+                  name={`nav_item_${item.key}`}
                   value={item.value} 
                   onChange={(e) => updateNavItem(index, { value: e.target.value })}
                   className="h-8 bg-transparent border-none p-0 focus-visible:ring-0 font-bold text-sm"
+                  autoComplete="off"
                 />
               </div>
 
@@ -228,19 +231,25 @@ export const NavigationTab = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Nome do Menu</Label>
+              <Label htmlFor="new-nav-value">Nome do Menu</Label>
               <Input 
+                id="new-nav-value"
+                name="new_nav_value"
                 placeholder="Ex: Minha Nova Página" 
                 value={newLink.value}
                 onChange={(e) => setNewLink({ ...newLink, value: e.target.value })}
+                autoComplete="off"
               />
             </div>
             <div className="space-y-2">
-              <Label>ID Único (Chave Técnica)</Label>
+              <Label htmlFor="new-nav-key">ID Único (Chave Técnica)</Label>
               <Input 
+                id="new-nav-key"
+                name="new_nav_key"
                 placeholder="Ex: my_new_page" 
                 value={newLink.key}
                 onChange={(e) => setNewLink({ ...newLink, key: e.target.value })}
+                autoComplete="off"
               />
             </div>
           </div>

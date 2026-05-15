@@ -12,7 +12,9 @@ export const SystemFooter = () => {
           <p className="flex items-center gap-1.5 order-2 md:order-1 whitespace-nowrap">
             © 2026 <span className="text-muted-foreground/70">{settings?.platform_name || "Vitória Net"}</span>
             <span className="mx-1 opacity-30">•</span>
-            Desenvolvido com <span className="text-red-500 animate-pulse">❤️</span> por <Link to="/profile/bruno-flacon" className="text-muted-foreground/60 hover:text-foreground hover:underline transition-all">Bruno Flacon</Link>
+            <span className="md:hidden">Criado</span>
+            <span className="hidden md:inline">Desenvolvido com</span>
+            <span className="text-red-500 animate-pulse ml-1">❤️</span> por <Link to="/profile/bruno-flacon" className="text-muted-foreground/60 hover:text-foreground hover:underline transition-all">Bruno Flacon</Link>
           </p>
           
           <div className="flex items-center justify-center flex-wrap gap-4 md:gap-6 order-1 md:order-2">

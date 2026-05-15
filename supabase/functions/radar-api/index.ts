@@ -52,39 +52,54 @@ serve(async (req: Request) => {
     let data: any = null;
     let error: any = null;
 
+    console.log(`[radar-api] Processing path: ${path} for user: ${req.headers.get('Authorization') ? 'Token Present' : 'No Token'}`);
+
     switch (path) {
       case 'intelligence':
       case 'sync-intelligence': {
+          console.log('[radar-api] Intelligence requested');
           const { discoverTrends } = await import('../_shared/automation/trend-discovery.ts');
           
           const authHeader = req.headers.get('Authorization') || '';
           const token = authHeader.replace('Bearer ', '');
           
           if (!token) {
+              console.warn('[radar-api] Intelligence: Missing token');
               return new Response(JSON.stringify({ error: 'Missing token' }), { 
                   status: 401, 
                   headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
               });
           }
 
+          console.log('[radar-api] Verifying token...');
           const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
           if (authError || !user) {
+              console.error('[radar-api] Auth error:', authError);
               return new Response(JSON.stringify({ error: 'Unauthorized', details: authError }), { 
                   status: 401, 
                   headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
               });
           }
 
-          await discoverTrends(supabaseClient, user.id);
+          console.log(`[radar-api] Starting trend discovery for user: ${user.id}`);
+          try {
+            await discoverTrends(supabaseClient, user.id);
+          } catch (discoverErr: any) {
+            console.error('[radar-api] discoverTrends failed:', discoverErr);
+            // Don't fail the whole request, try to return whatever trends we have
+          }
           
-          // After discovery, fetch the latest trends to return to the UI
+          console.log('[radar-api] Fetching trends from DB...');
           const { data: trends, error: fetchError } = await supabaseClient
             .from('trends')
             .select('*')
             .order('detected_at', { ascending: false })
             .limit(50);
             
-          if (fetchError) throw fetchError;
+          if (fetchError) {
+              console.error('[radar-api] DB fetch error:', fetchError);
+              throw fetchError;
+          }
           data = trends;
           break;
       }
@@ -106,6 +121,7 @@ serve(async (req: Request) => {
         break;
 
       default:
+        console.warn(`[radar-api] Path not found: ${path}`);
         return new Response(JSON.stringify({ error: `Not found: ${path}` }), { 
             status: 404, 
             headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -113,22 +129,26 @@ serve(async (req: Request) => {
     }
 
     if (error) {
+      console.error(`[radar-api] Database error for ${path}:`, error);
       return new Response(JSON.stringify({ error }), { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
+    console.log(`[radar-api] Success for path: ${path}`);
     return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
     });
 
   } catch (err: any) {
-    console.error('[radar-api] Fatal error:', err.message);
-    return new Response(JSON.stringify({ error: err.message }), {
+    console.error('[radar-api] FATAL ERROR:', err.message, err.stack);
+    return new Response(JSON.stringify({ error: err.message, stack: err.stack }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500
     });
   }
+
+
 });

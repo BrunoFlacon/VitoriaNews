@@ -67,6 +67,9 @@ export const SubscribersView = () => {
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input 
+          id="subscribers-search"
+          name="subscribers-search"
+          autoComplete="off"
           placeholder="Pesquisar por nome, telefone ou email..." 
           className="pl-12 h-12 rounded-2xl bg-white/5 border-white/10"
           value={search}

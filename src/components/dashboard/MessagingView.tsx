@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   MessageCircle, Plus, Trash2, Send, SendHorizontal, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw, Megaphone, Info, BarChart3, Copy, UserPlus, Link2, MapPin
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { safeInvoke } from "@/utils/supabase-utils";
 import { useToast } from "@/hooks/use-toast";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
@@ -563,9 +564,10 @@ export const MessagingView = () => {
 
       // 3. Call Edge Function to sync google contacts (token fetching managed entirely on the backend)
       const currentSession = (await supabase.auth.getSession()).data.session;
-      const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-google-contacts', {
+      const { data: syncResult, error: syncError } = await safeInvoke('sync-google-contacts', {
         body: { members: memberData },
-        headers: currentSession ? { Authorization: `Bearer ${currentSession.access_token}` } : undefined
+        headers: currentSession ? { Authorization: `Bearer ${currentSession.access_token}` } : undefined,
+        timeoutMs: 45000
       });
       
       if (syncError || !syncResult?.success) {
@@ -599,8 +601,9 @@ export const MessagingView = () => {
       // Determine correct edge function
       const functionName = platform === 'telegram' ? 'sync-telegram-chats' : 'sync-messaging-channels';
 
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body: { platform }
+      const { data, error } = await safeInvoke(functionName, {
+        body: { platform },
+        timeoutMs: 40000
       });
 
       if (error) {
@@ -1160,8 +1163,9 @@ export const MessagingView = () => {
               postId: data.id 
             };
             
-            const { data: resultData, error: funcError } = await supabase.functions.invoke('publish-post', {
-              body: chanPayload
+            const { data: resultData, error: funcError } = await safeInvoke('publish-post', {
+              body: chanPayload,
+              timeoutMs: 30000
             });
 
             if (funcError || !resultData?.success) {
@@ -1306,8 +1310,9 @@ export const MessagingView = () => {
       if (ch) payload.chatId = ch.channel_id;
     }
 
-    const { data: resultData, error: funcError } = await supabase.functions.invoke('publish-post', {
-      body: payload
+    const { data: resultData, error: funcError } = await safeInvoke('publish-post', {
+      body: payload,
+      timeoutMs: 30000
     });
 
     if (funcError || !resultData?.success) {
@@ -1391,7 +1396,7 @@ export const MessagingView = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-muted/50 p-1 rounded-xl">
+        <TabsList className="bg-muted/50 p-1 rounded-xl scrollbar-none overflow-x-auto justify-start md:justify-center">
           <TabsTrigger value="channels" className="rounded-lg data-[state=active]:bg-background gap-2">
             <Hash className="w-4 h-4" /> Canais
           </TabsTrigger>
@@ -1652,10 +1657,13 @@ export const MessagingView = () => {
                         <div className={cn("px-4 py-2 border-b border-white/5", styles.chatBg)}>
                           <div className="flex items-center gap-2">
                             <Input 
+                              id="chat-search"
+                              name="chat_search"
                               value={chatSearchQuery} 
                               onChange={e => setChatSearchQuery(e.target.value)} 
                               placeholder="Pesquisar nesta conversa..."
                               className="h-8 text-sm bg-muted/30 border-white/10 rounded-xl"
+                              aria-label="Pesquisar nesta conversa"
                               autoFocus
                             />
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg shrink-0" onClick={() => { setChatSearchOpen(false); setChatSearchQuery(""); }}>
@@ -1723,11 +1731,14 @@ export const MessagingView = () => {
                           
                           <div className="flex-1 relative">
                             <Textarea
+                              id="message-reply"
+                              name="message_reply"
                               placeholder="Digite uma mensagem..."
                               value={replyMessage}
                               onChange={(e) => setReplyMessage(e.target.value)}
                               className="min-h-[44px] max-h-[200px] resize-none py-3 pr-12 bg-muted/30 border-border/50 rounded-2xl focus:ring-primary/30"
                               disabled={sendingReply}
+                              aria-label="Responder mensagem"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                   e.preventDefault();
@@ -1848,7 +1859,7 @@ export const MessagingView = () => {
                                   <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-background shadow-md bg-muted/30">
                                     {ch.profile_picture ? (
                                       <SafeImage 
-                                        src={ch.profile_picture} 
+                                        src={getProxyUrl(ch.profile_picture)} 
                                         alt={ch.channel_name} 
                                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
                                       />
@@ -2002,7 +2013,7 @@ export const MessagingView = () => {
                             selected ? "bg-primary/10 border-primary/40 shadow-sm" : "hover:bg-muted/40 border-transparent")}>
                           <div className="relative shrink-0">
                             {ch.profile_picture ? (
-                              <SafeImage src={ch.profile_picture} alt={ch.channel_name} className="w-8 h-8 rounded-lg object-cover border border-border" />
+                              <SafeImage src={getProxyUrl(ch.profile_picture)} alt={ch.channel_name} className="w-8 h-8 rounded-lg object-cover border border-border" />
                             ) : (
                               <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", platform?.color || "bg-muted")}>
                                 {PIcon ? <PIcon className="w-4 h-4 text-white" /> : <Hash className="w-4 h-4 text-muted-foreground" />}
@@ -2029,9 +2040,9 @@ export const MessagingView = () => {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Plataforma</label>
+                  <label htmlFor="compose-platform" className="text-sm font-medium mb-1 block">Plataforma</label>
                   <Select value={composeIndividualPlatform} onValueChange={setComposeIndividualPlatform}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="compose-platform"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="whatsapp">WhatsApp</SelectItem>
                       <SelectItem value="telegram">Telegram</SelectItem>
@@ -2039,21 +2050,39 @@ export const MessagingView = () => {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Número / Username</label>
-                  <Input value={composeIndividualPhone} onChange={e => setComposeIndividualPhone(e.target.value)}
-                    placeholder={composeIndividualPlatform === "whatsapp" ? "+55 11 99999-9999" : "@username"} />
+                  <label htmlFor="compose-contact" className="text-sm font-medium mb-1 block">Número / Username</label>
+                  <Input 
+                    id="compose-contact"
+                    name="compose_contact"
+                    value={composeIndividualPhone} 
+                    onChange={e => setComposeIndividualPhone(e.target.value)}
+                    placeholder={composeIndividualPlatform === "whatsapp" ? "+55 11 99999-9999" : "@username"} 
+                  />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Nome (opcional)</label>
-                  <Input value={composeIndividualName} onChange={e => setComposeIndividualName(e.target.value)} placeholder="Nome do contato" />
+                  <label htmlFor="compose-name" className="text-sm font-medium mb-1 block">Nome (opcional)</label>
+                  <Input 
+                    id="compose-name"
+                    name="compose_name"
+                    value={composeIndividualName} 
+                    onChange={e => setComposeIndividualName(e.target.value)} 
+                    placeholder="Nome do contato" 
+                  />
                 </div>
               </div>
             )}
 
             <div className="mt-4 space-y-4">
               <div>
-                <label className="text-sm font-medium mb-1 block">Mensagem</label>
-                <Textarea value={composeMessage} onChange={e => setComposeMessage(e.target.value)} placeholder="Digite sua mensagem..." rows={4} />
+                <label htmlFor="compose-message" className="text-sm font-medium mb-1 block">Mensagem</label>
+                <Textarea 
+                  id="compose-message"
+                  name="compose_message"
+                  value={composeMessage} 
+                  onChange={e => setComposeMessage(e.target.value)} 
+                  placeholder="Digite sua mensagem..." 
+                  rows={4} 
+                />
               </div>
 
               {/* Attachments preview */}
@@ -2101,8 +2130,15 @@ export const MessagingView = () => {
 
                 <div className="flex-1" />
 
-                <Input type="datetime-local" value={composeScheduledAt} onChange={e => setComposeScheduledAt(e.target.value)}
-                  className="w-auto h-8 text-xs bg-transparent border-0 focus-visible:ring-0" />
+                <Input 
+                  id="compose-schedule"
+                  name="compose_schedule"
+                  type="datetime-local" 
+                  value={composeScheduledAt} 
+                  onChange={e => setComposeScheduledAt(e.target.value)}
+                  className="w-auto h-8 text-xs bg-transparent border-0 focus-visible:ring-0" 
+                  aria-label="Agendar para"
+                />
               </div>
 
               {/* Action buttons */}
@@ -2127,7 +2163,15 @@ export const MessagingView = () => {
             <div className="flex flex-wrap gap-3 items-center">
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input value={historySearch} onChange={e => setHistorySearch(e.target.value)} placeholder="Buscar mensagens..." className="pl-10" />
+                <Input 
+                  id="history-search"
+                  name="history_search"
+                  value={historySearch} 
+                  onChange={e => setHistorySearch(e.target.value)} 
+                  placeholder="Buscar mensagens..." 
+                  className="pl-10" 
+                  aria-label="Buscar no histórico"
+                />
               </div>
               <div className="flex gap-1">
                 {[{ id: "all", label: "Todas" }, { id: "draft", label: "Rascunhos" }, { id: "scheduled", label: "Agendadas" }, { id: "sent", label: "Enviadas" }, { id: "failed", label: "Falhas" }].map(f => (
@@ -2161,7 +2205,7 @@ export const MessagingView = () => {
                       <div className="flex items-start gap-3">
                         <div className="relative shrink-0">
                           {ch?.profile_picture ? (
-                            <SafeImage src={ch.profile_picture} alt={ch.channel_name} className="w-12 h-12 rounded-xl object-cover border border-border shadow-sm" />
+                            <SafeImage src={getProxyUrl(ch.profile_picture)} alt={ch.channel_name} className="w-12 h-12 rounded-xl object-cover border border-border shadow-sm" />
                           ) : (
                             <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", platform?.color || "bg-muted")}>
                               {PIcon ? <PIcon className="w-6 h-6 text-white" /> : <MessageCircle className="w-6 h-6 text-muted-foreground" />}
@@ -2255,9 +2299,9 @@ export const MessagingView = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">Plataforma</label>
+              <label htmlFor="channel-platform" className="text-sm font-medium mb-1 block">Plataforma</label>
               <Select value={formPlatform} onValueChange={(v) => { setFormPlatform(v); setFormChannelType(messagingPlatformConfigs.find(p => p.id === v)?.types[0] || "group"); }}>
-                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectTrigger id="channel-platform"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {messagingPlatformConfigs.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -2267,16 +2311,22 @@ export const MessagingView = () => {
             </div>
             {formPlatform === "custom" && (
               <div>
-                <label className="text-sm font-medium mb-1 block">Nome da rede</label>
-                <Input value={formCustomPlatform} onChange={e => setFormCustomPlatform(e.target.value)} placeholder="Ex: Discord, Slack..." />
+                <label htmlFor="custom-platform" className="text-sm font-medium mb-1 block">Nome da rede</label>
+                <Input 
+                  id="custom-platform"
+                  name="custom_platform"
+                  value={formCustomPlatform} 
+                  onChange={e => setFormCustomPlatform(e.target.value)} 
+                  placeholder="Ex: Discord, Slack..." 
+                />
               </div>
             )}
             {formPlatform && (
               <>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Tipo</label>
+                  <label htmlFor="channel-type" className="text-sm font-medium mb-1 block">Tipo</label>
                   <Select value={formChannelType} onValueChange={setFormChannelType}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="channel-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {availableTypes.map(t => {
                         const ct = channelTypes.find(c => c.id === t);
@@ -2286,16 +2336,35 @@ export const MessagingView = () => {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Nome do canal/grupo</label>
-                  <Input value={formChannelName} onChange={e => setFormChannelName(e.target.value)} placeholder="Nome do grupo ou canal" />
+                  <label htmlFor="channel-name" className="text-sm font-medium mb-1 block">Nome do canal/grupo</label>
+                  <Input 
+                    id="channel-name"
+                    name="channel_name"
+                    value={formChannelName} 
+                    onChange={e => setFormChannelName(e.target.value)} 
+                    placeholder="Nome do grupo ou canal" 
+                  />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">ID ou link (opcional)</label>
-                  <Input value={formChannelId} onChange={e => setFormChannelId(e.target.value)} placeholder="Ex: https://chat.whatsapp.com/... ou @canal" />
+                  <label htmlFor="channel-id" className="text-sm font-medium mb-1 block">ID ou link (opcional)</label>
+                  <Input 
+                    id="channel-id"
+                    name="channel_id"
+                    value={formChannelId} 
+                    onChange={e => setFormChannelId(e.target.value)} 
+                    placeholder="Ex: https://chat.whatsapp.com/... ou @canal" 
+                  />
                 </div>
                 <div>
-                  <label className="text-sm font-medium mb-1 block">Membros (opcional)</label>
-                  <Input type="number" value={formMembersCount} onChange={e => setFormMembersCount(e.target.value)} placeholder="0" />
+                  <label htmlFor="members-count" className="text-sm font-medium mb-1 block">Membros (opcional)</label>
+                  <Input 
+                    id="members-count"
+                    name="members_count"
+                    type="number" 
+                    value={formMembersCount} 
+                    onChange={e => setFormMembersCount(e.target.value)} 
+                    placeholder="0" 
+                  />
                 </div>
               </>
             )}
@@ -2317,13 +2386,19 @@ export const MessagingView = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium mb-1 block">Conteúdo</label>
-              <Textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={4} />
+              <label htmlFor="edit-message-content" className="text-sm font-medium mb-1 block">Conteúdo</label>
+              <Textarea 
+                id="edit-message-content"
+                name="edit_message_content"
+                value={editContent} 
+                onChange={e => setEditContent(e.target.value)} 
+                rows={4} 
+              />
             </div>
             <div>
-              <label className="text-sm font-medium mb-1 block">Status</label>
+              <label htmlFor="edit-message-status" className="text-sm font-medium mb-1 block">Status</label>
               <Select value={editStatus} onValueChange={setEditStatus}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger id="edit-message-status"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="draft">Rascunho</SelectItem>
                   <SelectItem value="scheduled">Agendada</SelectItem>
@@ -2333,8 +2408,14 @@ export const MessagingView = () => {
             </div>
             {editStatus === "scheduled" && (
               <div>
-                <label className="text-sm font-medium mb-1 block">Agendar para</label>
-                <Input type="datetime-local" value={editScheduledAt} onChange={e => setEditScheduledAt(e.target.value)} />
+                <label htmlFor="edit-message-schedule" className="text-sm font-medium mb-1 block">Agendar para</label>
+                <Input 
+                  id="edit-message-schedule"
+                  name="edit_message_schedule"
+                  type="datetime-local" 
+                  value={editScheduledAt} 
+                  onChange={e => setEditScheduledAt(e.target.value)} 
+                />
               </div>
             )}
           </div>

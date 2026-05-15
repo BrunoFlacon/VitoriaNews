@@ -44,37 +44,37 @@ export const StatsCard = memo(({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.5 }}
       className={cn(
-        "glass-card rounded-2xl p-6 bg-gradient-to-br border",
+        "glass-card rounded-2xl p-3 md:p-4 bg-gradient-to-br border",
         colorStyles[color]
       )}
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-muted-foreground text-sm font-medium">{title}</p>
-          <p className="text-3xl font-display font-bold mt-2">{value}</p>
+          <p className="text-muted-foreground text-[10px] md:text-xs font-medium">{title}</p>
+          <p className="text-lg md:text-2xl font-display font-bold mt-1">{value}</p>
           {trend !== undefined && (
-            <div className="flex items-center gap-1 mt-2">
+            <div className="flex items-center gap-1 mt-1 md:mt-2">
               {isPositive ? (
-                <TrendingUp className="w-4 h-4 text-green-500" />
+                <TrendingUp className="w-3 h-3 md:w-4 md:h-4 text-green-500" />
               ) : (
-                <TrendingDown className="w-4 h-4 text-red-500" />
+                <TrendingDown className="w-3 h-3 md:w-4 md:h-4 text-red-500" />
               )}
               <span className={cn(
-                "text-sm font-medium",
+                "text-[10px] md:text-sm font-medium",
                 isPositive ? "text-green-500" : "text-red-500"
               )}>
                 {isPositive ? "+" : ""}{trend}%
               </span>
               {trendLabel && (
-                <span className="text-xs text-muted-foreground ml-1">
+                <span className="text-[10px] md:text-xs text-muted-foreground ml-1 truncate">
                   {trendLabel}
                 </span>
               )}
             </div>
           )}
         </div>
-        <div className={cn("p-3 rounded-xl", iconColors[color])}>
-          <Icon className="w-6 h-6" />
+        <div className={cn("p-2 md:p-3 rounded-xl", iconColors[color])}>
+          <Icon className="w-4 h-4 md:w-6 md:h-6" />
         </div>
       </div>
     </motion.div>

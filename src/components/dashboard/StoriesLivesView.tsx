@@ -541,7 +541,7 @@ export const StoriesLivesView = () => {
                     {memories.map(mem => (
                       <div key={mem.id} className="relative w-32 aspect-[9/16] shrink-0 rounded-xl overflow-hidden group cursor-pointer border border-pink-500/30">
                         {mem.thumbnail_url ? (
-                          <img src={mem.thumbnail_url} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
+                          <img src={mem.thumbnail_url} className="w-full h-full object-cover transition-transform group-hover:scale-110" referrerPolicy="no-referrer" />
                         ) : (
                           <div className="w-full h-full bg-muted flex items-center justify-center"><Radio className="w-8 h-8 text-muted-foreground" /></div>
                         )}
@@ -588,7 +588,7 @@ export const StoriesLivesView = () => {
                     className="relative aspect-[9/16] rounded-2xl overflow-hidden glass-card border border-border group hover:border-primary/50 transition-all cursor-pointer"
                   >
                     {story.thumbnail_url ? (
-                      <img src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" />
+                      <img src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
                         <Radio className="w-8 h-8" />
@@ -797,7 +797,7 @@ export const StoriesLivesView = () => {
           <div className="space-y-4 pt-4">
             <div>
               <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Título da {createType === "story" ? "Story" : "Live"}</label>
-              <Input value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Dê um nome impactante..." className="rounded-xl border-muted" />
+              <Input id="story-title" name="story-title" autoComplete="off" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Dê um nome impactante..." className="rounded-xl border-muted" />
             </div>
             
             <div>
@@ -833,24 +833,24 @@ export const StoriesLivesView = () => {
                   <span className="text-xs font-bold">Postar nos Stories?</span>
                   <span className="text-[10px] text-muted-foreground">Avise seus seguidores quando estiver ao vivo</span>
                 </div>
-                <Checkbox checked={publishToStories} onCheckedChange={(v) => setPublishToStories(!!v)} />
+                <Checkbox id="publish-to-stories" name="publish-to-stories" checked={publishToStories} onCheckedChange={(v) => setPublishToStories(!!v)} />
               </div>
             )}
 
             <div>
               <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Descrição / Conteúdo</label>
-              <Textarea value={formContent} onChange={e => setFormContent(e.target.value)} placeholder="Opcional..." rows={2} className="rounded-xl border-muted resize-none" />
+              <Textarea id="story-content" name="story-content" autoComplete="off" value={formContent} onChange={e => setFormContent(e.target.value)} placeholder="Opcional..." rows={2} className="rounded-xl border-muted resize-none" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Data/Hora</label>
-                <Input type="datetime-local" value={formScheduledAt} onChange={e => setFormScheduledAt(e.target.value)} className="rounded-xl border-muted text-xs" />
+                <Input id="story-scheduled-at" name="story-scheduled-at" type="datetime-local" autoComplete="off" value={formScheduledAt} onChange={e => setFormScheduledAt(e.target.value)} className="rounded-xl border-muted text-xs" />
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Mídias (Vários para múltiplos Stories)</label>
                 <div className="flex flex-col gap-2">
-                  <input ref={multiFileInputRef} type="file" accept="image/*,video/*,audio/*" multiple onChange={handleMultipleUpload} className="hidden" />
+                  <input ref={multiFileInputRef} id="story-media-upload" name="story-media-upload" type="file" accept="image/*,video/*,audio/*" multiple onChange={handleMultipleUpload} className="hidden" />
                   <Button variant="outline" className="w-full h-12 border-dashed rounded-xl border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary" onClick={() => multiFileInputRef.current?.click()}>
                     <Plus className="w-4 h-4 mr-2" /> {uploadingThumb ? "Subindo arquivos..." : "Adicionar Fotos / Vídeos / Áudios"}
                   </Button>
@@ -859,7 +859,7 @@ export const StoriesLivesView = () => {
                     <div className="grid grid-cols-4 gap-2 mt-2">
                        {thumbnailUrls.map((url, i) => (
                          <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border group">
-                            <img src={url} className="w-full h-full object-cover" />
+                            <img src={url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             <button type="button" onClick={() => setThumbnailUrls(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
                               <X className="w-3 h-3 text-white" />
                             </button>

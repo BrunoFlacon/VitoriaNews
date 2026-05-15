@@ -354,8 +354,11 @@ export const PortalSettingsView = () => {
                      <Switch checked={portalConfig.portal_footer_visible} onCheckedChange={(val) => setPortalConfig({...portalConfig, portal_footer_visible: val})} />
                   </div>
                   <div className="space-y-1">
-                     <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Nome do Portal</label>
+                     <label htmlFor="portal-platform-name" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Nome do Portal</label>
                      <Input 
+                        id="portal-platform-name"
+                        name="platform_name"
+                        autoComplete="organization"
                         value={portalConfig.platform_name} 
                         onChange={(e) => setPortalConfig({...portalConfig, platform_name: e.target.value})} 
                         className="h-8 text-[10px] bg-background/50 font-bold" 
@@ -398,8 +401,10 @@ export const PortalSettingsView = () => {
                <span className="text-[10px] font-black uppercase tracking-widest text-primary">Controle de Acesso</span>
                <div className="space-y-3">
                   <div className="space-y-1">
-                     <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Nível de Visibilidade da Página</label>
+                     <label htmlFor="portal-page-visibility" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Nível de Visibilidade da Página</label>
                      <select 
+                       id="portal-page-visibility"
+                       name="page_visibility"
                        value={activePageData?.visibility_tier || 'public'}
                        onChange={async (e) => {
                           if (!activePage) return;
@@ -418,8 +423,11 @@ export const PortalSettingsView = () => {
                       </select>
                   </div>
                   <div className="space-y-1">
-                     <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">URL de Redirecionamento (WhatsApp/Telegram)</label>
+                     <label htmlFor="portal-redirect-url" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">URL de Redirecionamento (WhatsApp/Telegram)</label>
                      <Input 
+                        id="portal-redirect-url"
+                        name="redirect_url"
+                        autoComplete="url"
                         value={activePageData?.redirect_url || ''} 
                         onChange={async (e) => {
                            if (!activePage) return;
@@ -441,8 +449,11 @@ export const PortalSettingsView = () => {
                </span>
                <div className="space-y-3">
                   <div className="space-y-1">
-                     <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">WhatsApp Oficial</label>
+                     <label htmlFor="portal-whatsapp-link" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">WhatsApp Oficial</label>
                      <Input 
+                        id="portal-whatsapp-link"
+                        name="whatsapp_link"
+                        autoComplete="url"
                         value={portalConfig.whatsapp_link} 
                         onChange={(e) => setPortalConfig({...portalConfig, whatsapp_link: e.target.value})} 
                         className="h-8 text-[10px] bg-background/50 font-mono" 
@@ -450,8 +461,11 @@ export const PortalSettingsView = () => {
                      />
                   </div>
                   <div className="space-y-1">
-                     <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Telegram Oficial</label>
+                     <label htmlFor="portal-telegram-link" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Telegram Oficial</label>
                      <Input 
+                        id="portal-telegram-link"
+                        name="telegram_link"
+                        autoComplete="url"
                         value={portalConfig.telegram_link} 
                         onChange={(e) => setPortalConfig({...portalConfig, telegram_link: e.target.value})} 
                         className="h-8 text-[10px] bg-background/50 font-mono" 
@@ -625,8 +639,10 @@ export const PortalSettingsView = () => {
              
              <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin">
                 <div className="space-y-2">
-                   <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Tipo do Recurso</label>
+                   <label htmlFor="portal-block-type" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Tipo do Recurso</label>
                    <select 
+                     id="portal-block-type"
+                     name="block_type"
                      value={editingBlock.type} 
                      onChange={(e) => setEditingBlock({...editingBlock, type: e.target.value})}
                      className="w-full bg-background/50 border border-border rounded-xl h-9 px-3 text-xs font-bold"
@@ -638,8 +654,10 @@ export const PortalSettingsView = () => {
                 </div>
 
                  <div className="space-y-2">
-                   <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Visibilidade do Bloco</label>
+                   <label htmlFor="portal-block-visibility" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Visibilidade do Bloco</label>
                    <select 
+                     id="portal-block-visibility"
+                     name="block_visibility"
                      value={editingBlock.visibility_tier || 'public'} 
                      onChange={(e) => setEditingBlock({...editingBlock, visibility_tier: e.target.value})}
                      className="w-full bg-background/50 border border-border rounded-xl h-9 px-3 text-xs font-bold"
@@ -652,8 +670,11 @@ export const PortalSettingsView = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Configuração (JSON)</label>
+                  <label htmlFor="portal-block-content" className="text-[9px] font-bold uppercase text-muted-foreground ml-1">Configuração (JSON)</label>
                   <Textarea 
+                    id="portal-block-content"
+                    name="block_content"
+                    autoComplete="off"
                     value={typeof editingBlock.content === 'string' ? editingBlock.content : JSON.stringify(editingBlock.content, null, 2)} 
                     onChange={(e) => setEditingBlock({...editingBlock, content: e.target.value})}
                     className="min-h-[200px] text-[10px] font-mono bg-background/80 rounded-xl p-3"
@@ -678,8 +699,8 @@ export const PortalSettingsView = () => {
             <DialogDescription>Crie uma nova página institucional ou de conteúdo.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <Input placeholder="Título" value={newPageData.title} onChange={(e) => setNewPageData({...newPageData, title: e.target.value})} />
-            <Input placeholder="Slug (ex: news)" value={newPageData.slug} onChange={(e) => setNewPageData({...newPageData, slug: e.target.value})} />
+            <Input id="portal-new-page-title" name="new_page_title" autoComplete="off" placeholder="Título" value={newPageData.title} onChange={(e) => setNewPageData({...newPageData, title: e.target.value})} />
+            <Input id="portal-new-page-slug" name="new_page_slug" autoComplete="off" placeholder="Slug (ex: news)" value={newPageData.slug} onChange={(e) => setNewPageData({...newPageData, slug: e.target.value})} />
           </div>
           <DialogFooter>
             <Button onClick={handleAddPage} className="font-bold">Criar Página</Button>
@@ -694,8 +715,8 @@ export const PortalSettingsView = () => {
             <DialogDescription>Configure o título e descrição que aparecerão no Google e redes sociais.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <Input placeholder="Meta Title" value={seoData.title} onChange={(e) => setSeoData({...seoData, title: e.target.value})} />
-            <Textarea placeholder="Meta Description" value={seoData.description} onChange={(e) => setSeoData({...seoData, description: e.target.value})} />
+            <Input id="portal-seo-meta-title" name="seo_meta_title" autoComplete="off" placeholder="Meta Title" value={seoData.title} onChange={(e) => setSeoData({...seoData, title: e.target.value})} />
+            <Textarea id="portal-seo-meta-description" name="seo_meta_description" autoComplete="off" placeholder="Meta Description" value={seoData.description} onChange={(e) => setSeoData({...seoData, description: e.target.value})} />
           </div>
           <DialogFooter>
             <Button onClick={saveSEO} className="font-bold">Salvar SEO</Button>

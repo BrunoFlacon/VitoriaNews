@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, Clock, CheckCircle2, XCircle, Activity, Timer, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { safeInvoke } from "@/utils/supabase-utils";
+import { NetworkHealthIndicator } from "./NetworkHealthIndicator";
 
 interface CronJob {
   jobid: number;
@@ -28,16 +30,49 @@ interface CronRun {
 }
 
 export const CronMonitorView = () => {
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching, error: queryError } = useQuery({
     queryKey: ["cron-status"],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("cron-status");
-      if (error) throw error;
-      return data as { jobs: CronJob[]; runs: CronRun[] };
+      try {
+        const { data, error } = await safeInvoke("cron-status", { timeoutMs: 15000 });
+        if (error) {
+          // Se for erro de conexão/deploy em ambiente local, retornamos estado vazio "saudável"
+          // para não quebrar a UI conforme pedido do usuário
+          if (error.message.includes('request') || error.message.includes('CORS') || error.message.includes('404')) {
+            console.info("[CronMonitor] Edge Function offline, usando modo de espera silencioso.");
+            return { jobs: [], runs: [] };
+          }
+          throw error;
+        }
+        return data as { jobs: CronJob[]; runs: CronRun[] };
+      } catch (e) {
+        // Fallback final para evitar crash
+        return { jobs: [], runs: [] };
+      }
     },
-    refetchInterval: 30000,
-    staleTime: 10000,
+    staleTime: Infinity,
+    refetchInterval: false, // ZERO background polling
+    refetchOnWindowFocus: false, // Save resources when user is away
+    refetchOnReconnect: false,
+    retry: false,
+    retryOnMount: false,
   });
+
+  // Subscribe to Realtime updates to avoid polling
+  useEffect(() => {
+    const channel = supabase
+      .channel('cron-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'scheduled_posts' },
+        () => refetch()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refetch]);
 
   const jobs = data?.jobs || [];
   const runs = data?.runs || [];
@@ -66,16 +101,19 @@ export const CronMonitorView = () => {
             Acompanhe o status dos jobs automáticos (pg_cron), últimos runs e erros
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="gap-2"
-        >
-          <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-3">
+          <NetworkHealthIndicator />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="gap-2"
+          >
+            <RefreshCw className={cn("w-4 h-4", isFetching && "animate-spin")} />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -125,6 +163,52 @@ export const CronMonitorView = () => {
           </div>
         </Card>
       </div>
+
+      {queryError && (
+        <div className={cn(
+          "border rounded-xl p-4 flex items-center gap-3 text-sm transition-all",
+          (queryError as Error).message?.includes('request') 
+            ? "bg-amber-500/5 border-amber-500/20 text-amber-600" 
+            : "bg-red-500/10 border-red-500/30 text-red-500"
+        )}>
+          <AlertTriangle className="w-5 h-5 shrink-0" />
+          <div className="flex-1">
+            <p className="font-bold">
+              {(queryError as Error).message?.includes('request') ? "Serviço de Monitoramento Offline" : "Erro de Sincronização"}
+            </p>
+            <p className="opacity-80">
+              {(queryError as Error).message?.includes('request') 
+                ? "A Edge Function 'cron-status' não foi detectada. Verifique se o deploy foi realizado no Supabase." 
+                : ((queryError as Error).message || "Não foi possível carregar o status do Cron.")}
+            </p>
+          </div>
+          {(queryError as Error).message?.includes('request') && (
+             <div className="flex gap-2">
+               <Button 
+                 variant="ghost" 
+                 size="sm" 
+                 onClick={() => refetch()} 
+                 className="h-8 text-xs hover:bg-amber-500/10"
+               >
+                 Tentar novamente
+               </Button>
+             </div>
+          )}
+        </div>
+      )}
+
+      {/* Empty State / Success but no jobs */}
+      {!queryError && jobs.length === 0 && !isLoading && (
+        <div className="bg-muted/10 border border-dashed border-border rounded-xl p-8 flex flex-col items-center justify-center text-center gap-3">
+          <Clock className="w-8 h-8 text-muted-foreground/30" />
+          <div>
+            <p className="font-medium text-muted-foreground">Nenhum agendamento ativo</p>
+            <p className="text-xs text-muted-foreground/60 max-w-xs mx-auto mt-1">
+              O sistema de automação está pronto, mas não existem tarefas (jobs) configuradas no momento.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Jobs List */}
       <Card className="glass-card border-border overflow-hidden">

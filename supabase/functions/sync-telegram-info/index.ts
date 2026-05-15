@@ -85,19 +85,13 @@ serve(async (req: Request) => {
       // Silent fail for photo
     }
 
-    const { error: upsertError } = await supabase.from("social_accounts").upsert({
+    const { error: upsertError } = await supabase.from("social_connections").upsert({
       user_id: userId,
       platform: "telegram",
       platform_user_id: botInfo.id.toString(),
-      username: botInfo.username,
-      display_name: botInfo.first_name,
-      profile_picture: profilePicture,
-      followers: 0, // Bots don't have followers in the same sense, but we can track chats later
-      posts_count: 0,
-      views: 0,
-      likes: 0,
-      shares: 0,
-      is_active: true,
+      page_name: botInfo.username,
+      profile_image_url: profilePicture,
+      is_connected: true,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,platform,platform_user_id" });
 

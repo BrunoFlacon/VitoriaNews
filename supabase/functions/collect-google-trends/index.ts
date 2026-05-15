@@ -68,23 +68,49 @@ serve(async (req: Request) => {
 
     // Salva no banco de dados
     if (allTrends.length > 0) {
-      const { error } = await supabase.from("trends" as any).upsert(
-        allTrends.map(t => ({
-          keyword: t.keyword,
-          source: t.source,
-          sub_source: t.sub_source,
-          category: t.category,
-          score: t.score,
-          url: t.url,
-          thumbnail_url: t.thumbnail_url,
-          description: t.description,
-          detected_at: t.detected_at
-        })),
-        { onConflict: "keyword,source" }
-      );
+      try {
+        const { data: existing } = await supabase
+          .from("trends" as any)
+          .select("keyword")
+          .in("keyword", allTrends.map(t => t.keyword));
+        
+        const existingKeywords = new Set((existing || []).map((e: any) => e.keyword));
+        
+        const trendsToInsert = allTrends
+          .filter(t => !existingKeywords.has(t.keyword))
+          .map(t => ({
+            keyword: t.keyword,
+            source: t.source,
+            sub_source: t.sub_source,
+            category: t.category,
+            score: t.score,
+            url: t.url,
+            thumbnail_url: t.thumbnail_url,
+            description: t.description,
+            detected_at: t.detected_at
+          }));
 
-      if (error) throw error;
+        if (trendsToInsert.length > 0) {
+          const { error: insErr } = await supabase.from("trends" as any).insert(trendsToInsert);
+          if (insErr) console.error('[GOOGLE-TRENDS] Insert error:', insErr.message);
+        }
+
+        // Updates
+        const trendsToUpdate = allTrends.filter(t => existingKeywords.has(t.keyword));
+        for (const t of trendsToUpdate) {
+          await supabase.from("trends" as any).update({
+            score: t.score,
+            url: t.url,
+            thumbnail_url: t.thumbnail_url,
+            description: t.description,
+            detected_at: t.detected_at
+          }).eq("keyword", t.keyword);
+        }
+      } catch (e: any) {
+        console.error('[GOOGLE-TRENDS] Manual Upsert error:', e.message);
+      }
     }
+
 
     return new Response(JSON.stringify({
       success: true,

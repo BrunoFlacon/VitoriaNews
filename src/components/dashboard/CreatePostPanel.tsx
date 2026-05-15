@@ -824,10 +824,12 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
         {/* Content Textarea */}
         <div>
-          <label className="text-sm font-medium mb-3 block">
+          <label htmlFor="post-content" className="text-sm font-medium mb-3 block">
             Conteúdo da Publicação
           </label>
           <Textarea
+            id="post-content"
+            name="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Escreva sua mensagem aqui... Use #hashtags para maior alcance"
@@ -951,8 +953,10 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             
             <div className="space-y-4 py-4">
               <div>
-                <label className="text-sm font-medium mb-2 block">Tema do Post</label>
+                <label htmlFor="ai-topic" className="text-sm font-medium mb-2 block">Tema do Post</label>
                 <Textarea
+                  id="ai-topic"
+                  name="ai_topic"
                   value={aiTopic}
                   onChange={(e) => setAiTopic(e.target.value)}
                   placeholder="Ex: Lançamento de novo produto de skincare para pele oleosa..."
@@ -1037,7 +1041,10 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           <div className="flex gap-3">
             <div className="flex-1 relative">
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <label htmlFor="scheduled-at" className="sr-only">Data de Agendamento</label>
               <input
+                id="scheduled-at"
+                name="scheduled_at"
                 type="datetime-local"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
