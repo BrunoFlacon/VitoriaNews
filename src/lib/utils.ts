@@ -49,13 +49,13 @@ export function getPlatformDisplayName(platformId: string): string {
  */
 export function getWhatsAppMediaUrl(mediaId: string, userId: string): string {
   if (!mediaId || !userId) return "";
-  return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/whatsapp-media-proxy?mediaId=${mediaId}&userId=${userId}`;
+  const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/whatsapp-media-proxy?mediaId=${mediaId}&userId=${userId}&apikey=${apiKey}`;
 }
 
 export function getProxyUrl(url: string | null | undefined): string {
   if (!url) return "";
 
-  // Only proxy known problematic domains that block CORS
   const problematicDomains = [
     "fbcdn.net", 
     "fbsbx.com", 
@@ -74,9 +74,9 @@ export function getProxyUrl(url: string | null | undefined): string {
   const shouldProxy = problematicDomains.some(domain => url.includes(domain));
   
   if (shouldProxy) {
-    // Ensure we don't double-proxy
     if (url.includes('proxy-media?url=')) return url;
-    return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(url)}`;
+    const apiKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(url)}&apikey=${apiKey}`;
   }
   
   return url;

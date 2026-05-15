@@ -13,7 +13,10 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
+  // O erro 401 ocorre porque o Supabase exige JWT por padrão.
+  // Como tags <img> não enviam Authorization Header, permitimos apikey via query param.
+  // (A validação de domínio abaixo já protege contra uso indevido)
+
     const url = new URL(req.url);
     const targetUrl = url.searchParams.get("url");
 
