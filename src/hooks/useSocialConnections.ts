@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { safeInvoke } from '@/utils/supabase-utils';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export interface SocialConnection {
   id: string;
@@ -17,233 +19,226 @@ export interface SocialConnection {
   followers_count?: number | null;
   posts_count?: number | null;
   username?: string | null;
-  metadata?: Record<string, any> | null;
+  metadata?: Record<string, unknown> | null;
 }
 
-export function useSocialConnections() {
-  const [connections, setConnections] = useState<SocialConnection[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useSocialConnections(options: { enabled?: boolean } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const lastFetchRef = useRef<number>(0);
-  const fetchConnections = useCallback(async () => {
-    if (!user) return;
-    
-    // Simple debounce: don't fetch more than once every 2 seconds unless forced
-    const now = Date.now();
-    if (now - lastFetchRef.current < 2000) return;
-    lastFetchRef.current = now;
+  const { data: connections = [], isLoading, refetch } = useQuery({
+    queryKey: ['social_connections_all', user?.id],
+    queryFn: async () => {
+      if (!user) return [];
 
-    try {
-      setLoading(true);
-      // 1. Fetch OAuth-based connections
-      const { data, error } = await supabase
-        .from('social_connections')
-        .select('id, platform, is_connected, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
-        .eq('user_id', user.id);
+      const results = await Promise.allSettled([
+        supabase
+          .from('social_connections')
+          .select('id, platform, is_connected, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
+          .eq('user_id', user.id),
+        (supabase as any)
+          .from('social_accounts')
+          .select('platform, platform_user_id, username, profile_picture, followers_count, followers, posts_count, page_name')
+          .eq('user_id', user.id),
+        supabase
+          .from('api_credentials' as any)
+          .select('platform, credentials')
+          .eq('user_id', user.id)
+          .in('platform', ['telegram', 'whatsapp']),
+      ]);
 
-      if (error) throw error;
+      const oauthRes    = results[0].status === 'fulfilled' ? results[0].value : { data: [] };
+      const accountsRes = results[1].status === 'fulfilled' ? results[1].value : { data: [] };
+      const credsRes    = results[2].status === 'fulfilled' ? results[2].value : { data: [] };
 
-      const oauthConnections = (data || []) as unknown as SocialConnection[];
+      const oauthConnections = (oauthRes.data || []) as unknown as SocialConnection[];
+      const accounts         = (accountsRes.data || []) as any[];
 
-      // 2. Fetch ALL social_accounts to enrich connections with cached data
-      // social_accounts has non-expiring Supabase Storage URLs + real follower counts
-      const { data: allAccounts } = await (supabase as any)
-        .from('social_accounts')
-        .select('platform, platform_user_id, username, profile_picture, followers_count, followers, posts_count, page_name')
-        .eq('user_id', user.id);
-
-      const accounts: any[] = (allAccounts as any[]) || [];
-
-      // Helper: find best matching social_account for a connection (match by page_id or platform_user_id)
       const findAccount = (conn: SocialConnection) => {
-        // First try exact match by page_id (Facebook pages)
         if (conn.page_id) {
           const byPageId = accounts.find(a => a.platform === conn.platform && a.platform_user_id === conn.page_id);
           if (byPageId) return byPageId;
         }
-        // Then try by platform_user_id
         if (conn.platform_user_id) {
           const byUserId = accounts.find(a => a.platform === conn.platform && a.platform_user_id === conn.platform_user_id);
           if (byUserId) return byUserId;
         }
-        // Fallback: first account for this platform
         return accounts.find(a => a.platform === conn.platform) || null;
       };
 
-      // 3. Enrich each OAuth connection with cached data from social_accounts
       let enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
         const acc = findAccount(conn);
         if (!acc) return conn;
-
-        const cachedPic = acc.profile_picture || null;
-        const enrichedFollowers = acc.followers_count ?? (acc as any).followers ?? conn.followers_count;
-        const enrichedPosts = acc.posts_count ?? conn.posts_count;
-        const enrichedPageName = conn.page_name || acc.page_name || acc.username || null;
-
+        const cachedPic         = acc.profile_picture || null;
+        const enrichedFollowers = acc.followers_count || (acc as any).followers || conn.followers_count;
+        const enrichedPosts     = acc.posts_count || conn.posts_count;
+        const enrichedPageName  = conn.page_name || acc.page_name || acc.username || null;
         return {
           ...conn,
-          // Use cached (Supabase Storage) URL if available, otherwise keep existing
           profile_image_url: cachedPic || conn.profile_image_url || null,
-          profile_picture: cachedPic || conn.profile_picture || null,
-          followers_count: enrichedFollowers ?? conn.followers_count,
-          posts_count: enrichedPosts ?? conn.posts_count,
-          page_name: enrichedPageName,
+          profile_picture:   cachedPic || conn.profile_picture   || null,
+          followers_count:   enrichedFollowers || conn.followers_count,
+          posts_count:       enrichedPosts     || conn.posts_count,
+          page_name:         enrichedPageName,
         };
       });
 
-      const { data: credsData } = await supabase
-        .from('api_credentials' as any)
-        .select('platform, credentials')
-        .eq('user_id', user.id)
-        .in('platform', ['telegram', 'whatsapp']) as { data: any[] | null };
+      const tgCreds: any = (credsRes.data || []).find((r: any) => r.platform === 'telegram')?.credentials;
+      const waCreds: any = (credsRes.data || []).find((r: any) => r.platform === 'whatsapp')?.credentials;
 
-      const tgCreds: any = credsData?.find(r => r.platform === 'telegram')?.credentials;
-      const waCreds: any = credsData?.find(r => r.platform === 'whatsapp')?.credentials;
+      const hasTGToken = tgCreds && (tgCreds.bot_token?.trim() || tgCreds.token?.trim() || tgCreds.tokens?.length);
+      const hasWAToken = waCreds && (waCreds.app_id?.trim() || waCreds.access_token?.trim());
 
-      const hasTGToken = tgCreds &&
-        (typeof tgCreds.bot_token === 'string' && tgCreds.bot_token.trim() !== '' ||
-         typeof tgCreds.token === 'string' && tgCreds.token.trim() !== '' ||
-         (Array.isArray(tgCreds.tokens) && tgCreds.tokens.length > 0));
-
-      const hasWAToken = waCreds &&
-        (typeof waCreds.app_id === 'string' && waCreds.app_id.trim() !== '' ||
-         typeof waCreds.access_token === 'string' && waCreds.access_token.trim() !== '');
-
-      // 5. Inject synthetic connections if missing
-      const alreadyHasTelegramBot = enrichedConnections.some(c => 
-        c.platform === 'telegram' && 
-        c.is_connected && 
-        Number(c.platform_user_id || 0) > 0
-      );
+      const alreadyHasTelegramBot  = enrichedConnections.some(c => c.platform === 'telegram'  && c.is_connected && Number(c.platform_user_id || 0) > 0);
       const alreadyHasWhatsAppConn = enrichedConnections.some(c => c.platform === 'whatsapp' && c.is_connected);
 
       let finalConnections = [...enrichedConnections];
 
-      if ((hasTGToken && !alreadyHasTelegramBot) || (hasWAToken && !alreadyHasWhatsAppConn)) {
-        // Use already-fetched accounts (filtered by platform below)
-
-        if (hasTGToken && !alreadyHasTelegramBot) {
-          const platformAccounts = accounts.filter(a => a.platform === 'telegram');
-          // Prioritize WebRadioVitoria_Newsbot specifically if available
-          const firstAcc = platformAccounts.find(a => 
-            (a.page_name?.toLowerCase().includes('newsbot') || a.username?.toLowerCase().includes('newsbot')) && 
-            Number(a.platform_user_id || 0) > 0
-          ) || platformAccounts.find(a => Number(a.platform_user_id || 0) > 0) || platformAccounts[0];
-          
-          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || Number((a as any).followers) || 0), 0);
-          const totalPosts = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
-          const botToken: string = Array.isArray(tgCreds?.tokens) ? tgCreds.tokens[0] : (tgCreds?.bot_token || tgCreds?.token || '');
-          
-          finalConnections.push({
-            id: `telegram-api-${user.id}`,
-            platform: 'telegram',
-            is_connected: true,
-            page_name: firstAcc?.username ? `@${firstAcc.username}` : 'Bot Telegram',
-            platform_user_id: firstAcc?.platform_user_id || null,
-            token_expires_at: null,
-            page_id: null,
-            profile_image_url: firstAcc?.profile_picture || null,
-            profile_picture: firstAcc?.profile_picture || null,
-            followers_count: totalFollowers,
-            posts_count: totalPosts,
-            username: firstAcc?.username || null,
-            metadata: { from_api_credentials: true, bot_token_preview: botToken ? botToken.slice(0,8) + '...' : '' },
-          });
-        }
-
-        if (hasWAToken && !alreadyHasWhatsAppConn) {
-          const platformAccounts = accounts.filter(a => a.platform === 'whatsapp');
-          const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || 0), 0);
-          const totalPosts = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
-          const firstAcc = platformAccounts[0];
-
-          finalConnections.push({
-            id: `whatsapp-api-${user.id}`,
-            platform: 'whatsapp',
-            is_connected: true,
-            page_name: firstAcc?.username || firstAcc?.page_name || 'WhatsApp Business',
-            platform_user_id: firstAcc?.platform_user_id || null,
-            token_expires_at: null,
-            page_id: null,
-            profile_image_url: firstAcc?.profile_picture || null,
-            profile_picture: firstAcc?.profile_picture || null,
-            followers_count: totalFollowers,
-            posts_count: totalPosts,
-            username: firstAcc?.username || null,
-            metadata: { from_api_credentials: true },
-          });
-        }
+      if (hasTGToken && !alreadyHasTelegramBot) {
+        const platformAccounts = accounts.filter(a => a.platform === 'telegram');
+        const firstAcc = platformAccounts.find(a =>
+          (a.page_name?.toLowerCase().includes('newsbot') || a.username?.toLowerCase().includes('newsbot'))
+          && Number(a.platform_user_id || 0) > 0
+        ) || platformAccounts.find(a => Number(a.platform_user_id || 0) > 0) || platformAccounts[0];
+        const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || Number((a as any).followers) || 0), 0);
+        const totalPosts     = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
+        const botToken = Array.isArray(tgCreds?.tokens) ? tgCreds.tokens[0] : (tgCreds?.bot_token || tgCreds?.token || '');
+        finalConnections.push({
+          id: `telegram-api-${user.id}`,
+          platform: 'telegram',
+          is_connected: true,
+          page_name: firstAcc?.username ? `@${firstAcc.username}` : 'Bot Telegram',
+          platform_user_id: firstAcc?.platform_user_id || null,
+          token_expires_at: null,
+          page_id: null,
+          profile_image_url: firstAcc?.profile_picture || null,
+          profile_picture:   firstAcc?.profile_picture || null,
+          followers_count: totalFollowers,
+          posts_count:     totalPosts,
+          username: firstAcc?.username || null,
+          metadata: { from_api_credentials: true, bot_token_preview: botToken ? botToken.slice(0, 8) + '...' : '' },
+        });
       }
-      
-      setConnections(finalConnections);
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+
+      if (hasWAToken && !alreadyHasWhatsAppConn) {
+        const platformAccounts = accounts.filter(a => a.platform === 'whatsapp');
+        const totalFollowers   = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || 0), 0);
+        const totalPosts       = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
+        const firstAcc = platformAccounts[0];
+        finalConnections.push({
+          id: `whatsapp-api-${user.id}`,
+          platform: 'whatsapp',
+          is_connected: true,
+          page_name: firstAcc?.username || firstAcc?.page_name || 'WhatsApp Business',
+          platform_user_id: firstAcc?.platform_user_id || null,
+          token_expires_at: null,
+          page_id: null,
+          profile_image_url: firstAcc?.profile_picture || null,
+          profile_picture:   firstAcc?.profile_picture || null,
+          followers_count: totalFollowers,
+          posts_count:     totalPosts,
+          username: firstAcc?.username || null,
+          metadata: { from_api_credentials: true },
+        });
+      }
+
+      return finalConnections;
+    },
+    enabled: !!user && (options.enabled !== false),
+    staleTime: 60 * 1000,
+  });
 
   useEffect(() => {
-    fetchConnections();
-
-    // Listen for changes in both tables to keep UI in sync across different component instances
+    if (!user || options.enabled === false) return;
     const connectionsChannel = supabase
       .channel('connections-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'social_connections' },
-        () => fetchConnections()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'api_credentials' },
-        () => fetchConnections()
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_connections' }, () =>
+        queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, () =>
+        queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
       .subscribe();
+    return () => { supabase.removeChannel(connectionsChannel); };
+  }, [user, queryClient]);
 
-    return () => {
-      supabase.removeChannel(connectionsChannel);
+  // ---------------------------------------------------------------------------
+  // Busca o app_id Meta percorrendo múltiplas plataformas no banco.
+  // Ordem para Threads: 'threads' → 'facebook' → 'meta'
+  // ---------------------------------------------------------------------------
+  const fetchMetaAppId = async (platform: string) => {
+    const lookupOrder: Record<string, string[]> = {
+      threads:   ['threads', 'facebook', 'meta'],
+      instagram: ['instagram', 'facebook', 'meta'],
+      facebook:  ['facebook', 'meta'],
+      whatsapp:  ['whatsapp', 'facebook', 'meta'],
     };
-  }, [user, fetchConnections]);
+
+    const platforms = lookupOrder[platform] ?? [platform];
+
+    for (const p of platforms) {
+      const { data: row, error } = await supabase
+        .from('api_credentials' as any)
+        .select('credentials')
+        .eq('user_id', user!.id)
+        .eq('platform', p)
+        .maybeSingle();
+
+      if (error) {
+        console.warn(`[META CREDS] Erro ao buscar '${p}':`, error.message);
+        continue;
+      }
+
+      const creds     = (row as any)?.credentials;
+      const appId     = creds?.app_id?.trim()     || creds?.client_id?.trim()     || null;
+      const appSecret = creds?.app_secret?.trim() || creds?.client_secret?.trim() || null;
+
+      if (appId) {
+        console.log(`[META CREDS] app_id encontrado em '${p}': ${appId.substring(0, 5)}...`);
+        return { appId, appSecret, source: p };
+      }
+    }
+
+    console.warn(`[META CREDS] app_id NÃO encontrado. Verificados:`, platforms);
+    return { appId: null, appSecret: null, source: 'not_found' };
+  };
 
   const initiateOAuth = async (platform: string) => {
     try {
       const { data: session } = await supabase.auth.getSession();
       if (!session?.session?.access_token) {
-        toast({
-          title: "Sessão expirada",
-          description: "Faça login novamente.",
-          variant: "destructive",
-        });
+        toast({ title: "Sessão expirada", description: "Faça login novamente.", variant: "destructive" });
         return;
       }
 
       localStorage.setItem("oauth_platform", platform);
 
-      // Use current origin for OAuth callback to avoid "Connection Refused" if port 8081 is not used
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       
-      // X/Twitter strictly wants 127.0.0.1, others prefer localhost or are fine with it
-      let localHostname = window.location.hostname;
-      if (['twitter'].includes(platform)) {
-        localHostname = "127.0.0.1";
-      } else if (['facebook', 'instagram', 'whatsapp', 'threads', 'google', 'youtube'].includes(platform)) {
-        localHostname = "localhost";
+      let origin = window.location.origin;
+      const port = window.location.port ? `:${window.location.port}` : "";
+
+      // Threads + Ponte de Conexão (webradiovitoria.com.br)
+      // O Threads não aceita localhost. Se estivermos em local, usamos o domínio de produção como ponte.
+      if (platform === 'threads' && isLocal) {
+        console.log("[THREADS] Ativando ponte de conexão via webradiovitoria.com.br");
+        origin = "https://webradiovitoria.com.br";
+        toast({
+          title: "Ponte de Conexão Ativada",
+          description: "Usando webradiovitoria.com.br para contornar a restrição de localhost do Threads.",
+        });
+      } else if (isLocal) {
+        let localHostname = window.location.hostname;
+        if (['twitter'].includes(platform)) localHostname = "127.0.0.1";
+        else if (['facebook', 'instagram', 'whatsapp', 'threads', 'google', 'youtube'].includes(platform)) localHostname = "localhost";
+        origin = `http://${localHostname}${port}`;
       }
 
-      // Origin with current port (unless it's default 80/443)
-      const port = window.location.port ? `:${window.location.port}` : "";
-      const origin = isLocal
-        ? `http://${localHostname}${port}`
-        : window.location.origin;
-        
-      const redirectUri = `${origin}/oauth/callback/${platform}`;
-      
-      // Open OAuth in popup window immediately to prevent browser blocking
-      const width = 600;
+      const redirectUri = `${origin}/oauth/callback/${platform}.html`;
+
+      const width  = 600;
       const height = 700;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
+      const left   = window.screenX + (window.outerWidth  - width)  / 2;
+      const top    = window.screenY + (window.outerHeight - height) / 2;
 
       const popup = window.open(
         "about:blank",
@@ -252,160 +247,207 @@ export function useSocialConnections() {
       );
 
       if (!popup) {
-        toast({
-          title: "Popup bloqueado",
-          description: "Permita popups para este site e tente novamente.",
-          variant: "destructive",
-        });
+        toast({ title: "Popup bloqueado", description: "Permita popups para este site e tente novamente.", variant: "destructive" });
         return;
       }
 
-      // Show loading in popup
-      popup.document.write(`
-        <html>
-          <head>
-            <title>Conectando ${platform}...</title>
-            <style>
-              body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #0f172a; color: white; text-align: center; }
-              .loader { border: 4px solid #1e293b; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
-              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-              h1 { font-size: 18px; margin: 0; }
-            </style>
-          </head>
-          <body>
-            <div>
-              <div class="loader"></div>
-              <h1>Conectando ao ${platform}...</h1>
-              <p>Iniciando autenticação segura...</p>
-            </div>
-          </body>
-        </html>
-      `);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+      popup.document.write(
+        `<html><head><title>Conectando ${platform}...</title>` +
+        `<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;` +
+        `height:100vh;margin:0;background:#0f172a;color:white;text-align:center;}` +
+        `.loader{border:4px solid #1e293b;border-top:4px solid #3b82f6;border-radius:50%;` +
+        `width:40px;height:40px;animation:spin 1s linear infinite;margin:0 auto 20px;}` +
+        `@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}` +
+        `h1{font-size:18px;margin:0;}</style></head>` +
+        `<body><div><div class="loader"></div><h1>Conectando ao ${platform}...</h1>` +
+        `<p>Iniciando autenticação segura...</p></div></body></html>`
+      );
 
       try {
-        const baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
-        const response = await fetch(
-          `${baseUrl}/functions/v1/social-oauth-init`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${session.session.access_token}`,
-            },
-            body: JSON.stringify({ platform, redirect_uri: redirectUri }),
-            signal: controller.signal,
+        const META_PLATFORMS = ['threads', 'facebook', 'instagram', 'whatsapp'];
+        let extraBody: Record<string, unknown> = {};
+
+        if (META_PLATFORMS.includes(platform)) {
+          const { appId, appSecret, source } = await fetchMetaAppId(platform);
+
+          if (!appId) {
+            popup.close();
+            toast({
+              title: "App ID do Threads não configurado",
+              description:
+                "Para o Threads, você DEVE usar o 'Threads App ID' específico. " +
+                "No painel da Meta, vá em: Casos de Uso -> Threads API -> Configurações. " +
+                "Não use o ID que aparece no topo da página.",
+              variant: "destructive",
+            });
+            console.error("[THREADS] Erro: Threads App ID ausente. Guia: https://developers.facebook.com/docs/threads/getting-started");
+            return;
           }
-        );
 
-        clearTimeout(timeoutId);
-        const data = await response.json().catch(() => ({ error: "Resposta inválida do servidor" }));
+          console.log(`[OAUTH INIT] Plataforma: ${platform} | Fonte: ${source} | app_id: ${appId.substring(0, 5)}...`);
+          console.warn("[THREADS] Se receber o erro 4476002, certifique-se de que está usando o ID da seção 'Threads API', não o ID geral do Meta.");
+          extraBody = { client_id: appId, client_secret: appSecret };
+        } else if (platform === 'tiktok') {
+          // TikTok usa "client_key" — buscamos do banco antes de chamar a Edge Function
+          let tikTokCreds = null;
+          try {
+            const { data } = await supabase
+              .from('api_credentials')
+              .select('credentials')
+              .eq('user_id', user!.id)
+              .eq('platform', 'tiktok')
+              .maybeSingle();
+            tikTokCreds = data?.credentials as Record<string, string | undefined> | undefined;
+          } catch (e) {
+            console.warn('Failed to fetch TikTok credentials', e);
+          }
 
-        if (!response.ok) {
-          console.error(`Oauth Init Error (${response.status}):`, data);
-          
-          popup.document.body.innerHTML = `
-            <div style="font-family: sans-serif; padding: 20px; text-align: center; background: #0f172a; color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-              <div style="color: #ef4444; font-size: 48px; margin-bottom: 20px;">⚠️</div>
-              <h1 style="font-size: 20px;">Erro ao conectar ${platform}</h1>
-              <p style="color: #94a3b8; margin: 10px 0 20px;">${data.error || `Erro HTTP ${response.status}`}</p>
-              <button onclick="window.close()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">Fechar Janela</button>
-            </div>
-          `;
+          const clientKey = tikTokCreds?.client_key?.trim() || tikTokCreds?.client_id?.trim();
+          const clientSecret = tikTokCreds?.client_secret?.trim();
 
-          if (data.requiresToken || response.status === 400) {
-            toast({ 
-              title: "Configuração pendente", 
-              description: data.error || "Verifique se as APIs estão configuradas corretamente nas Configurações.",
-              variant: "destructive"
+          if (!clientKey) {
+            popup.close();
+            toast({
+              title: "TikTok Client Key não configurado",
+              description: "Vá em Configurações → APIs → TikTok e salve o 'TikTok Client Key' antes de conectar.",
+              variant: "destructive",
             });
             return;
           }
-          
+
+          extraBody = {
+            client_key: clientKey,
+            client_id: clientKey,     // fallback compat
+            client_secret: clientSecret,
+          };
+        }
+
+        const { data, error: aErr } = await safeInvoke('social-oauth-init', {
+          body: { platform, redirect_uri: redirectUri, ...extraBody },
+          timeoutMs: 20000,
+        });
+
+        if (aErr) {
+          try {
+            popup.document.open();
+            popup.document.write(`<html><head><title>Erro - ${platform}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="color:#ef4444;font-size:48px;margin-bottom:16px;">⚠️</div><h1>Erro ao conectar ${platform}</h1><p>${(aErr.message || 'Verifique se as credenciais estão salvas nas Configurações de API.').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`);
+            popup.document.close();
+          } catch (writeErr) {
+            try { popup.close(); } catch (_) {}
+          }
           toast({
-            title: "Erro de inicialização",
-            description: data.error || "Erro ao iniciar conexão.",
+            title: "Configuração pendente",
+            description: aErr.message || "Verifique se as APIs estão configuradas corretamente.",
             variant: "destructive",
           });
           return;
         }
 
-        if (!data.authUrl) {
+        if (!data?.authUrl) {
           popup.close();
           toast({ title: "Erro", description: "URL de autenticação não recebida.", variant: "destructive" });
           return;
         }
 
-        popup.location.href = data.authUrl;
+        let finalUrl = data.authUrl;
+        
+        // CORREÇÃO CRÍTICA: threads.com é uma empresa diferente. O Threads da Meta usa .net
+        if (platform === 'threads' && finalUrl.includes('threads.com')) {
+          console.warn("[OAUTH] Corrigindo domínio threads.com para threads.net automaticamente.");
+          finalUrl = finalUrl.replace('threads.com', 'www.threads.net');
+        }
+
+        popup.location.href = finalUrl;
 
       } catch (error: any) {
-        clearTimeout(timeoutId);
-        const errorMsg = error.name === 'AbortError' 
-          ? "A requisição demorou muito para responder."
-          : "Erro de rede ao conectar com as Edge Functions.";
-
-        try {
-          if (popup && !popup.closed) {
-            popup.document.body.innerHTML = `
-              <div style="font-family: sans-serif; padding: 20px; text-align: center; background: #0f172a; color: white; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                <div style="color: #ef4444; font-size: 48px; margin-bottom: 20px;">🌐</div>
-                <h1 style="font-size: 20px;">Falha de Conexão</h1>
-                <p style="color: #94a3b8; margin: 10px 0 20px;">${errorMsg}</p>
-                <button onclick="window.close()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">Fechar Janela</button>
-              </div>
-            `;
+        const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
+        if (popup && !popup.closed) {
+          try {
+            popup.document.open();
+            popup.document.write(`<html><head><title>Falha de Conexão</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="font-size:48px;margin-bottom:16px;">🌐</div><h1>Falha de Conexão</h1><p>${errorMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`);
+            popup.document.close();
+          } catch (_) {
+            try { popup.close(); } catch (__) {}
           }
-        } catch (e) {}
-
-        toast({ title: "Erro de rede", description: errorMsg, variant: "destructive" });
+        }
+        toast({ title: "Erro de rede", description: errorMessage, variant: "destructive" });
         return;
       }
 
       let isFinalized = false;
 
-      const handleMessage = (event: MessageEvent) => {
+      const handleMessage = async (event: MessageEvent) => {
+        // Padrão antigo: popup já finalizou tudo ou é outra origem
         if (event.data?.type === "oauth-complete") {
-          // Send signal and return immediately
+          isFinalized = true;
+          window.removeEventListener("message", handleMessage);
+          clearInterval(pollInterval);
+          await finalize(true);
+          toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
+          return;
+        }
+
+        // NOVO: Ponte de callback (GitHub Pages / webradiovitoria.com.br)
+        if (event.data?.type === "oauth-callback" && event.data?.url) {
           isFinalized = true;
           window.removeEventListener("message", handleMessage);
           clearInterval(pollInterval);
           
-          // Execute finalize in a background-like task
-          (async () => {
+          try {
+            console.log(`[OAUTH CALLBACK] Processando retorno da ponte para: ${platform}`);
+            const url = new URL(event.data.url);
+            const code = url.searchParams.get("code");
+            const state = url.searchParams.get("state");
+            
+            if (!code) {
+              console.error("[OAUTH CALLBACK] Código não encontrado na URL:", event.data.url);
+              throw new Error("Código de autorização não encontrado na URL de retorno.");
+            }
+
+            toast({ title: "Finalizando conexão...", description: "Trocando código por token de acesso." });
+
+            const { data: cbData, error: cbErr } = await supabase.functions.invoke('social-oauth-callback', {
+              body: { code, state, platform, redirect_uri: redirectUri }
+            });
+
+            if (cbErr) {
+              console.error("[OAUTH CALLBACK ERROR] Erro na Edge Function:", cbErr);
+              throw cbErr;
+            }
+            
+            console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso:", cbData);
             await finalize(true);
-            toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
-          })();
+            toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
+          } catch (err: any) {
+            console.error("[OAUTH CALLBACK CRITICAL ERROR]", err);
+            toast({ 
+              title: "Erro na finalização", 
+              description: err.message || "Não foi possível completar a troca de tokens.", 
+              variant: "destructive" 
+            });
+            // Mesmo com erro, finalizamos o polling
+            await finalize(false);
+          }
         }
       };
+
       window.addEventListener("message", handleMessage);
 
-      // Finalize should take a 'triggered' flag to avoid double recursion
       const finalize = async (fromMessage = false) => {
         if (!fromMessage && isFinalized) return;
         isFinalized = true;
         clearInterval(pollInterval);
         window.removeEventListener("message", handleMessage);
-        await fetchConnections();
+        await refetch();
       };
 
       const pollInterval = setInterval(async () => {
         try {
-          if (popup && popup.closed) {
-            clearInterval(pollInterval);
-            await finalize();
-          }
-        } catch (e) {
-          // If we can't access popup (cross-origin), just wait for it to close
-          clearInterval(pollInterval);
-          await finalize();
-        }
-      }, 2000); // Increased interval to 2s to reduce overhead
+          if (popup && popup.closed) { clearInterval(pollInterval); await finalize(); }
+        } catch (e) { clearInterval(pollInterval); await finalize(); }
+      }, 2000);
 
-      setTimeout(() => {
-        finalize();
-      }, 300000);
+      setTimeout(() => finalize(), 300000);
 
     } catch (error) {
       toast({
@@ -418,58 +460,40 @@ export function useSocialConnections() {
 
   const disconnect = async (platformOrKey: string) => {
     if (!user) return;
-
     try {
-      // Support both 'platform' and 'platform|connectionId' formats
-      const parts = platformOrKey.split('|');
-      const platform = parts[0];
-      const connectionId = parts[1]; // may be undefined
+      const parts        = platformOrKey.split('|');
+      const platform     = parts[0];
+      const connectionId = parts[1];
 
-      // Telegram uses api_credentials (not social_connections) for its "connection"
-      const isTelegramSynthetic = platform === 'telegram' &&
-        (!connectionId || connectionId.startsWith('telegram-api-'));
-
-      if (isTelegramSynthetic) {
-        await supabase
-          .from('api_credentials' as any)
-          .delete()
-          .eq('user_id', user.id)
-          .eq('platform', 'telegram');
-        await fetchConnections();
+      if (platform === 'telegram' && (!connectionId || connectionId.startsWith('telegram-api-'))) {
+        await supabase.from('api_credentials' as any).delete().eq('user_id', user.id).eq('platform', 'telegram');
+        await refetch();
         toast({ title: "Telegram desconectado", description: "Bot Token removido com sucesso." });
         return;
       }
 
       let query = supabase
         .from('social_connections')
-        .update({ 
-          is_connected: false, 
-          access_token: null, 
+        .update({
+          is_connected:  false,
+          access_token:  null,
           refresh_token: null,
-          updated_at: new Date().toISOString(),
+          updated_at:    new Date().toISOString(),
         })
         .eq('user_id', user.id)
         .eq('platform', platform);
-      
-      if (connectionId) {
-        query = query.eq('id', connectionId) as any;
-      }
+
+      if (connectionId) query = query.eq('id', connectionId) as any;
 
       const { error } = await query;
-
       if (error) throw error;
-      await fetchConnections();
+
+      await refetch();
       toast({ title: "Conta desconectada", description: `${platform} foi desconectado com sucesso.` });
     } catch (error) {
       toast({ title: "Erro", description: "Não foi possível desconectar.", variant: "destructive" });
     }
   };
 
-  return {
-    connections,
-    loading,
-    initiateOAuth,
-    disconnect,
-    refetch: fetchConnections,
-  };
+  return { connections, loading: isLoading, initiateOAuth, disconnect, refetch };
 }
