@@ -32,6 +32,7 @@ serve(async (req: Request) => {
       ".fbcdn.net", 
       ".facebook.com", 
       ".instagram.com",
+      ".threads.net",
       "pbs.twimg.com",
       "twimg.com",
       "api.telegram.org",

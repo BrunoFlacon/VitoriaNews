@@ -205,7 +205,7 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   const accessToken = data.access_token;
   const expiresIn = data.expires_in || 5184000;
 
-  const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url&access_token=${accessToken}`);
+  const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_biography,threads_follower_count&access_token=${accessToken}`);
   const meData = await meRes.json();
 
   return [{
@@ -215,7 +215,10 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
     platformUserId: meData.id || "",
     pageName: meData.username || "",
     pageId: "",
-    profileImageUrl: meData.threads_profile_picture_url || ""
+    profileImageUrl: meData.threads_profile_picture_url || "",
+    username: meData.username,
+    followers: meData.threads_follower_count || 0,
+    postsCount: 0 // A API do Threads ainda não fornece total de posts no endpoint /me de forma direta
   }];
 }
 
