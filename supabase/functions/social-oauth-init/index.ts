@@ -142,15 +142,13 @@ serve(async (req: Request) => {
       pkce = await generatePKCE();
     }
 
-    const stateId = crypto.randomUUID().replace(/-/g, "");
-    // Enviamos o verifier no state para máxima segurança (state~verifier)
-    const state = pkce ? `${stateId}~${pkce.verifier}` : stateId;
+    const state = crypto.randomUUID().replace(/-/g, "");
 
-    // Salva no banco (ID simples)
+    // Salva no banco com code_verifier atômico (PKCE via DB, não via state composto)
     await supabase.from("oauth_states").insert({ 
       user_id: user.id, 
       platform, 
-      state: stateId, 
+      state,        // state simples, sem ~verifier
       redirect_uri,
       code_verifier: pkce?.verifier || null
     });

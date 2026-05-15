@@ -491,24 +491,21 @@ serve(async (req: Request) => {
 
     if (!code || !incomingState || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required");
 
-    // Extrair stateId e code_verifier do state composto (ex: "id~verifier")
-    const tildeIndex = incomingState.indexOf("~");
-    const stateId = tildeIndex !== -1 ? incomingState.substring(0, tildeIndex) : incomingState;
-    const extractedVerifierFromState = tildeIndex !== -1 ? incomingState.substring(tildeIndex + 1) : null;
-
-    // Fetch state from DB usando apenas o stateId
+    // Busca state diretamente (state é sempre um UUID simples agora)
     const { data: oauthState, error: stateError } = await supabase
       .from("oauth_states")
       .select("*")
-      .eq("state", stateId)
+      .eq("state", incomingState)
       .eq("user_id", user.id)
       .eq("platform", platform)
       .single();
       
     if (stateError || !oauthState) return oauthError(platform, "callback", "Invalid or expired OAuth state");
 
-    // Prioridade para o verifier: (1) o que veio na URL (~), (2) o que está na coluna do banco
-    const finalVerifier = extractedVerifierFromState || oauthState.code_verifier || "";
+    // code_verifier vem exclusivamente da coluna do banco
+    const finalVerifier = oauthState.code_verifier || "";
+    
+    console.log(`[OAUTH CALLBACK] platform=${platform} | has_verifier=${!!oauthState.code_verifier}`);
 
     // Validar Redirect URI
     if (incomingRedirectUri) assertRedirectUriMatch(oauthState.redirect_uri, incomingRedirectUri);
