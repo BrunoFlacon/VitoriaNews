@@ -411,8 +411,20 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             });
 
             if (cbErr) {
-              console.error("[OAUTH CALLBACK ERROR] Erro na Edge Function:", cbErr);
-              throw cbErr;
+              let errorMsg = cbErr.message;
+              try {
+                if (cbErr instanceof Error && 'context' in cbErr) {
+                  const context = (cbErr as any).context;
+                  if (context && typeof context.json === 'function') {
+                    const body = await context.json();
+                    errorMsg = body.error || errorMsg;
+                  }
+                }
+              } catch (e) {
+                console.warn("Falha ao processar corpo do erro:", e);
+              }
+              console.error("[OAUTH CALLBACK ERROR] Erro detalhado:", errorMsg);
+              throw new Error(errorMsg);
             }
             
             console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso:", cbData);
