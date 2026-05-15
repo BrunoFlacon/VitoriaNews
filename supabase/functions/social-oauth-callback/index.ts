@@ -584,18 +584,27 @@ serve(async (req: Request) => {
          username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
        }, { onConflict: "user_id,platform,platform_user_id" });
 
+        const finalProfileImage = (platform === 'twitter' || platform === 'tiktok') 
+          ? `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(result.profileImageUrl || "")}`
+          : result.profileImageUrl;
+
         await supabase.from("social_accounts").upsert({
-          user_id: user.id, platform, platform_user_id: result.platformUserId, username: result.username || result.pageName,
-          page_name: result.pageName, profile_picture: result.profileImageUrl, is_connected: true, 
-          followers_count: result.followers || 0,
-          subscribers_count: result.followers || 0, // Redundância para painéis que usam este campo
-          posts_count: result.postsCount || 0,
+          user_id: user.id, 
+          platform, 
+          platform_user_id: result.platformUserId, 
+          username: result.username || result.pageName,
+          page_name: result.pageName, 
+          profile_picture: finalProfileImage, 
+          is_connected: true, 
+          followers_count: Number(result.followers || 0),
+          subscribers_count: Number(result.followers || 0),
+          posts_count: Number(result.postsCount || 0),
           updated_at: new Date().toISOString(),
           metadata: { 
             username: result.username, 
             followers: result.followers, 
             posts_count: result.postsCount,
-            profile_image_url: result.profileImageUrl 
+            profile_image_url: finalProfileImage 
           }
         }, { onConflict: "user_id,platform,platform_user_id" });
     }
