@@ -204,14 +204,21 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         allowTaint: true,
         logging: false,
         backgroundColor: '#0f172a',
-        windowWidth: reportRef.current.scrollWidth,
-        windowHeight: reportRef.current.scrollHeight,
+        windowWidth: 1200, // Largura fixa para garantir renderização consistente dos gráficos
         onclone: (doc) => {
-          // Ensure all content is visible in the clone
-          const el = doc.querySelector('[data-report-root]') as HTMLElement;
-          if (el) {
-            el.style.overflow = 'visible';
-            el.style.maxHeight = 'none';
+          // Garantir que todos os containers de gráficos estejam visíveis e com largura total no clone
+          const elements = doc.querySelectorAll('.recharts-responsive-container');
+          elements.forEach((el: any) => {
+            el.style.width = '100%';
+            el.style.height = '400px';
+            el.style.visibility = 'visible';
+          });
+          
+          const reportRoot = doc.querySelector('[data-report-root]') as HTMLElement;
+          if (reportRoot) {
+            reportRoot.style.overflow = 'visible';
+            reportRoot.style.maxHeight = 'none';
+            reportRoot.style.width = '1200px';
           }
         }
       });

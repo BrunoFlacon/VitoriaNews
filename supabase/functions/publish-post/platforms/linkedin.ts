@@ -2,8 +2,8 @@ import { ENV } from "../config/env.ts"
 
 export async function publishLinkedin(
     content: string,
-    media: any,
-    connection: any,
+    media: Array<{ url: string; altText?: string }> | null,
+    connection: { platform_user_id: string; access_token: string },
     options: { postType?: string; mediaType?: string } = {}
 ) {
     const postType = options.postType?.toLowerCase() || 'post';
@@ -18,8 +18,8 @@ export async function publishLinkedin(
 
     const author = `urn:li:person:${connection.platform_user_id}`;
 
-    let shareMediaCategory = "NONE";
-    let mediaData = [];
+    const shareMediaCategory = "NONE";
+    const mediaData = [];
 
     // Note: To properly upload media to LinkedIn UGC, we need multi-step asset upload.
     // Assuming mediaUrls are just URLs for now, which LinkedIn UGC doesn't natively support without asset upload.

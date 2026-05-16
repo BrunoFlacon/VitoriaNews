@@ -2,7 +2,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-declare const Deno: any;
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -158,14 +162,38 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
     }
   } else if (platform === "whatsapp") {
     try {
-      const waRes = await fetch(`https://graph.facebook.com/v21.0/me/businesses?access_token=${accessToken}`);
+      const waRes = await fetch(`https://graph.facebook.com/v21.0/me/whatsapp_business_accounts?access_token=${accessToken}`);
       const waData = await waRes.json();
+      
       if (waData.data) {
         for (const biz of waData.data) {
-          results.push({ accessToken, refreshToken: "", expiresIn, platformUserId: biz.id, pageName: biz.name, pageId: "", profileImageUrl: defaultProfileImageUrl });
+          // Busca a foto real do perfil comercial
+          let profilePic = defaultProfileImageUrl;
+          try {
+            const bizProfileRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/whatsapp_business_profile?fields=profile_picture_url&access_token=${accessToken}`);
+            const bizProfile = await bizProfileRes.json();
+            if (bizProfile.data?.[0]?.profile_picture_url) {
+              profilePic = bizProfile.data[0].profile_picture_url;
+            }
+          } catch (e) {
+            console.warn(`[WA] Falha ao buscar foto da conta ${biz.id}:`, e);
+          }
+
+          results.push({ 
+            accessToken, 
+            refreshToken: "", 
+            expiresIn, 
+            platformUserId: biz.id, 
+            pageName: biz.name, 
+            pageId: "", 
+            profileImageUrl: profilePic 
+          });
         }
       }
-    } catch { /* fallback */ }
+    } catch (e) {
+      console.warn("[WA] Falha na extração de contas business:", e);
+      results.push({ accessToken, refreshToken: "", expiresIn, platformUserId: meData.id, pageName: meData.name, pageId: "", profileImageUrl: defaultProfileImageUrl });
+    }
   } else {
     for (const page of pages) {
       const pagePhoto = page.picture?.data?.url || defaultProfileImageUrl;
@@ -550,6 +578,11 @@ serve(async (req: Request) => {
       // TikTok usa client_key (não client_id)
       formattedCreds.client_key = raw.client_key || raw.client_id || Deno.env.get("TIKTOK_CLIENT_KEY");
       formattedCreds.client_secret = raw.client_secret || Deno.env.get("TIKTOK_CLIENT_SECRET");
+    } else if (platform === "threads") {
+      // Threads exige o Client ID da App, que no nosso sistema é mapeado como app_id (Meta App ID)
+      // Evitamos usar raw.client_id aqui se ele parecer um ID de usuário (longo e numérico sem ser o da App)
+      formattedCreds.app_id = raw.app_id || Deno.env.get("META_APP_ID") || raw.client_id || Deno.env.get("THREADS_CLIENT_ID");
+      formattedCreds.app_secret = raw.app_secret || raw.client_secret || Deno.env.get("META_APP_SECRET") || Deno.env.get("THREADS_CLIENT_SECRET");
     } else {
       formattedCreds.app_id = raw.app_id || raw.client_id || Deno.env.get("META_APP_ID") || Deno.env.get("THREADS_CLIENT_ID");
       formattedCreds.app_secret = raw.app_secret || raw.client_secret || Deno.env.get("META_APP_SECRET") || Deno.env.get("THREADS_CLIENT_SECRET");
@@ -584,7 +617,11 @@ serve(async (req: Request) => {
          username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
        }, { onConflict: "user_id,platform,platform_user_id" });
 
-        const finalProfileImage = (platform === 'twitter' || platform === 'tiktok') 
+        // Injetar Proxy de Mídia para evitar bloqueios de Referer/Auth (403/401)
+        const needsProxy = ['twitter', 'tiktok', 'threads', 'whatsapp', 'instagram', 'facebook'].includes(platform) || 
+                          (result.profileImageUrl && (result.profileImageUrl.includes('fbcdn.net') || result.profileImageUrl.includes('whatsapp.net') || result.profileImageUrl.includes('twimg.com')));
+
+        const finalProfileImage = needsProxy
           ? `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(result.profileImageUrl || "")}`
           : result.profileImageUrl;
 

@@ -37,12 +37,12 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           .from('social_connections')
           .select('id, platform, is_connected, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
           .eq('user_id', user.id),
-        (supabase as any)
+        supabase
           .from('social_accounts')
           .select('platform, platform_user_id, username, profile_picture, followers_count, followers, posts_count, page_name')
           .eq('user_id', user.id),
         supabase
-          .from('api_credentials' as any)
+          .from('api_credentials')
           .select('platform, credentials')
           .eq('user_id', user.id)
           .in('platform', ['telegram', 'whatsapp']),
@@ -53,7 +53,16 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const credsRes    = results[2].status === 'fulfilled' ? results[2].value : { data: [] };
 
       const oauthConnections = (oauthRes.data || []) as unknown as SocialConnection[];
-      const accounts         = (accountsRes.data || []) as any[];
+      const accounts         = (accountsRes.data || []) as Array<{
+        platform: string;
+        platform_user_id: string | null;
+        username: string | null;
+        profile_picture: string | null;
+        followers_count: number | null;
+        followers?: number | null;
+        posts_count: number | null;
+        page_name: string | null;
+      }>;
 
       const findAccount = (conn: SocialConnection) => {
         if (conn.page_id) {
@@ -67,11 +76,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         return accounts.find(a => a.platform === conn.platform) || null;
       };
 
-      let enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
+      const enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
         const acc = findAccount(conn);
         if (!acc) return conn;
         const cachedPic         = acc.profile_picture || null;
-        const enrichedFollowers = acc.followers_count || (acc as any).followers || conn.followers_count;
+        const enrichedFollowers = acc.followers_count || (acc as { followers?: number | null }).followers || conn.followers_count;
         const enrichedPosts     = acc.posts_count || conn.posts_count;
         const enrichedPageName  = conn.page_name || acc.page_name || acc.username || null;
         return {
@@ -84,16 +93,28 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         };
       });
 
-      const tgCreds: any = (credsRes.data || []).find((r: any) => r.platform === 'telegram')?.credentials;
-      const waCreds: any = (credsRes.data || []).find((r: any) => r.platform === 'whatsapp')?.credentials;
+      const credentials = (credsRes.data || []) as Array<{ platform: string; credentials: Record<string, unknown> }>;
+      const tgCreds = credentials.find(r => r.platform === 'telegram')?.credentials;
+      const waCreds = credentials.find(r => r.platform === 'whatsapp')?.credentials;
 
-      const hasTGToken = tgCreds && (tgCreds.bot_token?.trim() || tgCreds.token?.trim() || tgCreds.tokens?.length);
-      const hasWAToken = waCreds && (waCreds.app_id?.trim() || waCreds.access_token?.trim());
+      const hasTGToken = tgCreds && (
+        (typeof tgCreds.bot_token === 'string' && tgCreds.bot_token.trim()) || 
+        (typeof tgCreds.token === 'string' && tgCreds.token.trim()) || 
+        (Array.isArray(tgCreds.tokens) && tgCreds.tokens.length > 0)
+      );
+      const hasWAToken = waCreds && (
+        (typeof waCreds.app_id === 'string' && waCreds.app_id.trim()) || 
+        (typeof waCreds.access_token === 'string' && waCreds.access_token.trim())
+      );
 
-      const alreadyHasTelegramBot  = enrichedConnections.some(c => c.platform === 'telegram'  && c.is_connected && Number(c.platform_user_id || 0) > 0);
-      const alreadyHasWhatsAppConn = enrichedConnections.some(c => c.platform === 'whatsapp' && c.is_connected);
+      const alreadyHasTelegramBot = enrichedConnections.some(c => 
+        c.platform === 'telegram' && c.is_connected && c.platform_user_id != null
+      );
+      const alreadyHasWhatsAppConn = enrichedConnections.some(c => 
+        c.platform === 'whatsapp' && c.is_connected
+      );
 
-      let finalConnections = [...enrichedConnections];
+      const finalConnections = [...enrichedConnections];
 
       if (hasTGToken && !alreadyHasTelegramBot) {
         const platformAccounts = accounts.filter(a => a.platform === 'telegram');
@@ -101,7 +122,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           (a.page_name?.toLowerCase().includes('newsbot') || a.username?.toLowerCase().includes('newsbot'))
           && Number(a.platform_user_id || 0) > 0
         ) || platformAccounts.find(a => Number(a.platform_user_id || 0) > 0) || platformAccounts[0];
-        const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || Number((a as any).followers) || 0), 0);
+        const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || Number((a as { followers?: unknown }).followers) || 0), 0);
         const totalPosts     = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
         const botToken = Array.isArray(tgCreds?.tokens) ? tgCreds.tokens[0] : (tgCreds?.bot_token || tgCreds?.token || '');
         finalConnections.push({
@@ -159,7 +180,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
       .subscribe();
     return () => { supabase.removeChannel(connectionsChannel); };
-  }, [user, queryClient]);
+  }, [user, queryClient, options.enabled]);
 
   // ---------------------------------------------------------------------------
   // Busca o app_id Meta percorrendo múltiplas plataformas no banco.
@@ -177,7 +198,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
     for (const p of platforms) {
       const { data: row, error } = await supabase
-        .from('api_credentials' as any)
+        .from('api_credentials')
         .select('credentials')
         .eq('user_id', user!.id)
         .eq('platform', p)
@@ -188,7 +209,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         continue;
       }
 
-      const creds     = (row as any)?.credentials;
+      interface CredentialsRow {
+        credentials?: Record<string, string | undefined>;
+      }
+      const creds     = (row as CredentialsRow | null)?.credentials;
       const appId     = creds?.app_id?.trim()     || creds?.client_id?.trim()     || null;
       const appSecret = creds?.app_secret?.trim() || creds?.client_secret?.trim() || null;
 
@@ -334,7 +358,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             popup.document.write(`<html><head><title>Erro - ${platform}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="color:#ef4444;font-size:48px;margin-bottom:16px;">⚠️</div><h1>Erro ao conectar ${platform}</h1><p>${(aErr.message || 'Verifique se as credenciais estão salvas nas Configurações de API.').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`);
             popup.document.close();
           } catch (writeErr) {
-            try { popup.close(); } catch (_) {}
+            try { 
+              popup.close(); 
+            } catch (_) { 
+              // Ignore errors when closing popup
+            }
           }
           toast({
             title: "Configuração pendente",
@@ -360,7 +388,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
         popup.location.href = finalUrl;
 
-      } catch (error: any) {
+      } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
         if (popup && !popup.closed) {
           try {
@@ -368,7 +396,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             popup.document.write(`<html><head><title>Falha de Conexão</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="font-size:48px;margin-bottom:16px;">🌐</div><h1>Falha de Conexão</h1><p>${errorMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`);
             popup.document.close();
           } catch (_) {
-            try { popup.close(); } catch (__) {}
+            try { popup.close(); } catch { /* Ignore errors when closing popup */ }
           }
         }
         toast({ title: "Erro de rede", description: errorMessage, variant: "destructive" });
@@ -415,7 +443,8 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
               let errorMsg = cbErr.message;
               try {
                 if (cbErr instanceof Error && 'context' in cbErr) {
-                  const context = (cbErr as any).context;
+                  interface ErrorContext { context?: { json?: () => Promise<{ error?: string }> } }
+                  const context = (cbErr as Error & ErrorContext).context;
                   if (context && typeof context.json === 'function') {
                     const body = await context.json();
                     errorMsg = body.error || errorMsg;
@@ -431,11 +460,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso:", cbData);
             await finalize(true);
             toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
-          } catch (err: any) {
+          } catch (err: unknown) {
             console.error("[OAUTH CALLBACK CRITICAL ERROR]", err);
             toast({ 
               title: "Erro na finalização", 
-              description: err.message || "Não foi possível completar a troca de tokens.", 
+              description: (err instanceof Error ? err.message : undefined) || "Não foi possível completar a troca de tokens.",
               variant: "destructive" 
             });
             // Mesmo com erro, finalizamos o polling
@@ -479,7 +508,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const connectionId = parts[1];
 
       if (platform === 'telegram' && (!connectionId || connectionId.startsWith('telegram-api-'))) {
-        await supabase.from('api_credentials' as any).delete().eq('user_id', user.id).eq('platform', 'telegram');
+        await supabase.from('api_credentials').delete().eq('user_id', user.id).eq('platform', 'telegram');
         await refetch();
         toast({ title: "Telegram desconectado", description: "Bot Token removido com sucesso." });
         return;
@@ -496,7 +525,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         .eq('user_id', user.id)
         .eq('platform', platform);
 
-      if (connectionId) query = query.eq('id', connectionId) as any;
+      if (connectionId) query = query.eq('id', connectionId) as typeof query;
 
       const { error } = await query;
       if (error) throw error;

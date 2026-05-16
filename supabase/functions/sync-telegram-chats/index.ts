@@ -71,6 +71,11 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
         const fileUrl = await getTelegramFileUrl(token, fileId);
         if (fileUrl) {
           botProfilePicture = await cacheProfileImage(adminClient, userId, "telegram", fileUrl, botId) || fileUrl;
+          
+          // Se ainda for uma URL do telegram, aplica o proxy para evitar bloqueios do navegador
+          if (botProfilePicture.includes('api.telegram.org')) {
+            botProfilePicture = `${supabaseUrl}/functions/v1/proxy-media?url=${encodeURIComponent(botProfilePicture)}`;
+          }
         }
       }
     } catch (e) { console.warn("[SYNC] Could not fetch bot profile pic:", e.message); }
@@ -133,7 +138,13 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
         if (chat.photo?.big_file_id) {
           const remoteUrl = await getTelegramFileUrl(token, chat.photo.big_file_id);
           if (remoteUrl) {
-            chatPhoto = await cacheProfileImage(adminClient, userId, "telegram", remoteUrl, chatId) || remoteUrl;
+            // Tenta salvar no Storage para persistência eterna
+            chatPhoto = await cacheProfileImage(adminClient, userId, "telegram", remoteUrl, chatId.toString()) || remoteUrl;
+            
+            // Se ainda for uma URL do telegram, aplica o proxy para evitar bloqueios do navegador
+            if (chatPhoto.includes('api.telegram.org')) {
+              chatPhoto = `${supabaseUrl}/functions/v1/proxy-media?url=${encodeURIComponent(chatPhoto)}`;
+            }
           }
         }
 

@@ -954,11 +954,53 @@ export const MessagingView = () => {
 
       if (error) throw error;
       
-      // Substituir o temporário pelo ID real do banco
-      queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-        old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id, status: "sent" } : m) || []
-      );
-      toast({ title: "Resposta enviada!" });
+      // DISPARO REAL: Chamar a Edge Function publish-post
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        const baseUrl = (supabase as any).functionsUrl || import.meta.env.VITE_SUPABASE_URL + '/functions/v1';
+
+        const publishPayload = {
+          content: optimisticMsg.content,
+          postId: data.id,
+          platforms: [chatPlatform],
+          postType: "message",
+          recipientPhone: !isChannel ? (activeChatId.startsWith('ind-') ? activeChatId.slice(4) : activeChatId) : undefined,
+          channelId: isChannel ? channelDbId : undefined
+        };
+
+        const response = await fetch(`${baseUrl}/publish-post`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token || anonKey}`,
+            'apikey': anonKey
+          },
+          body: JSON.stringify(publishPayload)
+        });
+        
+        const resultData = await response.json();
+        if (!response.ok || !resultData?.success) {
+          console.error("[REPLY] Publish failed:", resultData);
+          await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
+          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+            old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
+          );
+          toast({ title: "Erro no envio", description: resultData?.error || "Falha na API da plataforma", variant: "destructive" });
+        } else {
+          // Substituir o temporário pelo ID real do banco com status final
+          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+            old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id, status: "sent" } : m) || []
+          );
+          toast({ title: "Resposta enviada!" });
+        }
+      } catch (publishErr: any) {
+        console.error("[REPLY] Network error during publish:", publishErr);
+        await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
+        queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+          old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
+        );
+      }
     } catch (e: any) {
       // Reverter optimistic update em caso de erro
       queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 

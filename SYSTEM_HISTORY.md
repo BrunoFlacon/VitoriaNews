@@ -4,42 +4,38 @@ Este documento consolida todas as ações, melhorias e estabilizações realizad
 
 ## 🚀 Marcos do Projeto
 
-### 1. Estabilização de Performance & Infra (Sessão Atual) - CONCLUÍDO 🚀
-- **Correção Crítica:** Resolução de erro sintático no `MessagingView.tsx` e `useSocialConnections.ts`.
-- **Notícias Co-operativas:** Integração Google Trends + NewsAPI (Conteúdo Rico).
-- **Ambiente Deno Nativo:** Ativação nuclear do Deno no VSCode via `settings.json`, garantindo resolução de 100% dos módulos externos e aliases.
-- **Resiliência Bio:** Implementação de `.maybeSingle()` no Bruno Profile para prevenir falhas PGRST116.
-- **Otimização de Console:** Debouncing de conexões e limpeza de logs de produção.
-- **UI Premium:** Drag & Drop e Popovers de edição no Bio.
+### 1. Estabilização OAuth & Mídia (Sessão Atual) - CONCLUÍDO 🚀
+- **TikTok v2 (PKCE)**: Implementação nuclear do handshake PKCE (Code Verifier/Challenge), resolvendo falhas de autenticação.
+- **Proxy de Mídia**: Correção estrutural na Edge Function para bypass de imagens bloqueadas (X, TikTok, Instagram) com suporte a Referer dinâmico.
+- **Identidade Visual**: Restauração total do nome "Vitória Net" e paleta Indigo Premium.
+- **Sincronização de Métricas**: Normalização de followers e posts para exibição imediata no Dashboard.
 
-### 2. Integração de Inteligência e Radar (Sessões Anteriores)
-- Criação e estabilização do `radar-api` para sincronização de tendências.
-- Implementação do Radar de Poder com clustering e detecção de ataques robóticos.
-- Resolução de erros de CORS e permissões SQL (Migração `20260412000001_fix_intelligence_access.sql`).
+### 2. Infraestrutura, RBAC & Dashboard (Brains 31f9 & 5d61)
+- **RBAC Dinâmico**: Criação do `PermissionsTab.tsx` permitindo controle de acesso por cargos para cada módulo do sistema.
+- **Sidebar Dinâmica**: Integração total da navegação com a tabela `system_settings`.
+- **Analytics Real**: Refatoração da função `get-analytics` para eliminar dados fictícios e realizar cálculos reais de engajamento e crescimento.
+- **Performance**: Migrações SQL para índices de performance e sincronização forçada de schema.
 
-### 3. Messaging & Social Sync
-- Refatoração do `useSocialConnections.ts` para ser assíncrono, eliminando travamentos da Thread de UI.
-- Unificação das caixas de entrada e implementação de respostas via Edge Functions reais (handleReply).
+### 3. Messaging & Social Sync (Brain e783)
+- **Unificação de Mensagens**: Centralização de chats de múltiplas fontes na tabela `messages`.
+- **Optimistic UI**: Implementação de deleção imediata de canais no `MessagingView.tsx` com invalidação de cache via React Query.
+- **Telegram Sync**: Estabilização inicial da coleta de chats e membros.
 
 ### 4. Vitória Net (Bruno Profile)
-- Evolução do builder visual de um protótipo estático para uma ferramenta interativa com persistência no Supabase.
-- Remoção de interações via `prompt()` legado em favor de componentes UI integrados.
+- **CMS Visual**: Evolução do builder do Media Kit com persistência atômica e edição inline.
+- **Segurança**: Implementação de RLS (Row Level Security) e proteção contra ataques robóticos.
 
-### 5. Auditoria TestSprite e Mapeamento de Rotas (Última Checagem)
-- Simulação rejeitada no túnel `tun.testsprite.com:7300`, porém superada via auditoria empírica de UI e DataFlow.
-- **Gráficos e Analytics**: Sistema consolidado. Se Edge Functions colapsam ou encontram Rate Limit nas APIs Sociais (Facebook/Google), os gráficos recuam usando cache dinâmico de `social_accounts` via `useSocialStats`.
-- Circuit Break estabelecido para não causar flood em rotas do terminal 3000 de bots offline. 
+## 🛠️ ROADMAP FINAL (Rumo à Produção)
+1. **Threads OAuth**: Resolver mismatch de ID no callback final.
+2. **WhatsApp Oficial**: Migrar Webhooks para a Cloud API da Meta (API Oficial).
+3. **Automação pg_cron**: Agendar coletas diárias do News Radar e Analytics para evitar "Cold Starts".
+4. **Exportação de Relatórios**: Atrelar o botão "Exportar PDF" às métricas reais do sistema.
+5. **Avatar Telegram**: Download real de imagens via `getFile` para garantir exibição de perfis.
 
-## 🛠️ O Que Falta e Próximas Implementações (ROADMAP GERAL)
-1. Consertar a rota de Callback OAuth do `Threads` corrigindo resolução de App ID;
-2. Migrar serviços do WhatsApp de `scripts/Bot_Zap` para a Webhooks do serviço "API Meta Oficial". Cortará gastos extras de processamento local da aplicação;
-3. Instalar rotina periódica do banco de dados global (`pg_cron`) em `supabase/migrations` responsável por colher diariamente o News Radar, eliminando *Cold Starts* na dashboard se for disparado pelos usuários finais;
-4. Finalizar de atrelar o sistema do frontend "Exportar PDF" as consultas reais de analytics;
-
-## 🛠️ Instruções de Manutenção Futura
-1. **NewsAPI Keys:** Sempre manter as credenciais na tabela `api_credentials` com a plataforma `newsapi` e `google_cloud`.
-2. **Deno Config:** Ao abrir o projeto no VSCode, se os erros de importação voltarem, certifique-se de que a extensão "Deno" está instalada e configurada via `settings.json`.
-3. **Migrações:** Todos os schemas críticos estão armazenados no diretório `supabase/migrations`.
+## 🛠️ Instruções de Manutenção
+- **Edge Functions**: Sempre utilizar `apikey` do Supabase para requisições de mídia via Proxy.
+- **Deno Config**: Manter o VSCode configurado para Deno para evitar erros de importação em funções.
+- **Migrations**: O diretório `supabase/migrations` é a fonte oficial de verdade do schema.
 
 ---
-*Documento gerado automaticamente para fins de backup e histórico.*
+*Documento atualizado em 16/05/2026 após auditoria sistêmica completa.*
