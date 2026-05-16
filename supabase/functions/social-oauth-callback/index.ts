@@ -30,7 +30,7 @@ interface TokenResult {
 }
 
 // --- HELPERS ---
-function validateOAuthConfig(provider: string, creds: any) {
+function validateOAuthConfig(provider: string, creds: Record<string, string | undefined>) {
   if (provider === "google" || provider === "youtube") {
     if (!creds.client_id || !creds.client_secret) {
       throw new Error("Configuração Google/YouTube incompleta para troca de token.");
