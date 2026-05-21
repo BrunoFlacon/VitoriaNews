@@ -101,6 +101,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
+  // ── Session Expiry & Auto-Refresh Monitor ──
+  useEffect(() => {
+    if (!session) return;
+
+    const checkSessionExpiry = async () => {
+      const now = Math.floor(Date.now() / 1000);
+      // Se faltar menos de 30 segundos para expirar ou já tiver expirado
+      if (session.expires_at && session.expires_at - now < 30) {
+        console.warn("[AuthContext] JWT está prestes a expirar. Tentando renovação automática...");
+        try {
+          const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
+          if (error || !refreshedSession) {
+            console.error("[AuthContext] Falha ao renovar sessão (JWT expirado). Deslogando...");
+            await logout();
+            const publicPaths = ['/', '/login', '/register'];
+            if (!publicPaths.includes(window.location.pathname)) {
+              window.location.href = '/login';
+            }
+          } else {
+            console.log("[AuthContext] Sessão renovada com sucesso!");
+            setSession(refreshedSession);
+            setUser(refreshedSession.user);
+          }
+        } catch (e) {
+          console.error("[AuthContext] Erro ao tentar renovar sessão:", e);
+        }
+      }
+    };
+
+    // Executa a checagem imediatamente e depois a cada 15 segundos
+    checkSessionExpiry();
+    const interval = setInterval(checkSessionExpiry, 15000);
+
+    return () => clearInterval(interval);
+  }, [session]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -115,15 +151,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     );
 
-    // Initial check - FAST PATH
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        // Fire profile fetch in background, DO NOT await it
-        fetchProfile(session.user.id);
+    // Initial check - FAST PATH com validação robusta de JWT expirado
+    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      const now = Math.floor(Date.now() / 1000);
+      if (initialSession && initialSession.expires_at && initialSession.expires_at < now) {
+        console.warn("[AuthContext] Sessão inicial detectada como expirada. Tentando renovação...");
+        try {
+          const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
+          if (!error && refreshedSession) {
+            setSession(refreshedSession);
+            setUser(refreshedSession.user);
+            fetchProfile(refreshedSession.user.id);
+          } else {
+            console.error("[AuthContext] Falha na renovação da sessão expirada. Efetuando logout limpo...");
+            await supabase.auth.signOut();
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+          }
+        } catch (e) {
+          setSession(null);
+          setUser(null);
+        }
+      } else {
+        setSession(initialSession);
+        setUser(initialSession?.user ?? null);
+        if (initialSession?.user) {
+          fetchProfile(initialSession.user.id);
+        }
       }
-      // Release loading state IMMEDIATELY after session check
       setIsLoading(false);
     }).catch(() => {
       setIsLoading(false);
@@ -233,14 +289,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = async () => {
-    // Set offline BEFORE signing out so we still have auth context to write
-    if (user) {
-      await supabase
-        .from('profiles')
-        .update({ is_online: false, online_status: 'offline', updated_at: new Date().toISOString() })
-        .eq('user_id', user.id);
+    try {
+      if (user) {
+        // Tenta marcar como offline, mas se o JWT estiver expirado ou a rede falhar, ignoramos silenciosamente
+        await supabase
+          .from('profiles')
+          .update({ is_online: false, online_status: 'offline', updated_at: new Date().toISOString() })
+          .eq('user_id', user.id);
+      }
+    } catch (e) {
+      // Ignora erro no update ao fazer logout com JWT expirado ou rede offline
     }
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // Ignora erro no signOut
+    }
     setUser(null);
     setSession(null);
     setProfile(null);

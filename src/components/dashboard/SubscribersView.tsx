@@ -6,17 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { SubscriberModal } from "./subscribers/SubscriberModal";
 
 interface Subscriber {
   id: string;
   full_name: string;
   email: string;
-  whatsapp: string;
-  tier: string;
+  phone: string;
+  plan_type: string;
   created_at: string;
   metadata?: {
     plan_duration?: string;
     preferred_messenger?: string;
+    payment_status?: string;
+    payment_method?: string;
+    due_date?: string;
+    price?: string;
+    currency?: string;
+    notes?: string;
+    products?: string[];
+    receipt_url?: string;
+    profile_picture_url?: string;
   };
 }
 
@@ -24,6 +34,8 @@ export const SubscribersView = () => {
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const fetchSubscribers = async () => {
     setLoading(true);
@@ -48,9 +60,20 @@ export const SubscribersView = () => {
 
   const filtered = subscribers.filter(s => 
     s.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    s.whatsapp?.includes(search) ||
+    s.phone?.includes(search) ||
     s.email?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const translateDuration = (dur?: string) => {
+    if (!dur) return 'MENSAL';
+    switch (dur.toLowerCase()) {
+      case 'monthly': return 'MENSAL';
+      case 'quarterly': return 'TRIMESTRAL';
+      case 'semiannual': return 'SEMESTRAL';
+      case 'yearly': return 'ANUAL';
+      default: return dur.toUpperCase();
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -96,49 +119,59 @@ export const SubscribersView = () => {
             >
               <div className="flex items-center gap-4">
                 <div className={cn(
-                  "w-12 h-12 rounded-xl flex items-center justify-center border",
-                  sub.tier === 'paid_sub' ? "bg-yellow-400/10 border-yellow-400/20 text-yellow-400" : "bg-primary/10 border-primary/20 text-primary"
+                  "w-12 h-12 rounded-xl flex items-center justify-center border overflow-hidden shrink-0 bg-white/5",
+                  sub.plan_type === 'paid_sub' ? "border-yellow-400/30 text-yellow-400" : "border-primary/30 text-primary"
                 )}>
-                  {sub.tier === 'paid_sub' ? <Star className="w-6 h-6" /> : <Users className="w-6 h-6" />}
+                  {sub.metadata?.profile_picture_url ? (
+                    <img src={sub.metadata.profile_picture_url} alt={sub.full_name} className="w-full h-full object-cover" />
+                  ) : sub.plan_type === 'paid_sub' ? (
+                    <Star className="w-6 h-6 fill-current" />
+                  ) : (
+                    <Users className="w-6 h-6" />
+                  )}
                 </div>
                 <div>
-                  <h4 className="font-bold text-white uppercase tracking-tight">{sub.full_name}</h4>
+                  <h4 className="font-bold text-white uppercase tracking-tight flex items-center gap-1.5">
+                    {sub.plan_type === 'paid_sub' && <Star className="w-4 h-4 text-yellow-400 fill-yellow-400 shrink-0 inline-block" />}
+                    <span>{sub.full_name}</span>
+                  </h4>
                   <div className="flex items-center gap-3 text-[10px] font-medium text-slate-400 uppercase tracking-widest mt-1">
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {new Date(sub.created_at).toLocaleDateString()}</span>
-                    <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3" /> {sub.whatsapp}</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-slate-500" /> {new Date(sub.created_at).toLocaleDateString()}</span>
+                    <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3 text-green-500" /> {sub.phone}</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="text-right pr-4 border-r border-white/5 hidden md:block">
-                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Preferencia</div>
-                  <div className="flex items-center justify-end gap-2">
-                    {sub.metadata?.preferred_messenger === 'whatsapp' ? <MessageSquare className="w-3 h-3 text-green-500" /> : <Send className="w-3 h-3 text-blue-500" />}
-                    <span className="text-[10px] font-bold text-white uppercase">{sub.metadata?.preferred_messenger || 'WhatsApp'}</span>
-                  </div>
-                </div>
-                
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-end gap-2.5">
                   <Badge className={cn(
-                    "uppercase text-[9px] font-black tracking-widest py-1",
-                    sub.tier === 'paid_sub' ? "bg-yellow-400 text-black hover:bg-yellow-400" : "bg-primary text-white"
+                    "uppercase text-[9px] font-black tracking-widest py-1 px-3 shadow",
+                    sub.plan_type === 'paid_sub' ? "bg-yellow-400 text-black hover:bg-yellow-400" : "bg-primary text-white"
                   )}>
-                    {sub.tier === 'paid_sub' ? "VIP " + (sub.metadata?.plan_duration || '') : "Gratuito"}
+                    {sub.plan_type === 'paid_sub' ? "VIP " + translateDuration(sub.metadata?.plan_duration) : "Gratuito"}
                   </Badge>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
                     <Button 
-                      variant="ghost" 
+                      variant="outline" 
                       size="sm" 
-                      className="h-7 text-[9px] font-black uppercase text-slate-400 hover:text-white"
+                      className="h-8 bg-[#25D366]/10 border-[#25D366]/30 text-[#25D366] hover:bg-[#25D366] hover:text-black font-black uppercase text-[10px] tracking-widest px-3 flex items-center gap-1.5 transition-all shadow-md"
                       onClick={() => {
-                        const phone = sub.whatsapp.replace(/\D/g, '');
-                        window.open(`https://wa.me/${phone.startsWith('55') ? phone : '55' + phone}`, '_blank');
+                        const phoneNum = sub.phone ? sub.phone.replace(/\D/g, '') : '';
+                        const text = encodeURIComponent(`Olá ${sub.full_name || 'Assinante'}, aqui é do portal Web Rádio Vitória!`);
+                        window.open(`https://wa.me/${phoneNum.startsWith('55') ? phoneNum : '55' + phoneNum}?text=${text}`, '_blank');
                       }}
                     >
-                      <MessageSquare className="w-3 h-3 mr-1" /> WhatsApp
+                      <MessageSquare className="w-3.5 h-3.5 fill-current" /> Conversar no WhatsApp
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-7 text-[9px] font-black uppercase text-slate-400 hover:text-white">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="h-8 text-[10px] font-black uppercase tracking-widest text-yellow-400 border-yellow-400/30 bg-yellow-400/5 hover:bg-yellow-400 hover:text-black transition-all shadow-md"
+                      onClick={() => {
+                        setSelectedSubscriber(sub);
+                        setModalOpen(true);
+                      }}
+                    >
                       Ver Detalhes
                     </Button>
                   </div>
@@ -148,6 +181,13 @@ export const SubscribersView = () => {
           ))
         )}
       </div>
+
+      <SubscriberModal 
+        subscriber={selectedSubscriber}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onUpdated={fetchSubscribers}
+      />
     </div>
   );
 };

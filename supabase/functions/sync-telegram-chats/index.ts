@@ -74,7 +74,7 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
           
           // Se ainda for uma URL do telegram, aplica o proxy para evitar bloqueios do navegador
           if (botProfilePicture.includes('api.telegram.org')) {
-            botProfilePicture = `${supabaseUrl}/functions/v1/proxy-media?url=${encodeURIComponent(botProfilePicture)}`;
+            botProfilePicture = `${supabaseUrl}/functions/v1/media-relay?url=${encodeURIComponent(botProfilePicture)}`;
           }
         }
       }
@@ -143,7 +143,7 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
             
             // Se ainda for uma URL do telegram, aplica o proxy para evitar bloqueios do navegador
             if (chatPhoto.includes('api.telegram.org')) {
-              chatPhoto = `${supabaseUrl}/functions/v1/proxy-media?url=${encodeURIComponent(chatPhoto)}`;
+              chatPhoto = `${supabaseUrl}/functions/v1/media-relay?url=${encodeURIComponent(chatPhoto)}`;
             }
           }
         }

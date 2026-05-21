@@ -36,8 +36,8 @@ export default function PortalLanding() {
         { 
           full_name: name, 
           email: email, 
-          whatsapp: whatsapp, 
-          tier: 'lead',
+          phone: whatsapp, 
+          plan_type: 'lead',
           metadata: { 
             channels: channels,
             preferred_messenger: preferredMessenger,

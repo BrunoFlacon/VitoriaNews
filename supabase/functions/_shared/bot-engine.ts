@@ -212,3 +212,141 @@ export async function logInteraction(supabase: any, {
     console.error(`[BOT-ENGINE] Log Error:`, err);
   }
 }
+
+export type OmnichannelPlatform = 'whatsapp' | 'facebook' | 'instagram' | 'threads' | 'webchat';
+
+export interface NormalizedMessage {
+  platform: OmnichannelPlatform;
+  chatId: string;
+  recipientId: string;
+  text: string;
+  timestamp: number;
+  senderName: string;
+  isGroup: boolean;
+  isComment: boolean;
+  commentId?: string;
+  postId?: string;
+  mediaType?: string;
+  mediaUrl?: string;
+  rawPayload?: any;
+}
+
+export async function sendMetaGraphMessage(msg: NormalizedMessage, replyText: string) {
+  const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") || "v21.0";
+  const SYSTEM_TOKEN = Deno.env.get("META_SYSTEM_USER_TOKEN");
+
+  if (!SYSTEM_TOKEN) {
+    throw new Error("META_SYSTEM_USER_TOKEN não configurado no .env");
+  }
+
+  let url = `https://graph.facebook.com/${GRAPH_VERSION}`;
+  let payload: any = {};
+
+  if (msg.platform === "whatsapp") {
+    url += `/${msg.recipientId}/messages`;
+    payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: msg.chatId,
+      type: "text",
+      text: { body: replyText }
+    };
+  } else if (msg.platform === "facebook" || msg.platform === "instagram") {
+    if (msg.isComment && msg.commentId) {
+      url += `/${msg.commentId}/comments`;
+      payload = { message: replyText };
+    } else {
+      url += `/${msg.recipientId}/messages`;
+      payload = {
+        recipient: { id: msg.chatId },
+        message: { text: replyText }
+      };
+    }
+  } else {
+    console.warn(`[BOT-SENDER] Plataforma ${msg.platform} não possui envio Graph API direto.`);
+    return null;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${SYSTEM_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (data.error) {
+      console.error(`[GRAPH-API-ERROR] [${msg.platform}]`, data.error);
+      throw new Error(data.error.message);
+    }
+    return data;
+  } catch (error) {
+    console.error(`[BOT-SENDER] Falha ao enviar para ${msg.platform} (${msg.chatId}):`, error);
+    throw error;
+  }
+}
+
+export async function processOmnichannelMessage(supabase: any, msg: NormalizedMessage) {
+  console.log(`[BOTZAP] Entrada Normalizada [${msg.platform}] de ${msg.senderName} (${msg.chatId})`);
+
+  const ageSeconds = Math.floor(Date.now() / 1000) - msg.timestamp;
+  if (msg.timestamp > 0 && ageSeconds > 300) {
+    console.log(`[BOTZAP] Ignorando evento antigo (${ageSeconds}s atrás).`);
+    return;
+  }
+
+  const { data: adminUsers } = await supabase.from("profiles").select("id").limit(1);
+  const userId = adminUsers?.[0]?.id;
+
+  if (!userId) {
+    console.warn("[BOTZAP] Nenhum usuário administrador encontrado.");
+    return;
+  }
+
+  await logInteraction(supabase, {
+    userId,
+    platform: msg.platform,
+    chatId: msg.chatId,
+    content: msg.text,
+    status: "received",
+    isBot: false,
+    metadata: {
+      sender_name: msg.senderName,
+      is_group: msg.isGroup,
+      is_comment: msg.isComment,
+      comment_id: msg.commentId,
+      post_id: msg.postId,
+      media_type: msg.mediaType
+    }
+  });
+
+  const reply = await getSmartResponse({
+    supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+    supabaseServiceKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    userId,
+    platform: msg.platform,
+    chatId: msg.chatId,
+    message: msg.text,
+    isGroup: msg.isGroup
+  });
+
+  if (reply && typeof reply === "string") {
+    console.log(`[BOTZAP] Respondendo [${msg.platform}]: "${reply.slice(0, 50)}..."`);
+    await sendMetaGraphMessage(msg, reply);
+
+    await logInteraction(supabase, {
+      userId,
+      platform: msg.platform,
+      chatId: msg.chatId,
+      content: reply,
+      status: "sent",
+      isBot: true,
+      metadata: { is_group: msg.isGroup, is_comment: msg.isComment }
+    });
+  } else if (reply && typeof reply === "object" && reply.error) {
+    console.log(`[BOTZAP] Silenciado/Não respondeu: ${reply.error}`);
+  }
+}

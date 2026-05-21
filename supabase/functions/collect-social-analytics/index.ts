@@ -239,6 +239,124 @@ serve(async (req: Request) => {
                 }
                 break;
               }
+              case "threads": {
+                if (!conn.access_token) break;
+
+                const threadsUserId = conn.platform_user_id || conn.page_id;
+                if (!threadsUserId) break;
+
+                let threadsFollowers = conn.followers_count || 0;
+                let threadsTotalPosts = conn.posts_count || 0;
+                let threadsUsername = conn.page_name || conn.username || "Threads User";
+                let threadsPhoto = conn.profile_image_url || conn.profile_picture || null;
+
+                // Passo 1: Buscar Perfil Básico
+                try {
+                  const profileUrl = `https://graph.threads.net/v1.0/${threadsUserId}?fields=id,username,threads_profile_picture_url,threads_follower_count&access_token=${conn.access_token}`;
+                  const profileResp = await fetch(profileUrl);
+
+                  if (profileResp.ok) {
+                    const profileData = await profileResp.json();
+                    threadsUsername = profileData.username || threadsUsername;
+                    threadsPhoto = profileData.threads_profile_picture_url || threadsPhoto;
+                    if (profileData.threads_follower_count !== undefined && profileData.threads_follower_count !== null) {
+                      threadsFollowers = Number(profileData.threads_follower_count);
+                      console.log(`[COLLECT] Threads Followers (from basic profile): ${threadsFollowers}`);
+                    }
+                    console.log(`[COLLECT] Threads profile OK: @${threadsUsername}`);
+                  } else {
+                    const errText = await profileResp.text();
+                    console.error(`[COLLECT] Threads Profile Error ${profileResp.status}: ${errText}`);
+                  }
+                } catch (e) {
+                  console.error(`[COLLECT] Threads profile request failed:`, e);
+                }
+
+                // Passo 1.5: Buscar Métricas de Seguidores via Insights (Método Oficial)
+                try {
+                  const insightsUrl = `https://graph.threads.net/v1.0/${threadsUserId}/threads_insights?metric=followers_count&access_token=${conn.access_token}`;
+                  const insightsResp = await fetch(insightsUrl);
+                  
+                  if (insightsResp.ok) {
+                    const insightsData = await insightsResp.json();
+                    // A API retorna um array de métricas; filtramos a contagem de seguidores
+                    if (insightsData.data && insightsData.data.length > 0) {
+                      const followerMetric = insightsData.data.find((m: any) => m.name === 'followers_count');
+                      if (followerMetric && followerMetric.values && followerMetric.values.length > 0) {
+                        threadsFollowers = followerMetric.values[0].value;
+                        console.log(`[COLLECT] Threads Followers coletado (via insights): ${threadsFollowers}`);
+                      }
+                    }
+                  } else {
+                    console.warn(`[COLLECT] Threads Insights (Followers) falhou: ${await insightsResp.text()}`);
+                  }
+                } catch (e) {
+                  console.warn(`[COLLECT] Erro ao buscar Threads Insights:`, e);
+                }
+
+                // Passo 2: Buscar e Paginar TODOS os posts para contagem e extração
+                try {
+                  const postsFields = "id,text,media_type,media_url,timestamp,like_count,reply_count";
+                  let nextUrl: string | null = `https://graph.threads.net/v1.0/${threadsUserId}/threads?fields=${postsFields}&limit=25&access_token=${conn.access_token}`;
+                  
+                  let totalFetched = 0;
+                  let pageCount = 0;
+                  const MAX_PAGES = 50; // limite de segurança (1250 posts)
+
+                  while (nextUrl && pageCount < MAX_PAGES) {
+                    const pageResp = await fetch(nextUrl);
+                    if (!pageResp.ok) {
+                      console.warn(`[COLLECT] Threads page ${pageCount + 1} error: ${pageResp.status} - ${await pageResp.text()}`);
+                      break;
+                    }
+
+                    const pageData = await pageResp.json();
+                    const pagePosts: any[] = pageData.data || [];
+
+                    pagePosts.forEach((m: any) => {
+                      fetchedPosts.push({
+                        external_id: m.id,
+                        content: m.text || "",
+                        published_at: m.timestamp,
+                        media_url: m.media_url || null,
+                        media_type: m.media_type || "TEXT",
+                        likes: m.like_count || 0,
+                        comments: m.reply_count || 0,
+                        performance_score: (m.like_count || 0) + ((m.reply_count || 0) * 2)
+                      });
+                    });
+
+                    totalFetched += pagePosts.length;
+                    pageCount++;
+
+                    // FIX: Usar 'paging.next' nativo da Meta Graph API é à prova de falhas
+                    if (pagePosts.length > 0 && pageData.paging && pageData.paging.next) {
+                      nextUrl = pageData.paging.next;
+                    } else {
+                      nextUrl = null;
+                    }
+                  }
+
+                  console.log(`[COLLECT] Threads posts: ${totalFetched} total em ${pageCount} página(s)`);
+                  
+                  // Atualiza o total de posts com base na quantidade real varrida (se pageCount > 0, a API funcionou)
+                  if (pageCount > 0) {
+                    threadsTotalPosts = totalFetched;
+                  }
+                } catch (postsErr) {
+                  console.warn(`[COLLECT] Threads pagination failed:`, postsErr);
+                }
+
+                // Passo 3: Fechar o objeto de métricas com os valores precisos
+                metrics = {
+                  followers: threadsFollowers,
+                  posts_count: threadsTotalPosts,
+                  username: threadsUsername,
+                  profile_picture: threadsPhoto
+                };
+
+                break;
+              }
               case "twitter": {
                 const twTokenToUse = conn.access_token || twToken;
                 if (!twTokenToUse) {
@@ -291,15 +409,85 @@ serve(async (req: Request) => {
                 }
                 break;
               }
+              case "tiktok": {
+                if (!conn.access_token) {
+                  // Fallback se não tiver access token
+                  metrics = {
+                    followers: conn.followers_count || 0,
+                    posts_count: conn.posts_count || 0,
+                    username: conn.page_name || conn.username || "TikTok User",
+                    profile_picture: conn.profile_image_url || conn.profile_picture || null
+                  };
+                  break;
+                }
+                const resp = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username,follower_count,video_count,likes_count", {
+                  headers: { Authorization: `Bearer ${conn.access_token}` }
+                });
+                if (resp.ok) {
+                  const data = await resp.json();
+                  const u = data.data?.user;
+                  if (u) {
+                    metrics = {
+                      followers: u.follower_count || conn.followers_count || 0,
+                      posts_count: u.video_count || conn.posts_count || 0,
+                      likes: u.likes_count || 0,
+                      username: u.display_name || u.username || conn.page_name || conn.username || "TikTok User",
+                      profile_picture: u.avatar_url || conn.profile_image_url || conn.profile_picture || null
+                    };
+                  }
+                } else {
+                  console.warn(`[COLLECT] TikTok API error: ${resp.status} ${await resp.text()}`);
+                  metrics = {
+                    followers: conn.followers_count || 0,
+                    posts_count: conn.posts_count || 0,
+                    username: conn.page_name || conn.username || "TikTok User",
+                    profile_picture: conn.profile_image_url || conn.profile_picture || null
+                  };
+                }
+                break;
+              }
               case "whatsapp": {
                 const [officialMsgs, scheduledCount] = await Promise.all([
                   adminClient.from("messages").select("id", { count: "exact", head: true }).eq("user_id", uid).eq("platform", "whatsapp"),
                   adminClient.from("scheduled_posts").select("id", { count: "exact", head: true }).eq("user_id", uid).contains("platforms", ["whatsapp"]).eq("status", "published")
                 ]);
+
+                let profilePicUrl = conn.profile_picture || conn.profile_image_url || null;
+
+                // Fetch from Meta API if we have access token
+                let token = conn.access_token;
+                if (!token) {
+                  const { data: credsData } = await adminClient
+                    .from("api_credentials")
+                    .select("credentials")
+                    .eq("user_id", uid)
+                    .eq("platform", "whatsapp")
+                    .maybeSingle();
+                  token = credsData?.credentials?.access_token;
+                }
+
+                if (token && conn.platform_user_id) {
+                  try {
+                    const metaResp = await fetch(`https://graph.facebook.com/v21.0/${conn.platform_user_id}/whatsapp_business_profile?fields=profile_picture_url`, {
+                      headers: { "Authorization": `Bearer ${token}` }
+                    });
+                    if (metaResp.ok) {
+                      const metaData = await metaResp.json();
+                      if (metaData.profile_picture_url) {
+                        profilePicUrl = metaData.profile_picture_url;
+                        console.log(`[COLLECT] Fetched WhatsApp profile picture: ${profilePicUrl}`);
+                      }
+                    }
+                  } catch (e) {
+                    console.warn(`[COLLECT] Failed to fetch WhatsApp profile picture:`, e);
+                  }
+                }
+
                 metrics = {
                   followers: conn.followers_count || 0,
                   posts_count: (officialMsgs.count || 0) + (scheduledCount.count || 0),
-                  username: conn.page_name
+                  username: conn.page_name,
+                  profile_picture: profilePicUrl
                 };
                 break;
               }
@@ -347,7 +535,7 @@ serve(async (req: Request) => {
                 last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString()
               };
 
-              const { data: account, error: upsertErr } = await adminClient.from("social_accounts").upsert(upsertPayload, { onConflict: "user_id,platform,platform_user_id" }).select("id").maybeSingle();
+               const { data: account, error: upsertErr } = await adminClient.from("social_accounts").upsert(upsertPayload, { onConflict: "user_id,platform,platform_user_id" }).select("id").maybeSingle();
               if (upsertErr) console.error(`[COLLECT] Account upsert fail:`, upsertErr.message);
 
               // SYNC social_connections with new metrics
@@ -355,10 +543,27 @@ serve(async (req: Request) => {
                 await adminClient.from("social_connections").update({
                   followers_count: upsertPayload.followers_count,
                   posts_count: upsertPayload.posts_count,
+                  profile_image_url: upsertPayload.profile_picture,
+                  profile_picture: upsertPayload.profile_picture,
                   updated_at: new Date().toISOString()
                 }).eq("user_id", uid).eq("platform", conn.platform).eq("platform_user_id", actualId);
-              } catch (connSyncErr) {
+              } catch (connSyncErr: any) {
                 console.warn(`[COLLECT] social_connections sync failed:`, connSyncErr.message);
+              }
+
+              // Record point-in-time historical snapshot (fotografia dos resultados atualizados)
+              try {
+                await adminClient.from("social_metrics_history").insert({
+                  user_id: uid,
+                  platform: conn.platform,
+                  followers: upsertPayload.followers_count,
+                  posts_count: upsertPayload.posts_count,
+                  views: upsertPayload.views,
+                  collected_at: new Date().toISOString()
+                });
+                console.log(`[COLLECT] Historical snapshot recorded for ${conn.platform} (followers: ${upsertPayload.followers_count}, posts: ${upsertPayload.posts_count})`);
+              } catch (histErr: any) {
+                console.warn(`[COLLECT] Historical snapshot logging failed:`, histErr.message);
               }
 
               if (account && fetchedPosts.length > 0) {

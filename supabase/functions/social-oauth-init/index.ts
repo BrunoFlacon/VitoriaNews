@@ -190,7 +190,7 @@ serve(async (req: Request) => {
       authUrl = `https://www.threads.net/oauth/authorize?` + new URLSearchParams({
         client_id: threadsAppId,
         redirect_uri,
-        scope: "threads_basic,threads_content_publish",
+        scope: "threads_basic,threads_content_publish,threads_manage_insights",
         state,
         response_type: "code",
       });

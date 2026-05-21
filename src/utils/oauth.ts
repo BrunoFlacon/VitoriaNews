@@ -1,5 +1,5 @@
-export function getThreadsOAuthUrl() {
-  const clientId = import.meta.env.VITE_META_APP_ID;
+export function getThreadsOAuthUrl(customClientId?: string) {
+  const clientId = customClientId || import.meta.env.VITE_META_APP_ID;
 
   if (!clientId) {
     throw new Error("META_APP_ID não configurado");

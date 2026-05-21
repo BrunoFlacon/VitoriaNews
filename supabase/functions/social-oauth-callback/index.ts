@@ -1,6 +1,7 @@
 // deno-lint-ignore-file
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { cacheProfileImage } from "../_shared/media.ts";
 
 declare const Deno: {
   env: {
@@ -167,27 +168,51 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
       
       if (waData.data) {
         for (const biz of waData.data) {
-          // Busca a foto real do perfil comercial
-          let profilePic = defaultProfileImageUrl;
+          // Buscar os Phone Numbers individuais dentro de cada WABA
           try {
-            const bizProfileRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/whatsapp_business_profile?fields=profile_picture_url&access_token=${accessToken}`);
-            const bizProfile = await bizProfileRes.json();
-            if (bizProfile.data?.[0]?.profile_picture_url) {
-              profilePic = bizProfile.data[0].profile_picture_url;
-            }
-          } catch (e) {
-            console.warn(`[WA] Falha ao buscar foto da conta ${biz.id}:`, e);
-          }
+            const phonesRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/phone_numbers?fields=id,display_phone_number,verified_name,quality_rating&access_token=${accessToken}`);
+            const phonesData = await phonesRes.json();
+            
+            if (phonesData.data && phonesData.data.length > 0) {
+              for (const phone of phonesData.data) {
+                // Busca a foto do perfil comercial específico deste número
+                let profilePic = defaultProfileImageUrl;
+                try {
+                  const bizProfileRes = await fetch(`https://graph.facebook.com/v21.0/${phone.id}/whatsapp_business_profile?fields=profile_picture_url&access_token=${accessToken}`);
+                  const bizProfile = await bizProfileRes.json();
+                  if (bizProfile.data?.[0]?.profile_picture_url) {
+                    profilePic = bizProfile.data[0].profile_picture_url;
+                  }
+                } catch (e) {
+                  console.warn(`[WA] Falha ao buscar foto do phone ${phone.id}:`, e);
+                }
 
-          results.push({ 
-            accessToken, 
-            refreshToken: "", 
-            expiresIn, 
-            platformUserId: biz.id, 
-            pageName: biz.name, 
-            pageId: "", 
-            profileImageUrl: profilePic 
-          });
+                results.push({ 
+                  accessToken, 
+                  refreshToken: "", 
+                  expiresIn, 
+                  platformUserId: phone.id,  // Phone Number ID (individual)
+                  pageName: phone.verified_name || phone.display_phone_number || biz.name, 
+                  pageId: biz.id,  // WABA ID como referência
+                  profileImageUrl: profilePic 
+                });
+              }
+            } else {
+              // Fallback: se não conseguiu listar phones, usa o WABA genérico
+              results.push({ 
+                accessToken, refreshToken: "", expiresIn, 
+                platformUserId: biz.id, pageName: biz.name, 
+                pageId: "", profileImageUrl: defaultProfileImageUrl 
+              });
+            }
+          } catch (phoneErr) {
+            console.warn(`[WA] Falha ao buscar phones da WABA ${biz.id}:`, phoneErr);
+            results.push({ 
+              accessToken, refreshToken: "", expiresIn, 
+              platformUserId: biz.id, pageName: biz.name, 
+              pageId: "", profileImageUrl: defaultProfileImageUrl 
+            });
+          }
         }
       }
     } catch (e) {
@@ -238,6 +263,21 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   
   console.log(`[THREADS DEBUG] Resposta da Meta:`, JSON.stringify(meData));
 
+  // Tentar buscar a contagem inicial de posts para que o painel não exiba 0 posts na primeira carga
+  let initialPostsCount = 0;
+  try {
+    const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${accessToken}`);
+    if (postsResp.ok) {
+      const postsData = await postsResp.json();
+      initialPostsCount = postsData.data?.length || 0;
+      console.log(`[THREADS DEBUG] Posts count initialized: ${initialPostsCount}`);
+    } else {
+      console.warn(`[THREADS DEBUG] Posts list returned status ${postsResp.status}`);
+    }
+  } catch (postsErr: any) {
+    console.warn(`[THREADS DEBUG] Failed to fetch initial posts:`, postsErr.message);
+  }
+
   return [{
     accessToken,
     refreshToken: "",
@@ -248,7 +288,7 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
     profileImageUrl: meData.threads_profile_picture_url || "",
     username: meData.username,
     followers: Number(meData.threads_follower_count) || 0,
-    postsCount: 0 
+    postsCount: initialPostsCount
   }];
 }
 
@@ -471,10 +511,41 @@ serve(async (req: Request) => {
     // -------------------------------------------------------------------------
     if (manual_token && platform === 'threads') {
       console.log(`[OAUTH CALLBACK] Ativando Threads via token manual para o usuário: ${user.id}`);
-      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url&access_token=${manual_token}`);
+      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_follower_count&access_token=${manual_token}`);
       const meData = await meRes.json();
 
       if (meData.error) throw new Error(meData.error.message || "Token manual inválido");
+
+      // 1. Cachear foto de perfil no Supabase Storage de forma definitiva para evitar expiração de token de imagem da Meta
+      let cachedProfilePic = meData.threads_profile_picture_url || "";
+      if (cachedProfilePic) {
+        try {
+          const uploadedUrl = await cacheProfileImage(
+            supabase, user.id, platform, cachedProfilePic, meData.id || ""
+          );
+          if (uploadedUrl) {
+            cachedProfilePic = uploadedUrl;
+            console.log(`[OAUTH CALLBACK] Threads manual profile pic cached successfully: ${cachedProfilePic}`);
+          }
+        } catch (cacheErr: any) {
+          console.warn(`[OAUTH CALLBACK] Failed to cache manual Threads profile pic:`, cacheErr.message);
+        }
+      }
+
+      // 2. Tentar buscar a contagem inicial de posts para que o painel não exiba 0 posts na primeira carga
+      let initialPostsCount = 0;
+      try {
+        const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${manual_token}`);
+        if (postsResp.ok) {
+          const postsData = await postsResp.json();
+          initialPostsCount = postsData.data?.length || 0;
+          console.log(`[OAUTH CALLBACK] Threads manual posts count initialized: ${initialPostsCount}`);
+        } else {
+          console.warn(`[OAUTH CALLBACK] Threads manual posts list returned status ${postsResp.status}`);
+        }
+      } catch (postsErr: any) {
+        console.warn(`[OAUTH CALLBACK] Failed to fetch initial posts for manual connection:`, postsErr.message);
+      }
 
       const results: TokenResult[] = [{
         accessToken: manual_token,
@@ -483,8 +554,10 @@ serve(async (req: Request) => {
         platformUserId: meData.id || "",
         pageName: meData.username || "",
         pageId: "",
-        profileImageUrl: meData.threads_profile_picture_url || "",
-        username: meData.username
+        profileImageUrl: cachedProfilePic || null,
+        username: meData.username,
+        followers: Number(meData.threads_follower_count) || 0,
+        postsCount: initialPostsCount
       }];
 
       // Salvar conexão
@@ -500,7 +573,7 @@ serve(async (req: Request) => {
           page_name: res.pageName,
           page_id: res.pageId,
           profile_image_url: res.profileImageUrl,
-          metadata: { username: res.username, manual: true }
+          metadata: { username: res.username, followers: res.followers, manual: true }
         }, { onConflict: "user_id,platform,platform_user_id" });
 
         await supabase.from("social_accounts").upsert({
@@ -510,7 +583,12 @@ serve(async (req: Request) => {
           username: res.username || res.pageName,
           page_name: res.pageName,
           profile_picture: res.profileImageUrl,
-          is_active: true
+          is_active: true,
+          followers: res.followers || 0,
+          followers_count: res.followers || 0,
+          subscribers_count: res.followers || 0,
+          posts_count: res.postsCount || 0,
+          metadata: { username: res.username, followers: res.followers, posts_count: res.postsCount, profile_image_url: res.profileImageUrl }
         }, { onConflict: "user_id,platform,platform_user_id" });
       }
 
@@ -607,23 +685,26 @@ serve(async (req: Request) => {
         throw new Error(`Troca de token para plataforma '${platform}' não implementada.`);
     }
 
-    // Upsert connections
+    // Upsert connections with cached non-expiring profile pictures
     for (const result of results) {
-       const expiresAt = new Date(Date.now() + result.expiresIn * 1000).toISOString();
-       await supabase.from("social_connections").upsert({
-         user_id: user.id, platform, access_token: result.accessToken, refresh_token: result.refreshToken || null,
-         token_expires_at: expiresAt, platform_user_id: result.platformUserId, page_name: result.pageName,
-         page_id: result.pageId || null, profile_image_url: result.profileImageUrl || null,
-         username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
-       }, { onConflict: "user_id,platform,platform_user_id" });
+        let cachedProfilePic = result.profileImageUrl;
+        if (result.profileImageUrl) {
+          try {
+            cachedProfilePic = await cacheProfileImage(
+              supabase, user.id, platform, result.profileImageUrl, result.platformUserId
+            ) || result.profileImageUrl;
+          } catch (cacheErr: any) {
+            console.warn(`[OAUTH] Failed to cache profile image on initial connection:`, cacheErr.message);
+          }
+        }
 
-        // Injetar Proxy de Mídia para evitar bloqueios de Referer/Auth (403/401)
-        const needsProxy = ['twitter', 'tiktok', 'threads', 'whatsapp', 'instagram', 'facebook'].includes(platform) || 
-                          (result.profileImageUrl && (result.profileImageUrl.includes('fbcdn.net') || result.profileImageUrl.includes('whatsapp.net') || result.profileImageUrl.includes('twimg.com')));
-
-        const finalProfileImage = needsProxy
-          ? `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(result.profileImageUrl || "")}`
-          : result.profileImageUrl;
+        const expiresAt = new Date(Date.now() + result.expiresIn * 1000).toISOString();
+        await supabase.from("social_connections").upsert({
+          user_id: user.id, platform, access_token: result.accessToken, refresh_token: result.refreshToken || null,
+          token_expires_at: expiresAt, platform_user_id: result.platformUserId, page_name: result.pageName,
+          page_id: result.pageId || null, profile_image_url: cachedProfilePic || null,
+          username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id,platform,platform_user_id" });
 
         await supabase.from("social_accounts").upsert({
           user_id: user.id, 
@@ -631,8 +712,9 @@ serve(async (req: Request) => {
           platform_user_id: result.platformUserId, 
           username: result.username || result.pageName,
           page_name: result.pageName, 
-          profile_picture: finalProfileImage, 
+          profile_picture: cachedProfilePic || null, 
           is_connected: true, 
+          followers: Number(result.followers || 0),
           followers_count: Number(result.followers || 0),
           subscribers_count: Number(result.followers || 0),
           posts_count: Number(result.postsCount || 0),
@@ -641,7 +723,7 @@ serve(async (req: Request) => {
             username: result.username, 
             followers: result.followers, 
             posts_count: result.postsCount,
-            profile_image_url: finalProfileImage 
+            profile_image_url: cachedProfilePic 
           }
         }, { onConflict: "user_id,platform,platform_user_id" });
     }

@@ -56,27 +56,34 @@ export function getWhatsAppMediaUrl(mediaId: string, userId: string): string {
 export function getProxyUrl(url: string | null | undefined): string {
   if (!url) return "";
 
+  // URLs já proxied ou do nosso storage não precisam de proxy
+  if (url.includes('media-relay?url=') || url.includes('proxy-media?url=')) return url;
+  if (url.includes('supabase.co/storage/')) return url;
+
   const problematicDomains = [
     "fbcdn.net", 
     "fbsbx.com", 
     "googleusercontent.com", 
     "graph.facebook.com",
+    "graph.threads.net",
     "cdninstagram.com",
     "instagram.fbcdn.net",
     "api.telegram.org",
     "twimg.com",
     "twitter.com",
-    "linkedin.com/media",
     "whatsapp.net",
-    "mmg.whatsapp",
-    "pps.whatsapp"
+    "linkedin.com/media",
+    "tiktok.com",
+    "tiktokv.com",
+    "tiktokcdn.com",
+    "tiktokcdn-us.com",
+    "threads.net"
   ];
   
   const shouldProxy = problematicDomains.some(domain => url.includes(domain));
   
   if (shouldProxy) {
-    if (url.includes('proxy-media?url=')) return url;
-    return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/proxy-media?url=${encodeURIComponent(url)}&apikey=${SUPABASE_ANON_KEY}`;
+    return `https://ghtkdkauseesambzqfrd.supabase.co/functions/v1/media-relay?url=${encodeURIComponent(url)}`;
   }
   
   return url;

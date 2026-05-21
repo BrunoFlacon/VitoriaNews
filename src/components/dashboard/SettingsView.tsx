@@ -32,6 +32,7 @@ import { SEOTab } from "./settings/SEOTab";
 import { ConnectionCard } from "./settings/ConnectionCard";
 import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, AnalyticsIcon, AdsIcon, PeopleIcon, GoogleNewsIcon, SnapchatIcon } from "@/components/icons/SocialIcons";
 import { safeInvoke } from "@/utils/supabase-utils";
+import { WhatsAppEmbeddedSignup } from "./settings/WhatsAppEmbeddedSignup";
 
 
 
@@ -1311,10 +1312,12 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                       const s_pid = String(s.platform_user_id || "").toLowerCase();
                                       const c_pid = String(conn.platform_user_id || "").toLowerCase();
                                       const c_page = String(conn.page_id || "").toLowerCase();
+                                      const s_username = String(s.username || "").toLowerCase();
+                                      const c_username = String(conn.username || conn.page_name || "").toLowerCase();
                                       
                                       return (s_pid && c_pid && s_pid === c_pid) ||
                                              (s_pid && c_page && s_pid === c_page) ||
-                                             (s.username && conn.username && s.username.toLowerCase() === conn.username.toLowerCase()) ||
+                                             (s_username && c_username && s_username === c_username) ||
                                              (s.id === conn.id);
                                     });
 
@@ -1330,36 +1333,51 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                       ? connections.find(c => (c.platform === 'facebook' || c.platform === 'instagram') && c.is_connected)
                                       : null;
 
-                                    const fbPictureFallback = (config.id === 'facebook' || config.id === 'whatsapp' || config.id === 'instagram') ? `https://graph.facebook.com/${conn.page_id || conn.platform_user_id}/picture?type=large` : "";
-                                    const rawPhoto = stats?.profile_picture || conn.profile_image_url || conn.profile_picture || fbPictureFallback;
+                                    const fbPictureFallback = (config.id === 'facebook' || config.id === 'instagram') ? `https://graph.facebook.com/${conn.page_id || conn.platform_user_id}/picture?type=large` : "";
+                                    const rawPhoto = stats?.profile_picture || conn.profile_image_url || conn.profile_picture || fbPictureFallback || "";
                                     const isTwitter = String(rawPhoto || "").includes('twimg.com') || config.id === 'twitter';
-                                    // Cache-bust the raw URL BEFORE proxying to avoid corrupting the proxy endpoint's url= param
-                                    // Skip cache-busting for Twitter/X as their CDN returns 404 for unknown params
-                                    const cacheBustedPhoto = (rawPhoto && !rawPhoto.includes('data:') && !isTwitter)
+                                    // Also skip cache-busting for Graph API as it handles its own redirects
+                                    // Also skip cache-busting for TikTok CDN as it breaks x-signature validation
+                                    const isGraphAPI = String(rawPhoto || "").includes('graph.facebook.com');
+                                    const isTikTok = String(rawPhoto || "").includes('tiktokcdn');
+                                    const cacheBustedPhoto = (rawPhoto && !rawPhoto.includes('data:') && !isTwitter && !isGraphAPI && !isTikTok)
                                       ? `${rawPhoto}${rawPhoto.includes('?') ? '&' : '?'}v=${stats?.updated_at ? new Date(stats.updated_at).getTime() : Date.now()}`
                                       : rawPhoto;
                                     const displayPhoto = getProxyUrl(cacheBustedPhoto);
                                     const displayName = stats?.username || conn.page_name || conn.username || "Conta Conectada";
 
-                                    const totalPlatformMembers = (config.id === 'telegram' || config.id === 'whatsapp')
-                                      ? (audienceBreakdown?.flatMap(b => b.channels) || [])
-                                        .filter(ch => ch.platform === config.id || !ch.platform)
-                                        .reduce((sum, ch) => sum + (ch.members_count || 0), 0)
-                                      : 0;
+                                    const individualChannels = (config.id === 'telegram' || config.id === 'whatsapp')
+                                       ? (audienceBreakdown?.flatMap(b => b.channels) || []).filter(ch => {
+                                           if (ch.platform !== config.id) return false;
+                                           const chId = String(ch.channel_id || ch.id || "").toLowerCase();
+                                           const connId = String(conn.platform_user_id || conn.page_id || conn.id || "").toLowerCase();
+                                           const chName = String(ch.channel_name || "").toLowerCase();
+                                           const connName = String(conn.page_name || conn.username || "").toLowerCase();
+                                           return (chId && connId && (chId.includes(connId) || connId.includes(chId))) || 
+                                                  (chName && connName && (chName.includes(connName) || connName.includes(chName)));
+                                         })
+                                       : [];
 
-                                    const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
-                                      ? (totalPlatformMembers || Number(stats?.followers_count || 0))
-                                      : Math.max(Number(stats?.followers_count || 0), Number(conn.followers_count || 0));
+                                     const individualMembers = individualChannels.length > 0
+                                       ? individualChannels.reduce((sum, ch) => sum + (ch.members_count || 0), 0)
+                                       : 0;
 
-                                    const waMetadata = (stats?.metadata as any) || {};
-                                    const displayPosts = config.id === 'whatsapp'
-                                      ? Number(waMetadata.official_posts_count || stats?.posts_count || 0)
-                                      : (config.id === 'youtube')
-                                        ? Number(stats?.posts_count || stats?.metadata?.video_count || 0)
-                                        : Math.max(Number(stats?.posts_count || 0), Number((conn.metadata as any)?.posts_count || conn.posts_count || 0));
+                                     const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
+                                       ? (individualMembers || Math.max(Number(conn.followers_count || 0), Number(stats?.followers_count || 0)))
+                                       : Math.max(Number(stats?.followers_count || 0), Number(conn.followers_count || 0));
 
-                                    const botPosts = Number(waMetadata.bot_posts_count || 0);
-                                    const botAnswers = Number(waMetadata.bot_answers_count || 0);
+                                     const waMetadata = (stats?.metadata as any) || {};
+                                     const displayPosts = config.id === 'whatsapp'
+                                       ? Number(conn.posts_count || waMetadata.official_posts_count || stats?.posts_count || 0)
+                                       : (config.id === 'youtube')
+                                         ? Number(stats?.posts_count || stats?.metadata?.video_count || 0)
+                                         : (config.id === 'threads')
+                                           // threads_count is stored in posts_count after sync
+                                           ? Math.max(Number(stats?.posts_count || 0), Number(conn.posts_count || 0))
+                                           : Math.max(Number(stats?.posts_count || 0), Number((conn.metadata as any)?.posts_count || conn.posts_count || 0));
+
+                                     const botPosts = Number(waMetadata.bot_posts_count || 0);
+                                     const botAnswers = Number(waMetadata.bot_answers_count || 0);
 
                                     return (
                                       <ConnectionCard
@@ -1387,7 +1405,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                             )}
 
                             {/*  Credential fields and Actions  */}
-                            <form onSubmit={(e) => { e.preventDefault(); handleSaveCreds(config.id); }} className="space-y-6">
+                            <form onSubmit={(e) => { e.preventDefault(); handleSaveCreds(config.id); }} className="space-y-6" autoComplete="off">
                               {/*  Hidden username to satisfy DOM accessibility warnings for password inputs  */}
                               <input type="text" name="username" autoComplete="username" defaultValue={user?.email || "api_user"} style={{ display: 'none' }} />
 
@@ -1600,7 +1618,17 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                   {hasCreds ? "Atualizar Credenciais" : "Salvar Configuração"}
                                 </Button>
 
-                                {config.oauthSupported && (
+                                {config.id === 'whatsapp' ? (
+                                  <WhatsAppEmbeddedSignup 
+                                    appId={credentials["whatsapp"]?.app_id || ""}
+                                    configId={credentials["whatsapp"]?.client_key || ""}
+                                    onSuccess={() => {
+                                      syncSocialStats('whatsapp');
+                                      refetch();
+                                    }}
+                                    isLoading={isConnecting}
+                                  />
+                                ) : config.oauthSupported && (
                                   <Button
                                     type="button"
                                     size="sm"

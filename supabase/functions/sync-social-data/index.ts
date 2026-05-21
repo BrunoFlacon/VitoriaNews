@@ -48,7 +48,7 @@ serve(async (req: Request) => {
 
     const { data: connections, error: connError } = await supabase
       .from("social_connections")
-      .select("id, user_id, platform, access_token, platform_user_id, page_name, page_id, profile_image_url, username, followers_count")
+      .select("id, user_id, platform, access_token, platform_user_id, page_name, page_id, profile_image_url, profile_picture, username, followers_count, posts_count")
       .eq("user_id", userId)
       .eq("is_connected", true);
 
@@ -118,6 +118,7 @@ serve(async (req: Request) => {
                 username: data.name || conn.page_name || "",
                 page_name: data.name || conn.page_name || "",
                 profile_picture: cachedProfilePic,
+                followers: followers,
                 followers_count: followers,
                 posts_count: postsCount,
                 metadata: { posts_count: postsCount },
@@ -131,11 +132,7 @@ serve(async (req: Request) => {
                 updated_at: new Date().toISOString(),
               };
 
-              if (cachedProfilePic !== conn.profile_image_url) {
-                await supabase.from("social_connections")
-                  .update({ profile_image_url: cachedProfilePic })
-                  .eq("id", conn.id);
-              }
+
             }
           }
         } else if (conn.platform === "twitter" || conn.platform === "x") {
@@ -152,6 +149,7 @@ serve(async (req: Request) => {
                 user_id: conn.user_id, platform: "twitter", platform_user_id: conn.platform_user_id,
                 username: data.data.username || "", page_name: data.data.name || "",
                 profile_picture: await cacheProfileImage(supabase, conn.user_id, "twitter", data.data.profile_image_url?.replace('_normal', '_400x400'), conn.platform_user_id) || conn.profile_image_url || "",
+                followers: metrics.followers_count || 0,
                 followers_count: metrics.followers_count || 0, 
                 posts_count: metrics.tweet_count || 0,
                 metadata: { posts_count: metrics.tweet_count || 0 },
@@ -177,6 +175,7 @@ serve(async (req: Request) => {
                 page_name: ch.snippet?.title || "",
                 profile_picture: await cacheProfileImage(supabase, conn.user_id, "youtube", ch.snippet?.thumbnails?.high?.url, ch.id) || conn.profile_image_url || "",
                 cover_photo: await cacheProfileImage(supabase, conn.user_id, "youtube", coverPhoto, `${ch.id}_cover`) || coverPhoto,
+                followers: parseInt(ch.statistics?.subscriberCount || "0"),
                 followers_count: parseInt(ch.statistics?.subscriberCount || "0"),
                 subscribers_count: parseInt(ch.statistics?.subscriberCount || "0"),
                 posts_count: parseInt(ch.statistics?.videoCount || "0"),
@@ -190,22 +189,62 @@ serve(async (req: Request) => {
           }
         } else if (conn.platform === "threads") {
           if (conn.access_token) {
-            const res = await fetch(
-              `https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,followers_count&access_token=${conn.access_token}`
-            );
-            const data = await res.json();
-            if (data && !data.error) {
-              stats = {
-                user_id: conn.user_id, platform: conn.platform, platform_user_id: data.id,
-                username: data.username || "", page_name: data.username || conn.page_name || "",
-                profile_picture: await cacheProfileImage(supabase, conn.user_id, "threads", data.threads_profile_picture_url, data.id) || conn.profile_image_url || "",
-                followers_count: data.followers_count || 0, 
-                posts_count: 0,
-                metadata: { posts_count: 0 },
-                views: 0, likes: 0, shares: 0, comments: 0,
-                engagement_rate: 0,
-                is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-              };
+            try {
+              const res = await fetch(
+                `https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_follower_count&access_token=${conn.access_token}`
+              );
+
+              // 1. Verifica se a resposta da rede foi bem-sucedida antes de fazer o parse do JSON
+              if (!res.ok) {
+                const errText = await res.text();
+                console.error(`[SYNC] Threads HTTP falhou com status ${res.status}:`, errText);
+              } else {
+                const data = await res.json();
+                
+                if (data && !data.error) {
+                  const currentPosts = conn.posts_count || 0;
+                  const currentFollowers = conn.followers_count || 0;
+                  
+                  // 2. Protege a função de cache caso a URL da foto venha vazia
+                  let profilePicUrl = conn.profile_image_url || conn.profile_picture || "";
+                  if (data.threads_profile_picture_url) {
+                    try {
+                      const cachedPic = await cacheProfileImage(supabase, conn.user_id, "threads", data.threads_profile_picture_url, data.id);
+                      if (cachedPic) profilePicUrl = cachedPic;
+                    } catch (cacheErr) {
+                      console.warn("[SYNC] Erro ao colocar imagem do Threads em cache:", cacheErr);
+                      profilePicUrl = data.threads_profile_picture_url; // Usa a URL direta como fallback
+                    }
+                  }
+
+                  stats = {
+                    user_id: conn.user_id, 
+                    platform: conn.platform, 
+                    platform_user_id: data.id || conn.platform_user_id,
+                    username: data.username || conn.username || "", 
+                    page_name: data.username || conn.page_name || "",
+                    profile_picture: profilePicUrl,
+                    // 3. Usa Nullish Coalescing (??) para só usar currentFollowers se a API retornar null/undefined
+                    followers: data.threads_follower_count ?? currentFollowers,
+                    followers_count: data.threads_follower_count ?? currentFollowers, 
+                    posts_count: currentPosts,
+                    metadata: { posts_count: currentPosts },
+                    views: 0, 
+                    likes: 0, 
+                    shares: 0, 
+                    comments: 0,
+                    engagement_rate: 0,
+                    is_connected: true, 
+                    last_synced_at: new Date().toISOString(), 
+                    updated_at: new Date().toISOString(),
+                  };
+                } else if (data && data.error) {
+                  console.error("[SYNC] Threads data API error:", data.error);
+                }
+              }
+            } catch (error) {
+              // 4. Captura falhas de rede (ex: timeout)
+              console.error("[SYNC] Falha fatal na requisição do Threads:", error);
             }
           }
         } else if (conn.platform === "tiktok") {
@@ -221,6 +260,7 @@ serve(async (req: Request) => {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: info.open_id,
                 username: info.username || "", page_name: info.display_name || "",
                 profile_picture: await cacheProfileImage(supabase, conn.user_id, "tiktok", info.avatar_url, info.open_id) || conn.profile_image_url || "",
+                followers: info.follower_count || 0,
                 followers_count: info.follower_count || 0,
                 posts_count: info.video_count || 0,
                 metadata: { posts_count: info.video_count || 0 },
@@ -242,6 +282,7 @@ serve(async (req: Request) => {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: data.sub,
                 username: data.email || "", page_name: data.name || "",
                 profile_picture: await cacheProfileImage(supabase, conn.user_id, "linkedin", data.picture, data.sub) || conn.profile_image_url || "",
+                followers: 0,
                 followers_count: 0, posts_count: 0,
                 metadata: { posts_count: 0 },
                 views: 0, likes: 0, shares: 0, comments: 0,
@@ -262,6 +303,7 @@ serve(async (req: Request) => {
                 user_id: conn.user_id, platform: conn.platform, platform_user_id: data.username,
                 username: data.username || "", page_name: data.full_name || "",
                 profile_picture: await cacheProfileImage(supabase, conn.user_id, "pinterest", data.profile_image, data.username) || conn.profile_image_url || "",
+                followers: data.follower_count || 0,
                 followers_count: data.follower_count || 0,
                 posts_count: data.pin_count || 0,
                 metadata: { posts_count: data.pin_count || 0 },
@@ -280,6 +322,22 @@ serve(async (req: Request) => {
           if (upsertErr) {
             console.error("Upsert error:", upsertErr);
           }
+
+          // Also update social_connections with the cached profile image & metrics
+          try {
+            await supabase.from("social_connections")
+              .update({
+                profile_image_url: stats.profile_picture || conn.profile_image_url,
+                profile_picture: stats.profile_picture || conn.profile_picture,
+                followers_count: stats.followers_count,
+                posts_count: stats.posts_count,
+                updated_at: new Date().toISOString()
+              })
+              .eq("id", conn.id);
+          } catch (syncErr: any) {
+            console.warn(`[SYNC] Failed to update social_connections:`, syncErr.message);
+          }
+
           results.push({ platform: conn.platform, page: conn.page_name || stats.username, status: "synced", followers: stats.followers_count });
         } else {
           results.push({ platform: conn.platform, page: conn.page_name, status: "no_data" });
@@ -312,13 +370,15 @@ serve(async (req: Request) => {
             }
           } catch {}
 
+          const cachedPic = await cacheProfileImage(supabase, userId, "telegram", profilePicture, botInfo.id.toString()) || profilePicture;
           await supabase.from("social_accounts").upsert({
             user_id: userId,
             platform: "telegram",
             platform_user_id: botInfo.id.toString(),
             username: botInfo.username,
             page_name: botInfo.first_name,
-            profile_picture: await cacheProfileImage(supabase, userId, "telegram", profilePicture, botInfo.id.toString()) || profilePicture,
+            profile_picture: cachedPic,
+            followers: 0,
             followers_count: 0,
             posts_count: 0,
             metadata: { posts_count: 0, chat_type: "bot" },
@@ -326,6 +386,21 @@ serve(async (req: Request) => {
             is_connected: true,
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id,platform,platform_user_id" });
+
+          // Sync social_connections with the cached Telegram bot picture
+          try {
+            await supabase.from("social_connections")
+              .update({
+                profile_image_url: cachedPic,
+                profile_picture: cachedPic,
+                updated_at: new Date().toISOString()
+              })
+              .eq("user_id", userId)
+              .eq("platform", "telegram")
+              .eq("platform_user_id", botInfo.id.toString());
+          } catch (syncErr: any) {
+            console.warn(`[SYNC] Failed to update Telegram bot connection:`, syncErr.message);
+          }
 
           results.push({ platform: "telegram", page: botInfo.username, status: "synced", type: "bot" });
         }
@@ -344,13 +419,27 @@ serve(async (req: Request) => {
         );
         const data = await res.json();
         if (!data.error) {
+          let waProfilePic = "";
+          try {
+            const metaResp = await fetch(`https://graph.facebook.com/v21.0/${waPhoneId}/whatsapp_business_profile?fields=profile_picture_url`, {
+              headers: { "Authorization": `Bearer ${waToken}` }
+            });
+            if (metaResp.ok) {
+              const metaData = await metaResp.json();
+              if (metaData.profile_picture_url) {
+                waProfilePic = await cacheProfileImage(supabase, userId, "whatsapp", metaData.profile_picture_url, waPhoneId) || metaData.profile_picture_url;
+              }
+            }
+          } catch {}
+
           await supabase.from("social_accounts").upsert({
             user_id: userId,
             platform: "whatsapp",
             platform_user_id: waPhoneId,
             username: data.verified_name || "",
             page_name: data.verified_name || "WhatsApp Business",
-            profile_picture: "",
+            profile_picture: waProfilePic || "",
+            followers: 0,
             followers_count: 0,
             posts_count: 0,
             metadata: { posts_count: 0, quality_rating: data.quality_rating, account_mode: data.account_mode },
@@ -358,6 +447,23 @@ serve(async (req: Request) => {
             is_connected: true,
             updated_at: new Date().toISOString(),
           }, { onConflict: "user_id,platform,platform_user_id" });
+
+          // Sync social_connections with the cached WhatsApp profile picture
+          if (waProfilePic) {
+            try {
+              await supabase.from("social_connections")
+                .update({
+                  profile_image_url: waProfilePic,
+                  profile_picture: waProfilePic,
+                  updated_at: new Date().toISOString()
+                })
+                .eq("user_id", userId)
+                .eq("platform", "whatsapp")
+                .eq("platform_user_id", waPhoneId);
+            } catch (syncErr: any) {
+              console.warn(`[SYNC] Failed to update WhatsApp Business connection:`, syncErr.message);
+            }
+          }
 
           results.push({ platform: "whatsapp", page: data.verified_name, status: "synced" });
         }

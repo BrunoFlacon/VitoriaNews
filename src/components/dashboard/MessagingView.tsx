@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-  MessageCircle, Plus, Trash2, Send, SendHorizontal, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw, Megaphone, Info, BarChart3, Copy, UserPlus, Link2, MapPin
+  MessageCircle, Plus, Trash2, Send, SendHorizontal, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw, Megaphone, Info, BarChart3, Copy, UserPlus, Link2, MapPin, ArrowLeft
 } from "lucide-react";
 import { cn, getProxyUrl } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
@@ -270,9 +270,9 @@ export const MessagingView = () => {
       let photoUrl = null;
       if (ch.profile_picture) {
         if (ch.profile_picture.startsWith('http') || ch.profile_picture.startsWith('data:')) {
-          photoUrl = ch.profile_picture;
+          photoUrl = getProxyUrl(ch.profile_picture);
         } else {
-          photoUrl = supabase.storage.from("media").getPublicUrl(ch.profile_picture).data.publicUrl;
+          photoUrl = getProxyUrl(supabase.storage.from("media").getPublicUrl(ch.profile_picture).data.publicUrl);
         }
       }
 
@@ -309,9 +309,9 @@ export const MessagingView = () => {
           let photoUrl = null;
           if (rawPhoto) {
             if (rawPhoto.startsWith('http') || rawPhoto.startsWith('data:')) {
-              photoUrl = rawPhoto;
+              photoUrl = getProxyUrl(rawPhoto);
             } else {
-              photoUrl = supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl;
+              photoUrl = getProxyUrl(supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl);
             }
           }
 

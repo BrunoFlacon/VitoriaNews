@@ -93,11 +93,11 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* Platform icon — rounded square, brand bg, diagonal shadow */}
+            {/* Platform icon or user avatar — rounded square, brand bg/avatar, diagonal shadow */}
             <div
               className={cn(
-                "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0",
-                isConnected ? platform.color : "bg-muted/40"
+                "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 relative",
+                isConnected && !selectedAccount?.profile_image_url ? platform.color : "bg-muted/40"
               )}
               style={{
                 // Strong diagonal shadow like the Snapchat reference
@@ -106,12 +106,30 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                   : "4px 5px 10px rgba(0,0,0,0.35)",
               }}
             >
-              <Icon
-                className={cn("w-8 h-8", isConnected ? "text-white" : "text-muted-foreground")}
-                style={{
-                  filter: "drop-shadow(3px 4px 3px rgba(0,0,0,0.50))",
-                }}
-              />
+              {isConnected && selectedAccount?.profile_image_url ? (
+                <>
+                  <SafeImage
+                    src={selectedAccount.profile_image_url}
+                    alt={selectedAccount.page_name || platform.name}
+                    className="w-full h-full rounded-2xl object-cover"
+                  />
+                  <div
+                    className={cn(
+                      "absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-background shadow-md z-10",
+                      platform.color
+                    )}
+                  >
+                    <Icon className="w-3 h-3 text-white" />
+                  </div>
+                </>
+              ) : (
+                <Icon
+                  className={cn("w-8 h-8", isConnected ? "text-white" : "text-muted-foreground")}
+                  style={{
+                    filter: "drop-shadow(3px 4px 3px rgba(0,0,0,0.50))",
+                  }}
+                />
+              )}
             </div>
 
             <div>

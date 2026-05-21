@@ -243,13 +243,14 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       // Threads + TikTok + Ponte de Conexão (webradiovitoria.com.br)
       // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
-      if ((platform === 'threads' || platform === 'tiktok') && isLocal) {
+      if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
         if (platform === 'threads') console.log("[THREADS] Ativando ponte de conexão via webradiovitoria.com.br");
         if (platform === 'tiktok') console.log("[TIKTOK] Ativando ponte de conexão via webradiovitoria.com.br (TikTok não aceita localhost)");
+        if (['facebook', 'instagram', 'whatsapp'].includes(platform)) console.log(`[${platform.toUpperCase()}] Ativando ponte de conexão via webradiovitoria.com.br (bypassing localhost App Domain limit)`);
         origin = "https://webradiovitoria.com.br";
         toast({
           title: "Ponte de Conexão Ativada",
-          description: `Usando webradiovitoria.com.br para contornar a restrição de localhost do ${platform === 'tiktok' ? 'TikTok' : 'Threads'}.`,
+          description: `Usando webradiovitoria.com.br para contornar a restrição de localhost do ${platform}.`,
         });
       } else if (isLocal) {
         let localHostname = window.location.hostname;
@@ -457,7 +458,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
               throw new Error(errorMsg);
             }
             
-            console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso:", cbData);
+            console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso. (Dados sensíveis ocultados para conformidade de segurança)");
             await finalize(true);
             toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
           } catch (err: unknown) {

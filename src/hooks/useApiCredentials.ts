@@ -24,9 +24,11 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Threads User ID (Opcional)", key: "platform_user_id", placeholder: "ID numérico do usuário" },
   ],
   whatsapp: [
-    { label: "Phone Number ID (WhatsApp Business)", key: "phone_number_id", placeholder: "Ex: 123456789012345" },
-    { label: "Access Token (Permanente / System User)", key: "access_token", masked: true },
-    { label: "Business Account ID", key: "business_id", placeholder: "Ex: 1234567890" },
+    { label: "System User Token (Meta Uso Próprio)", key: "access_token", masked: true, placeholder: "EAAG..." },
+    { label: "WhatsApp Business Account ID (WABA ID)", key: "waba_id", placeholder: "Ex: 1234567890" },
+    { label: "Phone Number ID (ID do Número)", key: "phone_number_id", placeholder: "Ex: 9876543210" },
+    { label: "Número do WhatsApp (com DDD)", key: "phone_number", placeholder: "Ex: 5511999999999" },
+    { label: "App ID (Meta for Developers)", key: "app_id", placeholder: "Ex: 123456789012345" },
   ],
   twitter: [
     { label: "Twitter Username/Handle (sem @)", key: "platform_user_id", placeholder: "ex: lovable_dev" },
@@ -195,6 +197,25 @@ export function useApiCredentials() {
       if (error) throw error;
       setCredentials(prev => ({ ...prev, [platform]: finalCreds }));
       toast({ title: "Credenciais salvas", description: `${platform} atualizado com sucesso.` });
+
+      // Auto-upsert social_connection for WhatsApp Business Uso Próprio
+      if (platform === "whatsapp") {
+        if (finalCreds.phone_number_id && (finalCreds.access_token || finalCreds.waba_id)) {
+          const wabaId = finalCreds.waba_id || finalCreds.phone_number_id;
+          const phoneName = finalCreds.phone_number || "WhatsApp Oficial";
+          await supabase.from("social_connections").upsert({
+            user_id: user.id,
+            platform: "whatsapp",
+            platform_user_id: finalCreds.phone_number_id,
+            page_id: wabaId,
+            username: phoneName,
+            page_name: phoneName,
+            access_token: finalCreds.access_token || null,
+            is_connected: true,
+            updated_at: new Date().toISOString()
+          }, { onConflict: "user_id,platform,platform_user_id" });
+        }
+      }
 
       // Auto-sync Telegram after saving token
       if (platform === "telegram") {

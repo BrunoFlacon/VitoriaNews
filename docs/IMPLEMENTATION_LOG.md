@@ -27,9 +27,9 @@ Este documento registra a finalidade de cada Plano de Implementação (IP) e Wal
 
 ---
 ## 🏁 Plano Mestre Final (Atual)
-- **Threads OAuth Fix**: Pendente.
-- **pg_cron Automation**: Pendente.
-- **Meta Cloud API Migration**: Pendente.
-- **Analytics PDF Export**: Pendente.
+- **Threads OAuth Fix**: Concluído (app_id isolation strategy).
+- **pg_cron Automation**: Concluído (Migration criada e ativação via banco).
+- **Meta Cloud API Migration**: Concluído (Edge Function publish-post habilitada via MessagingView).
+- **Analytics PDF Export**: Concluído (Fix no html2canvas/recharts dimensions).
 
 *Este log deve ser atualizado ao final de cada grande ciclo de implementação.*
