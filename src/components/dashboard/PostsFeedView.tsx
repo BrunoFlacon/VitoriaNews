@@ -298,7 +298,7 @@ export function PostsFeedView({ onEditPost }: PostsFeedViewProps) {
           </Badge>
         </div>
         <button
-          onClick={refetch}
+          onClick={() => refetch()}
           disabled={loading}
           className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
         >
