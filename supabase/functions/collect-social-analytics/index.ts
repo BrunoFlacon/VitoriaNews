@@ -554,31 +554,40 @@ serve(async (req: Request) => {
                 console.warn(`[COLLECT] social_connections sync failed:`, connSyncErr.message);
               }
 
-              // Record point-in-time historical snapshot (fotografia dos resultados atualizados)
+              // Record point-in-time snapshot in account_metrics (used by growth/follower charts)
               try {
-                await adminClient.from("social_metrics_history").insert({
+                await adminClient.from("account_metrics").insert({
                   user_id: uid,
+                  social_account_id: account?.id || null,
                   platform: conn.platform,
                   followers: upsertPayload.followers_count,
                   posts_count: upsertPayload.posts_count,
                   views: upsertPayload.views,
+                  likes: upsertPayload.likes,
+                  shares: upsertPayload.shares,
+                  comments: upsertPayload.comments,
+                  engagement_rate: upsertPayload.engagement_rate,
                   collected_at: new Date().toISOString()
                 });
-                console.log(`[COLLECT] Historical snapshot recorded for ${conn.platform} (followers: ${upsertPayload.followers_count}, posts: ${upsertPayload.posts_count})`);
+                console.log(`[COLLECT] account_metrics snapshot recorded for ${conn.platform}`);
               } catch (histErr: any) {
-                console.warn(`[COLLECT] Historical snapshot logging failed:`, histErr.message);
+                console.warn(`[COLLECT] account_metrics snapshot failed:`, histErr.message);
               }
 
               if (account && fetchedPosts.length > 0) {
-                const postPayload = fetchedPosts.map(p => ({
-                  user_id: uid, platform: conn.platform, external_id: p.external_id,
-                  content: p.content, published_at: p.published_at, media_url: p.media_url || null,
-                  media_type: p.media_type || null, likes: p.likes || 0, comments: p.comments || 0,
-                  shares: p.shares || 0, performance_score: p.performance_score || 0,
-                  collected_at: new Date().toISOString()
-                }));
-                const { error: postMetricsErr } = await adminClient.from("post_metrics").upsert(postPayload, { onConflict: "user_id,platform,external_id" });
-                if (postMetricsErr) console.warn(`[COLLECT] Post metrics fail:`, postMetricsErr.message);
+                // Skip rows missing external_id — NULL bypasses the unique index and causes duplicates
+                const validPosts = fetchedPosts.filter((p: any) => !!p.external_id);
+                if (validPosts.length > 0) {
+                  const postPayload = validPosts.map(p => ({
+                    user_id: uid, platform: conn.platform, external_id: p.external_id,
+                    content: p.content, published_at: p.published_at, media_url: p.media_url || null,
+                    media_type: p.media_type || null, likes: p.likes || 0, comments: p.comments || 0,
+                    shares: p.shares || 0, performance_score: p.performance_score || 0,
+                    collected_at: new Date().toISOString()
+                  }));
+                  const { error: postMetricsErr } = await adminClient.from("post_metrics").upsert(postPayload, { onConflict: "user_id,platform,external_id" });
+                  if (postMetricsErr) console.warn(`[COLLECT] Post metrics fail:`, postMetricsErr.message);
+                }
               }
               return { platform: conn.platform, status: "ok" };
             }
