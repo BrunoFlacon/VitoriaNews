@@ -236,59 +236,92 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
 async function exchangeThreads(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
   validateOAuthConfig("meta", creds);
 
-  const payload = {
-    client_id: creds.app_id,
+  // PASSO 1 — Trocar code por token de curta duração
+  const shortPayload = {
+    client_id:     creds.app_id,
     client_secret: creds.app_secret,
-    grant_type: "authorization_code",
-    redirect_uri: redirectUri,
-    code
+    grant_type:    "authorization_code",
+    redirect_uri:  redirectUri,
+    code,
   };
 
-  const res = await fetch("https://graph.threads.net/oauth/access_token", {
+  const shortRes = await fetch("https://graph.threads.net/oauth/access_token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(payload)
+    body: new URLSearchParams(shortPayload)
   });
+  const shortData = await shortRes.json();
+  await logOAuth(supabase, { user_id: userId, provider: "threads", stage: "exchange_short", request_payload: shortPayload, response_payload: shortData });
 
-  const data = await res.json();
-  await logOAuth(supabase, { user_id: userId, provider: "threads", stage: "exchange", request_payload: payload, response_payload: data });
+  if (shortData.error) throw new Error(shortData.error.message || shortData.error_message || "Erro Threads OAuth");
 
-  if (data.error) throw new Error(data.error.message || "Erro Threads OAuth");
+  const shortToken = shortData.access_token as string;
 
-  const accessToken = data.access_token;
-  const expiresIn = data.expires_in || 5184000;
+  // PASSO 2 — Trocar por token de longa duração (60 dias)
+  let accessToken = shortToken;
+  let expiresIn   = shortData.expires_in || 5184000;
 
-  const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_biography,threads_follower_count&access_token=${accessToken}`);
-  const meData = await meRes.json();
-  
-  console.log(`[THREADS DEBUG] Resposta da Meta:`, JSON.stringify(meData));
-
-  // Tentar buscar a contagem inicial de posts para que o painel não exiba 0 posts na primeira carga
-  let initialPostsCount = 0;
   try {
-    const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${accessToken}`);
-    if (postsResp.ok) {
-      const postsData = await postsResp.json();
-      initialPostsCount = postsData.data?.length || 0;
-      console.log(`[THREADS DEBUG] Posts count initialized: ${initialPostsCount}`);
-    } else {
-      console.warn(`[THREADS DEBUG] Posts list returned status ${postsResp.status}`);
+    const longRes = await fetch(
+      `https://graph.threads.net/access_token?` + new URLSearchParams({
+        grant_type:    "th_exchange_token",
+        client_secret: creds.app_secret,
+        access_token:  shortToken,
+      })
+    );
+    const longData = await longRes.json();
+    if (longData.access_token) {
+      accessToken = longData.access_token;
+      expiresIn   = longData.expires_in || 5184000;
+      console.log(`[THREADS] Token de longa duração obtido (expira em ${expiresIn}s)`);
     }
-  } catch (postsErr: any) {
-    console.warn(`[THREADS DEBUG] Failed to fetch initial posts:`, postsErr.message);
+  } catch (e) {
+    console.warn("[THREADS] Falha ao trocar por token longo, usando token curto:", e);
   }
+
+  // PASSO 3 — Buscar perfil completo com foto e métricas
+  // Campos corretos da API do Threads v1.0:
+  //   id, username, name, threads_profile_picture_url,
+  //   threads_biography, followers_count, threads_count
+  const profileRes = await fetch(
+    `https://graph.threads.net/v1.0/me?` + new URLSearchParams({
+      fields:       "id,username,name,threads_profile_picture_url,threads_biography,followers_count,threads_count",
+      access_token: accessToken,
+    })
+  );
+  const profileData = await profileRes.json();
+  await logOAuth(supabase, { user_id: userId, provider: "threads", stage: "profile_fetch", response_payload: profileData });
+
+  console.log("[THREADS] Dados do perfil:", JSON.stringify({
+    id:              profileData.id,
+    username:        profileData.username,
+    has_photo:       !!profileData.threads_profile_picture_url,
+    followers_count: profileData.followers_count,
+    threads_count:   profileData.threads_count,
+  }));
+
+  if (profileData.error) {
+    console.error("[THREADS] Erro ao buscar perfil:", profileData.error);
+  }
+
+  const platformUserId  = profileData.id       || shortData.user_id || "";
+  const username        = profileData.username  || "";
+  const displayName     = profileData.name      || username         || "Threads User";
+  const profileImageUrl = profileData.threads_profile_picture_url || "";
+  const followersCount  = Number(profileData.followers_count) || 0;
+  const postsCount      = Number(profileData.threads_count)   || 0;
 
   return [{
     accessToken,
     refreshToken: "",
     expiresIn,
-    platformUserId: meData.id || "",
-    pageName: meData.username || "",
-    pageId: "",
-    profileImageUrl: meData.threads_profile_picture_url || "",
-    username: meData.username,
-    followers: Number(meData.threads_follower_count) || 0,
-    postsCount: initialPostsCount
+    platformUserId,
+    pageName:        displayName,
+    pageId:          "",
+    profileImageUrl,
+    username,
+    followers:       followersCount,
+    postsCount,
   }];
 }
 
@@ -511,7 +544,7 @@ serve(async (req: Request) => {
     // -------------------------------------------------------------------------
     if (manual_token && platform === 'threads') {
       console.log(`[OAUTH CALLBACK] Ativando Threads via token manual para o usuário: ${user.id}`);
-      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_follower_count&access_token=${manual_token}`);
+      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,followers_count,threads_count&access_token=${manual_token}`);
       const meData = await meRes.json();
 
       if (meData.error) throw new Error(meData.error.message || "Token manual inválido");
@@ -532,19 +565,19 @@ serve(async (req: Request) => {
         }
       }
 
-      // 2. Tentar buscar a contagem inicial de posts para que o painel não exiba 0 posts na primeira carga
-      let initialPostsCount = 0;
-      try {
-        const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${manual_token}`);
-        if (postsResp.ok) {
-          const postsData = await postsResp.json();
-          initialPostsCount = postsData.data?.length || 0;
-          console.log(`[OAUTH CALLBACK] Threads manual posts count initialized: ${initialPostsCount}`);
-        } else {
-          console.warn(`[OAUTH CALLBACK] Threads manual posts list returned status ${postsResp.status}`);
+      // 2. Buscar contagem inicial de posts do threads_count
+      let initialPostsCount = Number(meData.threads_count) || 0;
+      if (!initialPostsCount) {
+        try {
+          const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${manual_token}`);
+          if (postsResp.ok) {
+            const postsData = await postsResp.json();
+            initialPostsCount = postsData.data?.length || 0;
+            console.log(`[OAUTH CALLBACK] Threads manual posts count initialized from list: ${initialPostsCount}`);
+          }
+        } catch (postsErr: any) {
+          console.warn(`[OAUTH CALLBACK] Failed to fetch initial posts for manual connection:`, postsErr.message);
         }
-      } catch (postsErr: any) {
-        console.warn(`[OAUTH CALLBACK] Failed to fetch initial posts for manual connection:`, postsErr.message);
       }
 
       const results: TokenResult[] = [{
@@ -556,7 +589,7 @@ serve(async (req: Request) => {
         pageId: "",
         profileImageUrl: cachedProfilePic || null,
         username: meData.username,
-        followers: Number(meData.threads_follower_count) || 0,
+        followers: Number(meData.followers_count) || 0,
         postsCount: initialPostsCount
       }];
 
@@ -704,6 +737,9 @@ serve(async (req: Request) => {
           token_expires_at: expiresAt, platform_user_id: result.platformUserId, page_name: result.pageName,
           page_id: result.pageId || null, profile_image_url: cachedProfilePic || null,
           username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
+          // CORREÇÃO: salva métricas em social_connections para exibição imediata no painel
+          followers_count: result.followers  ?? null,
+          posts_count:     result.postsCount ?? null,
         }, { onConflict: "user_id,platform,platform_user_id" });
 
         await supabase.from("social_accounts").upsert({

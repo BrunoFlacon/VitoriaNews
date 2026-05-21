@@ -252,16 +252,20 @@ serve(async (req: Request) => {
 
                 // Passo 1: Buscar Perfil Básico
                 try {
-                  const profileUrl = `https://graph.threads.net/v1.0/${threadsUserId}?fields=id,username,threads_profile_picture_url,threads_follower_count&access_token=${conn.access_token}`;
+                  const profileUrl = `https://graph.threads.net/v1.0/${threadsUserId}?fields=id,username,threads_profile_picture_url,followers_count,threads_count&access_token=${conn.access_token}`;
                   const profileResp = await fetch(profileUrl);
 
                   if (profileResp.ok) {
                     const profileData = await profileResp.json();
                     threadsUsername = profileData.username || threadsUsername;
                     threadsPhoto = profileData.threads_profile_picture_url || threadsPhoto;
-                    if (profileData.threads_follower_count !== undefined && profileData.threads_follower_count !== null) {
-                      threadsFollowers = Number(profileData.threads_follower_count);
+                    if (profileData.followers_count !== undefined && profileData.followers_count !== null) {
+                      threadsFollowers = Number(profileData.followers_count);
                       console.log(`[COLLECT] Threads Followers (from basic profile): ${threadsFollowers}`);
+                    }
+                    if (profileData.threads_count !== undefined && profileData.threads_count !== null) {
+                      threadsTotalPosts = Number(profileData.threads_count);
+                      console.log(`[COLLECT] Threads Total Posts (from basic profile): ${threadsTotalPosts}`);
                     }
                     console.log(`[COLLECT] Threads profile OK: @${threadsUsername}`);
                   } else {
@@ -338,10 +342,9 @@ serve(async (req: Request) => {
                   }
 
                   console.log(`[COLLECT] Threads posts: ${totalFetched} total em ${pageCount} página(s)`);
-                  
-                  // Atualiza o total de posts com base na quantidade real varrida (se pageCount > 0, a API funcionou)
+                  // Atualiza o total de posts com base na contagem oficial e na quantidade real varrida
                   if (pageCount > 0) {
-                    threadsTotalPosts = totalFetched;
+                    threadsTotalPosts = Math.max(threadsTotalPosts, totalFetched);
                   }
                 } catch (postsErr) {
                   console.warn(`[COLLECT] Threads pagination failed:`, postsErr);

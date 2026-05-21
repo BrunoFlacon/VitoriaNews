@@ -191,7 +191,7 @@ serve(async (req: Request) => {
           if (conn.access_token) {
             try {
               const res = await fetch(
-                `https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_follower_count&access_token=${conn.access_token}`
+                `https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,followers_count,threads_count&access_token=${conn.access_token}`
               );
 
               // 1. Verifica se a resposta da rede foi bem-sucedida antes de fazer o parse do JSON
@@ -225,10 +225,10 @@ serve(async (req: Request) => {
                     page_name: data.username || conn.page_name || "",
                     profile_picture: profilePicUrl,
                     // 3. Usa Nullish Coalescing (??) para só usar currentFollowers se a API retornar null/undefined
-                    followers: data.threads_follower_count ?? currentFollowers,
-                    followers_count: data.threads_follower_count ?? currentFollowers, 
-                    posts_count: currentPosts,
-                    metadata: { posts_count: currentPosts },
+                    followers: data.followers_count ?? currentFollowers,
+                    followers_count: data.followers_count ?? currentFollowers, 
+                    posts_count: data.threads_count ?? currentPosts,
+                    metadata: { posts_count: data.threads_count ?? currentPosts },
                     views: 0, 
                     likes: 0, 
                     shares: 0, 
