@@ -227,3 +227,15 @@ export const getSocialPlatform = (id: SocialPlatformId) =>
 export const platformMetadata = Object.fromEntries(
   socialPlatforms.map(p => [p.id, p])
 ) as Record<string, typeof socialPlatforms[number]>;
+
+import { normalizePlatform } from "@/lib/utils";
+
+export const getPlatformDetails = (platform: string) => {
+  if (!platform) return null;
+  const normalized = normalizePlatform(platform);
+  return (
+    socialPlatforms.find(p => p.id === normalized) ||
+    socialPlatforms.find(p => p.id === platform.toLowerCase()) ||
+    null
+  );
+};
