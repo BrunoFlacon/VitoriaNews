@@ -1,0 +1,16 @@
+# Novo Portal — Redação Multimídia de Tupã e Região
+
+> Portal de notícias multimídia com análises de precisão, breaking news, podcasts e reportagens exclusivas da região de Tupã/SP.
+
+## Conteúdo principal
+- [Portal de Notícias](https://vitoria-net.lovable.app/news)
+- [Página Inicial](https://vitoria-net.lovable.app/)
+- [Manual do Usuário](https://vitoria-net.lovable.app/manual)
+- [Perfil — Bruno Falcão](https://vitoria-net.lovable.app/profile/bruno-flacon)
+
+## Sobre
+Plataforma omnichannel de redação multimídia que combina jornalismo, redes sociais e streaming ao vivo. Cobre política, economia, cultura e cotidiano da região de Tupã.
+
+## Políticas
+- [Termos de Uso](https://vitoria-net.lovable.app/terms)
+- [Privacidade](https://vitoria-net.lovable.app/privacy)
