@@ -522,6 +522,65 @@ async function exchangeTikTok(code: string, redirectUri: string, codeVerifier: s
   }];
 }
 
+async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
+  const clientId = creds.client_id;
+  const clientSecret = creds.client_secret;
+
+  if (!clientId || !clientSecret) {
+    throw new Error("LinkedIn Client ID e Client Secret são obrigatórios.");
+  }
+
+  const payload = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    client_id: clientId,
+    client_secret: clientSecret
+  });
+
+  const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: payload.toString()
+  });
+
+  const data = await res.json();
+  await logOAuth(supabase, { user_id: userId, provider: "linkedin", stage: "exchange", request_payload: { client_id: clientId, redirect_uri: redirectUri }, response_payload: data });
+
+  if (data.error) throw new Error(data.error_description || data.error);
+
+  const accessToken = data.access_token;
+  const refreshToken = data.refresh_token || "";
+  const expiresIn = data.expires_in || 5184000; // padrão do LinkedIn é 60 dias
+
+  // Buscar perfil básico do LinkedIn via Userinfo (OIDC)
+  const userinfoRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const userinfoData = await userinfoRes.json();
+  
+  if (!userinfoData.sub) {
+    throw new Error("Não foi possível obter dados do perfil do LinkedIn via OIDC.");
+  }
+
+  const platformUserId = userinfoData.sub;
+  const pageName = userinfoData.name || userinfoData.email || "LinkedIn User";
+  const profileImageUrl = userinfoData.picture || "";
+  const username = userinfoData.email || "";
+
+  // Retornar dados estruturados
+  return [{
+    accessToken,
+    refreshToken,
+    expiresIn,
+    platformUserId,
+    pageName,
+    pageId: "",
+    profileImageUrl,
+    username
+  }];
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -679,6 +738,9 @@ serve(async (req: Request) => {
     if (platform === "twitter") {
       formattedCreds.client_id = getVal("client_id", "TWITTER_CLIENT_ID");
       formattedCreds.client_secret = getVal("client_secret", "TWITTER_CLIENT_SECRET");
+    } else if (platform === "linkedin") {
+      formattedCreds.client_id = getVal("client_id", "LINKEDIN_CLIENT_ID");
+      formattedCreds.client_secret = getVal("client_secret", "LINKEDIN_CLIENT_SECRET");
     } else if (platform === "reddit") {
       formattedCreds.client_id = getVal("client_id", "REDDIT_CLIENT_ID");
       formattedCreds.client_secret = getVal("client_secret", "REDDIT_CLIENT_SECRET");
@@ -708,6 +770,7 @@ serve(async (req: Request) => {
       case "instagram":
       case "whatsapp": results = await exchangeMeta(code, oauthState.redirect_uri, platform, formattedCreds, supabase, user.id); break;
       case "threads": results = await exchangeThreads(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
+      case "linkedin": results = await exchangeLinkedIn(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
       case "reddit": results = await exchangeReddit(code, oauthState.redirect_uri, { 
         client_id: raw.client_id, 
         client_secret: raw.client_secret 

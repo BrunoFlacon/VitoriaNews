@@ -241,11 +241,12 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Threads + TikTok + Ponte de Conexão (webradiovitoria.com.br)
+      // Threads + TikTok + LinkedIn + Ponte de Conexão (webradiovitoria.com.br)
       // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
-      if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
+      if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal) {
         if (platform === 'threads') console.log("[THREADS] Ativando ponte de conexão via webradiovitoria.com.br");
         if (platform === 'tiktok') console.log("[TIKTOK] Ativando ponte de conexão via webradiovitoria.com.br (TikTok não aceita localhost)");
+        if (platform === 'linkedin') console.log("[LINKEDIN] Ativando ponte de conexão via webradiovitoria.com.br");
         if (['facebook', 'instagram', 'whatsapp'].includes(platform)) console.log(`[${platform.toUpperCase()}] Ativando ponte de conexão via webradiovitoria.com.br (bypassing localhost App Domain limit)`);
         origin = "https://webradiovitoria.com.br";
         toast({
@@ -255,7 +256,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       } else if (isLocal) {
         let localHostname = window.location.hostname;
         if (['twitter'].includes(platform)) localHostname = "127.0.0.1";
-        else if (['facebook', 'instagram', 'whatsapp', 'threads', 'google', 'youtube', 'tiktok'].includes(platform)) localHostname = "localhost";
+        else if (['facebook', 'instagram', 'whatsapp', 'threads', 'google', 'youtube', 'tiktok', 'linkedin'].includes(platform)) localHostname = "localhost";
         origin = `http://${localHostname}${port}`;
       }
 

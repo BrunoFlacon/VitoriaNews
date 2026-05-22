@@ -1,29 +1,63 @@
-import { PublishPayload } from './dispatcher.ts';
+// _shared/platforms/linkedin.ts
+// Adaptador de despacho para LinkedIn.
+// Busca credenciais via getPlatformCredentials() e delega à implementação real.
 
-export async function publishToLinkedIn(supabase: any, payload: PublishPayload): Promise<any> {
+import { PublishPayload } from "./dispatcher.ts";
+import { getPlatformCredentials } from "../credentials.ts";
+import { publishLinkedin } from "../../publish-post/platforms/linkedin.ts";
+
+export async function publishToLinkedIn(
+  supabase: any,
+  payload: PublishPayload
+): Promise<any> {
   const { content, mediaUrls, userId, options } = payload;
-  
-  // Fetch LinkedIn credentials from api_credentials
-  const { data: credentials, error } = await supabase
-    .from('api_credentials')
-    .select('credentials')
-    .eq('user_id', userId)
-    .eq('platform', 'linkedin')
-    .maybeSingle();
 
-  if (error || !credentials?.credentials?.access_token) {
-    throw new Error('LinkedIn access token not found. Please configure it in Settings.');
+  // ── Credenciais ───────────────────────────────────────────────────────────
+  const creds = await getPlatformCredentials(
+    supabase,
+    userId || "",
+    "linkedin",
+    options?.targetProfileId
+  );
+
+  if (!creds.accessToken) {
+    throw new Error(
+      "LinkedIn: access_token não encontrado. Conecte sua conta primeiro."
+    );
   }
 
-  const accessToken = credentials.credentials.access_token;
-  const personUrn = credentials.credentials.person_urn;
-
-  if (!personUrn) {
-    throw new Error('LinkedIn Person URN not found. Please configure it in Settings.');
+  // LinkedIn usa platformUserId (pessoa), nunca pageId — o URN é montado no
+  // publishLinkedin(), portanto não devemos adicionar o prefixo novamente aqui.
+  const rawUserId = creds.platformUserId as string | undefined;
+  if (!rawUserId) {
+    throw new Error(
+      "LinkedIn: platform_user_id não encontrado na conexão. Reconecte a conta."
+    );
   }
 
-  // Placeholder for real LinkedIn API call (Person sharing)
-  // https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/shares/posts-api
-  
-  return { success: true, platform: 'linkedin', info: 'LinkedIn sharing metadata ready. Final integration pending API mapping.' };
+  // Remove prefixo "urn:li:person:" caso já exista (prevenção de duplicação)
+  const platformUserId = rawUserId.replace(/^urn:li:person:/, "");
+
+  // ── Converter mediaUrls[] → Array<{ url, altText? }> ─────────────────────
+  const mediaItems: Array<{ url: string; altText?: string }> | null =
+    mediaUrls && mediaUrls.length > 0
+      ? mediaUrls.map((url) => ({ url }))
+      : null;
+
+  // ── Publicar ──────────────────────────────────────────────────────────────
+  const result = await publishLinkedin(
+    content,
+    mediaItems,
+    { platform_user_id: platformUserId, access_token: creds.accessToken },
+    {
+      postType:  options?.postType,
+      mediaType: payload.contentType,
+    }
+  );
+
+  if (!result.success) {
+    throw new Error(`LinkedIn: ${result.error}`);
+  }
+
+  return { success: true, platform: "linkedin", postId: result.postId };
 }
