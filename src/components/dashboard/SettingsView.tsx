@@ -1070,10 +1070,11 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
                 const hasCreds = hasCredentials(config.id);
                 // Telegram connects via Bot Token — data saved directly to social_accounts.
+                // Filter connections by platform and connected status only.
+                // Note: access_token is intentionally NOT selected in the query (security), so we never check it here.
                 const platformConnections = connections.filter(c =>
                   c.platform === config.id &&
-                  c.is_connected &&
-                  ((c as any).access_token !== null || config.id === 'whatsapp' || config.id === 'telegram')
+                  c.is_connected
                 );
 
                 const hasConnections = platformConnections.length > 0;
