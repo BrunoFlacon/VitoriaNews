@@ -71,3 +71,6 @@ _archive_temp/
 .testsprite_backup/
 testsprite_tests/
 
+# Supabase function test files
+supabase/functions/**/tests/
+

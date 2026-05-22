@@ -114,7 +114,7 @@ export const ChatList = ({
                 <div className="relative">
                   <div className="w-12 h-12 rounded-2xl overflow-hidden bg-white/5 border border-white/10 shadow-lg">
                     <SafeImage
-                      src={chat.photoUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(chat.name)}&background=random`}
+                      src={chat.photoUrl || ""}
                       alt={chat.name}
                       className="w-full h-full object-cover"
                       isWhatsAppImage={chat.photoUrl?.includes('whatsapp.net') || chat.platform === 'whatsapp'}

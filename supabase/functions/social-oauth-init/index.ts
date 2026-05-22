@@ -236,7 +236,7 @@ serve(async (req: Request) => {
         redirect_uri,
         state,
         response_type: "code",
-        scope: "openid profile email w_member_social",
+        scope: "openid profile email w_member_social w_organization_social", // Tentando apenas com w_organization_social
       });
 
     // =========================================================================

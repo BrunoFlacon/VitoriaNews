@@ -182,8 +182,8 @@ serve(async (req: Request) => {
                 if (!conn.access_token) break;
                 const pageId = conn.page_id || conn.platform_user_id;
                 if (!pageId) break;
-                // Use limit=5 to save memory, summary(true) gives the true total count of posts
-                const fields = "name,followers_count,fan_count,picture.type(large),cover,posts.limit(5).summary(true).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true))";
+                // Fetch page info + recent posts for engagement metrics
+                const fields = "name,followers_count,fan_count,picture.type(large),cover,posts.limit(5).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true))";
                 const resp = await fetch(`https://graph.facebook.com/v21.0/${pageId}?fields=${fields}&access_token=${conn.access_token}`);
                 if (resp.ok) {
                   const data = await resp.json();
@@ -199,9 +199,24 @@ serve(async (req: Request) => {
                       performance_score: (p.likes?.summary?.total_count || 0) + (p.comments?.summary?.total_count || 0)
                     });
                   });
+
+                  // ★ Chamada separada para total real de posts publicados
+                  let totalPostsCount = fbPosts.length;
+                  try {
+                    const pubPostsRes = await fetch(
+                      `https://graph.facebook.com/v21.0/${pageId}/published_posts?summary=total_count&limit=0&access_token=${conn.access_token}`
+                    );
+                    if (pubPostsRes.ok) {
+                      const pubPostsData = await pubPostsRes.json();
+                      totalPostsCount = pubPostsData?.summary?.total_count || totalPostsCount;
+                    }
+                  } catch (e) {
+                    console.warn(`[COLLECT] FB published_posts count fallback for ${pageId}:`, e);
+                  }
+
                   metrics = {
                     followers: Math.max(data.fan_count || 0, data.followers_count || 0),
-                    posts_count: data.posts?.summary?.total_count || fbPosts.length, // True total posts!
+                    posts_count: totalPostsCount,
                     username: data.name || conn.page_name,
                     profile_picture: data.picture?.data?.url
                   };

@@ -520,7 +520,7 @@ export const MessagingView = () => {
         user_id: user.id,
         channel_id: channelKey,
         platform: selectedInfoChannel.platform,
-        profile_picture: `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name)}&background=random`,
+        profile_picture: "", // Removido fallback externo para evitar erros de CORS
         full_name: contact.name,
         phone_number: contact.phone,
         role: 'member',

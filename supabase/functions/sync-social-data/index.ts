@@ -81,7 +81,7 @@ serve(async (req: Request) => {
               const profilePic  = data.picture?.data?.url || conn.profile_image_url || "";
               let postsCount    = 0;
               try {
-                const postsRes  = await fetch(`https://graph.facebook.com/v21.0/${pageId}/posts?limit=1&summary=true&access_token=${conn.access_token}`);
+                const postsRes  = await fetch(`https://graph.facebook.com/v21.0/${pageId}/published_posts?summary=total_count&limit=0&access_token=${conn.access_token}`);
                 const postsData = await postsRes.json();
                 postsCount      = postsData?.summary?.total_count || 0;
               } catch {}

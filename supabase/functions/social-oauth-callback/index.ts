@@ -222,7 +222,36 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
   } else {
     for (const page of pages) {
       const pagePhoto = page.picture?.data?.url || defaultProfileImageUrl;
-      results.push({ accessToken: page.access_token, refreshToken: "", expiresIn, platformUserId: page.id, pageName: page.name, pageId: page.id, profileImageUrl: pagePhoto });
+
+      // ★ Buscar total de posts publicados pela página
+      let postsCount = 0;
+      try {
+        const pubPostsRes = await fetch(
+          `https://graph.facebook.com/v21.0/${page.id}/published_posts?summary=total_count&limit=0&access_token=${page.access_token}`
+        );
+        if (pubPostsRes.ok) {
+          const pubPostsData = await pubPostsRes.json();
+          postsCount = pubPostsData?.summary?.total_count || 0;
+        }
+      } catch (e) { console.warn(`[META] Falha ao buscar posts_count da página ${page.id}:`, e); }
+
+      // ★ Buscar seguidores da página
+      let followers = 0;
+      try {
+        const pageInfoRes = await fetch(
+          `https://graph.facebook.com/v21.0/${page.id}?fields=followers_count,fan_count&access_token=${page.access_token}`
+        );
+        if (pageInfoRes.ok) {
+          const pageInfo = await pageInfoRes.json();
+          followers = Math.max(pageInfo.followers_count || 0, pageInfo.fan_count || 0);
+        }
+      } catch (e) { console.warn(`[META] Falha ao buscar followers da página ${page.id}:`, e); }
+
+      results.push({
+        accessToken: page.access_token, refreshToken: "", expiresIn,
+        platformUserId: page.id, pageName: page.name, pageId: page.id,
+        profileImageUrl: pagePhoto, postsCount, followers,
+      });
     }
   }
 
