@@ -22,6 +22,24 @@ export interface SocialConnection {
   metadata?: Record<string, unknown> | null;
 }
 
+const writeToPopupSafely = (win: Window | null, html: string) => {
+  if (!win || win.closed) return;
+  try {
+    const doc = win.document;
+    if (doc) {
+      doc.open();
+      doc.write(html);
+      doc.close();
+      return;
+    }
+  } catch (e) {
+    console.warn("[OAUTH] Não é possível acessar o documento do popup (CORS). Fechando popup.");
+  }
+  try {
+    win.close();
+  } catch (_) {}
+};
+
 export function useSocialConnections(options: { enabled?: boolean } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -355,17 +373,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
 
         if (aErr) {
-          try {
-            popup.document.open();
-            popup.document.write(`<html><head><title>Erro - ${platform}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="color:#ef4444;font-size:48px;margin-bottom:16px;">⚠️</div><h1>Erro ao conectar ${platform}</h1><p>${(aErr.message || 'Verifique se as credenciais estão salvas nas Configurações de API.').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`);
-            popup.document.close();
-          } catch (writeErr) {
-            try { 
-              popup.close(); 
-            } catch (_) { 
-              // Ignore errors when closing popup
-            }
-          }
+          writeToPopupSafely(
+            popup,
+            `<html><head><title>Erro - ${platform}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="color:#ef4444;font-size:48px;margin-bottom:16px;">⚠️</div><h1>Erro ao conectar ${platform}</h1><p>${(aErr.message || 'Verifique se as credenciais estão salvas nas Configurações de API.').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
+          );
           toast({
             title: "Configuração pendente",
             description: aErr.message || "Verifique se as APIs estão configuradas corretamente.",
@@ -392,15 +403,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-        if (popup && !popup.closed) {
-          try {
-            popup.document.open();
-            popup.document.write(`<html><head><title>Falha de Conexão</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="font-size:48px;margin-bottom:16px;">🌐</div><h1>Falha de Conexão</h1><p>${errorMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`);
-            popup.document.close();
-          } catch (_) {
-            try { popup.close(); } catch { /* Ignore errors when closing popup */ }
-          }
-        }
+        writeToPopupSafely(
+          popup,
+          `<html><head><title>Falha de Conexão</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="font-size:48px;margin-bottom:16px;">🌐</div><h1>Falha de Conexão</h1><p>${errorMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
+        );
         toast({ title: "Erro de rede", description: errorMessage, variant: "destructive" });
         return;
       }
