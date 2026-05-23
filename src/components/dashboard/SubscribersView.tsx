@@ -27,6 +27,7 @@ interface Subscriber {
     products?: string[];
     receipt_url?: string;
     profile_picture_url?: string;
+    instagram_username?: string;
   };
 }
 
@@ -122,12 +123,19 @@ export const SubscribersView = () => {
                   "w-12 h-12 rounded-xl flex items-center justify-center border overflow-hidden shrink-0 bg-white/5",
                   sub.plan_type === 'paid_sub' ? "border-yellow-400/30 text-yellow-400" : "border-primary/30 text-primary"
                 )}>
-                  {sub.metadata?.profile_picture_url ? (
-                    <img src={sub.metadata.profile_picture_url} alt={sub.full_name} className="w-full h-full object-cover" />
-                  ) : sub.plan_type === 'paid_sub' ? (
-                    <Star className="w-6 h-6 fill-current" />
+                  {sub.metadata?.profile_picture_url || sub.metadata?.instagram_username ? (
+                    <img 
+                      src={sub.metadata?.profile_picture_url || `https://unavatar.io/instagram/${sub.metadata.instagram_username.replace('@', '')}`} 
+                      alt={sub.full_name} 
+                      className="w-full h-full object-cover" 
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(sub.full_name)}`;
+                      }}
+                    />
                   ) : (
-                    <Users className="w-6 h-6" />
+                    <div className="w-full h-full flex items-center justify-center font-bold text-xs uppercase bg-white/5 text-slate-300">
+                      {sub.full_name ? sub.full_name.split(' ').map(n => n[0]).join('').slice(0, 2) : <Users className="w-5 h-5" />}
+                    </div>
                   )}
                 </div>
                 <div>
