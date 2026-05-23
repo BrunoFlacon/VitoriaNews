@@ -61,10 +61,22 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const AUTH_CACHE_KEY = 'auth_cached_profile';
+
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+
+  // ── Optimistic Cache: load profile from localStorage synchronously ──
+  const [profile, setProfile] = useState<Profile | null>(() => {
+    try {
+      const cached = localStorage.getItem(AUTH_CACHE_KEY);
+      return cached ? (JSON.parse(cached) as Profile) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [onlineUsersMap, setOnlineUsersMap] = useState<Record<string, any>>({});
@@ -86,6 +98,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (!error && data) {
         setProfile(data);
+        // ── Persist to localStorage cache for instant next load ──
+        try { localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(data)); } catch {}
         Promise.resolve(
           supabase
             .from('profiles')
@@ -305,6 +319,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch (e) {
       // Ignora erro no signOut
     }
+    // ── Limpar cache de perfil ao fazer logout ──
+    try { localStorage.removeItem(AUTH_CACHE_KEY); } catch {}
     setUser(null);
     setSession(null);
     setProfile(null);

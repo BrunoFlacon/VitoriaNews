@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { 
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter 
 } from "@/components/ui/dialog";
+import { SubscriberAvatar } from "../SubscribersView";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,7 @@ interface Subscriber {
     receipt_url?: string;
     profile_picture_url?: string;
     instagram_username?: string;
+    telegram_username?: string;
   };
 }
 
@@ -84,6 +86,7 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
   const [receiptUrl, setReceiptUrl] = useState("");
   const [profilePictureUrl, setProfilePictureUrl] = useState("");
   const [instagramUsername, setInstagramUsername] = useState("");
+  const [telegramUsername, setTelegramUsername] = useState("");
 
   useEffect(() => {
     if (subscriber) {
@@ -109,6 +112,7 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
       setReceiptUrl(subscriber.metadata?.receipt_url || "");
       setProfilePictureUrl(subscriber.metadata?.profile_picture_url || "");
       setInstagramUsername(subscriber.metadata?.instagram_username || "");
+      setTelegramUsername(subscriber.metadata?.telegram_username || "");
     }
   }, [subscriber]);
 
@@ -131,7 +135,8 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
         free_services: freeServices,
         receipt_url: receiptUrl,
         profile_picture_url: profilePictureUrl,
-        instagram_username: instagramUsername
+        instagram_username: instagramUsername,
+        telegram_username: telegramUsername
       };
 
       const { error } = await supabase
@@ -231,20 +236,13 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 pb-6 gap-4">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border border-white/10 overflow-hidden shrink-0 bg-white/5 flex items-center justify-center">
-                {profilePictureUrl || instagramUsername ? (
-                  <img 
-                    src={profilePictureUrl || `https://unavatar.io/instagram/${instagramUsername.replace('@', '')}`} 
-                    alt={fullName} 
-                    className="w-full h-full object-cover" 
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
-                    }}
-                  />
-                ) : (
-                  <div className="w-full h-full bg-primary/10 flex items-center justify-center text-primary font-black text-xl uppercase">
-                    {fullName ? fullName.split(' ').map(n => n[0]).join('').slice(0, 2) : <User className="w-8 h-8 text-slate-500" />}
-                  </div>
-                )}
+                <SubscriberAvatar
+                  fullName={fullName}
+                  phone={phone}
+                  profilePictureUrl={profilePictureUrl}
+                  instagramUsername={instagramUsername}
+                  telegramUsername={telegramUsername}
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-xl sm:text-2xl font-display font-black uppercase tracking-tighter flex items-center gap-2 truncate">
@@ -293,14 +291,18 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
           {/* Tab 1: Dados & Cadastro */}
           {activeTab === 'geral' && (
             <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-b border-white/5 pb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-b border-white/5 pb-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider ml-1">URL da Foto do Perfil (Avatar)</label>
-                  <Input value={profilePictureUrl} onChange={e => setProfilePictureUrl(e.target.value)} placeholder="https://exemplo.com/foto.jpg ou link da imagem..." className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
+                  <Input value={profilePictureUrl} onChange={e => setProfilePictureUrl(e.target.value)} placeholder="https://exemplo.com/foto.jpg" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-yellow-400/80 tracking-wider ml-1">Usuário do Instagram</label>
+                  <label className="text-[10px] font-black uppercase text-yellow-400/80 tracking-wider ml-1">Instagram</label>
                   <Input value={instagramUsername} onChange={e => setInstagramUsername(e.target.value)} placeholder="@usuario" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-blue-400 tracking-wider ml-1">Telegram</label>
+                  <Input value={telegramUsername} onChange={e => setTelegramUsername(e.target.value)} placeholder="@usuario" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

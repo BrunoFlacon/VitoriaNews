@@ -17,8 +17,6 @@ import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { TrendDetailDrawer } from "./TrendDetailDrawer";
 import { PowerRadar } from "./PowerRadar";
 
-import { SubscribersView } from "./SubscribersView";
-
 export const NewsPortal = () => {
   // ... existing code
 
@@ -165,11 +163,10 @@ export const NewsPortal = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="mb-6 grid w-full grid-cols-4 max-w-[800px]">
+        <TabsList className="mb-6 grid w-full grid-cols-3 max-w-[600px]">
           <TabsTrigger value="my-articles" className="font-bold">Meus Artigos</TabsTrigger>
           <TabsTrigger value="discovery" className="font-bold">Descoberta & Radar</TabsTrigger>
           <TabsTrigger value="power-radar" className="font-bold">Radar de Poder</TabsTrigger>
-          <TabsTrigger value="subscribers" className="font-bold">Assinantes VIP</TabsTrigger>
         </TabsList>
 
         <TabsContent value="my-articles">
@@ -386,10 +383,6 @@ export const NewsPortal = () => {
 
         <TabsContent value="power-radar">
            <PowerRadar />
-        </TabsContent>
-
-        <TabsContent value="subscribers">
-           <SubscribersView />
         </TabsContent>
       </Tabs>
 
