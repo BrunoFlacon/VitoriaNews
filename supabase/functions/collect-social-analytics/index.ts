@@ -199,11 +199,26 @@ serve(async (req: Request) => {
                       performance_score: (p.likes?.summary?.total_count || 0) + (p.comments?.summary?.total_count || 0)
                     });
                   });
+
+                  let postsCount = data.posts?.summary?.total_count || fbPosts.length;
+                  if (!postsCount || postsCount === fbPosts.length) {
+                    try {
+                      const postsRes = await fetch(`https://graph.facebook.com/v21.0/${pageId}/published_posts?summary=total_count&limit=1&access_token=${conn.access_token}`);
+                      if (postsRes.ok) {
+                        const postsData = await postsRes.json();
+                        postsCount = postsData?.summary?.total_count || postsCount;
+                      }
+                    } catch (e) {
+                      console.warn(`[COLLECT] Facebook fallback posts count failed:`, e);
+                    }
+                  }
+
                   metrics = {
                     followers: Math.max(data.fan_count || 0, data.followers_count || 0),
-                    posts_count: data.posts?.summary?.total_count || fbPosts.length, // True total posts!
+                    posts_count: postsCount,
                     username: data.name || conn.page_name,
-                    profile_picture: data.picture?.data?.url
+                    profile_picture: data.picture?.data?.url,
+                    platform_user_id: pageId
                   };
                 } else {
                   console.error(`[COLLECT] FB API Error: ${resp.status} ${await resp.text()}`);
@@ -232,7 +247,8 @@ serve(async (req: Request) => {
                     followers: data.followers_count || 0,
                     posts_count: data.media_count || media.length, // True total media count!
                     username: data.username,
-                    profile_picture: data.profile_picture_url
+                    profile_picture: data.profile_picture_url,
+                    platform_user_id: igUserId
                   };
                 } else {
                   console.error(`[COLLECT] IG API Error: ${resp.status} ${await resp.text()}`);
@@ -243,22 +259,24 @@ serve(async (req: Request) => {
                 if (!conn.access_token) break;
 
                 const threadsUserId = conn.platform_user_id || conn.page_id;
-                if (!threadsUserId) break;
+                const node = (threadsUserId && threadsUserId !== "") ? threadsUserId : "me";
 
                 let threadsFollowers = conn.followers_count || 0;
                 let threadsTotalPosts = conn.posts_count || 0;
                 let threadsUsername = conn.page_name || conn.username || "Threads User";
                 let threadsPhoto = conn.profile_image_url || conn.profile_picture || null;
+                let threadsRealId = threadsUserId;
 
                 // Passo 1: Buscar Perfil Básico
                 try {
-                  const profileUrl = `https://graph.threads.net/v1.0/${threadsUserId}?fields=id,username,threads_profile_picture_url,followers_count,threads_count&access_token=${conn.access_token}`;
+                  const profileUrl = `https://graph.threads.net/v1.0/${node}?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${conn.access_token}`;
                   const profileResp = await fetch(profileUrl);
 
                   if (profileResp.ok) {
                     const profileData = await profileResp.json();
                     threadsUsername = profileData.username || threadsUsername;
                     threadsPhoto = profileData.threads_profile_picture_url || threadsPhoto;
+                    threadsRealId = profileData.id || threadsRealId;
                     if (profileData.followers_count !== undefined && profileData.followers_count !== null) {
                       threadsFollowers = Number(profileData.followers_count);
                       console.log(`[COLLECT] Threads Followers (from basic profile): ${threadsFollowers}`);
@@ -278,7 +296,7 @@ serve(async (req: Request) => {
 
                 // Passo 1.5: Buscar Métricas de Seguidores via Insights (Método Oficial)
                 try {
-                  const insightsUrl = `https://graph.threads.net/v1.0/${threadsUserId}/threads_insights?metric=followers_count&access_token=${conn.access_token}`;
+                  const insightsUrl = `https://graph.threads.net/v1.0/${node}/threads_insights?metric=followers_count&access_token=${conn.access_token}`;
                   const insightsResp = await fetch(insightsUrl);
                   
                   if (insightsResp.ok) {
@@ -301,7 +319,7 @@ serve(async (req: Request) => {
                 // Passo 2: Buscar e Paginar TODOS os posts para contagem e extração
                 try {
                   const postsFields = "id,text,media_type,media_url,timestamp,like_count,reply_count";
-                  let nextUrl: string | null = `https://graph.threads.net/v1.0/${threadsUserId}/threads?fields=${postsFields}&limit=25&access_token=${conn.access_token}`;
+                  let nextUrl: string | null = `https://graph.threads.net/v1.0/${node}/threads?fields=${postsFields}&limit=25&access_token=${conn.access_token}`;
                   
                   let totalFetched = 0;
                   let pageCount = 0;
@@ -355,7 +373,8 @@ serve(async (req: Request) => {
                   followers: threadsFollowers,
                   posts_count: threadsTotalPosts,
                   username: threadsUsername,
-                  profile_picture: threadsPhoto
+                  profile_picture: threadsPhoto,
+                  platform_user_id: threadsRealId
                 };
 
                 break;
@@ -759,9 +778,10 @@ serve(async (req: Request) => {
                 }
               }
 
-              const actualId = conn.platform === 'facebook' || conn.platform === 'instagram' 
-                ? (conn.page_id || conn.platform_user_id) 
-                : (conn.platform_user_id || conn.page_id);
+              const actualId = metrics.platform_user_id || 
+                (conn.platform === 'facebook' || conn.platform === 'instagram' 
+                  ? (conn.page_id || conn.platform_user_id) 
+                  : (conn.platform_user_id || conn.page_id));
 
               const totalLikes = fetchedPosts.reduce((s, p) => s + (p.likes || 0), 0);
               const totalShares = fetchedPosts.reduce((s, p) => s + (p.shares || 0), 0);
@@ -800,8 +820,9 @@ serve(async (req: Request) => {
                   posts_count: upsertPayload.posts_count,
                   profile_image_url: upsertPayload.profile_picture,
                   profile_picture: upsertPayload.profile_picture,
+                  ...((!conn.platform_user_id || conn.platform_user_id === "") ? { platform_user_id: upsertPayload.platform_user_id } : {}),
                   updated_at: new Date().toISOString()
-                }).eq("user_id", uid).eq("platform", conn.platform).eq("platform_user_id", actualId);
+                }).eq("id", conn.id);
               } catch (connSyncErr: any) {
                 console.warn(`[COLLECT] social_connections sync failed:`, connSyncErr.message);
               }

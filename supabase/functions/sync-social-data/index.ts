@@ -428,6 +428,7 @@ serve(async (req: Request) => {
               profile_picture:   stats.profile_picture || conn.profile_picture,
               followers_count:   stats.followers_count,
               posts_count:       stats.posts_count,
+              ...((!conn.platform_user_id || conn.platform_user_id === "") ? { platform_user_id: stats.platform_user_id } : {}),
               updated_at:        new Date().toISOString(),
             }).eq("id", conn.id);
           } catch (syncErr: any) {
