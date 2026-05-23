@@ -227,7 +227,7 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
       let postsCount = 0;
       try {
         const pubPostsRes = await fetch(
-          `https://graph.facebook.com/v21.0/${page.id}/published_posts?summary=total_count&limit=0&access_token=${page.access_token}`
+          `https://graph.facebook.com/v21.0/${page.id}/published_posts?summary=total_count&limit=1&access_token=${page.access_token}`
         );
         if (pubPostsRes.ok) {
           const pubPostsData = await pubPostsRes.json();
@@ -314,7 +314,7 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   //   threads_biography, followers_count, threads_count
   const profileRes = await fetch(
     `https://graph.threads.net/v1.0/me?` + new URLSearchParams({
-      fields:       "id,username,name,threads_profile_picture_url,threads_biography,followers_count,threads_count",
+      fields:       "id,username,name,threads_profile_picture_url,threads_biography",
       access_token: accessToken,
     })
   );
@@ -325,8 +325,6 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
     id:              profileData.id,
     username:        profileData.username,
     has_photo:       !!profileData.threads_profile_picture_url,
-    followers_count: profileData.followers_count,
-    threads_count:   profileData.threads_count,
   }));
 
   if (profileData.error) {
@@ -337,8 +335,16 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   const username        = profileData.username  || "";
   const displayName     = profileData.name      || username         || "Threads User";
   const profileImageUrl = profileData.threads_profile_picture_url || "";
-  const followersCount  = Number(profileData.followers_count) || 0;
-  const postsCount      = Number(profileData.threads_count)   || 0;
+  const followersCount  = 0;
+  
+  let postsCount = 0;
+  try {
+    const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${accessToken}`);
+    if (postsResp.ok) {
+      const postsData = await postsResp.json();
+      postsCount = postsData.data?.length || 0;
+    }
+  } catch (e) {}
 
   return [{
     accessToken,
@@ -632,7 +638,7 @@ serve(async (req: Request) => {
     // -------------------------------------------------------------------------
     if (manual_token && platform === 'threads') {
       console.log(`[OAUTH CALLBACK] Ativando Threads via token manual para o usuário: ${user.id}`);
-      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,followers_count,threads_count&access_token=${manual_token}`);
+      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${manual_token}`);
       const meData = await meRes.json();
 
       if (meData.error) throw new Error(meData.error.message || "Token manual inválido");

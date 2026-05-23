@@ -330,7 +330,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           }
 
           console.log(`[OAUTH INIT] Plataforma: ${platform} | Fonte: ${source} | app_id: ${appId.substring(0, 5)}...`);
-          console.warn("[THREADS] Se receber o erro 4476002, certifique-se de que está usando o ID da seção 'Threads API', não o ID geral do Meta.");
           extraBody = { client_id: appId, client_secret: appSecret };
         } else if (platform === 'tiktok') {
           // TikTok usa "client_key" — buscamos do banco antes de chamar a Edge Function

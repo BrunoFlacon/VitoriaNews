@@ -182,8 +182,8 @@ serve(async (req: Request) => {
                 if (!conn.access_token) break;
                 const pageId = conn.page_id || conn.platform_user_id;
                 if (!pageId) break;
-                // Fetch page info + recent posts for engagement metrics
-                const fields = "name,followers_count,fan_count,picture.type(large),cover,posts.limit(5).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true))";
+                // Use limit=5 to save memory, summary(true) gives the true total count of posts
+                const fields = "name,followers_count,fan_count,picture.type(large),cover,posts.limit(5).summary(true).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true))";
                 const resp = await fetch(`https://graph.facebook.com/v21.0/${pageId}?fields=${fields}&access_token=${conn.access_token}`);
                 if (resp.ok) {
                   const data = await resp.json();
@@ -199,24 +199,9 @@ serve(async (req: Request) => {
                       performance_score: (p.likes?.summary?.total_count || 0) + (p.comments?.summary?.total_count || 0)
                     });
                   });
-
-                  // ★ Chamada separada para total real de posts publicados
-                  let totalPostsCount = fbPosts.length;
-                  try {
-                    const pubPostsRes = await fetch(
-                      `https://graph.facebook.com/v21.0/${pageId}/published_posts?summary=total_count&limit=0&access_token=${conn.access_token}`
-                    );
-                    if (pubPostsRes.ok) {
-                      const pubPostsData = await pubPostsRes.json();
-                      totalPostsCount = pubPostsData?.summary?.total_count || totalPostsCount;
-                    }
-                  } catch (e) {
-                    console.warn(`[COLLECT] FB published_posts count fallback for ${pageId}:`, e);
-                  }
-
                   metrics = {
                     followers: Math.max(data.fan_count || 0, data.followers_count || 0),
-                    posts_count: totalPostsCount,
+                    posts_count: data.posts?.summary?.total_count || fbPosts.length, // True total posts!
                     username: data.name || conn.page_name,
                     profile_picture: data.picture?.data?.url
                   };
@@ -509,6 +494,257 @@ serve(async (req: Request) => {
                 };
                 break;
               }
+
+              // ─────────────────────────────────────────────────────────────
+              // LINKEDIN  — REST API 202401 + foto hi-res + rede + posts
+              // ─────────────────────────────────────────────────────────────
+              case "linkedin": {
+                if (!conn.access_token) break;
+
+                const liHeaders: Record<string, string> = {
+                  Authorization:               `Bearer ${conn.access_token}`,
+                  "Content-Type":              "application/json",
+                  "LinkedIn-Version":          "202401",
+                  "X-Restli-Protocol-Version": "2.0.0",
+                };
+
+                // 1) Perfil via OIDC — retorna sub (userId), name, picture
+                const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", { headers: liHeaders });
+                if (!profileRes.ok) {
+                  console.warn(`[COLLECT] LinkedIn userinfo failed: ${profileRes.status}`);
+                  break;
+                }
+                const profileData = await profileRes.json();
+                if (!profileData.sub) {
+                  console.warn("[COLLECT] LinkedIn: sub ausente — token expirado?");
+                  break;
+                }
+
+                const liUserId   = profileData.sub as string;
+                const authorUrn  = `urn:li:person:${liUserId}`;
+                let   picUrl     = (profileData.picture as string) || conn.profile_image_url || "";
+
+                // 2) Foto em alta resolução via projection (v2 ainda suporta)
+                try {
+                  const picRes = await fetch(
+                    "https://api.linkedin.com/v2/me?projection=(id,profilePicture(displayImage~:playableStreams))",
+                    { headers: liHeaders }
+                  );
+                  if (picRes.ok) {
+                    const picData    = await picRes.json();
+                    const elements   = (picData?.profilePicture?.["displayImage~"]?.elements ?? []) as any[];
+                    if (elements.length > 0) {
+                      picUrl = elements[elements.length - 1]?.identifiers?.[0]?.identifier || picUrl;
+                    }
+                  }
+                } catch { /* usa OIDC picture como fallback */ }
+
+                // 3) Tamanho da rede (1º grau)
+                let liFollowers = conn.followers_count || 0;
+                try {
+                  const netRes = await fetch(
+                    `https://api.linkedin.com/v2/networkSizes/${encodeURIComponent(authorUrn)}?edgeType=CompanyFollowedByMember`,
+                    { headers: liHeaders }
+                  );
+                  if (netRes.ok) {
+                    const netData  = await netRes.json();
+                    liFollowers    = netData?.firstDegreeSize ?? liFollowers;
+                  }
+                } catch {}
+
+                // 4) Total de posts + engagement dos 5 mais recentes
+                let liPostsCount = conn.posts_count || 0;
+                try {
+                  const postsRes = await fetch(
+                    `https://api.linkedin.com/rest/posts?author=${encodeURIComponent(authorUrn)}&q=author&count=5&sortBy=LAST_MODIFIED`,
+                    { headers: liHeaders }
+                  );
+                  if (postsRes.ok) {
+                    const postsData = await postsRes.json();
+                    liPostsCount    = postsData?.paging?.total ?? liPostsCount;
+
+                    for (const post of (postsData?.elements ?? []) as any[]) {
+                      let postLikes = 0, postComments = 0;
+                      try {
+                        const actRes = await fetch(
+                          `https://api.linkedin.com/rest/socialActions/${encodeURIComponent(post.id)}`,
+                          { headers: liHeaders }
+                        );
+                        if (actRes.ok) {
+                          const actData  = await actRes.json();
+                          postLikes      = actData?.likesSummary?.totalLikes ?? 0;
+                          postComments   = actData?.commentsSummary?.totalFirstLevelComments ?? 0;
+                        }
+                      } catch {}
+
+                      fetchedPosts.push({
+                        external_id:       post.id,
+                        content:           post.commentary || "",
+                        published_at:      post.publishedAt ? new Date(post.publishedAt).toISOString() : null,
+                        likes:             postLikes,
+                        comments:          postComments,
+                        shares:            0,
+                        performance_score: postLikes + postComments * 2,
+                      });
+                    }
+                  }
+                } catch {}
+
+                metrics = {
+                  followers:       liFollowers,
+                  posts_count:     liPostsCount,
+                  username:        (profileData.name as string) || conn.username || conn.page_name || "",
+                  profile_picture: picUrl,
+                  views:           0,
+                };
+                break;
+              }
+
+              // ─────────────────────────────────────────────────────────────
+              // PINTEREST — v5: foto, seguidores, pins, analytics 30d
+              // ─────────────────────────────────────────────────────────────
+              case "pinterest": {
+                if (!conn.access_token) break;
+
+                const pinHeaders: Record<string, string> = {
+                  Authorization:  `Bearer ${conn.access_token}`,
+                  "Content-Type": "application/json",
+                };
+
+                const pinRes  = await fetch("https://api.pinterest.com/v5/user_account", { headers: pinHeaders });
+                if (!pinRes.ok) {
+                  console.warn(`[COLLECT] Pinterest user_account failed: ${pinRes.status}`);
+                  break;
+                }
+                const pinData = await pinRes.json();
+                if (!pinData.username) break;
+
+                // Analytics dos últimos 30 dias
+                const pinEndDate   = new Date().toISOString().split("T")[0];
+                const pinStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+                let   pinImpressions = 0, pinClicks = 0, pinOutbound = 0, pinSaves = 0;
+                try {
+                  const analyticsRes = await fetch(
+                    `https://api.pinterest.com/v5/user_account/analytics?start_date=${pinStartDate}&end_date=${pinEndDate}&metric_types=IMPRESSION,PIN_CLICK,OUTBOUND_CLICK,SAVE`,
+                    { headers: pinHeaders }
+                  );
+                  if (analyticsRes.ok) {
+                    const analyticsData = await analyticsRes.json();
+                    for (const day of (analyticsData?.all?.daily_metrics ?? []) as any[]) {
+                      const m = day.metrics ?? {};
+                      pinImpressions += m.IMPRESSION      || 0;
+                      pinClicks      += m.PIN_CLICK       || 0;
+                      pinOutbound    += m.OUTBOUND_CLICK  || 0;
+                      pinSaves       += m.SAVE            || 0;
+                    }
+                  }
+                } catch {}
+
+                metrics = {
+                  followers:       pinData.follower_count  || 0,
+                  posts_count:     pinData.pin_count       || 0,
+                  username:        pinData.username        || "",
+                  profile_picture: pinData.profile_image  || conn.profile_image_url || "",
+                  views:           pinImpressions,
+                  metadata: {
+                    board_count:         pinData.board_count     || 0,
+                    following_count:     pinData.following_count || 0,
+                    monthly_views:       pinData.monthly_views   || 0,
+                    account_type:        pinData.account_type    || "PERSONAL",
+                    impressions_30d:     pinImpressions,
+                    pin_clicks_30d:      pinClicks,
+                    outbound_clicks_30d: pinOutbound,
+                    saves_30d:           pinSaves,
+                  },
+                };
+                break;
+              }
+
+              // ─────────────────────────────────────────────────────────────
+              // SNAPCHAT — Marketing API: nome, foto bitmoji, stats 30d
+              // Nota: Snapchat não expõe seguidores orgânicos via API pública.
+              // ─────────────────────────────────────────────────────────────
+              case "snapchat": {
+                // Token: OAuth connection → api_credentials
+                let snapToken   = conn.access_token;
+                let snapAcctId  = conn.page_id || conn.platform_user_id || null;
+
+                if (!snapToken) {
+                  const snapCreds = await getCredentials(adminClient, uid, "snapchat");
+                  snapToken  = snapCreds?.access_token  || snapCreds?.accessToken  || null;
+                  snapAcctId = snapAcctId || snapCreds?.ad_account_id || snapCreds?.adAccountId || null;
+                }
+                if (!snapToken) break;
+
+                const snapHeaders: Record<string, string> = {
+                  Authorization:  `Bearer ${snapToken}`,
+                  "Content-Type": "application/json",
+                };
+
+                // 1) Usuário autenticado
+                const snapMeRes  = await fetch("https://adsapi.snapchat.com/v1/me", { headers: snapHeaders });
+                if (!snapMeRes.ok) {
+                  console.warn(`[COLLECT] Snapchat /me failed: ${snapMeRes.status}`);
+                  break;
+                }
+                const snapMeData = await snapMeRes.json();
+                const snapMe     = snapMeData?.me;
+
+                // 2) Estatísticas de campanhas (30 dias) — se houver ad_account_id
+                let snapImpressions = 0, snapSwipes = 0, snapVideoViews = 0;
+                let snapSaves = 0, snapShares = 0, snapReach = 0;
+
+                if (snapAcctId) {
+                  try {
+                    const snapEndTime   = new Date().toISOString();
+                    const snapStartTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+                    const snapStatsRes = await fetch(
+                      `https://adsapi.snapchat.com/v1/adaccounts/${snapAcctId}/stats`,
+                      {
+                        method: "POST",
+                        headers: snapHeaders,
+                        body: JSON.stringify({
+                          granularity: "TOTAL",
+                          fields: ["impressions", "swipes", "video_views", "reach", "saves", "shares"],
+                          start_time: snapStartTime,
+                          end_time:   snapEndTime,
+                        }),
+                      }
+                    );
+                    if (snapStatsRes.ok) {
+                      const snapStats = await snapStatsRes.json();
+                      const s         = snapStats?.total_stats ?? {};
+                      snapImpressions = s.impressions  || 0;
+                      snapSwipes      = s.swipes       || 0;
+                      snapVideoViews  = s.video_views  || 0;
+                      snapSaves       = s.saves        || 0;
+                      snapShares      = s.shares       || 0;
+                      snapReach       = s.reach        || 0;
+                    }
+                  } catch {}
+                }
+
+                metrics = {
+                  followers:       0,  // Snapchat não expõe seguidores orgânicos
+                  posts_count:     0,
+                  username:        snapMe?.display_name || conn.username || conn.page_name || "",
+                  profile_picture: snapMe?.bitmoji?.background_url || snapMe?.bitmoji?.avatar_url || conn.profile_image_url || "",
+                  views:           snapImpressions,
+                  metadata: {
+                    ad_account_id:   snapAcctId || "",
+                    email:           snapMe?.email || "",
+                    impressions_30d: snapImpressions,
+                    swipes_30d:      snapSwipes,
+                    video_views_30d: snapVideoViews,
+                    reach_30d:       snapReach,
+                    saves_30d:       snapSaves,
+                    shares_30d:      snapShares,
+                    note: "Snapchat não expõe seguidores orgânicos via Marketing API.",
+                  },
+                };
+                break;
+              }
             }
 
             if (metrics) {
@@ -550,6 +786,7 @@ serve(async (req: Request) => {
                 shares: totalShares,
                 comments: totalComments,
                 engagement_rate: isNaN(engagementRate) ? 0 : engagementRate,
+                ...(metrics.metadata ? { metadata: metrics.metadata } : {}),
                 last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString()
               };
 

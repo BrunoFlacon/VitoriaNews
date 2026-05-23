@@ -81,7 +81,7 @@ serve(async (req: Request) => {
               const profilePic  = data.picture?.data?.url || conn.profile_image_url || "";
               let postsCount    = 0;
               try {
-                const postsRes  = await fetch(`https://graph.facebook.com/v21.0/${pageId}/published_posts?summary=total_count&limit=0&access_token=${conn.access_token}`);
+                const postsRes  = await fetch(`https://graph.facebook.com/v21.0/${pageId}/published_posts?summary=total_count&limit=1&access_token=${conn.access_token}`);
                 const postsData = await postsRes.json();
                 postsCount      = postsData?.summary?.total_count || 0;
               } catch {}
@@ -172,7 +172,7 @@ serve(async (req: Request) => {
         } else if (conn.platform === "threads") {
           if (conn.access_token) {
             try {
-              const res = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,threads_profile_picture_url,threads_follower_count&access_token=${conn.access_token}`);
+              const res = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${conn.access_token}`);
               if (!res.ok) {
                 console.error(`[SYNC] Threads HTTP ${res.status}:`, await res.text());
               } else {
@@ -185,14 +185,25 @@ serve(async (req: Request) => {
                       if (cachedPic) profilePicUrl = cachedPic;
                     } catch { profilePicUrl = data.threads_profile_picture_url; }
                   }
+                  
+                  // Fetch posts count manually for Threads since user node doesn't return it
+                  let currentPostsCount = conn.posts_count || 0;
+                  try {
+                    const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${conn.access_token}`);
+                    if (postsResp.ok) {
+                      const postsData = await postsResp.json();
+                      currentPostsCount = postsData.data?.length || 0;
+                    }
+                  } catch (e) { console.warn("[SYNC] Threads posts count failed:", e); }
+
                   stats = {
                     user_id: conn.user_id, platform: conn.platform, platform_user_id: data.id || conn.platform_user_id,
-                    username: data.username || conn.username || "", page_name: data.username || conn.page_name || "",
+                    username: data.username || conn.username || "", page_name: data.name || data.username || conn.page_name || "",
                     profile_picture: profilePicUrl,
-                    followers: data.threads_follower_count ?? (conn.followers_count || 0),
-                    followers_count: data.threads_follower_count ?? (conn.followers_count || 0),
-                    posts_count: conn.posts_count || 0,
-                    metadata: { posts_count: conn.posts_count || 0 },
+                    followers: conn.followers_count || 0,
+                    followers_count: conn.followers_count || 0,
+                    posts_count: currentPostsCount,
+                    metadata: { posts_count: currentPostsCount },
                     views: 0, likes: 0, shares: 0, comments: 0, engagement_rate: 0,
                     is_connected: true, last_synced_at: new Date().toISOString(), updated_at: new Date().toISOString(),
                   };
