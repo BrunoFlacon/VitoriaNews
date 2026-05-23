@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Redirecionando...</title>
+  <script>
+    // GitHub Pages SPA Fix — redireciona /dashboard, /dashboard?tab=x etc. para /?/dashboard?tab=x
+    // O index.html lê o parâmetro e restaura a URL original via history.replaceState
+    (function () {
+      var l = window.location;
+      var segmentsToKeep = 0; // 0 = domínio raiz (não em subdiretório do repo)
+      var path = l.pathname.split('/').slice(segmentsToKeep).join('/');
+      if (path.length === 0 || path === '/') return; // já é raiz, sem redirect
+      l.replace(
+        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+        l.pathname.split('/').slice(0, segmentsToKeep + 1).join('/') +
+        '/?/' + path.replace(/^\//, '') +
+        (l.search ? '&' + l.search.slice(1) : '') +
+        l.hash
+      );
+    }());
+  </script>
+</head>
+<body>
+  <p>Redirecionando...</p>
+</body>
+</html>

@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Content Security Policy (CSP) Rigorosa + Permissão do Supabase -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://*.facebook.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* ws://localhost:* https://*.facebook.com https://*.fb.com https://static.cloudflareinsights.com; frame-src 'self' https://*.facebook.com https://*.fb.com;">
+    <!-- Content Security Policy (CSP) — permite Supabase, Cloudflare Insights, Google Fonts/Translate -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://connect.facebook.net https://*.facebook.net https://static.cloudflareinsights.com; script-src-elem 'self' 'unsafe-inline' https://connect.facebook.net https://*.facebook.net https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co http://localhost:* ws://localhost:* https://*.facebook.com https://*.fb.com https://static.cloudflareinsights.com; frame-src 'self' https://*.facebook.com https://*.fb.com;">
     <meta http-equiv="Permissions-Policy" content="browsing-topics=()">
 
     <!-- Meta Tags Primárias -->
@@ -47,6 +47,28 @@
   <meta name="twitter:card" content="summary_large_image">
 </head>
 
+  <!-- SPA Routing Fix for GitHub Pages: restaura a rota após redirect do 404.html -->
+  <script>
+    (function () {
+      var redirect = sessionStorage.getItem('spa_redirect');
+      if (redirect) {
+        sessionStorage.removeItem('spa_redirect');
+        window.history.replaceState(null, null, redirect);
+      } else {
+        // Lê o padrão /?/path gerado pelo 404.html
+        var loc = window.location;
+        if (loc.search && loc.search[1] === '/') {
+          var parts = loc.search.slice(1).split('&');
+          var path = parts[0];
+          var query = parts.slice(1).join('&');
+          window.history.replaceState(
+            null, null,
+            path + (query ? '?' + query : '') + loc.hash
+          );
+        }
+      }
+    }());
+  </script>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
