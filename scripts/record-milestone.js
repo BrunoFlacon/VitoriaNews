@@ -21,7 +21,8 @@ try {
   }, {});
 
   const supabaseUrl = envVars['VITE_SUPABASE_URL'];
-  const supabaseKey = envVars['VITE_SUPABASE_ANON_KEY']; // Chave Pública/Anon já basta se RLS permitir Insert
+  // Suporta VITE_SUPABASE_ANON_KEY (padrão) ou VITE_SUPABASE_PUBLISHABLE_KEY (alias usado neste projeto)
+  const supabaseKey = envVars['VITE_SUPABASE_ANON_KEY'] || envVars['VITE_SUPABASE_PUBLISHABLE_KEY'];
 
   if (!supabaseUrl || !supabaseKey) {
     console.warn('Variáveis do Supabase incompletas no .env para gerar Histórico.');
