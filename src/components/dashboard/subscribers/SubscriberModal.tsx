@@ -238,6 +238,7 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
               <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border border-white/10 overflow-hidden shrink-0 bg-white/5 flex items-center justify-center">
                 <SubscriberAvatar
                   fullName={fullName}
+                  email={email}
                   phone={phone}
                   profilePictureUrl={profilePictureUrl}
                   instagramUsername={instagramUsername}

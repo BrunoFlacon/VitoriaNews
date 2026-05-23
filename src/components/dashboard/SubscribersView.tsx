@@ -35,6 +35,7 @@ export interface Subscriber {
 // ─── SubscriberAvatar Helper Component ───────────────────────────────────────
 export const SubscriberAvatar = ({
   fullName,
+  email,
   phone,
   profilePictureUrl,
   instagramUsername,
@@ -42,6 +43,7 @@ export const SubscriberAvatar = ({
   className
 }: {
   fullName: string;
+  email?: string;
   phone?: string;
   profilePictureUrl?: string;
   instagramUsername?: string;
@@ -73,11 +75,16 @@ export const SubscriberAvatar = ({
       urls.push(`https://unavatar.io/instagram/${cleanInsta}`);
     }
 
-    // 4. Iniciais como último fallback
+    // 4. Gravatar
+    if (email) {
+      urls.push(`https://unavatar.io/gravatar/${email.trim().toLowerCase()}`);
+    }
+
+    // 5. Iniciais como último fallback
     urls.push(`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`);
 
     return urls;
-  }, [profilePictureUrl, cleanTele, cleanInsta, fullName]);
+  }, [profilePictureUrl, cleanTele, cleanInsta, email, fullName]);
 
   useEffect(() => {
     const urls = getFallbackUrls();
@@ -199,6 +206,7 @@ export const SubscribersView = () => {
                 )}>
                   <SubscriberAvatar
                     fullName={sub.full_name}
+                    email={sub.email}
                     phone={sub.phone}
                     profilePictureUrl={sub.metadata?.profile_picture_url}
                     instagramUsername={sub.metadata?.instagram_username}
