@@ -258,8 +258,14 @@ serve(async (req: Request) => {
     let engagement;
     let growthValue = "0";
 
-    const hasRealMetrics = filteredMetrics.length > 0;
-    const useAccountFallback = !hasRealMetrics && (socialAccounts.length > 0 || (adsData || []).length > 0 || (ytData || []).length > 0);
+    // Só considera "real metrics" se houver pelo menos um valor não-zero
+    // (caso contrário linhas zeradas zerariam o dashboard).
+    const realMetricsSum = filteredMetrics.reduce(
+      (s, m) => s + (Number(m.likes)||0) + (Number(m.comments)||0) + (Number(m.shares)||0) + (Number(m.impressions)||0) + (Number(m.reach)||0),
+      0
+    );
+    const hasRealMetrics = filteredMetrics.length > 0 && realMetricsSum > 0;
+    const useAccountFallback = !hasRealMetrics && (socialAccounts.length > 0 || (adsData || []).length > 0 || (ytData || []).length > 0 || accountMetrics.length > 0);
 
     const totalViews = useAccountFallback ? globalViews : Math.max(globalViews, filteredMetrics.reduce((s, m) => s + (m.impressions || 0), 0));
     const totalLikes = useAccountFallback ? globalLikes : Math.max(globalLikes, filteredMetrics.reduce((s, m) => s + (m.likes || 0), 0));
