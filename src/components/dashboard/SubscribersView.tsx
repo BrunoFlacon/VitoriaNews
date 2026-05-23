@@ -52,16 +52,17 @@ export const SubscriberAvatar = ({
 }) => {
   const [imgSrc, setImgSrc] = useState<string>("");
   const [attempt, setAttempt] = useState(0);
+  const [imgFailed, setImgFailed] = useState(false);
 
   const cleanInsta = instagramUsername?.replace("@", "").trim();
   const cleanTele = telegramUsername?.replace("@", "").trim();
 
-  // Ordem de prioridade de fotos
+  // Ordem de prioridade de fotos (sem SVGs externos)
   const getFallbackUrls = useCallback(() => {
     const urls: string[] = [];
 
-    // 1. WhatsApp: se houver imagem salva diretamente ou se a URL principal parecer ser dele
-    if (profilePictureUrl && !profilePictureUrl.includes("instagram.com") && !profilePictureUrl.includes("cdninstagram.com")) {
+    // 1. URL Direta (http/https ou Base64 data:)
+    if (profilePictureUrl && (profilePictureUrl.startsWith("http") || profilePictureUrl.startsWith("data:"))) {
       urls.push(profilePictureUrl.trim());
     }
 
@@ -75,21 +76,24 @@ export const SubscriberAvatar = ({
       urls.push(`https://unavatar.io/instagram/${cleanInsta}`);
     }
 
-    // 4. Gravatar
+    // 4. Gravatar pelo e-mail
     if (email) {
       urls.push(`https://unavatar.io/gravatar/${email.trim().toLowerCase()}`);
     }
 
-    // 5. Iniciais como último fallback
-    urls.push(`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`);
-
     return urls;
-  }, [profilePictureUrl, cleanTele, cleanInsta, email, fullName]);
+  }, [profilePictureUrl, cleanTele, cleanInsta, email, phone, fullName]);
 
   useEffect(() => {
     const urls = getFallbackUrls();
-    setImgSrc(urls[0] || "");
-    setAttempt(0);
+    if (urls.length > 0) {
+      setImgSrc(urls[0]);
+      setAttempt(0);
+      setImgFailed(false);
+    } else {
+      setImgSrc("");
+      setImgFailed(true);
+    }
   }, [getFallbackUrls]);
 
   const handleError = () => {
@@ -98,8 +102,31 @@ export const SubscriberAvatar = ({
     if (nextIndex < urls.length) {
       setImgSrc(urls[nextIndex]);
       setAttempt(nextIndex);
+    } else {
+      // Todas as URLs falharam → usa fallback JSX (iniciais)
+      setImgFailed(true);
     }
   };
+
+  // Fallback JSX: iniciais ou ícone Star
+  if (imgFailed || !imgSrc) {
+    const initials = fullName
+      ? fullName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
+      : "";
+    return (
+      <div className={cn(
+        "w-full h-full flex items-center justify-center",
+        "bg-gradient-to-br from-purple-600 to-pink-500",
+        className
+      )}>
+        {initials ? (
+          <span className="text-white font-bold text-sm select-none">{initials}</span>
+        ) : (
+          <Star className="text-white w-5 h-5" />
+        )}
+      </div>
+    );
+  }
 
   return (
     <img
