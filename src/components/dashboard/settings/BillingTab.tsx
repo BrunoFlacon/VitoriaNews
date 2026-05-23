@@ -154,8 +154,10 @@ const GatewaySection = () => {
   const SecretField = ({ label, fieldKey }: { label: string; fieldKey: keyof GatewaySettings }) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      {/* form role="presentation" suprime aviso "Password not in form" sem submeter nada */}
+      {/* form com campo username oculto suprime avisos de acessibilidade do Chrome */}
       <form role="presentation" autoComplete="off" onSubmit={e => e.preventDefault()}>
+        {/* Campo username oculto exigido pelo Chrome para formulários com senha */}
+        <input type="hidden" name="username" autoComplete="username" value="admin" readOnly />
         <div className="relative">
           <Input
             type={showSecrets[fieldKey] ? "text" : "password"}
