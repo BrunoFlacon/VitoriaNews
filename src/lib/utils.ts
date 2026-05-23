@@ -77,7 +77,8 @@ export function getProxyUrl(url: string | null | undefined): string {
     "tiktokv.com",
     "tiktokcdn.com",
     "tiktokcdn-us.com",
-    "threads.net"
+    "threads.net",
+    "ui-avatars.com"
   ];
   
   const shouldProxy = problematicDomains.some(domain => url.includes(domain));

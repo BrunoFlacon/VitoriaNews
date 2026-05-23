@@ -2,6 +2,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+import { getAuthUrl as getGoogleAuthUrl } from "../_shared/oauth/providers/google.ts";
+import { getAuthUrl as getMetaAuthUrl } from "../_shared/oauth/providers/meta.ts";
+import { getAuthUrl as getTwitterAuthUrl } from "../_shared/oauth/providers/twitter.ts";
+import { getAuthUrl as getTiktokAuthUrl } from "../_shared/oauth/providers/tiktok.ts";
+import { getAuthUrl as getLinkedinAuthUrl } from "../_shared/oauth/providers/linkedin.ts";
+import { getAuthUrl as getRedditAuthUrl } from "../_shared/oauth/providers/reddit.ts";
+import { getAuthUrl as getSpotifyAuthUrl } from "../_shared/oauth/providers/spotify.ts";
+import { getAuthUrl as getKwaiAuthUrl } from "../_shared/oauth/providers/kwai.ts";
+import { getAuthUrl as getTruthSocialAuthUrl } from "../_shared/oauth/providers/truth_social.ts";
+
 declare const Deno: any;
 
 const corsHeaders = {
@@ -155,101 +165,28 @@ serve(async (req: Request) => {
 
     let authUrl = "";
 
-    // =========================================================================
-    if (platform === "google" || platform === "youtube") {
-    // =========================================================================
-      validateOAuthConfig(platform, formattedCreds);
-      const scopes = ["openid", "profile", "email", "https://www.googleapis.com/auth/youtube"].join(" ");
-      authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + new URLSearchParams({
-        client_id: formattedCreds.client_id,
-        redirect_uri,
-        response_type: "code",
-        scope: scopes,
-        access_type: "offline",
-        prompt: "consent",
-        state,
-      });
+    const providerMap: Record<string, Function> = {
+      google: () => getGoogleAuthUrl(redirect_uri, state, formattedCreds),
+      youtube: () => getGoogleAuthUrl(redirect_uri, state, formattedCreds),
+      facebook: () => getMetaAuthUrl(platform, redirect_uri, state, formattedCreds),
+      instagram: () => getMetaAuthUrl(platform, redirect_uri, state, formattedCreds),
+      whatsapp: () => getMetaAuthUrl(platform, redirect_uri, state, formattedCreds),
+      threads: () => getMetaAuthUrl(platform, redirect_uri, state, formattedCreds, bodyClientId),
+      twitter: () => getTwitterAuthUrl(redirect_uri, state, formattedCreds, pkce),
+      tiktok: () => getTiktokAuthUrl(redirect_uri, state, formattedCreds, pkce),
+      linkedin: () => getLinkedinAuthUrl(redirect_uri, state, formattedCreds),
+      reddit: () => getRedditAuthUrl(redirect_uri, state, formattedCreds),
+      spotify: () => getSpotifyAuthUrl(redirect_uri, state, formattedCreds, pkce),
+      kwai: () => getKwaiAuthUrl(redirect_uri, state, formattedCreds),
+      truth_social: () => getTruthSocialAuthUrl(redirect_uri, state, formattedCreds),
+    };
 
-    // =========================================================================
-    } else if (["facebook", "instagram", "whatsapp"].includes(platform)) {
-    // =========================================================================
-      validateOAuthConfig(platform, formattedCreds);
-      authUrl = `https://www.facebook.com/v21.0/dialog/oauth?` + new URLSearchParams({
-        client_id: formattedCreds.app_id,
-        redirect_uri,
-        scope: platform === "instagram" ? "instagram_basic,instagram_content_publish" : "pages_show_list,pages_read_engagement",
-        state,
-        response_type: "code",
-      });
-
-    // =========================================================================
-    } else if (platform === "threads") {
-    // =========================================================================
-      const threadsAppId = bodyClientId || formattedCreds.app_id;
-      if (!threadsAppId) throw new Error("Threads App ID não configurado.");
-      authUrl = `https://www.threads.net/oauth/authorize?` + new URLSearchParams({
-        client_id: threadsAppId,
-        redirect_uri,
-        scope: "threads_basic,threads_content_publish,threads_manage_insights",
-        state,
-        response_type: "code",
-      });
-
-    // =========================================================================
-    } else if (platform === "twitter") {
-    // =========================================================================
-      const twitterKey = getVal("client_id", "TWITTER_CLIENT_ID");
-      if (!twitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
-      authUrl = `https://twitter.com/i/oauth2/authorize?` + new URLSearchParams({
-        response_type: "code",
-        client_id: twitterKey,
-        redirect_uri,
-        scope: "tweet.read tweet.write users.read offline.access",
-        state,
-        code_challenge: pkce!.challenge,
-        code_challenge_method: "S256",
-      });
-
-    // =========================================================================
-    } else if (platform === "tiktok") {
-    // =========================================================================
-      // O TikTok v2 EXIGE client_key (não client_id)
-      const tiktokClientKey = getVal("client_key", "TIKTOK_CLIENT_KEY") || getVal("client_id", "TIKTOK_CLIENT_KEY");
-      if (!tiktokClientKey) throw new Error("TikTok Client Key não configurado.");
-
-      authUrl = `https://www.tiktok.com/v2/auth/authorize/?` + new URLSearchParams({
-        client_key: tiktokClientKey,
-        response_type: "code",
-        scope: "user.info.basic,video.list,video.publish",
-        redirect_uri,
-        state,
-        code_challenge: pkce!.challenge,
-        code_challenge_method: "S256",
-      });
-
-    // =========================================================================
-    } else if (platform === "linkedin") {
-    // =========================================================================
-      const clientId = getVal("client_id", "LINKEDIN_CLIENT_ID");
-      authUrl = `https://www.linkedin.com/oauth/v2/authorization?` + new URLSearchParams({
-        client_id: clientId!,
-        redirect_uri,
-        state,
-        response_type: "code",
-        scope: "openid profile email w_member_social w_organization_social", // Tentando apenas com w_organization_social
-      });
-
-    // =========================================================================
-    } else if (platform === "reddit") {
-    // =========================================================================
-      const clientId = getVal("client_id", "REDDIT_CLIENT_ID");
-      authUrl = `https://www.reddit.com/api/v1/authorize?` + new URLSearchParams({
-        client_id: clientId!,
-        response_type: "code",
-        state,
-        redirect_uri,
-        duration: "permanent",
-        scope: "identity,read,submit",
+    if (providerMap[platform]) {
+      authUrl = providerMap[platform]();
+    } else {
+      // Platforms that don't use OAuth URLs (Gettr, Rumble, Giphy, Website)
+      return new Response(JSON.stringify({ success: true, message: "Plataforma usa token manual ou API Key, sem necessidade de OAuth Auth URL." }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 

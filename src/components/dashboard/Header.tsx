@@ -5,7 +5,7 @@ import { useNotifications } from "@/contexts/NotificationContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSystem } from "@/contexts/SystemContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -126,7 +126,7 @@ export const Header = ({
                 <div className="relative">
                   <Avatar className="w-8 h-8 rounded-xl">
                     {profile?.avatar_url && (
-                      <AvatarImage src={profile.avatar_url} alt={displayName} className="rounded-xl object-cover" />
+                      <AvatarImage src={getProxyUrl(profile.avatar_url)} alt={displayName} className="rounded-xl object-cover" />
                     )}
                     <AvatarFallback className="rounded-xl bg-gradient-to-br from-primary to-accent text-sm font-bold text-primary-foreground">
                       {initials}

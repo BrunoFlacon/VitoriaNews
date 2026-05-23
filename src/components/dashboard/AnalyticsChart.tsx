@@ -63,7 +63,7 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
         </div>
 
       <div className="h-[300px]" style={{ contain: "strict" }}>
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <AreaChart data={displayData}>
             <defs>
               <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback, startTransition } from "react";
 import { motion } from "framer-motion";
 import { 
   Eye, 
@@ -113,16 +113,20 @@ const Dashboard = () => {
     }
   }, [searchParams, scheduledPosts.posts]);
 
-  // Update URL when tab changes
-  const handleTabChange = (tab: string) => {
+  // Update URL when tab changes — wrapped in startTransition to reduce INP
+  const handleTabChange = useCallback((tab: string) => {
+    // Immediate visual feedback: mark as active right away (low-cost)
     setActiveTab(tab);
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      next.set("tab", tab);
-      if (tab !== "create") next.delete("id");
-      return next;
+    // Defer the URL update (non-urgent) to free the main thread faster
+    startTransition(() => {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", tab);
+        if (tab !== "create") next.delete("id");
+        return next;
+      });
     });
-  };
+  }, [setSearchParams]);
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const [settingsSubTab, setSettingsSubTab] = useState<string>('profile');
   const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>(() => {

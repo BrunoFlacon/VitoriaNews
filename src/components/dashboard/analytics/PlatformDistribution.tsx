@@ -20,7 +20,7 @@ export const PlatformDistribution = memo(({ platformBreakdown, COLORS }: Platfor
     <Card className="p-6 shadow-2xl border-white/10 bg-white/5 backdrop-blur-xl">
       <h3 className="font-display font-black text-lg text-foreground uppercase tracking-widest mb-6">Mix de Audiência</h3>
       <div className="h-[300px] w-full relative">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <PieChart>
             <Pie
               data={pieData}

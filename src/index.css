@@ -79,7 +79,15 @@
   [role="button"] {
     user-select: none;
     -webkit-user-select: none;
+    /* Hint browser to avoid click delay on touch */
     touch-action: manipulation;
+  }
+
+  /* Reduce presentation delay: isolate paint layers */
+  .sidebar-item-active,
+  button {
+    /* Promote interactive elements to compositor layer */
+    isolation: isolate;
   }
 }
 

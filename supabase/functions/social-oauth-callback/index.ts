@@ -2,6 +2,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cacheProfileImage } from "../_shared/media.ts";
+import { exchangeSpotify } from "../_shared/oauth/providers/spotify_exchange.ts";
+import { exchangeKwai } from "../_shared/oauth/providers/kwai_exchange.ts";
+import { exchangeTruthSocial } from "../_shared/oauth/providers/truth_social_exchange.ts";
+import { exchangeGettr } from "../_shared/oauth/providers/gettr.ts";
+import { exchangeRumble } from "../_shared/oauth/providers/rumble.ts";
+import { exchangeGiphy } from "../_shared/oauth/providers/giphy.ts";
+import { exchangeWebsite } from "../_shared/oauth/providers/website.ts";
 
 declare const Deno: {
   env: {
@@ -631,17 +638,22 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication");
 
-    const { code, state: incomingState, platform, redirect_uri: incomingRedirectUri, manual_token } = await req.json();
+    const { code, state: incomingState, platform, redirect_uri: incomingRedirectUri, manual_token, username: bodyUsername } = await req.json();
 
     // -------------------------------------------------------------------------
     // NOVO: SUPORTE A TOKEN MANUAL (THREADS)
     // -------------------------------------------------------------------------
-    if (manual_token && platform === 'threads') {
-      console.log(`[OAUTH CALLBACK] Ativando Threads via token manual para o usuário: ${user.id}`);
-      const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${manual_token}`);
-      const meData = await meRes.json();
+    if (manual_token && ['threads', 'gettr', 'rumble', 'giphy', 'website'].includes(platform)) {
+      console.log(`[OAUTH CALLBACK] Ativando ${platform} via token manual para o usuário: ${user.id}`);
+      let results: TokenResult[] = [];
+      let pageName = bodyUsername || platform;
 
-      if (meData.error) throw new Error(meData.error.message || "Token manual inválido");
+      if (platform === 'threads') {
+        const meRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${manual_token}`);
+        const meData = await meRes.json();
+        if (meData.error) throw new Error(meData.error.message || "Token manual inválido");
+        pageName = meData.username;
+
 
       // 1. Cachear foto de perfil no Supabase Storage de forma definitiva para evitar expiração de token de imagem da Meta
       let cachedProfilePic = meData.threads_profile_picture_url || "";
@@ -674,18 +686,28 @@ serve(async (req: Request) => {
         }
       }
 
-      const results: TokenResult[] = [{
-        accessToken: manual_token,
-        refreshToken: "",
-        expiresIn: 5184000,
-        platformUserId: meData.id || "",
-        pageName: meData.username || "",
-        pageId: "",
-        profileImageUrl: cachedProfilePic || null,
-        username: meData.username,
-        followers: Number(meData.followers_count) || 0,
-        postsCount: initialPostsCount
-      }];
+        const resultsThreads: TokenResult[] = [{
+          accessToken: manual_token,
+          refreshToken: "",
+          expiresIn: 5184000,
+          platformUserId: meData.id || "",
+          pageName: meData.username || "",
+          pageId: "",
+          profileImageUrl: cachedProfilePic || null,
+          username: meData.username,
+          followers: Number(meData.followers_count) || 0,
+          postsCount: initialPostsCount
+        }];
+        results = resultsThreads;
+      } else if (platform === 'gettr') {
+        results = await exchangeGettr(manual_token, bodyUsername);
+      } else if (platform === 'rumble') {
+        results = await exchangeRumble(manual_token, bodyUsername);
+      } else if (platform === 'giphy') {
+        results = await exchangeGiphy(manual_token, supabase, user.id);
+      } else if (platform === 'website') {
+        results = await exchangeWebsite(manual_token);
+      }
 
       // Salvar conexão
       for (const res of results) {
@@ -719,7 +741,7 @@ serve(async (req: Request) => {
         }, { onConflict: "user_id,platform,platform_user_id" });
       }
 
-      return new Response(JSON.stringify({ success: true, pageName: meData.username }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, pageName }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     if (!code || !incomingState || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required");
@@ -812,6 +834,12 @@ serve(async (req: Request) => {
       }, supabase, user.id); break;
       case "twitter": results = await exchangeTwitter(code, oauthState.redirect_uri, finalVerifier, formattedCreds, supabase, user.id); break;
       case "tiktok": results = await exchangeTikTok(code, oauthState.redirect_uri, finalVerifier, formattedCreds, supabase, user.id); break;
+      case "spotify": 
+        results = await exchangeSpotify(code, oauthState.redirect_uri, finalVerifier, formattedCreds); break;
+      case "kwai":
+        results = await exchangeKwai(code, oauthState.redirect_uri, formattedCreds); break;
+      case "truth_social":
+        results = await exchangeTruthSocial(code, oauthState.redirect_uri, formattedCreds); break;
       default:
         throw new Error(`Troca de token para plataforma '${platform}' não implementada.`);
     }

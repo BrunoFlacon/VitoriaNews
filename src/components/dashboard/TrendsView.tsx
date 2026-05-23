@@ -109,7 +109,7 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
               </div>
             </div>
             <div className="flex-1 w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <BarChart data={topTrendsChartData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#333" />
                   <XAxis type="number" hide />
@@ -143,7 +143,7 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
               Volume AI
             </h3>
             <div className="flex-1 w-full flex items-center justify-center relative">
-               <ResponsiveContainer width="100%" height="100%">
+               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                  <AreaChart data={topTrendsChartData}>
                     <defs>
                       <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">

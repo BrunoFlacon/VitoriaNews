@@ -22,7 +22,7 @@ import {
   Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, startTransition } from "react";
 import { useSystem } from "@/contexts/SystemContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -205,11 +205,9 @@ export const Sidebar = ({
             <button
               key={item.id}
               onClick={() => {
-                setActiveTab(item.id);
-                // No mobile, recolher o menu ao clicar
-                if (window.innerWidth < 768) {
-                  setIsCollapsed(true);
-                }
+                startTransition(() => setActiveTab(item.id));
+                // Use isMobile from hook — no window.innerWidth reflow
+                if (isMobile) setIsCollapsed(true);
               }}
               className={cn(
                 "w-full flex items-center gap-3 transition-all duration-300 group relative shrink-0",
@@ -227,10 +225,7 @@ export const Sidebar = ({
                 <span className="font-bold text-base tracking-tight">{item.label}</span>
               )}
               {!isCollapsed && activeTab === item.id && (
-                <motion.div 
-                  layoutId="activeTabDot"
-                  className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)]" 
-                />
+                <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)] transition-all duration-200" />
               )}
               {isCollapsed && (
                 <div className="absolute left-full ml-4 px-2 py-1 bg-black text-white text-[10px] uppercase font-bold tracking-widest rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[60] shadow-xl border border-border">
@@ -251,7 +246,7 @@ export const Sidebar = ({
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => startTransition(() => setActiveTab(item.id))}
               className={cn(
                 "w-full flex items-center gap-3 transition-all duration-300 group relative",
                 isCollapsed ? "w-11 h-11 justify-center rounded-2xl" : "px-4 py-2 rounded-xl",
@@ -268,10 +263,7 @@ export const Sidebar = ({
                 <span className="font-bold text-base tracking-tight">{item.label}</span>
               )}
               {!isCollapsed && activeTab === item.id && (
-                <motion.div 
-                  layoutId="activeTabDot"
-                  className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)]" 
-                />
+                <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)] transition-all duration-200" />
               )}
               {isCollapsed && (
                 <div className="absolute left-full ml-4 px-2 py-1 bg-black text-white text-[10px] uppercase font-bold tracking-widest rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[60] shadow-xl border border-border">

@@ -764,6 +764,212 @@ serve(async (req: Request) => {
                 };
                 break;
               }
+              case "reddit": {
+                const redditHeaders = { "Authorization": `bearer ${conn.access_token}`, "User-Agent": "SocialCanvasHub/1.0" };
+                let redditFollowers = conn.followers_count || 0;
+                let redditKarma = 0;
+                let redditPosts = conn.posts_count || 0;
+                try {
+                  const meRes = await fetch("https://oauth.reddit.com/api/v1/me", { headers: redditHeaders });
+                  if (meRes.ok) {
+                    const me = await meRes.json();
+                    redditKarma = (me.link_karma || 0) + (me.comment_karma || 0);
+                  }
+                  const subRes = await fetch(`https://oauth.reddit.com/user/${conn.username}/submitted?limit=10`, { headers: redditHeaders });
+                  if (subRes.ok) {
+                    const subData = await subRes.json();
+                    redditPosts = subData.data?.dist || redditPosts;
+                    fetchedPosts = (subData.data?.children || []).map((c: any) => ({
+                      external_id: c.data.id,
+                      content: c.data.title,
+                      likes: c.data.ups || 0,
+                      comments: c.data.num_comments || 0,
+                      shares: 0,
+                      views: c.data.view_count || 0,
+                      published_at: new Date((c.data.created_utc || 0) * 1000).toISOString(),
+                    }));
+                  }
+                } catch (e) { console.warn("[COLLECT] Reddit error:", e); }
+                metrics = {
+                  followers: redditFollowers,
+                  posts_count: redditPosts,
+                  username: conn.username || "",
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                  metadata: { karma: redditKarma },
+                };
+                break;
+              }
+              case "spotify": {
+                let spotifyFollowers = conn.followers_count || 0;
+                let spotifyPlaylists = conn.posts_count || 0;
+                try {
+                  const meRes = await fetch("https://api.spotify.com/v1/me", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  if (meRes.ok) {
+                    const me = await meRes.json();
+                    spotifyFollowers = me.followers?.total || spotifyFollowers;
+                  }
+                  const plRes = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  if (plRes.ok) {
+                    const plData = await plRes.json();
+                    spotifyPlaylists = plData.total || spotifyPlaylists;
+                  }
+                } catch (e) { console.warn("[COLLECT] Spotify error:", e); }
+                metrics = {
+                  followers: spotifyFollowers,
+                  posts_count: spotifyPlaylists,
+                  username: conn.username || "",
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                };
+                break;
+              }
+              case "kwai": {
+                // Kwai retorna dados no token exchange; sem API de coleta extra pública
+                metrics = {
+                  followers: conn.followers_count || 0,
+                  posts_count: conn.posts_count || 0,
+                  username: conn.username || "",
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                };
+                break;
+              }
+              case "truth_social": {
+                let truthFollowers = conn.followers_count || 0;
+                let truthPosts = conn.posts_count || 0;
+                try {
+                  const meRes = await fetch("https://truthsocial.com/api/v1/accounts/verify_credentials", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  if (meRes.ok) {
+                    const me = await meRes.json();
+                    truthFollowers = me.followers_count || truthFollowers;
+                    truthPosts = me.statuses_count || truthPosts;
+                  }
+                  const timelineRes = await fetch(`https://truthsocial.com/api/v1/accounts/${conn.platform_user_id}/statuses?limit=10`, { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  if (timelineRes.ok) {
+                    const posts = await timelineRes.json();
+                    fetchedPosts = posts.map((p: any) => ({
+                      external_id: p.id,
+                      content: p.content,
+                      likes: p.favourites_count || 0,
+                      comments: p.replies_count || 0,
+                      shares: p.reblogs_count || 0,
+                      views: 0,
+                      published_at: p.created_at,
+                    }));
+                  }
+                } catch (e) { console.warn("[COLLECT] TruthSocial error:", e); }
+                metrics = {
+                  followers: truthFollowers,
+                  posts_count: truthPosts,
+                  username: conn.username || "",
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                };
+                break;
+              }
+              case "gettr": {
+                const gettrUsername = conn.username || conn.page_name || "";
+                let gettrFollowers = conn.followers_count || 0;
+                let gettrPosts = conn.posts_count || 0;
+                try {
+                  const res = await fetch(`https://api.gettr.com/u/user/${gettrUsername}/public`, { headers: { "x-app-auth": conn.access_token } });
+                  if (res.ok) {
+                    const data = await res.json();
+                    const uinf = data.result?.aux?.uinf?.[gettrUsername];
+                    if (uinf) {
+                      gettrFollowers = uinf.flw || gettrFollowers;
+                      gettrPosts = uinf.pst || gettrPosts;
+                    }
+                  }
+                } catch (e) { console.warn("[COLLECT] Gettr error:", e); }
+                metrics = {
+                  followers: gettrFollowers,
+                  posts_count: gettrPosts,
+                  username: gettrUsername,
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                };
+                break;
+              }
+              case "rumble": {
+                const rumbleUsername = conn.username || conn.page_name || "";
+                let rumbleVideos = conn.posts_count || 0;
+                try {
+                  const rssRes = await fetch(`https://rumble.com/c/${rumbleUsername}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+                  const rssRes2 = rssRes.ok ? rssRes : await fetch(`https://rumble.com/user/${rumbleUsername}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+                  if (rssRes2.ok) {
+                    const rssText = await rssRes2.text();
+                    const items = rssText.match(/<item>/g) || [];
+                    rumbleVideos = items.length || rumbleVideos;
+                    const videoMatches = [...rssText.matchAll(/<item>([\s\S]*?)<\/item>/g)];
+                    fetchedPosts = videoMatches.slice(0, 10).map((m, i) => {
+                      const title = m[1].match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || `Video ${i + 1}`;
+                      const pubDate = m[1].match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || "";
+                      const link = m[1].match(/<link>(.*?)<\/link>/)?.[1] || "";
+                      return { external_id: link || `rumble_${i}`, content: title, likes: 0, comments: 0, shares: 0, views: 0, published_at: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() };
+                    });
+                  }
+                } catch (e) { console.warn("[COLLECT] Rumble error:", e); }
+                metrics = {
+                  followers: conn.followers_count || 0,
+                  posts_count: rumbleVideos,
+                  username: rumbleUsername,
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                };
+                break;
+              }
+              case "giphy": {
+                let giphyCount = conn.posts_count || 0;
+                try {
+                  const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${conn.access_token}&q=*&limit=1`);
+                  if (res.ok) {
+                    const data = await res.json();
+                    giphyCount = data.pagination?.total_count || giphyCount;
+                  }
+                } catch (e) { console.warn("[COLLECT] Giphy error:", e); }
+                metrics = {
+                  followers: 0,
+                  posts_count: giphyCount,
+                  username: conn.username || "",
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                };
+                break;
+              }
+              case "website": {
+                const domain = conn.platform_user_id || conn.username || "";
+                let websitePosts = conn.posts_count || 0;
+                try {
+                  const feedUrls = [`https://${domain}/feed`, `https://${domain}/rss`, `https://${domain}/rss.xml`, `https://${domain}/feed.xml`];
+                  for (const feedUrl of feedUrls) {
+                    const rssRes = await fetch(feedUrl, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+                    if (rssRes.ok) {
+                      const rssText = await rssRes.text();
+                      const items = rssText.match(/<item>|<entry>/gi) || [];
+                      websitePosts = items.length || websitePosts;
+                      const postMatches = [...rssText.matchAll(/<item>([\s\S]*?)<\/item>|<entry>([\s\S]*?)<\/entry>/g)];
+                      fetchedPosts = postMatches.slice(0, 10).map((m, i) => {
+                        const block = m[1] || m[2] || "";
+                        const title = block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || block.match(/<title>(.*?)<\/title>/)?.[1] || `Post ${i+1}`;
+                        const pubDate = block.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || block.match(/<updated>(.*?)<\/updated>/)?.[1] || "";
+                        const link = block.match(/<link>(.*?)<\/link>/)?.[1] || "";
+                        return { external_id: link || `website_post_${i}`, content: title, likes: 0, comments: 0, shares: 0, views: 0, published_at: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString() };
+                      });
+                      break;
+                    }
+                  }
+                } catch (e) { console.warn("[COLLECT] Website error:", e); }
+                metrics = {
+                  followers: 0,
+                  posts_count: websitePosts,
+                  username: domain,
+                  profile_picture: conn.profile_image_url || "",
+                  views: 0,
+                };
+                break;
+              }
             }
 
             if (metrics) {

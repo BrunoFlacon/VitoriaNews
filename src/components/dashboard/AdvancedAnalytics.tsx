@@ -751,7 +751,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           </div>
           
           <div className="h-[400px] w-full min-h-[400px]" style={{ contain: "layout size style" }}>
-            <ResponsiveContainer width="100%" height="100%" minHeight={400}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={400}>
               <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
@@ -784,7 +784,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           
           {Object.keys(platformBreakdown).length > 0 ? (
             <div className="h-[250px] w-full relative min-h-[250px]" style={{ contain: "layout size style" }}>
-              <ResponsiveContainer width="100%" height="100%" minHeight={250}>
+              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={250}>
                 <PieChart>
                   <Pie
                     data={Object.entries(platformBreakdown as Record<string, any>).map(([key, d]) => ({

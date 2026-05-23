@@ -3,7 +3,7 @@ import { User, Mail, Shield, Clock, Camera, Phone, Check, RefreshCw, Calendar, U
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 
 interface ProfileTabProps {
   profile: any;
@@ -39,7 +39,7 @@ export const ProfileTab = memo(({
         <div className="relative group">
           <Avatar className="w-24 h-24 rounded-2xl border-4 border-background shadow-xl">
             {profile?.avatar_url && (
-              <AvatarImage src={profile.avatar_url} alt={profileData.name} className="object-cover" />
+              <AvatarImage src={getProxyUrl(profile.avatar_url)} alt={profileData.name} className="object-cover" />
             )}
             <AvatarFallback className="bg-gradient-to-br from-primary to-accent text-2xl font-bold text-primary-foreground">
               {profileData.name?.charAt(0).toUpperCase() || "U"}

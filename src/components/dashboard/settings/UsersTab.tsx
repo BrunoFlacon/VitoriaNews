@@ -10,6 +10,7 @@ import {
 import { motion } from "framer-motion";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
@@ -78,7 +79,7 @@ const UserAvatar = ({ user, size = "sm", isDevMaster = false, isOnlineFromPresen
     <div className="relative flex-shrink-0">
       <div className={`${dim} rounded-full bg-muted/50 border-2 border-border/30 flex items-center justify-center overflow-hidden font-bold text-muted-foreground transition-all duration-300`}>
         {user.avatar_url
-          ? <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
+          ? <img src={getProxyUrl(user.avatar_url)} alt={user.name} className="w-full h-full object-cover" />
           : user.name?.charAt(0)?.toUpperCase() || "U"}
       </div>
       {showGreen ? (
@@ -628,7 +629,7 @@ export const UsersTab = () => {
                   onClick={() => avatarInputRef.current?.click()}
                 >
                   {editForm.avatar_url
-                    ? <img src={editForm.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                    ? <img src={getProxyUrl(editForm.avatar_url)} alt="avatar" className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-muted-foreground">
                         {editForm.name?.charAt(0)?.toUpperCase() || "U"}
                       </div>}

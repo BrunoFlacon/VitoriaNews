@@ -111,7 +111,8 @@ serve(async (req: Request) => {
       "p16-common-sign.tiktokcdn.com",
       "p16-sign.tiktokcdn-us.com",
       "p16-amd-va.tiktokcdn.com",
-      "p77-sign.tiktokcdn-us.com"
+      "p77-sign.tiktokcdn-us.com",
+      "ui-avatars.com"
     ];
 
     let targetUrlObj: URL;
