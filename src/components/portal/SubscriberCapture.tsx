@@ -64,6 +64,30 @@ export const SubscriberCapture = ({
   const [whatsapp, setWhatsapp] = useState("");
   const [instagramUsername, setInstagramUsername] = useState("");
   const [telegramUsername, setTelegramUsername] = useState("");
+  const [profilePicUrlInput, setProfilePicUrlInput] = useState("");
+
+  const handleCheckoutImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast({
+          title: "Arquivo muito grande",
+          description: "O tamanho máximo é 2MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfilePicUrlInput(reader.result as string);
+        toast({
+          title: "Foto carregada!",
+          description: "A imagem foi carregada e convertida com sucesso."
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // ── Step 2: seleção de plano e pagamento ─────────────────────────────────
   const [planDuration, setPlanDuration] = useState<PlanDuration>("monthly");
@@ -199,11 +223,22 @@ export const SubscriberCapture = ({
       const cleanInsta = instagramUsername.trim().replace(/^@/, "");
       const cleanTele = telegramUsername.trim().replace(/^@/, "");
 
-      const profilePicUrl = cleanTele
-        ? `https://unavatar.io/telegram/${cleanTele}`
-        : cleanInsta
-        ? `https://unavatar.io/instagram/${cleanInsta}`
-        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
+      let profilePicUrl = profilePicUrlInput.trim();
+      
+      if (profilePicUrl && /^\d+$/.test(profilePicUrl.replace(/\D/g, ""))) {
+        const cleanNum = profilePicUrl.replace(/\D/g, "");
+        profilePicUrl = `https://unavatar.io/gravatar/${cleanNum}@vitoria.net`;
+      }
+      
+      if (!profilePicUrl) {
+        profilePicUrl = cleanTele
+          ? `https://unavatar.io/telegram/${cleanTele}`
+          : cleanInsta
+          ? `https://unavatar.io/instagram/${cleanInsta}`
+          : whatsapp.trim()
+          ? `https://unavatar.io/gravatar/${whatsapp.trim().replace(/\D/g, "")}@vitoria.net`
+          : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`;
+      }
 
       const payload = {
         email: email.trim().toLowerCase(),
@@ -405,8 +440,36 @@ export const SubscriberCapture = ({
                     />
                   </div>
                 </div>
+                <div className="space-y-1.5 pt-1 border-t border-white/5 mt-2">
+                  <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                    Foto de Perfil (Opcional - Link ou Celular)
+                  </label>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={profilePicUrlInput} 
+                      onChange={e => setProfilePicUrlInput(e.target.value)} 
+                      placeholder="Cole link de foto ou número de celular..." 
+                      className="bg-white/5 border-white/10 rounded-xl h-11 text-xs font-medium flex-1 text-white" 
+                    />
+                    <div className="relative shrink-0">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="checkout-avatar-upload"
+                        className="hidden"
+                        onChange={handleCheckoutImageUpload}
+                      />
+                      <label
+                        htmlFor="checkout-avatar-upload"
+                        className="flex items-center justify-center bg-white/10 hover:bg-white/20 border border-white/10 rounded-xl h-11 px-4 cursor-pointer text-[10px] font-black uppercase tracking-wider text-white select-none transition-all"
+                      >
+                        Upload
+                      </label>
+                    </div>
+                  </div>
+                </div>
                 <p className="text-[8px] text-slate-500 mt-1 ml-1">
-                  Usaremos para carregar sua foto de perfil via Telegram ou Instagram.
+                  Pode fazer upload manual, colar link direto de foto, ou deixar em branco para buscar do Telegram, Instagram ou WhatsApp.
                 </p>
 
                 <Button

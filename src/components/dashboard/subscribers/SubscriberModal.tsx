@@ -116,6 +116,29 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
     }
   }, [subscriber]);
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        toast({
+          title: "Arquivo muito grande",
+          description: "O tamanho máximo do avatar é de 2MB.",
+          variant: "destructive"
+        });
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProfilePictureUrl(reader.result as string);
+        toast({
+          title: "Foto carregada!",
+          description: "A imagem local foi processada e salva com sucesso no perfil do assinante."
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   if (!subscriber) return null;
 
   const handleSave = async () => {
@@ -292,18 +315,42 @@ export const SubscriberModal: React.FC<SubscriberModalProps> = ({
           {/* Tab 1: Dados & Cadastro */}
           {activeTab === 'geral' && (
             <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-b border-white/5 pb-4">
+              <div className="space-y-4 border-b border-white/5 pb-4">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider ml-1">URL da Foto do Perfil (Avatar)</label>
-                  <Input value={profilePictureUrl} onChange={e => setProfilePictureUrl(e.target.value)} placeholder="https://exemplo.com/foto.jpg" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
+                  <div className="flex gap-2">
+                    <Input 
+                      value={profilePictureUrl} 
+                      onChange={e => setProfilePictureUrl(e.target.value)} 
+                      placeholder="Cole um link de imagem ou digite um número de celular..." 
+                      className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium flex-1" 
+                    />
+                    <div className="relative shrink-0">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        id="modal-avatar-upload"
+                        className="hidden"
+                        onChange={handleImageUpload}
+                      />
+                      <label
+                        htmlFor="modal-avatar-upload"
+                        className="flex items-center justify-center bg-primary/20 hover:bg-primary/45 border border-primary/30 rounded-xl h-11 px-4 cursor-pointer text-xs font-black uppercase tracking-wider text-white select-none transition-all"
+                      >
+                        Upload
+                      </label>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-yellow-400/80 tracking-wider ml-1">Instagram</label>
-                  <Input value={instagramUsername} onChange={e => setInstagramUsername(e.target.value)} placeholder="@usuario" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-blue-400 tracking-wider ml-1">Telegram</label>
-                  <Input value={telegramUsername} onChange={e => setTelegramUsername(e.target.value)} placeholder="@usuario" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-yellow-400/80 tracking-wider ml-1">Instagram</label>
+                    <Input value={instagramUsername} onChange={e => setInstagramUsername(e.target.value)} placeholder="@usuario" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-blue-400 tracking-wider ml-1">Telegram</label>
+                    <Input value={telegramUsername} onChange={e => setTelegramUsername(e.target.value)} placeholder="@usuario" className="bg-white/5 border-white/10 rounded-xl h-11 text-white text-xs font-medium" />
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
