@@ -455,10 +455,7 @@ const Dashboard = () => {
         return (
           <>
             <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
+              <div
                 className="flex items-center justify-between md:block w-full md:w-auto"
               >
                 <div>
@@ -508,7 +505,7 @@ const Dashboard = () => {
                     <RefreshCw className={cn("w-4 h-4", analyticsLoading && "animate-spin")} />
                   </Button>
                 </div>
-              </motion.div>
+              </div>
 
               <div className="hidden md:flex items-center gap-2">
                 <Popover open={isPlatformMenuOpen} onOpenChange={setIsPlatformMenuOpen}>
