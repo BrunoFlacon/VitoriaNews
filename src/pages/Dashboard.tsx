@@ -175,7 +175,6 @@ const Dashboard = () => {
   const dashboardChartData = useMemo(() => {
     // 1. Real edge function chartData (has values, not all zeros)
     if (analyticsData?.chartData?.length > 0 && analyticsData.chartData.some((d: any) => d.views > 0)) {
-      console.debug('[chart] source: edge function');
       return analyticsData.chartData;
     }
 
@@ -209,7 +208,6 @@ const Dashboard = () => {
           const key = `${dt.getDate().toString().padStart(2, '0')}/${(dt.getMonth() + 1).toString().padStart(2, '0')}`;
           return { name, ...(dateMap[key] || { views: 0, engagement: 0, reach: 0 }) };
         });
-        console.debug('[chart] source: account_metrics', { days: dateKeys.length, result });
         return result;
       }
     }
@@ -229,7 +227,6 @@ const Dashboard = () => {
         engagement: Math.round((engTotal / sumWeights) * dayWeights[i]) || 1,
         reach: Math.round((followTotal / sumWeights) * dayWeights[i]) || 1,
       }));
-      console.debug('[chart] source: localStats', { viewsTotal, engTotal, followTotal, result });
       return result;
     }
 
@@ -245,7 +242,6 @@ const Dashboard = () => {
       engagement: Math.round(ee / 7) + Math.floor(Math.random() * 8),
       reach: Math.round(ef / 7) + Math.floor(Math.random() * 15),
     }));
-    console.debug('[chart] source: estimated', result);
     return result;
   }, [analyticsData, localStats, platform, accountMetrics, connections]);
 

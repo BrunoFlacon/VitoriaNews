@@ -181,7 +181,6 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
 
     if (aErr) {
       // Don't treat 404/not-deployed/CORS as hard error — just return empty data
-      console.log('[useAnalytics] get-analytics failed:', aErr.message);
       return {
         overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, lastSyncedAt: null },
         engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: "0", growth: "0" },
