@@ -87,7 +87,7 @@ const App = () => (
                     <Route path="/system-history" element={<ProtectedRoute><SystemEvolutionPage /></ProtectedRoute>} />
                     <Route path="/radar2" element={<ProtectedRoute><Radar2 /></ProtectedRoute>} />
                     <Route path="/radarnews" element={<ProtectedRoute><RadarNews /></ProtectedRoute>} />
-                    <Route path="*" element={<Navigate to="/profile/bruno-flacon" replace />} />
+                    <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
               </BrowserRouter>

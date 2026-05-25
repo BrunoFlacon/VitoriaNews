@@ -41,7 +41,7 @@ const OAuthCallback = () => {
           throw new Error("Sessão expirada. Faça login novamente.");
         }
 
-        const baseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
+        const baseUrl = import.meta.env.VITE_SUPABASE_URL;
         const response = await fetch(
           `${baseUrl}/functions/v1/social-oauth-callback`,
           {

@@ -37,6 +37,34 @@ verify_jwt = false
 [functions.sync-telegram-chats]
 verify_jwt = false
 
+[functions.get-analytics]
+enabled = true
+verify_jwt = true
+
+[functions.collect-social-analytics]
+enabled = true
+verify_jwt = true
+
+[functions.sync-twitter]
+enabled = true
+verify_jwt = true
+
+[functions.collect-meta-ads-analytics]
+enabled = true
+verify_jwt = true
+
+[functions.collect-google-analytics]
+enabled = true
+verify_jwt = true
+
+[functions.collect-youtube-analytics]
+enabled = true
+verify_jwt = true
+
+[functions.sync-social-data]
+enabled = true
+verify_jwt = true
+
 [functions.dump-stats]
 enabled = true
 verify_jwt = true
@@ -87,6 +115,14 @@ enabled = true
 verify_jwt = false
 
 [functions.whatsapp-webhook]
+enabled = true
+verify_jwt = false
+
+[functions.efi-create-charge]
+enabled = true
+verify_jwt = true
+
+[functions.efi-webhook]
 enabled = true
 verify_jwt = false
 

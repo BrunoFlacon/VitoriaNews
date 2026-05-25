@@ -67,11 +67,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
 
-  // ── Optimistic Cache: load profile from localStorage synchronously ──
+  // ── Optimistic Cache: load profile from sessionStorage synchronously with TTL ──
   const [profile, setProfile] = useState<Profile | null>(() => {
     try {
-      const cached = localStorage.getItem(AUTH_CACHE_KEY);
-      return cached ? (JSON.parse(cached) as Profile) : null;
+      const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
+      if (!cached) return null;
+      const { data, timestamp } = JSON.parse(cached);
+      const isExpired = Date.now() - timestamp > 30 * 60 * 1000; // 30 minutes TTL
+      if (isExpired) {
+        sessionStorage.removeItem(AUTH_CACHE_KEY);
+        return null;
+      }
+      return data as Profile;
     } catch {
       return null;
     }
@@ -82,33 +89,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [onlineUsersMap, setOnlineUsersMap] = useState<Record<string, any>>({});
   const presenceChannelRef = React.useRef<any>(null);
 
-  const fetchProfile = async (userId: string, retryTimeout = 2000, retryCount = 0) => {
+  const fetchProfile = async (userId: string) => {
     try {
-      const queryPromise = supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', userId)
         .maybeSingle();
 
-      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: new Error('Profile fetch timeout') }), retryTimeout)
-      );
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
-
       if (!error && data) {
         setProfile(data);
-        // ── Persist to localStorage cache for instant next load ──
-        try { localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(data)); } catch {}
+        // ── Persist to sessionStorage cache with TTL for instant next load ──
+        try { 
+          sessionStorage.setItem(
+            AUTH_CACHE_KEY, 
+            JSON.stringify({ data, timestamp: Date.now() })
+          ); 
+        } catch {}
         Promise.resolve(
           supabase
             .from('profiles')
             .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })
             .eq('user_id', userId)
         ).catch(() => {});
-      } else if (retryCount < 1) {
-        // Reduced retry delay to 1s
-        setTimeout(() => fetchProfile(userId, 4000, retryCount + 1), 1000);
       }
     } catch (e) {
       // Fail silently, don't log errors for transient network issues
@@ -320,7 +323,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       // Ignora erro no signOut
     }
     // ── Limpar cache de perfil ao fazer logout ──
-    try { localStorage.removeItem(AUTH_CACHE_KEY); } catch {}
+    try { sessionStorage.removeItem(AUTH_CACHE_KEY); } catch {}
     setUser(null);
     setSession(null);
     setProfile(null);

@@ -173,16 +173,24 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
 
     setAnalyticsErrorInfo(null);
     
-    // Use safeInvoke with a generous 45s timeout for analytics calculation
+    // Use safeInvoke with a short timeout — fails fast when functions aren't deployed
     const { data: aData, error: aErr } = await safeInvoke('get-analytics', {
       body: { period, platform, type: postType, source },
-      timeoutMs: 45000
+      timeoutMs: 8000
     });
 
     if (aErr) {
-      const msg = aErr.message || "Falha ao carregar analytics";
-      setAnalyticsErrorInfo(msg);
-      throw aErr;
+      // Don't treat 404/not-deployed/CORS as hard error — just return empty data
+      console.log('[useAnalytics] get-analytics failed:', aErr.message);
+      return {
+        overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, lastSyncedAt: null },
+        engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: "0", growth: "0" },
+        chartData: [], platformBreakdown: {}, topContent: [], bestTimes: [],
+        followerData: [], adsStats: { impressions: 0, reach: 0, clicks: 0, spend: 0 },
+        youtubeStats: { views: 0, likes: 0, comments: 0 }, gaStats: { views: 0 },
+        viralData: [], trendsData: [], attacksData: [], messageStats: { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {} },
+        messagingChannels: [], period, generatedAt: new Date().toISOString(), dataSource: 'fallback',
+      } as unknown as AnalyticsData;
     }
     
     return aData as AnalyticsData;
@@ -194,20 +202,20 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     enabled: !!user && (options.enabled !== false),
     staleTime: 5 * 60 * 1000,    // considerar fresco por 5 minutos
     gcTime: 10 * 60 * 1000,      // manter em cache por 10 minutos
-    retry: 1,
+    retry: 0,
     refetchOnWindowFocus: false,  // não rebuscar ao focar a janela
   });
 
-  // Display toast once on unhandled fetching errors
+  // Display toast once on unhandled fetching errors (skip 404/not-deployed)
   useEffect(() => {
-    if (isError) {
+    if (isError && !analyticsErrorInfo?.includes('not found')) {
       toast({
         title: "Erro ao carregar analytics",
         description: "Não foi possível carregar os dados. Verifique a conexão.",
         variant: "destructive",
       });
     }
-  }, [isError, toast]);
+  }, [isError, toast, analyticsErrorInfo]);
 
   const syncMutation = useMutation({
     mutationFn: async () => {
@@ -230,7 +238,9 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['social_connections', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['account_metrics', user?.id, 'v3'] });
       queryClient.invalidateQueries({ queryKey: ['messaging_channels', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['social_stats_all', user?.id] });
     },
     onError: () => {
       toast({

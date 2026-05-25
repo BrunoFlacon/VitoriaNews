@@ -41,29 +41,29 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
       transition={{ delay: 0.2 }}
       className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col"
     >
-        <div className="mb-4 md:mb-6">
-          <div>
-            <h2 className="font-display font-bold text-lg md:text-xl text-white">Visão Geral</h2>
-            <p className="text-[10px] md:text-sm text-muted-foreground mt-0.5">Performance dos últimos 7 dias</p>
+      <div className="mb-4 md:mb-6">
+        <div>
+          <h2 className="font-display font-bold text-lg md:text-xl text-white">Visão Geral</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Performance dos últimos 7 dias</p>
+        </div>
+        <div className="flex items-center gap-4 mt-3">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#4F8AFF]" />
+            <span className="text-xs text-muted-foreground font-medium">Visualizações</span>
           </div>
-          <div className="flex items-center gap-4 mt-3">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 md:w-3 h-2 md:h-3 rounded-full bg-[#4F8AFF]" />
-              <span className="text-[10px] md:text-xs text-muted-foreground font-medium">Visualizações</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 md:w-3 h-2 md:h-3 rounded-full bg-[#8B5CF6]" />
-              <span className="text-[10px] md:text-xs text-muted-foreground font-medium">Engajamento</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 md:w-3 h-2 md:h-3 rounded-full bg-green-500" />
-              <span className="text-[10px] md:text-xs text-muted-foreground font-medium">Alcance</span>
-            </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#8B5CF6]" />
+            <span className="text-xs text-muted-foreground font-medium">Engajamento</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-green-500" />
+            <span className="text-xs text-muted-foreground font-medium">Alcance</span>
           </div>
         </div>
+      </div>
 
-      <div className="h-[300px]" style={{ contain: "strict" }}>
-        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+      <div className="h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={displayData}>
             <defs>
               <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">

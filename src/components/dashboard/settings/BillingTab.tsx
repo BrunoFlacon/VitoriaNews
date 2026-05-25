@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  CreditCard, KeyRound, Eye, EyeOff, Save, Plus, Pencil, Trash2,
-  CheckCircle, AlertCircle, Clock, DollarSign, Users, TrendingUp,
-  MessageSquare, RefreshCw, ChevronDown, ChevronUp, Loader2, Zap,
-  Package, Settings2, BarChart3, Wallet
+  CreditCard, KeyRound, Save, Plus, Pencil, Trash2,
+  CheckCircle, AlertCircle, Clock, Users, TrendingUp,
+  MessageSquare, RefreshCw, Loader2,
+  Package, BarChart3, Star, Eye, EyeOff, Wallet,
+  Smartphone, DollarSign
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -19,10 +21,26 @@ import { SubscribersView } from "@/components/dashboard/SubscribersView";
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface GatewaySettings {
   payment_gateway: string;
-  stripe_public_key: string;
-  stripe_secret_key: string;
-  mercadopago_public_key: string;
-  mercadopago_access_token: string;
+  efi_client_id: string;
+  efi_client_secret: string;
+  efi_pix_key: string;
+  efi_sandbox: boolean;
+  efi_certificate: string;
+}
+
+interface FoundingMember {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  plan: 'monthly' | 'quarterly' | 'yearly';
+  value_cents: number;
+  status: 'paid' | 'pending' | 'expired';
+  pix_proof?: string;
+  registered_at: string;
+  paid_at?: string;
+  notes?: string;
+  frozen_price: boolean;
 }
 
 interface Plan {
@@ -64,12 +82,6 @@ interface Subscriber {
 // ─── Utility ──────────────────────────────────────────────────────────────────
 const generateId = () => crypto.randomUUID();
 
-const GATEWAY_OPTIONS = [
-  { id: "none", label: "Nenhum (Desativado)", color: "text-muted-foreground" },
-  { id: "stripe", label: "Stripe", color: "text-blue-400" },
-  { id: "mercadopago", label: "Mercado Pago", color: "text-yellow-400" },
-];
-
 const INTERVAL_OPTIONS = [
   { value: "monthly", label: "Mensal" },
   { value: "quarterly", label: "Trimestral" },
@@ -99,15 +111,16 @@ const Section = ({ title, subtitle, icon: Icon, children }: {
   </motion.div>
 );
 
-// ─── 1. Gateway Settings ───────────────────────────────────────────────────────
+// ─── 1. EFI Bank Credentials ───────────────────────────────────────────────────
 const GatewaySection = () => {
   const { toast } = useToast();
   const [settings, setSettings] = useState<GatewaySettings>({
-    payment_gateway: "none",
-    stripe_public_key: "",
-    stripe_secret_key: "",
-    mercadopago_public_key: "",
-    mercadopago_access_token: "",
+    payment_gateway: "efipay",
+    efi_client_id: "",
+    efi_client_secret: "",
+    efi_pix_key: "",
+    efi_sandbox: false,
+    efi_certificate: "",
   });
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
@@ -120,9 +133,19 @@ const GatewaySection = () => {
           .from("system_settings" as any)
           .select("*")
           .maybeSingle();
-        if (data) setSettings(prev => ({ ...prev, ...(data as any) }));
+        if (data) {
+          const d = data as any;
+          setSettings(prev => ({
+            ...prev,
+            efi_client_id: d.efi_client_id || "",
+            efi_client_secret: d.efi_client_secret || "",
+            efi_pix_key: d.efi_pix_key || "",
+            efi_sandbox: d.efi_sandbox === true,
+            efi_certificate: d.efi_certificate || "",
+          }));
+        }
       } catch (e) {
-        console.error("Failed to load gateway settings:", e);
+        console.error("Failed to load EFI settings:", e);
       } finally {
         setLoading(false);
       }
@@ -136,35 +159,40 @@ const GatewaySection = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Upsert: first check if row exists
+      const payload = {
+        payment_gateway: "efipay",
+        efi_client_id: settings.efi_client_id,
+        efi_client_secret: settings.efi_client_secret,
+        efi_pix_key: settings.efi_pix_key,
+        efi_sandbox: settings.efi_sandbox,
+        efi_certificate: settings.efi_certificate,
+      };
       const { data: existing } = await supabase.from("system_settings" as any).select("id").maybeSingle();
       if (existing) {
-        await supabase.from("system_settings" as any).update(settings as any).eq("id", (existing as any).id);
+        await supabase.from("system_settings" as any).update(payload as any).eq("id", (existing as any).id);
       } else {
-        await supabase.from("system_settings" as any).insert([settings as any]);
+        await supabase.from("system_settings" as any).insert([payload as any]);
       }
-      toast({ title: "Configurações salvas!", description: "Gateway de pagamento atualizado com sucesso." });
+      toast({ title: "Credenciais salvas!", description: "Configurações EFI Bank atualizadas." });
     } catch (e) {
-      toast({ title: "Erro ao salvar", description: "Verifique suas permissões e tente novamente.", variant: "destructive" });
+      toast({ title: "Erro ao salvar", description: "Verifique suas permissões.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
   };
 
-  const SecretField = ({ label, fieldKey }: { label: string; fieldKey: keyof GatewaySettings }) => (
+  const SecretField = ({ label, fieldKey, placeholder }: { label: string; fieldKey: keyof GatewaySettings; placeholder?: string }) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      {/* form com campo username oculto suprime avisos de acessibilidade do Chrome */}
       <form role="presentation" autoComplete="off" onSubmit={e => e.preventDefault()}>
-        {/* Campo username oculto exigido pelo Chrome para formulários com senha */}
         <input type="hidden" name="username" autoComplete="username" value="admin" readOnly />
         <div className="relative">
           <Input
             type={showSecrets[fieldKey] ? "text" : "password"}
-            value={settings[fieldKey]}
+            value={settings[fieldKey] as string}
             autoComplete="new-password"
             onChange={e => setSettings(prev => ({ ...prev, [fieldKey]: e.target.value }))}
-            placeholder="••••••••••••••••••••"
+            placeholder={placeholder || "••••••••••••••••••••"}
             className="pr-10 font-mono text-sm bg-background/50"
           />
           <button
@@ -180,81 +208,54 @@ const GatewaySection = () => {
   );
 
   if (loading) return (
-    <Section title="Gateway de Pagamento" subtitle="Configuração de APIs e credenciais" icon={KeyRound}>
+    <Section title="Credenciais EFI Bank (PIX)" subtitle="API de pagamento oficial do sistema" icon={Wallet}>
       <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
-        <Loader2 className="w-4 h-4 animate-spin" /> Carregando configurações...
+        <Loader2 className="w-4 h-4 animate-spin" /> Carregando...
       </div>
     </Section>
   );
 
   return (
-    <Section title="Gateway de Pagamento" subtitle="Chaves de API para processamento real de pagamentos" icon={KeyRound}>
+    <Section title="Credenciais EFI Bank (PIX)" subtitle="API de pagamento oficial do sistema" icon={Wallet}>
       <div className="space-y-6">
-        {/* Gateway selector */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Gateway Ativo</Label>
-          <div className="grid grid-cols-3 gap-3">
-            {GATEWAY_OPTIONS.map(opt => (
-              <button
-                key={opt.id}
-                onClick={() => setSettings(prev => ({ ...prev, payment_gateway: opt.id }))}
-                className={cn(
-                  "rounded-xl border-2 p-3 text-sm font-medium transition-all text-center",
-                  settings.payment_gateway === opt.id
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "border-border/40 bg-muted/20 text-muted-foreground hover:border-border hover:bg-muted/40"
-                )}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+          <p className="text-xs text-muted-foreground flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-green-400 shrink-0" />
+            As credenciais abaixo são salvas no banco para referência. As Edge Functions usam os secrets do Supabase.
+          </p>
         </div>
 
-        {/* Stripe fields */}
-        {settings.payment_gateway === "stripe" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
-            <div className="md:col-span-2 flex items-center gap-2 mb-1">
-              <Zap className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-semibold text-blue-400">Credenciais Stripe</span>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Chave Pública (pk_live_...)</Label>
-              <Input
-                value={settings.stripe_public_key}
-                onChange={e => setSettings(prev => ({ ...prev, stripe_public_key: e.target.value }))}
-                placeholder="pk_live_..."
-                className="font-mono text-sm bg-background/50"
-              />
-            </div>
-            <SecretField label="Chave Secreta (sk_live_...)" fieldKey="stripe_secret_key" />
-          </motion.div>
-        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <SecretField label="Client ID" fieldKey="efi_client_id" placeholder="Client ID da EFI" />
+          <SecretField label="Client Secret" fieldKey="efi_client_secret" placeholder="Client Secret da EFI" />
+          <SecretField label="Chave PIX" fieldKey="efi_pix_key" placeholder="Chave PIX cadastrada" />
+          <SecretField label="Certificado PFX (Base64)" fieldKey="efi_certificate" placeholder="Base64 do certificado" />
+        </div>
 
-        {/* Mercado Pago fields */}
-        {settings.payment_gateway === "mercadopago" && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-yellow-500/5 border border-yellow-500/20">
-            <div className="md:col-span-2 flex items-center gap-2 mb-1">
-              <Wallet className="w-4 h-4 text-yellow-400" />
-              <span className="text-sm font-semibold text-yellow-400">Credenciais Mercado Pago</span>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Public Key (APP_USR-...)</Label>
-              <Input
-                value={settings.mercadopago_public_key}
-                onChange={e => setSettings(prev => ({ ...prev, mercadopago_public_key: e.target.value }))}
-                placeholder="APP_USR-..."
-                className="font-mono text-sm bg-background/50"
-              />
-            </div>
-            <SecretField label="Access Token (APP_USR-...)" fieldKey="mercadopago_access_token" />
-          </motion.div>
-        )}
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/30">
+          <Label className="text-sm font-medium shrink-0">Ambiente Sandbox</Label>
+          <button
+            type="button"
+            onClick={() => setSettings(prev => ({ ...prev, efi_sandbox: !prev.efi_sandbox }))}
+            className={cn(
+              "relative w-12 h-6 rounded-full transition-colors",
+              settings.efi_sandbox ? "bg-yellow-500" : "bg-muted-foreground/30"
+            )}
+          >
+            <span className={cn(
+              "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform",
+              settings.efi_sandbox && "translate-x-6"
+            )} />
+          </button>
+          <span className="text-xs text-muted-foreground">
+            {settings.efi_sandbox ? "Sandbox (homologação)" : "Produção"}
+          </span>
+        </div>
 
         <div className="flex justify-end pt-2">
           <Button onClick={handleSave} disabled={saving} className="gap-2">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? "Salvando..." : "Salvar Configurações"}
+            {saving ? "Salvando..." : "Salvar Credenciais"}
           </Button>
         </div>
       </div>
@@ -641,7 +642,322 @@ const ServicesSection = () => {
   );
 };
 
-// ─── 4. Financial Report ──────────────────────────────────────────────────────
+// ─── 4. Membro Fundador ────────────────────────────────────────────────────────
+const FoundingMemberSection = () => {
+  const { toast } = useToast();
+  const [members, setMembers] = useState<FoundingMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<FoundingMember | null>(null);
+
+  const emptyMember = (): FoundingMember => ({
+    id: generateId(),
+    name: "",
+    email: "",
+    phone: "",
+    plan: "monthly",
+    value_cents: 2292,
+    status: "pending",
+    registered_at: new Date().toISOString(),
+    frozen_price: true,
+  });
+
+  const planPrices: Record<string, { label: string; cents: number }> = {
+    monthly: { label: "Mensal", cents: 2292 },
+    quarterly: { label: "Trimestral", cents: 6992 },
+    yearly: { label: "Anual", cents: 22222 },
+  };
+
+  const loadMembers = useCallback(async () => {
+    try {
+      const { data } = await supabase.from("system_settings" as any).select("*").maybeSingle();
+      if (data && (data as any).founding_members) {
+        setMembers(JSON.parse((data as any).founding_members));
+      }
+    } catch (e) {
+      console.error("Error loading founding members:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadMembers(); }, [loadMembers]);
+
+  const saveMembers = async (updated: FoundingMember[]) => {
+    setSaving(true);
+    try {
+      const { data: existing } = await supabase.from("system_settings" as any).select("id").maybeSingle();
+      const payload = { founding_members: JSON.stringify(updated) };
+      if (existing) {
+        await supabase.from("system_settings" as any).update(payload as any).eq("id", (existing as any).id);
+      } else {
+        await supabase.from("system_settings" as any).insert([payload as any]);
+      }
+      setMembers(updated);
+      toast({ title: "Membros Fundadores atualizados!" });
+    } catch (e) {
+      toast({ title: "Erro ao salvar", variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editing) return;
+    const updated = members.find(m => m.id === editing.id)
+      ? members.map(m => m.id === editing.id ? editing : m)
+      : [...members, editing];
+    await saveMembers(updated);
+    setShowForm(false);
+    setEditing(null);
+  };
+
+  const handleDelete = async (id: string) => {
+    await saveMembers(members.filter(m => m.id !== id));
+  };
+
+  const markAsPaid = async (id: string) => {
+    const updated = members.map(m =>
+      m.id === id ? { ...m, status: 'paid' as const, paid_at: new Date().toISOString() } : m
+    );
+    await saveMembers(updated);
+  };
+
+  const totalRaised = members
+    .filter(m => m.status === 'paid')
+    .reduce((acc, m) => acc + m.value_cents, 0);
+
+  const stats = [
+    { label: "Total Arrecadado", value: `R$ ${(totalRaised / 100).toFixed(2)}`, icon: DollarSign, color: "text-green-400", bg: "bg-green-500/10" },
+    { label: "Membros Ativos", value: members.filter(m => m.status === 'paid').length, icon: Star, color: "text-yellow-400", bg: "bg-yellow-500/10" },
+    { label: "Pendentes", value: members.filter(m => m.status === 'pending').length, icon: Clock, color: "text-blue-400", bg: "bg-blue-500/10" },
+  ];
+
+  return (
+    <Section title="Membros Fundadores" subtitle="Gestão manual dos primeiros assinantes (Pré-lançamento)" icon={Star}>
+      <div className="space-y-6">
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-4">
+          {stats.map(s => (
+            <div key={s.label} className={cn("rounded-xl p-4 border border-border/30", s.bg)}>
+              <div className="flex items-center gap-2 mb-2">
+                <s.icon className={cn("w-4 h-4", s.color)} />
+                <span className="text-xs text-muted-foreground">{s.label}</span>
+              </div>
+              <p className={cn("text-xl font-bold", s.color)}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Strategy Card */}
+        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4">
+          <h4 className="text-sm font-semibold text-yellow-400 flex items-center gap-2 mb-2">
+            <Star className="w-4 h-4" /> Estratégia Membro Fundador
+          </h4>
+          <ul className="space-y-1.5 text-xs text-muted-foreground">
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+              Cobrança manual via PIX (Nubank PJ) — custo zero, dinheiro na hora
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+              Preço congelado vitalício para Membros Fundadores
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+              Gestão manual nesta planilha durante o período de transição
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-3.5 h-3.5 text-green-400 shrink-0 mt-0.5" />
+              Migração futura para recorrência automática via EFI Bank
+            </li>
+          </ul>
+        </div>
+
+        {/* Members list */}
+        {loading ? (
+          <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando membros...
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {members.map(m => {
+                const plan = planPrices[m.plan] || { label: m.plan, cents: m.value_cents };
+                return (
+                  <div key={m.id} className={cn(
+                    "rounded-xl border p-4 flex items-center gap-4 transition-all",
+                    m.status === 'paid' ? "border-green-500/30 bg-green-500/5" :
+                    m.status === 'expired' ? "border-red-500/20 bg-red-500/5 opacity-60" :
+                    "border-border/40 bg-card/60"
+                  )}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{m.name || "Sem nome"}</p>
+                        {m.frozen_price && (
+                          <Badge variant="outline" className="text-[9px] text-yellow-400 border-yellow-400/30 bg-yellow-400/5">
+                            Preço Congelado
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">{m.email} • {m.phone}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span className="text-xs font-medium text-primary">
+                          {plan.label} — R$ {(m.value_cents / 100).toFixed(2)}
+                        </span>
+                        {m.paid_at && (
+                          <span className="text-[10px] text-muted-foreground">
+                            Pago em {new Date(m.paid_at).toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {m.status === 'pending' && (
+                        <Button size="sm" className="h-7 text-xs gap-1 bg-green-500 hover:bg-green-600 text-white"
+                          onClick={() => markAsPaid(m.id)} disabled={saving}>
+                          <CheckCircle className="w-3 h-3" /> Confirmar
+                        </Button>
+                      )}
+                      {m.status === 'paid' ? (
+                        <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                          <CheckCircle className="w-3 h-3 mr-1" /> Pago
+                        </Badge>
+                      ) : m.status === 'expired' ? (
+                        <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Expirado</Badge>
+                      ) : (
+                        <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+                          <Clock className="w-3 h-3 mr-1" /> Pendente
+                        </Badge>
+                      )}
+                      <Button size="sm" variant="outline" className="h-7 text-xs"
+                        onClick={() => { setEditing({ ...m }); setShowForm(true); }}>
+                        <Pencil className="w-3 h-3" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-destructive hover:bg-destructive/10"
+                        onClick={() => handleDelete(m.id)}>
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {members.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground text-sm">
+                  Nenhum Membro Fundador cadastrado ainda.
+                </div>
+              )}
+            </div>
+
+            <Button variant="outline" className="gap-2 w-full" onClick={() => { setEditing(emptyMember()); setShowForm(true); }}>
+              <Plus className="w-4 h-4" /> Adicionar Membro Fundador
+            </Button>
+
+            <AnimatePresence>
+              {showForm && editing && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="rounded-xl border border-yellow-400/30 bg-yellow-500/5 p-5 space-y-4"
+                >
+                  <h4 className="font-semibold text-sm flex items-center gap-2">
+                    <Star className="w-4 h-4 text-yellow-400" />
+                    {members.find(m => m.id === editing.id) ? "Editar Membro Fundador" : "Novo Membro Fundador"}
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Nome Completo</Label>
+                      <Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="Nome do assinante" className="bg-background/50" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Email</Label>
+                      <Input type="email" value={editing.email} onChange={e => setEditing({ ...editing, email: e.target.value })} placeholder="email@exemplo.com" className="bg-background/50" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">WhatsApp</Label>
+                      <Input value={editing.phone} onChange={e => setEditing({ ...editing, phone: e.target.value })} placeholder="14997094362" className="bg-background/50" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Plano</Label>
+                      <Select value={editing.plan} onValueChange={(v: 'monthly' | 'quarterly' | 'yearly') => {
+                        const p = planPrices[v];
+                        setEditing({ ...editing, plan: v, value_cents: p.cents });
+                      }}>
+                        <SelectTrigger className="bg-background/50">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(planPrices).map(([key, val]) => (
+                            <SelectItem key={key} value={key}>{val.label} — R$ {(val.cents / 100).toFixed(2)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Valor (centavos)</Label>
+                      <Input type="number" value={editing.value_cents} onChange={e => setEditing({ ...editing, value_cents: parseInt(e.target.value) || 0 })} className="bg-background/50" />
+                      <p className="text-[10px] text-muted-foreground">R$ {(editing.value_cents / 100).toFixed(2)}</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Status</Label>
+                      <Select value={editing.status} onValueChange={(v: 'paid' | 'pending' | 'expired') => {
+                        const updates: Partial<FoundingMember> = { status: v };
+                        if (v === 'paid' && !editing.paid_at) updates.paid_at = new Date().toISOString();
+                        setEditing({ ...editing, ...updates });
+                      }}>
+                        <SelectTrigger className="bg-background/50">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pendente</SelectItem>
+                          <SelectItem value="paid">Pago</SelectItem>
+                          <SelectItem value="expired">Expirado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5 flex items-center pt-6">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <button
+                          type="button"
+                          onClick={() => setEditing({ ...editing, frozen_price: !editing.frozen_price })}
+                          className={cn(
+                            "relative w-10 h-5 rounded-full transition-colors",
+                            editing.frozen_price ? "bg-yellow-500" : "bg-muted-foreground/30"
+                          )}
+                        >
+                          <span className={cn(
+                            "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform",
+                            editing.frozen_price && "translate-x-5"
+                          )} />
+                        </button>
+                        <span className="text-xs text-muted-foreground">Preço congelado vitalício</span>
+                      </label>
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                      <Label className="text-xs">Observações</Label>
+                      <Input value={editing.notes || ""} onChange={e => setEditing({ ...editing, notes: e.target.value })} placeholder="Anotações internas..." className="bg-background/50" />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 justify-end pt-2">
+                    <Button variant="outline" onClick={() => { setShowForm(false); setEditing(null); }}>Cancelar</Button>
+                    <Button onClick={handleSave} disabled={saving} className="gap-2">
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Salvar
+                    </Button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
+      </div>
+    </Section>
+  );
+};
+
+// ─── 5. Financial Report ──────────────────────────────────────────────────────
 const FinancialSection = () => {
   const { toast } = useToast();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
@@ -841,6 +1157,9 @@ export const BillingTab = () => {
           <TabsTrigger value="services" className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background py-2 px-4">
             <Package className="w-4 h-4" /> Serviços
           </TabsTrigger>
+          <TabsTrigger value="founders" className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background py-2 px-4 text-yellow-400 data-[state=active]:text-yellow-400">
+            <Star className="w-4 h-4" /> Membros Fundadores
+          </TabsTrigger>
           <TabsTrigger value="financial" className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background py-2 px-4">
             <BarChart3 className="w-4 h-4" /> Financeiro
           </TabsTrigger>
@@ -852,6 +1171,7 @@ export const BillingTab = () => {
         <TabsContent value="gateway"><GatewaySection /></TabsContent>
         <TabsContent value="plans"><PlansSection /></TabsContent>
         <TabsContent value="services"><ServicesSection /></TabsContent>
+        <TabsContent value="founders"><FoundingMemberSection /></TabsContent>
         <TabsContent value="financial"><FinancialSection /></TabsContent>
         <TabsContent value="subscribers">
           <motion.div

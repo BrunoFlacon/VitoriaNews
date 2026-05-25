@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => ({
     }
   },
   plugins: [
-    basicSsl(),
+    mode === "development" ? basicSsl() : null,
     react(),
     mode === "development" && componentTagger()
   ].filter(Boolean),
@@ -24,4 +24,17 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    target: "es2020",
+    chunkSizeWarningLimit: 500,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-core": ["react", "react-dom", "react-router-dom"],
+          "ui-framework": ["framer-motion", "lucide-react"],
+          "data-layer": ["@tanstack/react-query", "@supabase/supabase-js", "zustand"]
+        }
+      }
+    }
+  }
 }));

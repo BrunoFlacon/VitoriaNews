@@ -32,7 +32,7 @@ export default function PortalLanding() {
       // Create metadata based on selected channels
       const preferredMessenger = channels.whatsapp ? 'whatsapp' : (channels.telegram ? 'telegram' : 'whatsapp');
 
-      const { error } = await supabase.from('portal_subscribers' as any).insert([
+      const { error } = await supabase.from('portal_subscribers').insert([
         { 
           full_name: name, 
           email: email, 
@@ -57,14 +57,16 @@ export default function PortalLanding() {
       });
 
       // Redirect to WhatsApp or Dashboard after a short delay
+      const whatsappUrl = import.meta.env.VITE_WHATSAPP_CONVERSION_URL || "https://whatsapp.com/channel/0029Va5QcmhISTkQc6Md6V3n";
       setTimeout(() => {
-        window.location.href = "https://whatsapp.com/channel/0029Va5QcmhISTkQc6Md6V3n";
+        window.location.href = whatsappUrl;
       }, 1500);
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Tente novamente mais tarde."
       toast({ 
         title: "Erro no cadastro", 
-        description: error.message || "Tente novamente mais tarde.", 
+        description: message, 
         variant: "destructive" 
       });
     } finally {

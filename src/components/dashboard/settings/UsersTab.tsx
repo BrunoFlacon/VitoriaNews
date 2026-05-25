@@ -185,7 +185,7 @@ export const UsersTab = () => {
   const handleResetPassword = async (email: string) => {
     if (!email) return;
     try {
-      const res = await fetch(`https://ghtkdkauseesambzqfrd.supabase.co/auth/v1/recover`, {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/recover`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

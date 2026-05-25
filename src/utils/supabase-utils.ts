@@ -41,9 +41,9 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
         }
       } catch {}
 
-      if (errorStr.includes('cors') || errorStr.includes('cross-origin')) {
+      if (errorStr.includes('cors') || errorStr.includes('cross-origin') || errorStr.includes('failed to fetch') || errorStr.includes('networkerror') || errorStr.includes('network error') || errorStr.includes('load')) {
         if (!silent) {
-          console.info(`[safeInvoke] CORS error for ${fnName}`);
+          console.info(`[safeInvoke] Network/CORS error for ${fnName}`);
         }
         return {
           data: null,

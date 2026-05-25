@@ -55,8 +55,14 @@ export const SubscriberCapture = ({
   // ── Dialog & Wizard ──────────────────────────────────────────────────────
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [planType, setPlanType] = useState(initialPlan);
+  const [qrcodeImage, setQrcodeImage] = useState<string | undefined>(undefined);
+  const [qrcodeText, setQrcodeText] = useState<string | undefined>(undefined);
+  const [txid, setTxid] = useState<string | undefined>(undefined);
+  const [pixPaid, setPixPaid] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [qrcodeCopied, setQrcodeCopied] = useState(false);
 
   // ── Step 1: dados de contato ─────────────────────────────────────────────
   const [name, setName] = useState("");
@@ -132,16 +138,89 @@ export const SubscriberCapture = ({
     setOpen(true);
   };
 
-  // ── Countdown (step 3) ───────────────────────────────────────────────────
+  // ── Countdown (step 4) ───────────────────────────────────────────────────
   useEffect(() => {
     let timer: NodeJS.Timeout;
-    if (step === 3 && countdown > 0 && open) {
+    if (step === 4 && countdown > 0 && open) {
       timer = setTimeout(() => setCountdown((prev) => prev - 1), 1000);
-    } else if (step === 3 && countdown === 0 && open) {
+    } else if (step === 4 && countdown === 0 && open) {
       window.open(getGroupLink(), "_blank");
     }
     return () => clearTimeout(timer);
   }, [step, countdown, open, messengerPref]);
+
+  // ── Polling de status do pagamento PIX (EFI Bank) ──
+  useEffect(() => {
+    let active = true;
+    let timer: NodeJS.Timeout;
+
+    const checkStatus = async () => {
+      if (!txid || !active) return;
+      try {
+        const { data, error } = await (supabase as any)
+          .from("payment_charges")
+          .select("status")
+          .eq("txid", txid)
+          .maybeSingle();
+
+        if (!error && data && data.status === "paid") {
+          setPixPaid(true);
+          setStep(4);
+          toast({
+            title: "Assinatura VIP Ativada!",
+            description: "Seu pagamento via PIX foi confirmado com sucesso!",
+          });
+        }
+      } catch (err) {
+        // Silencioso
+      }
+    };
+
+    if (step === 3 && txid && !pixPaid) {
+      timer = setInterval(checkStatus, 5000);
+    }
+
+    return () => {
+      active = false;
+      if (timer) clearInterval(timer);
+    };
+  }, [step, txid, pixPaid]);
+
+  const checkPaymentStatusManually = async () => {
+    if (!txid) return;
+    setCheckingPayment(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from("payment_charges")
+        .select("status")
+        .eq("txid", txid)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data && data.status === "paid") {
+        setPixPaid(true);
+        setStep(4);
+        toast({
+          title: "Confirmado!",
+          description: "Seu pagamento foi confirmado com sucesso.",
+        });
+      } else {
+        toast({
+          title: "Aguardando pagamento",
+          description: "O PIX ainda não consta como concluído. Tente novamente após pagar.",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Erro ao verificar",
+        description: err.message || "Não foi possível consultar o status.",
+        variant: "destructive",
+      });
+    } finally {
+      setCheckingPayment(false);
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   // STEP 1 — Validação de dados
@@ -176,6 +255,10 @@ export const SubscriberCapture = ({
   const handleFinalSubscribe = async () => {
     setLoading(true);
     try {
+      let createdPaymentId = "";
+      let createdQrcodeText = "";
+      let createdQrcodeImage = "";
+
       // ── 1. Processar pagamento (apenas para plano pago) ──────────────────
       if (planType === "paid") {
         const customer: PaymentCustomer = {
@@ -196,27 +279,23 @@ export const SubscriberCapture = ({
           },
         });
 
-        // Se o gateway estiver configurado e rejeitar o pagamento, aborta
-        if (!result.success && result.status === "rejected") {
+        if (!result.success) {
           toast({
-            title: "Pagamento recusado",
-            description: result.errorMessage || "Verifique os dados e tente novamente.",
+            title: "Erro ao gerar PIX",
+            description: result.errorMessage || "Não foi possível gerar a cobrança PIX.",
             variant: "destructive",
           });
           setLoading(false);
           return;
         }
 
-        // Avisa sobre gateway não configurado mas deixa prosseguir (modo dev)
-        if (!result.success && result.status === "error") {
-          toast({
-            title: "Gateway não configurado",
-            description: result.errorMessage,
-            variant: "destructive",
-          });
-          // Em produção com gateway real, retorne aqui.
-          // Em desenvolvimento (gateway === 'none'), permitimos continuar para testar o fluxo.
-        }
+        createdPaymentId = result.paymentId || "";
+        createdQrcodeText = result.pixCopyPaste || "";
+        createdQrcodeImage = result.redirectUrl || "";
+
+        setTxid(createdPaymentId);
+        setQrcodeText(createdQrcodeText);
+        setQrcodeImage(createdQrcodeImage);
       }
 
       // ── 2. Salvar assinante no banco ─────────────────────────────────────
@@ -248,7 +327,7 @@ export const SubscriberCapture = ({
         metadata: {
           plan_duration: planType === "paid" ? planDuration : null,
           preferred_messenger: messengerPref,
-          payment_status: planType === "paid" ? "em_dia" : "gratis",
+          payment_status: planType === "paid" ? "pendente" : "gratis",
           payment_method: planType === "paid" ? paymentMethod : null,
           due_date:
             planType === "paid"
@@ -262,11 +341,12 @@ export const SubscriberCapture = ({
           currency: "BRL",
           notes:
             planType === "paid"
-              ? "Cadastro público via Checkout VIP"
+              ? "Cadastro público via Checkout VIP (Aguardando PIX)"
               : "Lead público cadastrado",
           profile_picture_url: profilePicUrl,
           instagram_username: cleanInsta,
           telegram_username: cleanTele,
+          efi_txid: planType === "paid" ? createdPaymentId : null,
         },
       };
 
@@ -277,14 +357,20 @@ export const SubscriberCapture = ({
       if (error) throw error;
 
       localStorage.setItem("vitoria_messenger_pref", messengerPref);
-      setStep(3);
-      toast({
-        title: "Bem-vindo!",
-        description:
-          planType === "paid"
-            ? "Sua assinatura VIP foi confirmada!"
-            : "Pré-cadastro realizado com sucesso!",
-      });
+      
+      if (planType === "paid") {
+        setStep(3); // Transiciona para a tela de pagamento PIX
+        toast({
+          title: "Cobrança PIX Gerada!",
+          description: "Escaneie o QR Code para ativar seu acesso VIP.",
+        });
+      } else {
+        setStep(4); // Transiciona para o sucesso direto
+        toast({
+          title: "Bem-vindo!",
+          description: "Cadastro realizado com sucesso!",
+        });
+      }
       if (onSuccess) onSuccess();
     } catch (error: any) {
       toast({ title: "Erro no cadastro", description: error.message, variant: "destructive" });
@@ -521,41 +607,22 @@ export const SubscriberCapture = ({
                   </div>
                 </div>
 
-                {/* Forma de Pagamento */}
+                {/* Forma de Pagamento (Foco apenas no PIX via EFI) */}
                 <div className="space-y-2 pt-2 border-t border-white/5">
                   <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
                     Forma de Pagamento
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(
-                      [
-                        { id: "pix" as PaymentMethod, label: "PIX" },
-                        { id: "card" as PaymentMethod, label: "Cartão" },
-                        { id: "boleto" as PaymentMethod, label: "Boleto" },
-                      ]
-                    ).map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(m.id)}
-                        className={cn(
-                          "py-2 rounded-lg border text-[9px] font-bold uppercase transition-all",
-                          paymentMethod === m.id
-                            ? "bg-white text-black border-white"
-                            : "bg-white/5 border-white/10 text-slate-400 hover:bg-white/10"
-                        )}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-1">
+                    <div className="py-2.5 rounded-xl border border-green-500/30 bg-green-500/5 text-green-400 text-center text-[10px] font-black uppercase tracking-widest">
+                      Apenas PIX é Suportado
+                    </div>
                   </div>
                 </div>
 
-                {/* Componente de Gateway de Pagamento (sem simulação) */}
+                {/* Componente de Gateway de Pagamento */}
                 <PaymentGateway
-                  method={paymentMethod}
+                  method="pix"
                   plan={currentPlan}
-                  onTokenReady={(token) => setGatewayToken(token)}
                 />
 
                 {/* Meio de Recebimento */}
@@ -596,10 +663,10 @@ export const SubscriberCapture = ({
                 {/* Botões de Ação */}
                 <div className="grid grid-cols-3 gap-2.5 mt-4">
                   <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setStep(1)}
-                    className="border-white/10 rounded-xl font-bold uppercase text-[9px] h-12"
+                     type="button"
+                     variant="outline"
+                     onClick={() => setStep(1)}
+                     className="border-white/10 rounded-xl font-bold uppercase text-[9px] h-12"
                   >
                     Voltar
                   </Button>
@@ -618,15 +685,107 @@ export const SubscriberCapture = ({
               </div>
             )}
 
-            {/* ─── STEP 3: AGRADECIMENTO & REDIRECIONAMENTO ─────────────── */}
+            {/* ─── STEP 3: QR CODE PIX (EFI BANK) ─────────────────────────── */}
             {step === 3 && (
+              <div className="space-y-5 mt-6 animate-in fade-in zoom-in duration-500">
+                <div className="text-center space-y-1">
+                  <h3 className="text-lg font-display font-black uppercase tracking-tight text-yellow-400">
+                    Aguardando Pagamento PIX
+                  </h3>
+                  <p className="text-slate-400 text-[10px] px-2 leading-relaxed">
+                    Escaneie o QR Code abaixo no app do seu banco para ativar sua assinatura VIP.
+                  </p>
+                </div>
+
+                {qrcodeImage ? (
+                  <div className="w-48 h-48 mx-auto bg-white p-2 rounded-2xl flex items-center justify-center shadow-lg ring-4 ring-yellow-400/20">
+                    <img src={qrcodeImage} alt="QR Code PIX" className="w-full h-full object-contain" />
+                  </div>
+                ) : (
+                  <div className="w-48 h-48 mx-auto bg-white/5 rounded-2xl flex flex-col items-center justify-center text-slate-500 text-xs gap-2 border border-dashed border-white/10">
+                    <Loader2 className="w-6 h-6 animate-spin text-yellow-400" />
+                    <span>Carregando QR Code...</span>
+                  </div>
+                )}
+
+                {qrcodeText && (
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                      Código PIX Copia e Cola
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={qrcodeText}
+                        readOnly
+                        className="bg-black/35 border-white/5 h-11 rounded-xl text-[10px] font-mono select-all text-slate-300 flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(qrcodeText);
+                          setQrcodeCopied(true);
+                          setTimeout(() => setQrcodeCopied(false), 2000);
+                          toast({ title: "Copiado!", description: "Código PIX copiado para a área de transferência." });
+                        }}
+                        className="h-11 border-white/15 hover:bg-white/10 rounded-xl px-3"
+                      >
+                        {qrcodeCopied ? (
+                          <Check className="w-4 h-4 text-green-500" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-yellow-400" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-yellow-400/5 border border-yellow-400/10 p-3.5 rounded-xl text-center">
+                  <div className="text-[10px] text-yellow-400/80 font-bold uppercase tracking-wider animate-pulse flex items-center justify-center gap-2">
+                    <span className="w-2 h-2 bg-yellow-400 rounded-full animate-ping" />
+                    Aguardando confirmação automática...
+                  </div>
+                  <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">
+                    Assim que o pagamento for concluído, você será redirecionado para a comunidade VIP.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 mt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setStep(2)}
+                    className="border-white/10 rounded-xl font-bold uppercase text-[9px] h-12 text-slate-400 hover:text-white"
+                  >
+                    Voltar
+                  </Button>
+                  <Button
+                    onClick={checkPaymentStatusManually}
+                    className="h-12 rounded-xl bg-yellow-400 text-black hover:bg-yellow-500 font-black uppercase tracking-widest text-[9px] transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-yellow-400/15"
+                    disabled={checkingPayment}
+                  >
+                    {checkingPayment ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Confirmar Pagamento
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* ─── STEP 4: AGRADECIMENTO & REDIRECIONAMENTO ─────────────── */}
+            {step === 4 && (
               <div className="py-6 text-center space-y-6 animate-in fade-in zoom-in duration-500 mt-2">
                 <div className="w-20 h-20 bg-yellow-400/20 rounded-full flex items-center justify-center mx-auto mb-2 border border-yellow-400/30">
                   <CheckCircle2 className="w-10 h-10 text-yellow-400" />
                 </div>
 
                 <div className="space-y-1">
-                  <h3 className="text-2xl font-display font-black uppercase tracking-tighter">
+                  <h3 className="text-2xl font-display font-black uppercase tracking-tighter text-white">
                     Assinatura VIP Ativa!
                   </h3>
                   <p className="text-slate-400 text-xs px-2">
@@ -677,13 +836,14 @@ export const SubscriberCapture = ({
                 </div>
 
                 <Button
-                  className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-black h-12 rounded-xl uppercase tracking-widest text-[10px] shadow-lg shadow-yellow-400/20"
+                  className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-black h-12 rounded-xl uppercase tracking-widest text-[10px] shadow-lg shadow-yellow-400/20 animate-bounce"
                   onClick={() => window.open(getGroupLink(), "_blank")}
                 >
                   Entrar no Grupo de Assinantes <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </div>
             )}
+
           </div>
         </DialogContent>
       </Dialog>
