@@ -2,14 +2,15 @@
 // sync-google-contacts: Sync messaging members to Google Contacts (People API)
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+});
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
     const supabase = createClient(
@@ -20,7 +21,7 @@ serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Authorization required - Header ausente" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -28,7 +29,7 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: `Invalid session: ${authError?.message || 'Usuario nao encontrado no JWT'}` }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -65,7 +66,7 @@ serve(async (req: Request) => {
 
     if (!googleToken) {
       return new Response(JSON.stringify({ error: "API do Google Contatos bloqueada. Conecte sua Conta Google ou YouTube em Configurações > APIs." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -155,12 +156,13 @@ serve(async (req: Request) => {
     }
 
     return new Response(JSON.stringify({ success: true, results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error?.message || "Internal error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   }
 });
+

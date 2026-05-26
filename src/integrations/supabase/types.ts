@@ -14,6 +14,120 @@ export type Database = {
   }
   public: {
     Tables: {
+      payment_charges: {
+        Row: {
+          id: string
+          txid: string
+          plan: string
+          value_cents: number
+          customer_email: string
+          customer_name: string
+          status: string | null
+          qrcode_text: string | null
+          expires_at: string
+          paid_at: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          txid: string
+          plan: string
+          value_cents: number
+          customer_email: string
+          customer_name: string
+          status?: string | null
+          qrcode_text?: string | null
+          expires_at: string
+          paid_at?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          txid?: string
+          plan?: string
+          value_cents?: number
+          customer_email?: string
+          customer_name?: string
+          status?: string | null
+          qrcode_text?: string | null
+          expires_at?: string
+          paid_at?: string | null
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      portal_subscribers: {
+        Row: {
+          id: string
+          created_at: string | null
+          email: string | null
+          phone: string | null
+          full_name: string | null
+          plan_type: string | null
+          is_active: boolean | null
+          source_platform: string | null
+          source_content_id: string | null
+          metadata: Json | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string | null
+          email?: string | null
+          phone?: string | null
+          full_name?: string | null
+          plan_type?: string | null
+          is_active?: boolean | null
+          source_platform?: string | null
+          source_content_id?: string | null
+          metadata?: Json | null
+        }
+        Update: {
+          id?: string
+          created_at?: string | null
+          email?: string | null
+          phone?: string | null
+          full_name?: string | null
+          plan_type?: string | null
+          is_active?: boolean | null
+          source_platform?: string | null
+          source_content_id?: string | null
+          metadata?: Json | null
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          id: string
+          user_id: string | null
+          email: string
+          plan: string
+          status: string | null
+          started_at: string | null
+          expires_at: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          email: string
+          plan: string
+          status?: string | null
+          started_at?: string | null
+          expires_at: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          email?: string
+          plan?: string
+          status?: string | null
+          started_at?: string | null
+          expires_at?: string
+          created_at?: string | null
+        }
+        Relationships: []
+      }
       account_metrics: {
         Row: {
           collected_at: string

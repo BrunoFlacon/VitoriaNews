@@ -31,8 +31,7 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks: {
           "react-core": ["react", "react-dom", "react-router-dom"],
-          "ui-framework": ["framer-motion", "lucide-react"],
-          "data-layer": ["@tanstack/react-query", "@supabase/supabase-js", "zustand"]
+          "vendor-libs": ["framer-motion", "lucide-react", "@tanstack/react-query", "@supabase/supabase-js", "zustand"]
         }
       }
     }

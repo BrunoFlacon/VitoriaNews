@@ -1,15 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization, x-supabase-auth, x-client-version, x-my-custom-header",
   "Access-Control-Max-Age": "86400",
-};
+});
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   try {
@@ -19,7 +20,7 @@ serve(async (req: Request) => {
     if (!targetUrl) {
       return new Response(JSON.stringify({ error: "Missing 'url' query parameter" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -49,13 +50,13 @@ serve(async (req: Request) => {
       if (!isAllowed) {
         return new Response(JSON.stringify({ error: "Domain not allowed for proxy" }), {
           status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+          headers: { ...corsHeaders(req), "Content-Type": "application/json" }
         });
       }
     } catch (_e) {
       return new Response(JSON.stringify({ error: "Invalid URL format" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -90,12 +91,12 @@ serve(async (req: Request) => {
       console.error(`[PROXY] Failed to fetch. Status: ${response.status}`);
       return new Response(JSON.stringify({ error: `Failed to fetch image. Status: ${response.status}` }), {
         status: response.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
     // Prepara os headers de resposta copiando o content-type original
-    const responseHeaders = new Headers(corsHeaders);
+    const responseHeaders = new Headers(corsHeaders(req));
     const contentType = response.headers.get("content-type");
     if (contentType) {
       responseHeaders.set("Content-Type", contentType);
@@ -115,7 +116,8 @@ serve(async (req: Request) => {
     console.error(`[PROXY] Global Exception:`, error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   }
 });
+

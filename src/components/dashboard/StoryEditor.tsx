@@ -161,7 +161,9 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
            toast({ title: "Token Meta Faltando", description: "Configure o Access Token da Meta em Configurações > API Sociais", variant: "destructive" });
            return;
         }
-        const resp = await fetch(`https://graph.facebook.com/v18.0/ig_hashtag_search?user_id=${user?.id}&q=${query}&access_token=${token}`);
+        const resp = await fetch(`https://graph.facebook.com/v18.0/ig_hashtag_search?user_id=${user?.id}&q=${query}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         const json = await resp.json();
         setSearchResults((json.data || []).map((h: any) => ({ ...h, type: 'hashtag' })));
       } else if (type === "music") {

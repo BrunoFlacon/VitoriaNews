@@ -11,13 +11,14 @@ import { getAuthUrl as getRedditAuthUrl } from "../_shared/oauth/providers/reddi
 import { getAuthUrl as getSpotifyAuthUrl } from "../_shared/oauth/providers/spotify.ts";
 import { getAuthUrl as getKwaiAuthUrl } from "../_shared/oauth/providers/kwai.ts";
 import { getAuthUrl as getTruthSocialAuthUrl } from "../_shared/oauth/providers/truth_social.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+});
 
 // --- HELPERS ---
 function validateOAuthConfig(provider: string, creds: any) {
@@ -33,6 +34,22 @@ function validateOAuthConfig(provider: string, creds: any) {
   }
 }
 
+function sanitizePayload(payload: any): any {
+  if (!payload || typeof payload !== "object") return payload;
+  const sensitive = ["access_token", "refresh_token", "code", "client_secret", "app_secret", "token", "accessToken", "refreshToken", "authorization_code"];
+  const sanitized: any = Array.isArray(payload) ? [] : {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (sensitive.includes(key)) {
+      sanitized[key] = "[REDACTED]";
+    } else if (typeof value === "object" && value !== null) {
+      sanitized[key] = sanitizePayload(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 async function logOAuth(supabase: any, data: {
   user_id: string;
   provider: string;
@@ -41,13 +58,17 @@ async function logOAuth(supabase: any, data: {
   response_payload?: any;
 }) {
   try {
-    await supabase.from("oauth_logs").insert(data);
+    await supabase.from("oauth_logs").insert({
+      ...data,
+      request_payload: sanitizePayload(data.request_payload),
+      response_payload: sanitizePayload(data.response_payload),
+    });
   } catch (e) {
     console.warn("Falha ao gravar log de OAuth:", e);
   }
 }
 
-function oauthError(provider: string, stage: string, error: any) {
+function oauthError(provider: string, stage: string, error: any, req) {
   return new Response(JSON.stringify({
     success: false,
     provider,
@@ -55,7 +76,7 @@ function oauthError(provider: string, stage: string, error: any) {
     error: error.message || error,
   }), {
     status: 400,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders(req), "Content-Type": "application/json" },
   });
 }
 
@@ -80,11 +101,11 @@ async function generatePKCE() {
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return oauthError("unknown", "auth", "Authorization required");
+    if (!authHeader) return oauthError("unknown", "auth", "Authorization required", req);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -92,7 +113,7 @@ serve(async (req: Request) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication");
+    if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication", req);
 
     const body = await req.json();
     const platform     = body.platform     as string | undefined;
@@ -101,7 +122,7 @@ serve(async (req: Request) => {
     const bodyClientSecret = (body.client_secret as string | undefined)?.trim() || null;
 
     if (!platform || !redirect_uri) {
-      return oauthError(platform || "unknown", "init", "platform e redirect_uri são obrigatórios");
+      return oauthError(platform || "unknown", "init", "platform e redirect_uri são obrigatórios", req);
     }
 
     // Busca credenciais salvas no banco
@@ -186,16 +207,17 @@ serve(async (req: Request) => {
     } else {
       // Platforms that don't use OAuth URLs (Gettr, Rumble, Giphy, Website)
       return new Response(JSON.stringify({ success: true, message: "Plataforma usa token manual ou API Key, sem necessidade de OAuth Auth URL." }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
     return new Response(JSON.stringify({ authUrl, state }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
     console.error("Erro em social-oauth-init:", error);
-    return oauthError("unknown", "init", error);
+    return oauthError("unknown", "init", error, req);
   }
 });
+

@@ -149,9 +149,13 @@ export const DateTimeWeather = () => {
           });
         }
       } catch (e: any) {
-        console.warn("Falha ao buscar clima oficial:", e.message);
+        // Suppress CORS/network warnings in dev — only log genuine API failures
+        const msg = e.message || '';
+        const isCors = /cors|failed to fetch|network/i.test(msg);
+        if (!isCors) {
+          console.warn("Falha ao buscar clima oficial:", msg);
+        }
         if (cancelled) return;
-        
         // Se falhar e não houver dados, vamos setar um estado padrão para não quebrar a UI
         if (!weather) {
           setWeather({

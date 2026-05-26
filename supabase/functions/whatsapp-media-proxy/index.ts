@@ -1,13 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+});
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
     let mediaId, userId;
@@ -72,7 +73,7 @@ serve(async (req: Request) => {
     const blob = await binaryResp.blob();
     return new Response(blob, {
       headers: {
-        ...corsHeaders,
+        ...corsHeaders(req),
         "Content-Type": mime_type || "image/jpeg",
         "Cache-Control": "public, max-age=86400"
       }
@@ -80,6 +81,7 @@ serve(async (req: Request) => {
 
   } catch (error: any) {
     console.error("[WA-PROXY] Fatal error:", error.message);
-    return new Response(error.message, { status: 500, headers: corsHeaders });
+    return new Response(error.message, { status: 500, headers: corsHeaders(req) });
   }
 });
+

@@ -1,16 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { processOmnichannelMessage, NormalizedMessage } from "../_shared/bot-engine.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+});
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   const verifyToken = Deno.env.get("WEBHOOK_VERIFY_TOKEN") || "vitoria_net_omni_secure";
@@ -24,10 +25,10 @@ serve(async (req: Request) => {
 
     if (mode === "subscribe" && token === verifyToken) {
       console.log("[META-WEBHOOK] Verificação de Webhook bem-sucedida!");
-      return new Response(challenge, { status: 200, headers: corsHeaders });
+      return new Response(challenge, { status: 200, headers: corsHeaders(req) });
     }
-    console.warn(`[META-WEBHOOK] Tentativa de verificação falhou. Token recebido: ${token}`);
-    return new Response("Forbidden", { status: 403, headers: corsHeaders });
+    console.warn(`[META-WEBHOOK] Tentativa de verificação falhou. Modo: ${mode}, challenge length: ${(challenge || "").length}`);
+    return new Response("Forbidden", { status: 403, headers: corsHeaders(req) });
   }
 
   // ── 2. ROTA POST: Recepção Omnichannel de Eventos ──
@@ -172,14 +173,15 @@ serve(async (req: Request) => {
     // Sempre retorna 200 de imediato para a Meta para evitar enfileiramento de retentativas
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (error: any) {
     console.error("[META-WEBHOOK] Erro no processamento do evento:", error);
     // Mesmo em caso de erro interno, retornamos 200 para não travar o Webhook da Meta
     return new Response(JSON.stringify({ error: error.message }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });
+

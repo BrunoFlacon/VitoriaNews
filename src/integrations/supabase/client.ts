@@ -16,5 +16,3 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
   }
 });
 
-export const SUPABASE_ANON_KEY = SUPABASE_PUBLISHABLE_KEY;
-export const SUPABASE_PROJECT_URL = SUPABASE_URL;

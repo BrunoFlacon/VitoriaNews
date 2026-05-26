@@ -2,13 +2,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cacheProfileImage } from "../_shared/media.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-authorization',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
-};
+});
 
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
   try {
@@ -25,7 +26,7 @@ async function getCredentials(supabase: any, userId: string, platform: string): 
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
 
   try {
     const adminClient = createClient(
@@ -44,9 +45,9 @@ serve(async (req: Request) => {
        bodyPayload = await req.json();
     } catch {}
 
-    // Support both URL params (legacy) and body params (current frontend)
     const targetPlatform = urlParams.get("platform") || bodyPayload?.platform || null;
     const targetPageId = urlParams.get("pageId") || bodyPayload?.pageId || null;
+    const isCronSync = bodyPayload?.is_cron === true;
 
     // --- AUTH LOGIC ---
     if (token) {
@@ -59,73 +60,159 @@ serve(async (req: Request) => {
       }
     }
 
-    // Fallback to bodyPayload.userId if authorized as system
-    if (!userId && bodyPayload?.userId) {
-       userId = bodyPayload.userId;
-    }
+    if (!userId && bodyPayload?.userId) userId = bodyPayload.userId;
 
     if (!userId && !token?.includes(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "!!")) {
        return new Response(JSON.stringify({ error: "Unauthorized" }), { 
-         status: 401, headers: corsHeaders 
+         status: 401, headers: corsHeaders(req) 
        });
     }
 
-    // --- TARGET USERS ---
+    // --- TASK QUEUE LOGIC ---
+    let tasksToProcess: any[] = [];
+    if (isCronSync) {
+      // Pick next 5 pending tasks (staggered to avoid rate limits)
+      const { data: pendingTasks } = await adminClient
+        .from("social_sync_tasks")
+        .select("*, social_connections(*)")
+        .eq("status", "pending")
+        .or(`next_sync_at.lte.${new Date().toISOString()},next_sync_at.is.null`)
+        .order("sync_type", { ascending: true }) // historical first
+        .limit(5);
+      
+      tasksToProcess = pendingTasks || [];
+      console.log(`[COLLECT] Found ${tasksToProcess.length} pending tasks to process via CRON.`);
+    }
+
+    // --- TARGET USERS (Manual Sync) ---
     let usersToSync = userId ? [userId] : [];
-    if (bodyPayload?.sync_all === true || !userId) {
+    if (!isCronSync && (bodyPayload?.sync_all === true || !userId)) {
       const { data: allUsers } = await adminClient
         .from("social_connections")
         .select("user_id")
         .eq("is_connected", true);
-      
-      // Manually unique user_ids to avoid PostgREST 'distinct' issues
       usersToSync = Array.from(new Set((allUsers || []).map((u: any) => u.user_id)));
     }
 
     const globalResults: any[] = [];
-    console.log(`[COLLECT] Starting sync for ${usersToSync.length} users. Target: ${targetPlatform || 'ALL'}`);
 
-    for (const uid of usersToSync) {
-      try {
-        const { data: connections, error: connErr } = await adminClient
+    // --- CASE 1: CRON SYNC (PROCESS QUEUE) ---
+    if (isCronSync) {
+      for (const task of tasksToProcess) {
+        try {
+          await adminClient.from("social_sync_tasks").update({ status: "processing" }).eq("id", task.id);
+          
+          const conn = task.social_connections;
+          const result = await processSyncTask(adminClient, conn, task);
+          
+          // Update task state
+          const updates: any = { 
+            status: "completed", 
+            last_sync_at: new Date().toISOString(),
+            error_log: null 
+          };
+
+          if (task.sync_type === "historical_15d" && task.days_offset > 0) {
+            updates.days_offset = task.days_offset - 1;
+            updates.status = updates.days_offset === 0 ? "completed" : "pending";
+            // Stagger next 15-day sync by 1 hour (less aggressive)
+            updates.next_sync_at = new Date(Date.now() + 1000 * 60 * 60).toISOString(); 
+          } else if (task.sync_type === "polling_4h") {
+            updates.next_sync_at = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
+            updates.status = "pending";
+          }
+
+          await adminClient.from("social_sync_tasks").update(updates).eq("id", task.id);
+          globalResults.push({ task_id: task.id, platform: conn.platform, status: "ok" });
+        } catch (err: any) {
+          console.error(`[COLLECT] Task ${task.id} failed:`, err.message);
+          await adminClient.from("social_sync_tasks").update({ 
+            status: "failed", 
+            error_log: err.message,
+            next_sync_at: new Date(Date.now() + 1000 * 60 * 60).toISOString()
+          }).eq("id", task.id);
+          globalResults.push({ task_id: task.id, status: "error", error: err.message });
+        }
+      }
+    } 
+    // --- CASE 2: MANUAL SYNC (USER TRIGGERED) ---
+    else {
+      console.log(`[COLLECT] Starting manual sync for ${usersToSync.length} users. Target: ${targetPlatform || 'ALL'}`);
+      
+      for (const uid of usersToSync) {
+        const { data: connections } = await adminClient
           .from("social_connections")
           .select("*")
           .eq("user_id", uid)
           .eq("is_connected", true);
 
-        if (connErr) throw connErr;
-        if (!connections || connections.length === 0) continue;
+        if (!connections) continue;
 
-        // Parallelize connections processing for this user
-        const connectionsToProcess = [...(connections || [])];
-        
-        // --- X/TWITTER SYNTHETIC INJECTION ---
-        // Ensure users with manual Twitter credentials but no OAuth link are processed
-        const twitterCreds = await getCredentials(adminClient, uid, "twitter");
-        const twToken = twitterCreds?.access_token || twitterCreds?.bearer_token || twitterCreds?.token;
-        const hasTwitterConnection = connectionsToProcess.some(c => c.platform === "twitter");
-        
-        if (twToken && !hasTwitterConnection) {
-          console.log(`[COLLECT] Injecting synthetic Twitter connection for user ${uid}`);
-          connectionsToProcess.push({
-            platform: "twitter",
-            user_id: uid,
-            access_token: twToken,
-            is_connected: true,
-            username: twitterCreds.username || twitterCreds.platform_user_id || "twitter_user",
-            id: `tw_syn_${uid}`
-          });
+        for (const conn of connections) {
+          if (targetPlatform && conn.platform !== targetPlatform) continue;
+          if (targetPageId && (conn.page_id !== targetPageId && conn.platform_user_id !== targetPageId)) continue;
+          
+          try {
+            const result = await processSyncTask(adminClient, conn);
+            globalResults.push({ platform: conn.platform, status: "ok", result });
+          } catch (err: any) {
+            globalResults.push({ platform: conn.platform, status: "error", error: err.message });
+          }
         }
+      }
+    }
 
-        const syncPromises = connectionsToProcess.map(async (conn) => {
-          // Fast-path filtering
-          if (targetPlatform && conn.platform !== targetPlatform) return { platform: conn.platform, status: "skipped_filter" };
-          if (targetPageId && (conn.page_id !== targetPageId && conn.platform_user_id !== targetPageId)) return { platform: conn.platform, status: "skipped_page_filter" };
+    return new Response(JSON.stringify({ success: true, count: globalResults.length, results: globalResults }), {
+      status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+    });
 
-          console.log(`[COLLECT] Syncing ${conn.platform} for user ${uid} (ID: ${conn.id})`);
+  } catch (error: any) {
+    console.error(`[COLLECT] FATAL ERROR:`, error.message);
+    return new Response(JSON.stringify({ error: error?.message }), {
+      status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+    });
+  }
+});
 
-          let metrics: any = null;
-          let fetchedPosts: any[] = [];
+/**
+ * CORE SYNC LOGIC - Encapsulated to support both CRON (Tasks) and Manual sync
+ */
+async function processSyncTask(adminClient: any, conn: any, task: any = null) {
+  const uid = conn.user_id;
+  const platform = conn.platform;
+  const daysOffset = task?.days_offset || 0;
+  
+  // Calculate date range for historical sync if daysOffset > 0
+  let targetDate: string | null = null;
+  if (daysOffset > 0) {
+    const d = new Date();
+    d.setDate(d.getDate() - daysOffset);
+    targetDate = d.toISOString().split('T')[0];
+  }
+
+  console.log(`[COLLECT] Processing sync for ${platform} user ${uid}. historical_date: ${targetDate || 'TODAY'}`);
+
+  let metrics: any = null;
+  let fetchedPosts: any[] = [];
+
+  // ── Token Expiry Check ──────────────────────────────────────────────
+  // Skip collection if token is expired — refresh-tokens-cron handles renewal + disconnect
+  if (conn.token_expires_at && platform !== "telegram") {
+    const expiresAt = new Date(conn.token_expires_at).getTime();
+    const now = Date.now();
+    if (expiresAt - now < 0) {
+      console.warn(`[COLLECT] Token expirado para ${platform} user ${uid}. Expirou em: ${conn.token_expires_at}. Coleta ignorada.`);
+      return { skipped: true, reason: "token_expired" };
+    }
+  }
+
+  // Re-fetch synthetic Twitter token if needed
+  let twitterCreds: any = null;
+  let twToken: string | null = null;
+  if (platform === "twitter") {
+    twitterCreds = await getCredentials(adminClient, uid, "twitter");
+    twToken = twitterCreds?.access_token || twitterCreds?.bearer_token || twitterCreds?.token;
+  }
 
           try {
             switch (conn.platform) {
@@ -182,13 +269,24 @@ serve(async (req: Request) => {
                 if (!conn.access_token) break;
                 const pageId = conn.page_id || conn.platform_user_id;
                 if (!pageId) break;
-                // Use limit=5 to save memory, summary(true) gives the true total count of posts
-                const fields = "name,followers_count,fan_count,picture.type(large),cover,posts.limit(5).summary(true).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true))";
-                const resp = await fetch(`https://graph.facebook.com/v21.0/${pageId}?fields=${fields}&access_token=${conn.access_token}`);
+                
+                // If targetDate is set, we try to fetch posts from that specific day
+                let url = `https://graph.facebook.com/v21.0/${pageId}?fields=name,followers_count,fan_count,picture.type(large),cover,posts.limit(20).summary(true).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true),insights.metric(post_impressions,post_reach))&access_token=${conn.access_token}`;
+                
+                const resp = await fetch(url);
                 if (resp.ok) {
                   const data = await resp.json();
                   const fbPosts = data.posts?.data || [];
-                  fbPosts.forEach((p: any) => {
+                  
+                  // Filter by targetDate if requested
+                  const filteredPosts = targetDate 
+                    ? fbPosts.filter((p: any) => p.created_time.startsWith(targetDate))
+                    : fbPosts;
+
+                  filteredPosts.forEach((p: any) => {
+                    const impressions = p.insights?.data?.find((i: any) => i.name === "post_impressions")?.values?.[0]?.value || 0;
+                    const reach = p.insights?.data?.find((i: any) => i.name === "post_reach")?.values?.[0]?.value || 0;
+                    
                     fetchedPosts.push({
                       external_id: p.id,
                       content: p.message || "",
@@ -196,32 +294,19 @@ serve(async (req: Request) => {
                       likes: p.likes?.summary?.total_count || 0,
                       comments: p.comments?.summary?.total_count || 0,
                       shares: p.shares?.count || 0,
+                      impressions,
+                      reach,
                       performance_score: (p.likes?.summary?.total_count || 0) + (p.comments?.summary?.total_count || 0)
                     });
                   });
 
-                  let postsCount = data.posts?.summary?.total_count || fbPosts.length;
-                  if (!postsCount || postsCount === fbPosts.length) {
-                    try {
-                      const postsRes = await fetch(`https://graph.facebook.com/v21.0/${pageId}/published_posts?summary=total_count&limit=1&access_token=${conn.access_token}`);
-                      if (postsRes.ok) {
-                        const postsData = await postsRes.json();
-                        postsCount = postsData?.summary?.total_count || postsCount;
-                      }
-                    } catch (e) {
-                      console.warn(`[COLLECT] Facebook fallback posts count failed:`, e);
-                    }
-                  }
-
                   metrics = {
                     followers: Math.max(data.fan_count || 0, data.followers_count || 0),
-                    posts_count: postsCount,
+                    posts_count: data.posts?.summary?.total_count || fbPosts.length,
                     username: data.name || conn.page_name,
                     profile_picture: data.picture?.data?.url,
                     platform_user_id: pageId
                   };
-                } else {
-                  console.error(`[COLLECT] FB API Error: ${resp.status} ${await resp.text()}`);
                 }
                 break;
               }
@@ -229,29 +314,36 @@ serve(async (req: Request) => {
                 if (!conn.access_token) break;
                 const igUserId = conn.platform_user_id || conn.page_id;
                 if (!igUserId) break;
-                // Use limit=5 to save memory
-                const fields = "followers_count,media_count,username,profile_picture_url,media.limit(5).fields(id,caption,media_type,media_url,timestamp,like_count,comments_count)";
+
+                const fields = "followers_count,media_count,username,profile_picture_url,media.limit(20).fields(id,caption,media_type,media_url,timestamp,like_count,comments_count,insights.metric(impressions,reach))";
                 const resp = await fetch(`https://graph.facebook.com/v21.0/${igUserId}?fields=${fields}&access_token=${conn.access_token}`);
                 if (resp.ok) {
                   const data = await resp.json();
                   const media = data.media?.data || [];
-                  media.forEach((m: any) => {
+                  
+                  const filteredMedia = targetDate 
+                    ? media.filter((m: any) => m.timestamp.startsWith(targetDate))
+                    : media;
+
+                  filteredMedia.forEach((m: any) => {
+                    const impressions = m.insights?.data?.find((i: any) => i.name === "impressions")?.values?.[0]?.value || 0;
+                    const reach = m.insights?.data?.find((i: any) => i.name === "reach")?.values?.[0]?.value || 0;
+
                     fetchedPosts.push({
                       external_id: m.id, content: m.caption || "", published_at: m.timestamp,
                       media_url: m.media_url, media_type: m.media_type,
                       likes: m.like_count || 0, comments: m.comments_count || 0,
+                      impressions, reach,
                       performance_score: (m.like_count || 0) + (m.comments_count * 2)
                     });
                   });
                   metrics = {
                     followers: data.followers_count || 0,
-                    posts_count: data.media_count || media.length, // True total media count!
+                    posts_count: data.media_count || media.length,
                     username: data.username,
                     profile_picture: data.profile_picture_url,
                     platform_user_id: igUserId
                   };
-                } else {
-                  console.error(`[COLLECT] IG API Error: ${resp.status} ${await resp.text()}`);
                 }
                 break;
               }
@@ -269,23 +361,29 @@ serve(async (req: Request) => {
 
                 // Passo 1: Buscar Perfil Básico
                 try {
-                  const profileUrl = `https://graph.threads.net/v1.0/${node}?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${conn.access_token}`;
+                  const profileUrl = `https://graph.threads.net/v1.0/${node}?fields=id,username,name,threads_profile_picture_url,threads_biography,followers_count,threads_count&access_token=${conn.access_token}`;
                   const profileResp = await fetch(profileUrl);
 
                   if (profileResp.ok) {
                     const profileData = await profileResp.json();
                     threadsUsername = profileData.username || threadsUsername;
-                    threadsPhoto = profileData.threads_profile_picture_url || threadsPhoto;
+                    threadsPhoto = profileData.threads_profile_picture_url || profileData.profile_picture_url || threadsPhoto;
                     threadsRealId = profileData.id || threadsRealId;
+                    
+                    console.log(`[COLLECT] Threads API Raw Response:`, JSON.stringify(profileData));
+
                     if (profileData.followers_count !== undefined && profileData.followers_count !== null) {
                       threadsFollowers = Number(profileData.followers_count);
                       console.log(`[COLLECT] Threads Followers (from basic profile): ${threadsFollowers}`);
+                    } else {
+                      console.warn(`[COLLECT] Threads Followers field missing in basic profile!`);
                     }
+                    
                     if (profileData.threads_count !== undefined && profileData.threads_count !== null) {
                       threadsTotalPosts = Number(profileData.threads_count);
                       console.log(`[COLLECT] Threads Total Posts (from basic profile): ${threadsTotalPosts}`);
                     }
-                    console.log(`[COLLECT] Threads profile OK: @${threadsUsername}`);
+                    console.log(`[COLLECT] Threads profile OK: @${threadsUsername} | Photo: ${threadsPhoto?.substring(0, 50)}...`);
                   } else {
                     const errText = await profileResp.text();
                     console.error(`[COLLECT] Threads Profile Error ${profileResp.status}: ${errText}`);
@@ -1072,27 +1170,8 @@ serve(async (req: Request) => {
             }
           } catch (e) {
             console.error(`[COLLECT] Fail user ${uid} platform ${conn.platform}:`, e);
-            return { platform: conn.platform, status: "error", error: String(e) };
+            throw e;
           }
           return { platform: conn.platform, status: "no_metrics" };
-        });
+}
 
-        const results = await Promise.allSettled(syncPromises);
-        globalResults.push(...results.map((r: any) => r.value || { status: "promise_failed", error: String(r.reason) }));
-
-      } catch (e) {
-        console.error(`[COLLECT] Fail user ${uid}:`, e);
-      }
-    }
-
-    return new Response(JSON.stringify({ success: true, count: globalResults.length, results: globalResults }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-
-  } catch (error: any) {
-    console.error(`[COLLECT] FATAL ERROR:`, error.message);
-    return new Response(JSON.stringify({ error: error?.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
-    });
-  }
-});

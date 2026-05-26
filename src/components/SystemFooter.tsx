@@ -1,8 +1,8 @@
-import React from "react";
+import React, { memo } from "react";
 import { Link } from "react-router-dom";
 import { useSystem } from "@/contexts/SystemContext";
 
-export const SystemFooter = () => {
+export const SystemFooter = memo(() => {
   const { settings } = useSystem();
 
   return (
@@ -28,4 +28,6 @@ export const SystemFooter = () => {
       </div>
     </footer>
   );
-};
+});
+
+SystemFooter.displayName = "SystemFooter";

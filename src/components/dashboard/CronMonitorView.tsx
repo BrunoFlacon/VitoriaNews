@@ -21,12 +21,27 @@ interface CronJob {
 interface CronRun {
   runid: number;
   jobid: number;
-  job_pid: number;
-  command: string;
   status: string;
-  return_message: string;
   start_time: string;
-  end_time: string;
+  end_time: string | null;
+  return_message: string | null;
+}
+
+interface SyncTask {
+  id: string;
+  user_id: string;
+  connection_id: string;
+  sync_type: 'historical_15d' | 'polling_4h';
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  days_offset: number;
+  last_sync_at: string | null;
+  next_sync_at: string | null;
+  error_log: string | null;
+  social_connections: {
+    platform: string;
+    username: string;
+    page_name: string;
+  };
 }
 
 export const CronMonitorView = () => {
@@ -40,14 +55,14 @@ export const CronMonitorView = () => {
           // para não quebrar a UI conforme pedido do usuário
           if (error.message.includes('request') || error.message.includes('CORS') || error.message.includes('404')) {
             console.info("[CronMonitor] Edge Function offline, usando modo de espera silencioso.");
-            return { jobs: [], runs: [] };
+            return { jobs: [] as CronJob[], runs: [] as CronRun[] };
           }
           throw error;
         }
-        return data as { jobs: CronJob[]; runs: CronRun[] };
+        return (data as { jobs: CronJob[]; runs: CronRun[] }) || { jobs: [], runs: [] };
       } catch (e) {
         // Fallback final para evitar crash
-        return { jobs: [], runs: [] };
+        return { jobs: [] as CronJob[], runs: [] as CronRun[] };
       }
     },
     staleTime: Infinity,
@@ -57,6 +72,10 @@ export const CronMonitorView = () => {
     retry: false,
     retryOnMount: false,
   });
+
+  // Destructure safely with defaults to prevent "not defined" crashes
+  const jobs: CronJob[] = data?.jobs || [];
+  const runs: CronRun[] = data?.runs || [];
 
   // Subscribe to Realtime updates to avoid polling
   useEffect(() => {
@@ -74,8 +93,50 @@ export const CronMonitorView = () => {
     };
   }, [refetch]);
 
-  const jobs = data?.jobs || [];
-  const runs = data?.runs || [];
+  const { data: syncTasks, refetch: refetchTasks, isFetching: isFetchingTasks } = useQuery({
+    queryKey: ["social-sync-tasks"],
+    queryFn: async () => {
+      try {
+        // Cast to 'any' because social_sync_tasks may not yet exist in generated Supabase types
+        const { data, error } = await (supabase as any)
+          .from("social_sync_tasks")
+          .select("*, social_connections(platform, username, page_name)")
+          .order("next_sync_at", { ascending: true });
+        // Silently return empty if table doesn't exist yet (404) or any other error
+        if (error) {
+          console.info("[SyncTasks] Table not available yet:", error.message);
+          return [] as SyncTask[];
+        }
+        return (data || []) as SyncTask[];
+      } catch (e) {
+        // Never throw — just return empty so the page doesn't crash
+        return [] as SyncTask[];
+      }
+    },
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const toggleTask = async (taskId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'failed' || currentStatus === 'completed' ? 'pending' : 'completed';
+    const { error } = await (supabase as any)
+      .from("social_sync_tasks")
+      .update({ status: newStatus, next_sync_at: new Date().toISOString() })
+      .eq("id", taskId);
+    if (!error) refetchTasks();
+  };
+
+  const triggerHistorical = async (taskId: string) => {
+    const { error } = await (supabase as any)
+      .from("social_sync_tasks")
+      .update({ 
+        status: "pending", 
+        days_offset: 15, 
+        next_sync_at: new Date().toISOString() 
+      })
+      .eq("id", taskId);
+    if (!error) refetchTasks();
+  };
 
   // Group runs by jobid
   const runsByJob = runs.reduce((acc: Record<number, CronRun[]>, run) => {
@@ -321,6 +382,86 @@ export const CronMonitorView = () => {
           )}
         </div>
       </Card>
+      {/* Omnichannel Sync Management */}
+      <div className="flex items-center justify-between mt-8">
+        <div>
+          <h2 className="font-display font-bold text-2xl mb-1">Fila de Sincronização Omnichannel</h2>
+          <p className="text-sm text-muted-foreground">Monitoramento de histórico e polling de 4h para APIs Sociais</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetchTasks()} disabled={isFetchingTasks}>
+          <RefreshCw className={cn("w-3 h-3 mr-2", isFetchingTasks && "animate-spin")} />
+          Atualizar Fila
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        {syncTasks?.map((task) => (
+          <Card key={task.id} className="glass-card p-4 border-border flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center font-bold uppercase text-xs">
+                {task.social_connections.platform.substring(0, 2)}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm">
+                    {task.social_connections.page_name || task.social_connections.username}
+                  </span>
+                  <Badge variant="outline" className="text-[10px] capitalize">
+                    {task.sync_type.replace('_', ' ')}
+                  </Badge>
+                  <Badge 
+                    className={cn(
+                      "text-[10px]",
+                      task.status === 'completed' ? "bg-green-500/10 text-green-500 border-green-500/20" :
+                      task.status === 'processing' ? "bg-blue-500/10 text-blue-500 border-blue-500/20 animate-pulse" :
+                      task.status === 'failed' ? "bg-red-500/10 text-red-500 border-red-500/20" :
+                      "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                    )}
+                  >
+                    {task.status}
+                  </Badge>
+                </div>
+                <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-2">
+                  <span>Plataforma: <span className="capitalize">{task.social_connections.platform}</span></span>
+                  {task.sync_type === 'historical_15d' && (
+                    <span className="px-1.5 py-0.5 bg-primary/5 rounded">Faltam {task.days_offset} dias</span>
+                  )}
+                  {task.last_sync_at && (
+                    <span>Última: {new Date(task.last_sync_at).toLocaleTimeString()}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {task.sync_type === 'historical_15d' && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-[10px] h-7"
+                  onClick={() => triggerHistorical(task.id)}
+                >
+                  Reiniciar 15 dias
+                </Button>
+              )}
+              <Button 
+                variant={task.status === 'completed' ? "outline" : "default"} 
+                size="sm" 
+                className="text-[10px] h-7"
+                onClick={() => toggleTask(task.id, task.status)}
+              >
+                {task.status === 'completed' ? "Reativar" : "Pausar"}
+              </Button>
+            </div>
+          </Card>
+        ))}
+
+        {(!syncTasks || syncTasks.length === 0) && (
+          <div className="p-8 text-center border border-dashed rounded-xl text-muted-foreground text-sm">
+            Nenhuma tarefa de sincronização omnichannel encontrada.
+          </div>
+        )}
+      </div>
     </div>
   );
 };

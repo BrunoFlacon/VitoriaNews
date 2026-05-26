@@ -1,18 +1,19 @@
 // deno-lint-ignore-file
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Max-Age": "86400",
-};
+});
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders(req) });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -23,7 +24,7 @@ serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -34,7 +35,7 @@ serve(async (req: Request) => {
     const { data: { user }, error: userErr } = await userClient.auth.getUser();
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -223,20 +224,21 @@ serve(async (req: Request) => {
     } else if (!bearerToken && oauthAccounts.length === 0) {
       return new Response(JSON.stringify({
         error: "Nenhum token do Twitter configurado. Conecte sua conta via OAuth ou configure um Bearer Token em Configurações > APIs Sociais > X (Twitter)."
-      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }), { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
     }
 
     const success = results.some(r => r.ok);
     console.log(`[SYNC-TWITTER] Done. ${results.filter(r => r.ok).length}/${results.length} accounts synced successfully.`);
     
     return new Response(JSON.stringify({ success, results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
 
   } catch (err: any) {
     console.error("[SYNC-TWITTER] Fatal:", err);
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }
+      status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   }
 });
+

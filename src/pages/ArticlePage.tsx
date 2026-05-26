@@ -9,6 +9,7 @@ import { PortalFooter } from "@/components/portal/PortalFooter";
 import { useSystem } from "@/contexts/SystemContext";
 import { Newspaper, Sparkles, Bell } from "lucide-react";
 import { SubscriberCapture } from "@/components/portal/SubscriberCapture";
+import DOMPurify from "dompurify";
 
 const ArticlePage = () => {
   const { settings } = useSystem();
@@ -203,14 +204,14 @@ const ArticlePage = () => {
         {(article as any).visibility_tier === 'public' ? (
           <div
             className="prose prose-lg dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: article.content }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content) }}
           />
         ) : (
           <div className="relative">
             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background z-10" />
             <div
               className="prose prose-lg dark:prose-invert max-w-none opacity-20 blur-[4px] select-none pointer-events-none"
-              dangerouslySetInnerHTML={{ __html: article.content.substring(0, 300) + "..." }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.content.substring(0, 300) + "...") }}
             />
             <div className="relative z-20 -mt-20 py-24 px-8 text-center bg-[#020617] border border-white/5 rounded-[3rem] shadow-2xl overflow-hidden">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.05),transparent_70%)]" />

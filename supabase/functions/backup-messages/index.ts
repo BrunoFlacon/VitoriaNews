@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+});
 
 // AES-GCM Encryption using Web Crypto API
 async function encryptMessageData(text: string, keyString: string): Promise<{ encryptedBase64: string, ivBase64: string }> {
@@ -39,7 +40,7 @@ async function encryptMessageData(text: string, keyString: string): Promise<{ en
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -126,12 +127,13 @@ serve(async (req: Request) => {
 
     return new Response(JSON.stringify({ success: true, message: "Backups encrypted and processed successfully" }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   }
 });
+

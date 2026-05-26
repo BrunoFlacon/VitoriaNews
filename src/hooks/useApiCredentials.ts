@@ -29,6 +29,8 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Phone Number ID (ID do Número)", key: "phone_number_id", placeholder: "Ex: 9876543210" },
     { label: "Número do WhatsApp (com DDD)", key: "phone_number", placeholder: "Ex: 5511999999999" },
     { label: "App ID (Meta for Developers)", key: "app_id", placeholder: "Ex: 123456789012345" },
+    { label: "Tech Provider Config ID", key: "client_key", placeholder: "Ex: 123456789..." },
+    { label: "Setup PIN (Embedded Signup)", key: "setup_pin", masked: true, placeholder: "PIN de 6 dígitos (deixe vazio para auto-geração)" },
   ],
   twitter: [
     { label: "Twitter Username/Handle (sem @)", key: "platform_user_id", placeholder: "ex: lovable_dev" },

@@ -2,13 +2,14 @@ import { memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, RefreshCw, ChevronUp, ChevronDown, X, Globe, 
-  Unplug, Link2, Loader2, Plug, Save
+  Unplug, Link2, Loader2, Plug, Save, FileText, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { APIFields } from "./APIFields";
+import { ConnectionCard } from "./ConnectionCard";
 import { PLATFORM_CREDENTIAL_FIELDS } from "@/hooks/useApiCredentials";
 
 interface APITabProps {
@@ -89,15 +90,21 @@ export const APITab = memo(({
                   {isActive ? (
                     <div className="flex items-center gap-2 mt-0.5">
                       <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                         {config.id === 'telegram' ? (
-                            <span className="font-bold text-slate-200">
-                              {platformConnections.length > 0 ? platformConnections[0].page_name : "Bot Telegram"}
-                            </span>
-                         ) : (
-                            <span className="font-bold text-slate-200">
-                              {platformConnections.length > 0 ? platformConnections[0].page_name : "Conta Principal"}
-                            </span>
-                         )}
+                          {(() => {
+                            const conn = platformConnections[0];
+                            if (!conn) return config.id === 'telegram' ? "Bot Telegram" : "Conta Principal";
+                            const stats = socialStats.find(s => {
+                              if (s.platform !== config.id) return false;
+                              const s_pid = String(s.platform_user_id || "").toLowerCase();
+                              const c_pid = String(conn.platform_user_id || "").toLowerCase();
+                              return s_pid && c_pid && s_pid === c_pid;
+                            });
+                            return (
+                              <span className="font-bold text-slate-200">
+                                {stats?.username || conn.page_name || conn.username || (config.id === 'telegram' ? "Bot Telegram" : "Conta Conectada")}
+                              </span>
+                            );
+                          })()}
                       </p>
                     </div>
                   ) : (
@@ -129,10 +136,111 @@ export const APITab = memo(({
                   className="overflow-hidden"
                 >
                   <div className="p-5 border-t border-border bg-background/50 space-y-6">
+                    {/*  Connected Profiles List (MOVED TO TOP)  */}
+                    {hasConnections && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between px-1">
+                          <div className="flex items-center gap-2">
+                            <Users className="w-4 h-4 text-muted-foreground/70" />
+                            <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Contas Conectadas</p>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 w-8 p-0"
+                            onClick={() => syncSocialStats(config.id)}
+                            disabled={statsLoading}
+                          >
+                            <RefreshCw className={cn("w-3.5 h-3.5", statsLoading && "animate-spin")} />
+                          </Button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                          {platformConnections.map(conn => {
+                            const stats = socialStats.find(s => {
+                              if (s.platform !== config.id) return false;
+                              const s_pid = String(s.platform_user_id || "").toLowerCase();
+                              const c_pid = String(conn.platform_user_id || "").toLowerCase();
+                              const c_page = String(conn.page_id || "").toLowerCase();
+                              const s_username = String(s.username || "").toLowerCase();
+                              const c_username = String(conn.username || conn.page_name || "").toLowerCase();
+                              
+                              return (s_pid && c_pid && s_pid === c_pid) ||
+                                     (s_pid && c_page && s_pid === c_page) ||
+                                     (s_username && c_username && s_username === c_username) ||
+                                     (s.id === conn.id);
+                            });
+
+                            const fbPictureFallback = (config.id === 'facebook' || config.id === 'instagram') ? `https://graph.facebook.com/${conn.page_id || conn.platform_user_id}/picture?type=large` : "";
+                            const rawPhoto = stats?.profile_picture || conn.profile_image_url || conn.profile_picture || fbPictureFallback || "";
+                            const isTwitter = String(rawPhoto || "").includes('twimg.com') || config.id === 'twitter';
+                            const isGraphAPI = String(rawPhoto || "").includes('graph.facebook.com');
+                            const isTikTok = String(rawPhoto || "").includes('tiktokcdn');
+                            const isInstagram = String(rawPhoto || "").includes('cdninstagram.com') || config.id === 'instagram' || config.id === 'threads';
+                            
+                            const cacheBustedPhoto = (rawPhoto && !rawPhoto.includes('data:') && !isTwitter && !isGraphAPI && !isTikTok && !isInstagram)
+                              ? `${rawPhoto}${rawPhoto.includes('?') ? '&' : '?'}v=${stats?.updated_at ? new Date(stats.updated_at).getTime() : Date.now()}`
+                              : rawPhoto;
+                            const displayPhoto = getProxyUrl(cacheBustedPhoto);
+                            const displayName = stats?.username || conn.page_name || conn.username || (config.id === 'threads' ? "Threads Profile" : "Conta Conectada");
+
+                            const individualChannels = (config.id === 'telegram' || config.id === 'whatsapp')
+                               ? (audienceBreakdown?.flatMap(b => b.channels) || []).filter(ch => {
+                                   if (ch.platform !== config.id) return false;
+                                   const chId = String(ch.channel_id || ch.id || "").toLowerCase();
+                                   const connId = String(conn.platform_user_id || conn.page_id || conn.id || "").toLowerCase();
+                                   const chName = String(ch.channel_name || "").toLowerCase();
+                                   const connName = String(conn.page_name || conn.username || "").toLowerCase();
+                                   return (chId && connId && (chId.includes(connId) || connId.includes(chId))) || 
+                                          (chName && connName && (chName.includes(connName) || connName.includes(chName)));
+                                 })
+                               : [];
+
+                             const individualMembers = individualChannels.length > 0
+                               ? individualChannels.reduce((sum, ch) => sum + (ch.members_count || 0), 0)
+                               : 0;
+
+                             const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
+                               ? (individualMembers || Math.max(Number(conn.followers_count || 0), Number(stats?.followers_count || 0)))
+                               : Math.max(Number(stats?.followers_count || 0), Number(conn.followers_count || 0));
+
+                             const waMetadata = (stats?.metadata as any) || {};
+                             const displayPosts = config.id === 'whatsapp'
+                               ? Number(conn.posts_count || waMetadata.official_posts_count || stats?.posts_count || 0)
+                               : (config.id === 'youtube')
+                                 ? Number(stats?.posts_count || stats?.metadata?.video_count || 0)
+                                 : (config.id === 'threads')
+                                   ? Math.max(Number(stats?.posts_count || 0), Number(conn.posts_count || 0))
+                                   : Math.max(Number(stats?.posts_count || 0), Number((conn.metadata as any)?.posts_count || conn.posts_count || 0));
+
+                            return (
+                              <ConnectionCard
+                                key={conn.id}
+                                conn={conn}
+                                config={config}
+                                stats={stats}
+                                isEffectivelyConnected={conn.is_connected || !!stats}
+                                metaAdsProfile={null}
+                                displayPhoto={displayPhoto}
+                                displayName={displayName}
+                                displayFollowers={displayFollowers}
+                                displayPosts={displayPosts}
+                                waMetadata={waMetadata}
+                                botPosts={Number(waMetadata.bot_posts_count || 0)}
+                                botAnswers={Number(waMetadata.bot_answers_count || 0)}
+                                localBotActive={null}
+                                handleDisconnectCustom={() => deleteCredentials(config.id)}
+                                handleToggleBot={() => {}}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* API Fields Section */}
-                    <div className="space-y-4">
+                    <div className="space-y-4 pt-4 border-t border-border/20">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Configurações de Credenciais</p>
+                        <p className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Configuração da API</p>
                         <div className="flex items-center gap-2">
                            <Button 
                              size="sm" 
@@ -161,109 +269,6 @@ export const APITab = memo(({
                         formValues={formValues}
                       />
                     </div>
-
-                    {/* Platform Specific Controls */}
-                    {config.id === 'google_cloud' && (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between border-b border-border/40 pb-4">
-                          <div className="flex items-center gap-2">
-                            <Globe className="w-4 h-4 text-primary" />
-                            <p className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Hub Central Google (Cloud & Marketing)</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 gap-2 bg-background border-primary/20 hover:bg-primary/5 text-primary rounded-xl"
-                            onClick={() => {
-                              if (hasCreds) {
-                                if (window.confirm("Deseja desconectar todas as APIs do Google?")) {
-                                  deleteCredentials('google_cloud');
-                                }
-                              } else {
-                                handleSaveCreds('google_cloud');
-                              }
-                            }}
-                          >
-                            {hasCreds ? <><Unplug className="w-3.5 h-3.5" /> Desconectar Tudo</> : <><Link2 className="w-3.5 h-3.5" /> Conectar</>}
-                          </Button>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                          {[
-                            { name: 'Maps API', key: 'maps_api_key', desc: 'Geolocalização', syncFn: null },
-                            { name: 'Google News', key: 'news_api_key', desc: 'Google News', syncFn: 'radar-api' },
-                            { name: 'Contatos / Leads', key: 'contacts_api_key', desc: 'Leads e Contatos', syncFn: 'collect-google-contacts' },
-                            { name: 'Google Ads', key: 'ads_id', desc: 'Campanhas', syncFn: 'collect-meta-ads-analytics' },
-                            { name: 'Analytics', key: 'analytics_id', desc: 'Métricas', syncFn: 'collect-google-analytics' },
-                            { name: 'Search Console', key: 'search_console_id', desc: 'SEO', syncFn: 'collect-search-console-data' },
-                          ].map(svc => {
-                            const svcActive = !!credentials['google_cloud']?.[svc.key];
-                            return (
-                              <div key={svc.name} className={cn(
-                                "p-3 rounded-xl border transition-all",
-                                svcActive ? "border-green-500/20 bg-green-500/[0.03]" : "border-border/40 opacity-60"
-                              )}>
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-bold">{svc.name}</span>
-                                  <Badge variant={svcActive ? "default" : "outline"} className={cn("text-[9px] h-4", svcActive ? "bg-green-500/20 text-green-500 border-none" : "")}>
-                                    {svcActive ? "Ativo" : "Off"}
-                                  </Badge>
-                                </div>
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] text-muted-foreground">{svc.desc}</span>
-                                  {svc.syncFn && (
-                                    <Button 
-                                      size="sm" 
-                                      variant="ghost" 
-                                      className={cn("h-6 w-6 p-0", svcActive ? "text-primary hover:bg-primary/10" : "text-muted-foreground")}
-                                      onClick={() => svcActive ? syncSocialStats('google_cloud') : handleSaveCreds('google_cloud')}
-                                      title={svcActive ? "Conectado / Sincronizar" : "Desconectado / Conectar"}
-                                    >
-                                      {svcActive ? <Plug className="w-3.5 h-3.5" /> : <Unplug className="w-3.5 h-3.5" />}
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/*  Connected Profiles List  */}
-                    {hasConnections && (
-                      <div className="space-y-4 pt-4 border-t border-border/20">
-                        <div className="flex items-center justify-between px-1">
-                          <div className="flex items-center gap-2">
-                            <Users className="w-4 h-4 text-muted-foreground/70" />
-                            <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Contas Conectadas</p>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3">
-                          {platformConnections.map(conn => (
-                            <div key={conn.id} className="flex items-center justify-between p-3 rounded-xl bg-background/30 border border-border/40 group/item hover:border-primary/30 transition-all">
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary border border-primary/20">
-                                  {conn.page_name?.substring(0, 2).toUpperCase() || "U"}
-                                </div>
-                                <div>
-                                  <p className="text-sm font-bold tracking-tight">{conn.page_name || conn.username || "Conta Conectada"}</p>
-                                  <p className="text-[10px] text-muted-foreground opacity-60">ID: {conn.platform_user_id?.substring(0, 8)}...</p>
-                                </div>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => syncSocialStats(config.id)}
-                                className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
-                              >
-                                <RefreshCw className={cn("w-3.5 h-3.5", statsLoading && "animate-spin")} />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </motion.div>
               )}

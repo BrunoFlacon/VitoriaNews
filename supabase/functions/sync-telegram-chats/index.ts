@@ -1,21 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cacheProfileImage } from "../_shared/media.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization, x-supabase-auth, x-client-version, x-my-custom-header",
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET, PUT, DELETE",
   "Access-Control-Max-Age": "86400",
   "Permissions-Policy": "browsing-topics=()",
-};
+});
 
-function json(data: any, status = 200) {
+function json(data: any, status = 200, req?: Request) {
+  const dummyHeaders: Record<string, string> = { get: (name: string) => null } as any;
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders(req || { headers: dummyHeaders } as any), "Content-Type": "application/json" },
   });
 }
 
@@ -212,18 +214,18 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return json({ error: "Server configuration missing" }, 500);
+      return json({ error: "Server configuration missing" }, 500, req);
     }
 
     const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
-    if (!authHeader) return json({ error: "Unauthorized" }, 401);
+    if (!authHeader) return json({ error: "Unauthorized" }, 401, req);
 
     const authToken = authHeader.replace(/^Bearer\s+/i, "");
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
@@ -240,7 +242,7 @@ serve(async (req: Request) => {
       userId = jwtPayload?.sub || null;
     }
     
-    if (!userId) return json({ error: "Unauthorized: Missing UserID" }, 401);
+    if (!userId) return json({ error: "Unauthorized: Missing UserID" }, 401, req);
 
     // Fetch credentials
     const { data: credData, error: credError } = await adminClient
@@ -250,7 +252,7 @@ serve(async (req: Request) => {
       .eq("platform", "telegram")
       .maybeSingle();
 
-    if (credError) return json({ error: "Database error", details: credError.message }, 500);
+    if (credError)       return json({ error: "Database error", details: credError.message }, 500, req);
 
     const creds = credData?.credentials || {};
     let tokens: string[] = [];
@@ -259,7 +261,7 @@ serve(async (req: Request) => {
     else if (Array.isArray(creds.tokens)) tokens = creds.tokens;
     else if (creds.token) tokens = [creds.token];
 
-    if (tokens.length === 0) return json({ success: false, error: "No Telegram tokens found." });
+    if (tokens.length === 0) return json({ success: false, error: "No Telegram tokens found." }, 200, req);
 
     const allResults = [];
     const botIds: string[] = [];
@@ -312,10 +314,11 @@ serve(async (req: Request) => {
       }
     } catch (aggErr) { console.warn("[SYNC] Aggregation failed:", aggErr.message); }
 
-    return json({ success: true, results: allResults });
+    return json({ success: true, results: allResults }, 200, req);
 
   } catch (error: any) {
     console.error("[SYNC] Global Exception:", error.message);
     return json({ success: false, error: error.message }, 500);
   }
 });
+

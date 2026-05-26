@@ -1,10 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+});
 
 interface EfiTokenResponse {
   access_token: string
@@ -49,7 +50,7 @@ async function getEfiToken(clientId: string, clientSecret: string, sandbox: bool
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders(req) })
   }
 
   try {
@@ -173,12 +174,12 @@ serve(async (req) => {
         expiresAt: expiresAt.toISOString(),
         valueCents,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error) {
     return new Response(
       JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
     )
   }
 })

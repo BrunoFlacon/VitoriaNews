@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-src 'self';">
     <title>Conectando LinkedIn - Vitória Net</title>
     <script>
         // Esta página serve como ponte de conexão para o LinkedIn OAuth
@@ -12,10 +13,7 @@
                 
                 // Envia a URL completa de volta para a janela principal do Hub
                 // O Hub local vai processar o código de autorização
-                window.opener.postMessage({ 
-                    type: 'oauth-callback', 
-                    url: window.location.href 
-                }, "*"); 
+                window.opener.postMessage({ type: "oauth-callback", url: window.location.href }, "https://webradiovitoria.com.br"); 
                 
                 // Exibe mensagem de sucesso visual
                 document.getElementById('status').innerText = "Autorização concluída! Esta janela fechará em instantes.";

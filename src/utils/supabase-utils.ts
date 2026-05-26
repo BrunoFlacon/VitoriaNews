@@ -18,6 +18,19 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
 
+  // Helper: check if an error string indicates a CORS / network failure
+  const isCorsOrNetworkError = (str: string): boolean => {
+    const lower = str.toLowerCase();
+    return (
+      lower.includes('cors') ||
+      lower.includes('cross-origin') ||
+      lower.includes('failed to fetch') ||
+      lower.includes('networkerror') ||
+      lower.includes('network error') ||
+      lower.includes('load failed')
+    );
+  };
+
   try {
     const { data, error } = await supabase.functions.invoke(fnName, {
       body,
@@ -26,24 +39,25 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
         'Content-Type': 'application/json',
         ...callerHeaders,
       },
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutHandle);
 
     if (error) {
-      const errorStr = String(error).toLowerCase();
-      console.error(`[safeInvoke] Function ${fnName} failed with status:`, (error as any).status || "unknown");
+      const errorStr = String(error);
+      const contextStr = String((error as any)?.context ?? '');
       
-      try {
-        const errObj = error as any;
-        if (errObj.context) {
-           console.error(`[safeInvoke] Error context:`, errObj.context);
-        }
-      } catch {}
+      // Try to get a more detailed message if available
+      let detailMsg = (error as any).message || errorStr;
+      if ((error as any).status) {
+         detailMsg = `[${(error as any).status}] ${detailMsg}`;
+      }
 
-      if (errorStr.includes('cors') || errorStr.includes('cross-origin') || errorStr.includes('failed to fetch') || errorStr.includes('networkerror') || errorStr.includes('network error') || errorStr.includes('load')) {
+      // ── CORS / Network errors — suppress console noise in dev ──
+      if (isCorsOrNetworkError(detailMsg) || isCorsOrNetworkError(contextStr)) {
         if (!silent) {
-          console.info(`[safeInvoke] Network/CORS error for ${fnName}`);
+          console.info(`[safeInvoke] Network/CORS error for ${fnName} — expected in local dev`);
         }
         return {
           data: null,
@@ -51,7 +65,8 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
         };
       }
 
-      if (errorStr.includes('404') || errorStr.includes('not found')) {
+      // ── 404 / Not Found — function not deployed ──
+      if (detailMsg.includes('404') || detailMsg.toLowerCase().includes('not found')) {
         if (!silent) {
           console.info(`[safeInvoke] Function ${fnName} not found`);
         }
@@ -61,7 +76,17 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
         };
       }
 
-      throw error;
+      // ── Genuine server error — log only non-4xx (4xx = config issue) ──
+      const status = (error as any).status || 0;
+      if (status < 400 || status >= 500) {
+        console.error(`[safeInvoke] Function ${fnName} failed:`, status, detailMsg);
+      } else if (!silent) {
+        console.info(`[safeInvoke] Function ${fnName} returned ${status} (expected for unconfigured platform)`);
+      }
+      return {
+        data: null,
+        error: new Error(detailMsg)
+      };
     }
 
     return { data, error: null };
@@ -73,11 +98,10 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
     if (err.name === 'AbortError') {
       message = `Timeout after ${timeoutMs}ms calling ${fnName}`;
       console.warn(`[safeInvoke] ${message}`);
-    } else if (message.includes('CORS') || message.includes('cors')) {
-      message = `CORS error. Expected in local development.`;
-    }
-
-    if (!silent) {
+    } else if (isCorsOrNetworkError(message)) {
+      // Silently handle CORS thrown from fetch itself
+      message = `CORS error for ${fnName}. Expected in local development.`;
+    } else if (!silent) {
       console.error(`[safeInvoke] Error:`, err);
     }
 

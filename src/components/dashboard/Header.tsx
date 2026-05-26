@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Search, ChevronDown, User, Shield, Camera, Key, Settings, LogOut, X } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationContext";
@@ -27,7 +27,7 @@ interface HeaderProps {
   setIsSidebarCollapsed?: (collapsed: boolean) => void;
 }
 
-export const Header = ({ 
+export const Header = memo(({ 
   onNotificationsClick, 
   onNavigate,
   isSidebarCollapsed,
@@ -186,4 +186,6 @@ export const Header = ({
       </div>
     </div>
   );
-};
+});
+
+Header.displayName = "Header";

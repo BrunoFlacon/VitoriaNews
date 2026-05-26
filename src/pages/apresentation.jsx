@@ -429,7 +429,7 @@ export default function PresentationPage() {
                 <div className="flex flex-wrap items-center gap-4 pt-6">
                   {content.bio.social.map((link) => (
                     <div key={link.id} className="relative group/social">
-                      <a href={link.url} target="_blank" rel="noopener noreferrer" className={`text-slate-400 hover:text-theme transition-colors block ${isEditing ? 'pointer-events-none' : ''}`}><OfficialIcon platform={link.platform} color="currentColor" className="w-8 h-8" /></a>
+                      <a href={link.url?.startsWith('http') ? link.url : '#'} target="_blank" rel="noopener noreferrer" className={`text-slate-400 hover:text-theme transition-colors block ${isEditing ? 'pointer-events-none' : ''}`}><OfficialIcon platform={link.platform} color="currentColor" className="w-8 h-8" /></a>
                       {isEditing && (
                         <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-[#131825] border border-white/10 p-1.5 rounded-lg flex items-center gap-1 shadow-xl z-20 opacity-0 group-hover/social:opacity-100 transition-opacity">
                           <button onClick={() => { const p = prompt("Plataforma (ex: linkedin, instagram, github, x):", link.platform); if(p){ const n = [...content.bio.social]; const i = n.findIndex(x=>x.id===link.id); n[i].platform = p; updateSection('bio', 'social', n); } }} className="text-slate-400 hover:text-white p-1"><Edit3 className="w-3 h-3"/></button>

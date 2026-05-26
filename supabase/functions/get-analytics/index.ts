@@ -2,14 +2,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 // @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-authorization',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-};
+});
 
 function normalizePlatform(platform: string): string {
   const value = (platform || "").toLowerCase().trim();
@@ -52,7 +53,7 @@ interface AccountMetric {
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   try {
@@ -68,12 +69,12 @@ serve(async (req: Request) => {
         detail: "No token provided in Authorization or x-authorization headers"
       }), { 
         status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" } 
       });
     }
 
     const token = authHeader.replace(/^Bearer\s+/i, "");
-    console.log(`[get-analytics] Validating token: ${token.substring(0, 10)}...`);
+    
     
     let userId: string | undefined;
     
@@ -92,7 +93,7 @@ serve(async (req: Request) => {
         detail: "Invalid or expired session" 
       }), { 
         status: 401, 
-        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" } 
       });
     }
     
@@ -666,13 +667,14 @@ serve(async (req: Request) => {
     };
 
     return new Response(JSON.stringify(analytics), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (error: any) {
     console.error("Error in get-analytics:", error);
     return new Response(
       JSON.stringify({ error: error?.message || "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });
+

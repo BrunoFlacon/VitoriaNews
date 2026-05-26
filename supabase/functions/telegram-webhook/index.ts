@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getSmartResponse, logInteraction } from "../_shared/bot-engine.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+});
 
 /**
  * 📲 Envio via Telegram Bot API
@@ -25,7 +26,7 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -66,14 +67,22 @@ serve(async (req: Request) => {
 
     if (credsError) console.error("[TG-WEBHOOK] Creds Fetch Error:", credsError);
 
-    const creds = allCreds?.find((c: any) => 
-      c.credentials?.bot_token === botToken ||
-      c.credentials?.token === botToken ||
-      c.credentials?.accessToken === botToken
-    );
+    console.log(`[TG-WEBHOOK] Found ${allCreds?.length || 0} telegram credential(s)`);
+
+    const creds = allCreds?.find((c: any) => {
+      const cred = c.credentials || {};
+      const tokens = Array.isArray(cred.tokens) ? cred.tokens : [];
+      return cred.bot_token === botToken ||
+        cred.token === botToken ||
+        cred.accessToken === botToken ||
+        tokens.includes(botToken);
+    });
 
     if (!creds) {
-      console.warn(`[TG-WEBHOOK] No user found for token: ${botToken?.substring(0, 5)}... Total TG creds checked: ${allCreds?.length || 0}`);
+      const sampleKeys = allCreds?.length > 0
+        ? Object.keys(allCreds[0].credentials || {}).join(", ")
+        : "no credentials";
+      console.warn(`[TG-WEBHOOK] No user found for bot token. Token prefix: ${botToken?.substring(0, 15)}... Cred keys: ${sampleKeys}. Total: ${allCreds?.length || 0}`);
       return new Response("Unauthorized", { status: 401 });
     }
 
@@ -109,9 +118,10 @@ serve(async (req: Request) => {
       });
     }
 
-    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
   } catch (error: any) {
     console.error("[TG-WEBHOOK] Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
   }
 });
+

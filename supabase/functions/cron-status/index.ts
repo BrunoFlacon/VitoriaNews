@@ -1,20 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization, x-supabase-auth, x-client-version, x-my-custom-header",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
   "Access-Control-Max-Age": "86400",
   "Access-Control-Expose-Headers": "Content-Length, X-JSON",
   "Permissions-Policy": "browsing-topics=()",
-};
+});
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { 
       status: 200, 
-      headers: corsHeaders 
+      headers: corsHeaders(req) 
     });
   }
 
@@ -38,13 +39,14 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ jobs: jobs || [], runs: runs || [] }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("cron-status error:", err);
     return new Response(
       JSON.stringify({ error: err.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });
+

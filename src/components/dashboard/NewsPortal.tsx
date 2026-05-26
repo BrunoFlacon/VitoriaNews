@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTrends, TrendItem } from "@/hooks/useTrends";
 import type { Article } from "@/lib/social-sdk/types";
 import { cn } from "@/lib/utils";
+import DOMPurify from "dompurify";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { TrendDetailDrawer } from "./TrendDetailDrawer";
 import { PowerRadar } from "./PowerRadar";
@@ -123,20 +124,25 @@ export const NewsPortal = () => {
 
   const handleProduceFromTrend = (trend: TrendItem, mode: 'full' | 'summary' = 'full') => {
     setEditing(null);
-    const sourceLink = trend.url ? `<p><small>Fonte original: <a href="${trend.url}" target="_blank">${trend.source}</a></small></p>` : "";
+    const safeUrl = trend.url?.startsWith('http') ? trend.url : '#';
+    const safeSource = DOMPurify.sanitize(trend.source || '');
+    const safeKeyword = DOMPurify.sanitize(trend.keyword || '');
+    const safeDescription = DOMPurify.sanitize(trend.description || '');
+    const safeCategory = DOMPurify.sanitize(trend.category || '');
+    const sourceLink = trend.url ? `<p><small>Fonte original: <a href="${safeUrl}" target="_blank">${safeSource}</a></small></p>` : "";
     
     let content = '';
     if (mode === 'summary') {
-      content = `<h2>Resumo IA: ${trend.keyword}</h2>
+      content = `<h2>Resumo IA: ${safeKeyword}</h2>
                  <p>Este é um resumo gerado automaticamente para publicação rápida nas redes sociais:</p>
-                 <p>${trend.description || 'Aguardando processamento de linguagem natural...'}</p>
+                 <p>${safeDescription || 'Aguardando processamento de linguagem natural...'}</p>
                  <br/>
-                 <p>#${trend.category?.replace(/\s+/g, '')} #RadarVitoriaNet #Trend</p>
+                 <p>#${safeCategory.replace(/\s+/g, '')} #RadarVitoriaNet #Trend</p>
                  ${sourceLink}`;
     } else {
-      content = `<h2>${trend.keyword}</h2>
-                 <p>Baseado na tendência do <strong>${trend.source}</strong>, identificamos o seguinte contexto relevante:</p>
-                 <p>${trend.description || 'Nenhum detalhe adicional capturado pela varredura inicial.'}</p>
+      content = `<h2>${safeKeyword}</h2>
+                 <p>Baseado na tendência do <strong>${safeSource}</strong>, identificamos o seguinte contexto relevante:</p>
+                 <p>${safeDescription || 'Nenhum detalhe adicional capturado pela varredura inicial.'}</p>
                  ${sourceLink}
                  <p>Escreva seu conteúdo na íntegra aqui...</p>`;
     }

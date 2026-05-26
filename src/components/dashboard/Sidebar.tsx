@@ -1,3 +1,4 @@
+import { memo, useState, useMemo, useCallback, startTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   LayoutDashboard, 
@@ -22,7 +23,6 @@ import {
   Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState, useMemo, useCallback, startTransition } from "react";
 import { useSystem } from "@/contexts/SystemContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -54,7 +54,7 @@ const ICON_MAP: Record<string, any> = {
   monitoring: Activity
 };
 
-export const Sidebar = ({ 
+export const Sidebar = memo(({ 
   activeTab, 
   setActiveTab, 
   onLogout,
@@ -134,7 +134,6 @@ export const Sidebar = ({
 
   return (
     <>
-      {/* Overlay for mobile */}
       <AnimatePresence>
         {isMobile && !isCollapsed && (
           <motion.div
@@ -171,14 +170,12 @@ export const Sidebar = ({
               className="w-9 h-9 object-contain shrink-0 rounded-2xl" 
             />
           ) : (
-            /* INÍCIO LOGOMARCA PADRÃO DO SISTEMA (SVG NOVO) */
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F8AFF] to-[#8B5CF6] border border-white/20 flex items-center justify-center shrink-0 shadow-lg relative group overflow-hidden active:scale-95 transition-transform duration-300">
               <svg viewBox="0 0 64 64" className="w-[98%] h-[98%] text-black fill-current">
                 <path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z" />
                 <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z" />
               </svg>
             </div>
-            /* FIM LOGOMARCA PADRÃO DO SISTEMA */
           )
         )}
         {!isCollapsed && (
@@ -206,7 +203,6 @@ export const Sidebar = ({
               key={item.id}
               onClick={() => {
                 startTransition(() => setActiveTab(item.id));
-                // Use isMobile from hook — no window.innerWidth reflow
                 if (isMobile) setIsCollapsed(true);
               }}
               className={cn(
@@ -304,4 +300,6 @@ export const Sidebar = ({
     </motion.aside>
     </>
   );
-};
+});
+
+Sidebar.displayName = "Sidebar";

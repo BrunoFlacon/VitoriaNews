@@ -33,8 +33,9 @@ import { ConnectionCard } from "./settings/ConnectionCard";
 import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, AnalyticsIcon, AdsIcon, PeopleIcon, GoogleNewsIcon, SnapchatIcon } from "@/components/icons/SocialIcons";
 import { safeInvoke } from "@/utils/supabase-utils";
 import { WhatsAppEmbeddedSignup } from "./settings/WhatsAppEmbeddedSignup";
+import { WebhookStatusBadge } from "./settings/WebhookStatusBadge";
 
-
+const WEBHOOK_ENABLED_PLATFORMS = new Set(["telegram", "whatsapp", "facebook", "instagram", "tiktok", "linkedin"]);
 
 
 interface SocialAccountStats {
@@ -162,39 +163,66 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         return;
       }
 
+      const warnFilter = (tag: string, e: any) => {
+        const msg = e?.message || "";
+        const isQuiet = /cors|failed to fetch|network|4\d\d|not configured|not found/i.test(msg);
+        if (!isQuiet) {
+          console.warn(tag, msg);
+        }
+      };
+
       const invokeFn = async (fnName: string, bodyObj?: any) => {
         const { error: invErr } = await safeInvoke(fnName, {
           body: { userId: session.user.id, ...bodyObj },
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
           },
-          timeoutMs: fnName.includes('ads') ? 45000 : 30000
+          timeoutMs: fnName.includes('ads') ? 45000 : fnName.includes('analytics') ? 60000 : 30000
         });
         if (invErr) throw invErr;
       };
 
       if (platformId === 'telegram') {
-        await invokeFn('sync-telegram-chats', { platform: 'telegram' });
+        if (hasCredentials('telegram')) {
+          await invokeFn('sync-telegram-chats', { platform: 'telegram' });
+        }
       } else if (platformId === 'twitter') {
-        await invokeFn('sync-twitter');
+        if (hasCredentials('twitter')) {
+          await invokeFn('sync-twitter');
+        }
       } else if (platformId === 'meta_ads') {
-        await invokeFn('collect-meta-ads-analytics', { platform: 'meta_ads' }).catch(e => console.warn('[Ads]', e.message));
+        if (hasCredentials('meta_ads')) {
+          await invokeFn('collect-meta-ads-analytics', { platform: 'meta_ads' }).catch(e => warnFilter('[Ads]', e));
+        } else {
+          console.info("[Ads] Sync skipped: No credentials configured.");
+        }
       } else if (platformId === 'google_cloud' || platformId === 'youtube') {
-        await Promise.all([
-          invokeFn('collect-youtube-analytics').catch(e => console.warn('[YT]', e.message)),
-          invokeFn('collect-google-analytics').catch(e => console.warn('[GA]', e.message)),
-        ]);
+        const hasGP = hasCredentials('google_cloud') || hasCredentials('youtube');
+        if (hasGP) {
+          await Promise.all([
+            invokeFn('collect-youtube-analytics').catch(e => warnFilter('[YT]', e)),
+            invokeFn('collect-google-analytics').catch(e => warnFilter('[GA]', e)),
+          ]);
+        }
       } else if (platformId) {
-        await invokeFn('collect-social-analytics', { platform: platformId });
+        if (hasCredentials(platformId)) {
+          await invokeFn('collect-social-analytics', { platform: platformId });
+        }
       } else {
         // Global Sync — all platforms in parallel, failures swallowed individually
-        await Promise.allSettled([
-          invokeFn('collect-social-analytics').catch(e => console.warn('[Social]', e.message)),
-          invokeFn('sync-twitter').catch(e => console.warn('[Twitter]', e.message)),
-          invokeFn('collect-meta-ads-analytics').catch(e => console.warn('[Ads]', e.message)),
-          invokeFn('collect-youtube-analytics').catch(e => console.warn('[YT]', e.message)),
-          invokeFn('collect-google-analytics').catch(e => console.warn('[GA]', e.message)),
-        ]);
+        const tasks = [];
+        if (hasCredentials('instagram')) tasks.push(invokeFn('collect-social-analytics', { platform: 'instagram' }).catch(e => warnFilter('[Social]', e)));
+        if (hasCredentials('facebook')) tasks.push(invokeFn('collect-social-analytics', { platform: 'facebook' }).catch(e => warnFilter('[Social]', e)));
+        if (hasCredentials('twitter')) tasks.push(invokeFn('sync-twitter').catch(e => warnFilter('[Twitter]', e)));
+        if (hasCredentials('meta_ads')) tasks.push(invokeFn('collect-meta-ads-analytics').catch(e => warnFilter('[Ads]', e)));
+        if (hasCredentials('google_cloud') || hasCredentials('youtube')) {
+          tasks.push(invokeFn('collect-youtube-analytics').catch(e => warnFilter('[YT]', e)));
+          tasks.push(invokeFn('collect-google-analytics').catch(e => warnFilter('[GA]', e)));
+        }
+        
+        if (tasks.length > 0) {
+          await Promise.allSettled(tasks);
+        }
       }
 
       const platformLabel: Record<string, string> = {
@@ -382,6 +410,30 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       await disconnect(`${platformId}|${connectionId}`);
     }
   };
+
+  const handleRenewToken = useCallback(async (conn: any) => {
+    if (!user) return;
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session) {
+        toast({ title: "Sessão expirada", description: "Faça login novamente.", variant: "destructive" });
+        return;
+      }
+      const { error } = await safeInvoke('refresh-social-token', {
+        body: { platform: conn.platform, connectionId: conn.id },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+      toast({ title: "Token renovado!", description: "Conexão renovada com sucesso." });
+      refreshStats();
+    } catch (err: any) {
+      toast({
+        title: "Erro ao renovar token",
+        description: err.message || "Falha ao renovar. Reconecte a conta.",
+        variant: "destructive"
+      });
+    }
+  }, [user, toast, refreshStats]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -685,24 +737,24 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       </div>
 
       <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="space-y-6">
-        <TabsList className="bg-muted/50 p-1.5 rounded-xl flex flex-wrap h-auto gap-1 justify-start">
-          <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><User className="w-4 h-4 mr-2" />Perfil</TabsTrigger>
-          <TabsTrigger value="notifications" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Bell className="w-4 h-4 mr-2" />Notificações</TabsTrigger>
-          <TabsTrigger value="api" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Key className="w-4 h-4 mr-2" />APIs Sociais & Dev</TabsTrigger>
-          <TabsTrigger value="security" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Shield className="w-4 h-4 mr-2" />Segurança</TabsTrigger>
-          {can('system.access') && (
-            <>
-              <TabsTrigger value="system_dash" className="rounded-lg data-[state=active]:bg-background border-l border-primary/20 ml-2 py-2 px-4 shadow-[0_0_10px_rgba(139,92,246,0.1)] transition-all">
-                <Laptop className="w-4 h-4 mr-2 text-primary" />
-                <span className="font-bold text-primary">Dashboard</span>
-              </TabsTrigger>
-              <TabsTrigger value="seo" className="rounded-lg data-[state=active]:bg-background border-primary/10 py-2 px-4 shadow-sm transition-all">
-                <Search className="w-4 h-4 mr-2 text-primary" />
-                <span className="font-bold text-primary">SEO & Meta</span>
-              </TabsTrigger>
-            </>
-          )}
-        </TabsList>
+         <TabsList className="bg-muted/50 p-1.5 rounded-xl flex flex-wrap h-auto gap-1 justify-start">
+           <TabsTrigger value="profile" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><User className="w-4 h-4 mr-2" />Perfil</TabsTrigger>
+           <TabsTrigger value="notifications" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Bell className="w-4 h-4 mr-2" />Notificações</TabsTrigger>
+           <TabsTrigger value="api" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Key className="w-4 h-4 mr-2" />APIs Sociais & Dev</TabsTrigger>
+           <TabsTrigger value="security" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Shield className="w-4 h-4 mr-2" />Segurança</TabsTrigger>
+           {can('system.access') && (
+             <>
+               <TabsTrigger value="system_dash" className="rounded-lg data-[state=active]:bg-background border-l border-primary/20 ml-2 py-2 px-4 shadow-[0_0_10px_rgba(139,92,246,0.1)] transition-all">
+                 <Laptop className="w-4 h-4 mr-2 text-primary" />
+                 <span className="font-bold text-primary">Dashboard</span>
+               </TabsTrigger>
+               <TabsTrigger value="seo" className="rounded-lg data-[state=active]:bg-background border-primary/10 py-2 px-4 shadow-sm transition-all">
+                 <Search className="w-4 h-4 mr-2 text-primary" />
+                 <span className="font-bold text-primary">SEO & Meta</span>
+               </TabsTrigger>
+             </>
+           )}
+         </TabsList>
 
         <TabsContent value="profile">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6 outline-none">
@@ -1113,6 +1165,15 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                               </Badge>
                             )}
 
+                            {/* Webhook Status Badge */}
+                            {WEBHOOK_ENABLED_PLATFORMS.has(config.id) && user && (
+                              <WebhookStatusBadge
+                                platform={config.id}
+                                userId={user.id}
+                                compact
+                              />
+                            )}
+
                             {/* Credenciais Salvas (grey): has creds but not yet verified */}
                             {!isEffectivelyConnected && hasCreds && (() => {
                               let label = "Credenciais Salvas";
@@ -1396,6 +1457,9 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                         botPosts={botPosts}
                                         botAnswers={botAnswers}
                                         localBotActive={localBotActive}
+                                        isExpiringSoon={conn.isExpiringSoon}
+                                        daysUntilExpiry={conn.daysUntilExpiry}
+                                        onRenew={() => handleRenewToken(conn)}
                                         handleDisconnectCustom={handleDisconnectCustom}
                                         handleToggleBot={handleToggleBot}
                                       />
@@ -1623,6 +1687,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                   <WhatsAppEmbeddedSignup 
                                     appId={credentials["whatsapp"]?.app_id || ""}
                                     configId={credentials["whatsapp"]?.client_key || ""}
+                                    setupPin={credentials["whatsapp"]?.setup_pin || ""}
                                     onSuccess={() => {
                                       syncSocialStats('whatsapp');
                                       refetch();
@@ -1748,29 +1813,27 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           </DialogContent>
         </Dialog>
 
-        <TabsContent value="security">
-          <div className="space-y-6">
-            {/* Password Section */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6 pb-2">
+         <TabsContent value="security">
+           <div className="space-y-6">
+             {/* Password Section */}
+             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6 pb-2">
               <h3 className="font-display font-bold text-lg mb-4">Segurança da Conta</h3>
 
-              <div className="glass-card rounded-2xl border border-border/50 p-6 mb-6">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="p-2.5 bg-primary/10 rounded-xl"><Mail className="w-5 h-5 text-primary" /></div>
-                  <div>
-                    <h4 className="font-bold text-base">Alterar E-mail</h4>
-                    <p className="text-sm text-muted-foreground">Atualize seu endereço de e-mail cadastrado</p>
+                <div className="glass-card rounded-2xl border border-border/50 p-6 mb-6">
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="p-2.5 bg-primary/10 rounded-xl"><Mail className="w-5 h-5 text-primary" /></div>
+                    <div>
+                      <h4 className="font-bold text-base">Alterar E-mail</h4>
+                      <p className="text-sm text-muted-foreground">Atualize seu endereço de e-mail cadastrado</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4 pl-14">
+                    <Input id="security-new-email" name="new-email" type="email" autoComplete="email" placeholder="Novo endereço de e-mail" className="bg-background max-w-md" />
+                    <Button type="button" variant="secondary" onClick={() => toast({ title: 'Atenção', description: 'Por motivos de segurança, a troca de e-mail requer confirmação por link enviado ao endereço atual.' })}>
+                      Solicitar Alteração
+                    </Button>
                   </div>
                 </div>
-                <form className="space-y-4 pl-14">
-                  <div className="space-y-1.5">
-                    <Input id="security-new-email" name="new-email" type="email" autoComplete="email" placeholder="Novo endereço de e-mail" className="bg-background max-w-md" />
-                  </div>
-                  <Button type="button" variant="secondary" onClick={() => toast({ title: 'Atenção', description: 'Por motivos de segurança, a troca de e-mail requer confirmação por link enviado ao endereço atual.' })}>
-                    Solicitar Alteração
-                  </Button>
-                </form>
-              </div>
 
               <div className="glass-card rounded-2xl border border-border/50 p-6 mb-6">
                 <div className="flex items-start gap-4 mb-4">
@@ -1780,18 +1843,10 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                     <p className="text-sm text-muted-foreground">Mantenha sua conta segura alterando sua senha periodicamente</p>
                   </div>
                 </div>
-                <form className="space-y-4 pl-14" autoComplete="on">
-                  {/* Hidden username field for browser accessibility / password manager compliance */}
-                  <input type="text" name="username" value={profileData.email} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
-                  <div className="space-y-1.5">
-                    <Input id="security-current-password" name="current-password" type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Input id="security-new-password" name="new-password" type="password" placeholder="Nova senha" autoComplete="new-password" className="bg-background max-w-md" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Input id="security-confirm-password" name="confirm-password" type="password" placeholder="Confirmar nova senha" autoComplete="new-password" className="bg-background max-w-md" />
-                  </div>
+                <div className="space-y-4 pl-14" autoComplete="on">
+                  <Input id="security-current-password" name="current-password" type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
+                  <Input id="security-new-password" name="new-password" type="password" placeholder="Nova senha" autoComplete="new-password" className="bg-background max-w-md" />
+                  <Input id="security-confirm-password" name="confirm-password" type="password" placeholder="Confirmar nova senha" autoComplete="new-password" className="bg-background max-w-md" />
                   <div className="flex items-center gap-2 mb-2">
                     <Switch id="force-logout" />
                     <label htmlFor="force-logout" className="text-sm text-muted-foreground">Desconectar de outros dispositivos</label>
@@ -1799,7 +1854,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                   <Button type="button" variant="secondary" onClick={() => toast({ title: 'Recurso Indisponível', description: 'Por favor, recupere sua senha na tela de login caso precise alterá-la no momento.', variant: 'destructive' })}>
                     Atualizar Senha
                   </Button>
-                </form>
+                </div>
               </div>
 
 

@@ -2,25 +2,26 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-};
+});
 
-const jsonResponse = (body: any, status = 200) =>
+const jsonResponse = (body: any, status = 200, req?: Request) =>
   new Response(JSON.stringify(body), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(req ?? { headers: { get: () => null } as Headers }), 'Content-Type': 'application/json' },
     status,
   });
 
 serve(async (req: Request) => {
   // Always handle CORS preflight first
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders, status: 200 });
+    return new Response('ok', { headers: corsHeaders(req), status: 200 });
   }
 
   try {
@@ -121,14 +122,15 @@ serve(async (req: Request) => {
       }
 
       default:
-        return jsonResponse({ error: `Endpoint '${path}' not found` }, 404);
+        return jsonResponse({ error: `Endpoint '${path}' not found` }, 404, req);
     }
 
     if (error) throw error;
 
-    return jsonResponse({ success: true, data });
+    return jsonResponse({ success: true, data }, req);
   } catch (err: any) {
     console.error('[automation-api] error:', err.message);
     return jsonResponse({ error: err.message }, 500);
   }
 });
+

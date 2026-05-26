@@ -9,6 +9,7 @@ declare const FB: any;
 interface WhatsAppEmbeddedSignupProps {
   appId: string;
   configId: string; // O ID da Configuração de Tech Provider criada na Meta
+  setupPin?: string; // PIN opcional definido pelo usuário nas configurações de API
   onSuccess: () => void;
   isLoading?: boolean;
 }
@@ -16,6 +17,7 @@ interface WhatsAppEmbeddedSignupProps {
 export function WhatsAppEmbeddedSignup({
   appId,
   configId,
+  setupPin = '',
   onSuccess,
   isLoading = false,
 }: WhatsAppEmbeddedSignupProps) {
@@ -54,8 +56,9 @@ export function WhatsAppEmbeddedSignup({
 
     // Listener para as mensagens que vêm do popup do Facebook (Padrão Tech Provider)
     const handleMessage = async (event: MessageEvent) => {
-      // O SDK da Meta envia mensagens via 'facebook.com'
-      if (!event.origin.includes('facebook.com') && !event.origin.includes('fb.com')) return;
+      // O SDK da Meta envia mensagens via 'facebook.com' — validação rigorosa de origem
+      const trustedOrigins = ['https://www.facebook.com', 'https://facebook.com', 'https://www.fb.com', 'https://fb.com'];
+      if (!trustedOrigins.includes(event.origin) && !event.origin.endsWith('.facebook.com')) return;
 
       try {
         const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
@@ -88,40 +91,19 @@ export function WhatsAppEmbeddedSignup({
     try {
       setIsProcessing(true);
       toast({
-        title: "Ativando WhatsApp Oficial...",
-        description: "Registrando número e vinculando webhooks (isso pode levar 10 segundos).",
+        title: "Fluxo Tech Provider Descontinuado",
+        description: "O WhatsApp Embedded Signup foi descontinuado pela Meta. Use a configuração manual (Uso Próprio) abaixo.",
+        variant: "destructive",
       });
-
-      // Se o sessionInfo não chegou a tempo, aguardamos meio segundo por segurança
-      if (!sessionInfoRef.current) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      // Passa o code e detalhes para a nossa nova Edge Function segura
-      const { data, error } = await supabase.functions.invoke('whatsapp-tech-provider-auth', {
-        body: {
-          code,
-          waba_id: sessionInfoRef.current?.data?.waba_id,
-          phone_number_id: sessionInfoRef.current?.data?.phone_number_id,
-          app_id: appId
-        }
-      });
-
-      if (error) throw error;
-      
-      toast({
-        title: "WhatsApp Business Ativado!",
-        description: "Seu número foi registrado e integrado com sucesso na plataforma.",
-      });
-      
-      onSuccess();
+      // A função whatsapp-tech-provider-auth foi descontinuada (retorna HTTP 410).
+      // O usuário deve configurar o WhatsApp manualmente via "Uso Próprio":
+      // 1. Vá na aba "APIs Sociais & Dev"
+      // 2. Expanda o WhatsApp
+      // 3. Preencha: Access Token, WABA ID, Phone Number ID e App ID
+      // 4. Esses dados são obtidos no Meta Developer Console
+      console.warn("[WA_EMBEDDED_SIGNUP] Tech Provider deprecated. User deve configurar manualmente.");
     } catch (err: any) {
-      console.error("Erro na ativação do WhatsApp Tech Provider:", err);
-      toast({
-        title: "Falha na conexão do WhatsApp",
-        description: err.message || "Erro desconhecido ao tentar registrar na Meta.",
-        variant: "destructive"
-      });
+      console.error("Erro na ativação do WhatsApp:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -179,21 +161,26 @@ export function WhatsAppEmbeddedSignup({
       extras: {
         feature: 'whatsapp_embedded_signup',
         setup: {
-          // O PIN padrão da plataforma para ativar os números dos clientes transparentemente
-          pin: '123456'
+          pin: setupPin // configurado pelo usuário nas Configurações de API do WhatsApp
         }
       }
     });
   };
 
   return (
-    <button
-      onClick={launchWhatsAppSignup}
-      disabled={isLoading || isProcessing}
-      className={`inline-flex items-center justify-center gap-2 rounded-md bg-[#25D366] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1DA851] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#25D366] disabled:opacity-50 disabled:cursor-not-allowed transition-all h-9 whitespace-nowrap`}
-    >
-      <MessageCircle className="h-4 w-4" />
-      {isProcessing ? "Registrando na Meta..." : "Conectar via Login do Facebook"}
-    </button>
+    <div className="space-y-3">
+      <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 p-3 text-xs text-yellow-200">
+        <strong>⚠️ Fluxo descontinuado:</strong> A Meta descontinuou o Embedded Signup (Tech Provider).
+        Configure manualmente preenchendo os campos de API do WhatsApp abaixo.
+      </div>
+      <button
+        onClick={launchWhatsAppSignup}
+        disabled={isLoading || isProcessing}
+        className={`inline-flex items-center justify-center gap-2 rounded-md bg-[#25D366] px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#1DA851] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#25D366] disabled:opacity-50 disabled:cursor-not-allowed transition-all h-9 whitespace-nowrap`}
+      >
+        <MessageCircle className="h-4 w-4" />
+        {isProcessing ? "Registrando na Meta..." : "Tentar Conexão via Facebook (Obsoleto)"}
+      </button>
+    </div>
   );
 }

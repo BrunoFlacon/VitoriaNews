@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cacheProfileImage } from "../_shared/media.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-};
+});
 
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
   try {
@@ -23,7 +24,7 @@ async function getCredentials(supabase: any, userId: string, platform: string): 
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
     const supabase = createClient(
@@ -34,7 +35,7 @@ serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Authorization required" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -42,7 +43,7 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Invalid session" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -67,7 +68,7 @@ serve(async (req: Request) => {
         synced: 0, 
         reason: "YouTube OAuth connection or API key not configured" 
       }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -96,7 +97,7 @@ serve(async (req: Request) => {
         synced: 0, 
         reason: "Could not determine YouTube channel ID" 
       }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
+        status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -320,13 +321,14 @@ serve(async (req: Request) => {
       results,
       aggregated
     }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error?.message || "Unknown error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });
+

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from "react";
-import { Users, FileText, Check, Unplug, MessageSquare } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { Users, FileText, Check, Unplug, MessageSquare, AlertTriangle, RefreshCw } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn, getProxyUrl } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface ConnectionCardProps {
   conn: any;
@@ -20,6 +22,9 @@ interface ConnectionCardProps {
   botPosts: number;
   botAnswers: number;
   localBotActive: boolean | null;
+  isExpiringSoon?: boolean;
+  daysUntilExpiry?: number | null;
+  onRenew?: () => void;
   handleDisconnectCustom: (platformId: string, connectionId: string) => void;
   handleToggleBot: (active: boolean) => void;
 }
@@ -38,10 +43,51 @@ export const ConnectionCard = ({
   botPosts,
   botAnswers,
   localBotActive,
+  isExpiringSoon,
+  daysUntilExpiry,
+  onRenew,
   handleDisconnectCustom,
   handleToggleBot
 }: ConnectionCardProps) => {
+  const { toast } = useToast();
+  const [renewing, setRenewing] = useState(false);
   const isBotOn = localBotActive !== null ? localBotActive : waMetadata.is_active === true;
+
+  const handleRenewToken = useCallback(async () => {
+    if (onRenew) {
+      onRenew();
+      return;
+    }
+    setRenewing(true);
+    try {
+      const session = await supabase.auth.getSession();
+      const accessToken = session?.data?.session?.access_token;
+      if (!accessToken) throw new Error("No session");
+
+      const { error } = await supabase.functions.invoke('refresh-social-token', {
+        body: { platform: config.id, connectionId: conn.id },
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      if (error) throw error;
+      toast({ title: "Token renovado!", description: `Token ${config.name} renovado com sucesso.` });
+    } catch (err: any) {
+      toast({
+        title: "Erro ao renovar",
+        description: err.message || "Falha ao renovar token. Reconecte a conta.",
+        variant: "destructive"
+      });
+    } finally {
+      setRenewing(false);
+    }
+  }, [config.id, config.name, conn.id, onRenew, toast]);
+
+  const expiryLabel = daysUntilExpiry != null && daysUntilExpiry < 0
+    ? "Expirado"
+    : daysUntilExpiry != null && daysUntilExpiry <= 1
+      ? "Expira hoje"
+      : daysUntilExpiry != null
+        ? `${daysUntilExpiry} dias`
+        : null;
 
   // Build ordered list of candidate image URLs to try
   const proxyUrl = getProxyUrl(metaAdsProfile?.profile_image_url) || getProxyUrl(displayPhoto) || "";
@@ -96,9 +142,29 @@ export const ConnectionCard = ({
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <p className="font-black text-[17px] text-white tracking-tight">{displayName}</p>
               <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[9px] font-black uppercase tracking-tighter">Oficial</Badge>
+              {isExpiringSoon && (
+                <Badge
+                  className={cn(
+                    "text-[9px] font-black uppercase tracking-tighter gap-1 cursor-pointer",
+                    (daysUntilExpiry ?? 0) <= 0
+                      ? "bg-red-500/20 text-red-500 border-red-500/30"
+                      : (daysUntilExpiry ?? 0) <= 3
+                        ? "bg-orange-500/20 text-orange-500 border-orange-500/30"
+                        : "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
+                  )}
+                  onClick={handleRenewToken}
+                >
+                  {renewing ? (
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <AlertTriangle className="w-3 h-3" />
+                  )}
+                  Token: {expiryLabel || "Expirando"}
+                </Badge>
+              )}
             </div>
 
             {/* Detalhamento de Serviços Google */}

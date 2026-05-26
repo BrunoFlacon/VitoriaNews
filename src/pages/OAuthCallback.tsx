@@ -73,8 +73,11 @@ const OAuthCallback = () => {
         // If opened as popup, notify parent and close
         if (isPopup) {
           try {
-            // Send to parent. We use "*" to support localhost/127.0.0.1 origin mismatch common in Twitter OAuth
-            window.opener?.postMessage({ type: "oauth-complete", platform }, "*");
+            // Send to parent with specific origin for security
+            const targetOrigin = window.location.origin.startsWith('http://localhost') || window.location.origin.startsWith('http://127.0.0.1')
+              ? window.location.origin
+              : 'https://webradiovitoria.com.br';
+            window.opener?.postMessage({ type: "oauth-complete", platform }, targetOrigin);
           } catch (e) {
             // Error handling window postMessage
           }

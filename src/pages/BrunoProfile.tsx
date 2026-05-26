@@ -1006,7 +1006,7 @@ export default function PresentationPage() {
                   <div className="flex flex-wrap items-center gap-4">
                     {content.bio.social.map((link) => (
                     <div key={link.id} className="relative group/social">
-                      <a href={link.url} target="_blank" rel="noopener noreferrer" className={`text-slate-400 hover:text-theme transition-colors block ${isEditing ? 'pointer-events-none' : ''}`}>{getSocialIcon(link.platform, { className: "w-8 h-8" })}</a>
+                      <a href={link.url?.startsWith('http') ? link.url : '#'} target="_blank" rel="noopener noreferrer" className={`text-slate-400 hover:text-theme transition-colors block ${isEditing ? 'pointer-events-none' : ''}`}>{getSocialIcon(link.platform, { className: "w-8 h-8" })}</a>
                       {isEditing && (
                         <div className="absolute -top-20 left-1/2 -translate-x-1/2 bg-[#131825]/95 backdrop-blur-xl border border-white/20 p-3 rounded-xl flex flex-col items-start gap-2 shadow-2xl z-20 opacity-0 group-hover/social:opacity-100 transition-all scale-95 group-hover/social:scale-100 w-52 pointer-events-auto">
                           <span className="text-[10px] font-black text-theme uppercase tracking-tighter">Editar Link Social</span>

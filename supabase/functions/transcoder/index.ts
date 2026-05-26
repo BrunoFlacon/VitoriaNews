@@ -1,13 +1,14 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+});
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders(req) });
   }
 
   try {
@@ -15,7 +16,7 @@ serve(async (req: Request) => {
 
     if (!videoUrl) {
       return new Response(JSON.stringify({ error: 'Video URL required' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         status: 400,
       });
     }
@@ -30,13 +31,14 @@ serve(async (req: Request) => {
     }));
 
     return new Response(JSON.stringify({ success: true, outputs }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
       status: 500,
     });
   }
 });
+

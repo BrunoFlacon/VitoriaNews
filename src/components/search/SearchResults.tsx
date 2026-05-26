@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { FileText, Video, Calendar, LayoutDashboard, Zap, ExternalLink, MessageCircle, Newspaper, Share2, Settings, Bell, Bot, Activity, File, Search, Users } from 'lucide-react';
 import { OmniResult, OmniResultType } from '@/types/omnisearch';
 import { socialPlatforms } from '@/components/icons/platform-metadata';
@@ -134,7 +135,7 @@ function SearchResultItem({ result, onClose }: SearchResultItemProps) {
         <div className="flex items-center justify-between gap-2">
           <h4 
             className="text-sm font-medium text-foreground truncate"
-            dangerouslySetInnerHTML={{ __html: result.title }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(result.title) }}
           />
           <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary shrink-0">
             {result.categoryLabel}
@@ -144,7 +145,7 @@ function SearchResultItem({ result, onClose }: SearchResultItemProps) {
         {result.highlightedText && (
           <p 
             className="text-xs text-muted-foreground line-clamp-2 mt-1 leading-relaxed search-highlight"
-            dangerouslySetInnerHTML={{ __html: result.highlightedText }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(result.highlightedText) }}
           />
         )}
       </div>

@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS, PUT, DELETE",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization, x-supabase-auth, x-client-version, x-my-custom-header",
   "Access-Control-Max-Age": "86400",
-};
+});
 
 async function fetchWithTimeout(url: string | URL, options: RequestInit = {}, timeoutMs = 3000): Promise<Response> {
   const controller = new AbortController();
@@ -76,7 +77,7 @@ async function cacheImageToStorage(
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   try {
@@ -86,7 +87,7 @@ serve(async (req: Request) => {
     if (!targetUrl) {
       return new Response(JSON.stringify({ error: "Missing 'url' query parameter" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -126,13 +127,13 @@ serve(async (req: Request) => {
         console.warn(`[PROXY] Domain not allowed: ${targetUrlObj.hostname}`);
         return new Response(JSON.stringify({ error: "Domain not allowed for proxy" }), {
           status: 403,
-          headers: { ...corsHeaders, "Content-Type": "application/json" }
+          headers: { ...corsHeaders(req), "Content-Type": "application/json" }
         });
       }
     } catch (_e) {
       return new Response(JSON.stringify({ error: "Invalid URL format" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -281,66 +282,117 @@ serve(async (req: Request) => {
       }
     }
 
-    // 5. TikTok Expiry Recovery
-    if (!response.ok && (targetUrlObj.hostname.includes("tiktokcdn.com") || targetUrlObj.hostname.includes("tiktokcdn-us.com") || targetUrlObj.hostname.includes("tiktokv.com"))) {
-      console.log(`[PROXY] TikTok image expired (status ${response.status}). Attempting dynamic recovery...`);
+    // 5. Instagram / Threads Expiry Recovery
+    if (!response.ok && (targetUrlObj.hostname.includes("cdninstagram.com") || targetUrlObj.hostname.includes("instagram.com") || targetUrlObj.hostname.includes("threads.net"))) {
+      console.log(`[PROXY] Instagram/Threads image expired (status ${response.status}). Attempting dynamic recovery...`);
       try {
-        const matches = targetUrl.match(/\/([^/?]+)\?/);
-        const fileName = matches ? matches[1] : null;
+        // Robust filename extraction for Instagram URLs
+        // Handles: .../v/t51.2885-19/357995434_..._n.jpg?stp=...
+        const fileName = targetUrl.split('/').pop()?.split('?')[0] || null;
+        const stem = fileName?.split('_')[0] || fileName; // Try matching by the first ID part
+        
         if (supabaseUrl && supabaseKey) {
           const adminClient = createClient(supabaseUrl, supabaseKey);
-
-          // Busca por filename ou simplesmente a primeira conexão tiktok do user
-          const query = adminClient
+          
+          // Search for any connection (Threads or Instagram) that might own this image or at least use this platform
+          let { data: conns } = await adminClient
             .from("social_connections")
-            .select("user_id, access_token, platform_user_id")
-            .eq("platform", "tiktok");
+            .select("user_id, access_token, platform_user_id, platform")
+            .in("platform", ["instagram", "threads"])
+            .or(`profile_image_url.ilike.%${stem || '___'}%,profile_picture.ilike.%${stem || '___'}%`);
 
-          const { data: conns } = fileName
-            ? await query.or(`profile_image_url.ilike.%${fileName}%,profile_picture.ilike.%${fileName}%`)
-            : await query.limit(1);
+          // Fallback: If no direct filename match, try finding the most recent Instagram/Threads connection
+          if (!conns || conns.length === 0) {
+            const { data: recentConns } = await adminClient
+              .from("social_connections")
+              .select("user_id, access_token, platform_user_id, platform")
+              .in("platform", ["instagram", "threads"])
+              .order('updated_at', { ascending: false })
+              .limit(5);
+            conns = recentConns;
+          }
 
           const conn = conns?.[0];
-          if (conn) {
+          if (conn && conn.platform_user_id) {
             let token = conn.access_token;
             if (!token) {
               const { data: credsData } = await adminClient
                 .from("api_credentials")
                 .select("credentials")
                 .eq("user_id", conn.user_id)
-                .eq("platform", "tiktok")
+                .eq("platform", conn.platform)
                 .maybeSingle();
               token = credsData?.credentials?.access_token;
             }
+
             if (token) {
-              const infoResp = await fetchWithTimeout("https://open.tiktokapis.com/v2/user/info/?fields=avatar_url,avatar_url_100,avatar_large_url", {
-                headers: { "Authorization": `Bearer ${token}` }
-              }, 2500);
-              if (infoResp.ok) {
-                const infoData = await infoResp.json();
-                const freshUrl = infoData.data?.user?.avatar_large_url || infoData.data?.user?.avatar_url;
-                if (freshUrl) {
-                  console.log(`[PROXY] Recovered TikTok URL: ${freshUrl}`);
-                  response = await fetchWithTimeout(freshUrl, { method: "GET", headers: fetchHeaders }, 3000);
-                  if (response.ok) {
-                    await cacheImageToStorage(adminClient, "tiktok", conn.platform_user_id, freshUrl, fetchHeaders);
-                  }
+              let freshUrl = null;
+
+              // Attempt 1: Platform-specific Graph API for profile picture URL
+              if (conn.platform === 'threads') {
+                console.log(`[PROXY] Querying Threads API for ${conn.platform_user_id}...`);
+                const metaResp = await fetchWithTimeout(
+                  `https://graph.threads.net/v1.0/me?fields=threads_profile_picture_url`,
+                  { headers: { "Authorization": `Bearer ${token}` } },
+                  2500
+                );
+                if (metaResp.ok) {
+                  const metaData = await metaResp.json();
+                  freshUrl = metaData.threads_profile_picture_url;
                 }
+              } else {
+                // Instagram: try Graph API with user-specific endpoint (supports Business/Creator accounts)
+                console.log(`[PROXY] Querying Instagram Graph API for ${conn.platform_user_id}...`);
+                const metaResp = await fetchWithTimeout(
+                  `https://graph.facebook.com/v21.0/${conn.platform_user_id}?fields=profile_picture_url`,
+                  { headers: { "Authorization": `Bearer ${token}` } },
+                  2500
+                );
+                if (metaResp.ok) {
+                  const metaData = await metaResp.json();
+                  freshUrl = metaData.profile_picture_url;
+                }
+              }
+
+              // Attempt 2: Facebook /picture endpoint (reliable fallback, works with any valid token)
+              if (!freshUrl) {
+                console.log(`[PROXY] Falling back to Facebook /picture endpoint for ${conn.platform_user_id}...`);
+                const picResp = await fetchWithTimeout(
+                  `https://graph.facebook.com/v21.0/${conn.platform_user_id}/picture?type=large&redirect=false`,
+                  { headers: { "Authorization": `Bearer ${token}` } },
+                  2500
+                );
+                if (picResp.ok) {
+                  const picData = await picResp.json();
+                  freshUrl = picData.data?.url;
+                }
+              }
+
+              if (freshUrl) {
+                console.log(`[PROXY] Recovered ${conn.platform} URL: ${freshUrl}`);
+                response = await fetchWithTimeout(freshUrl, { method: "GET", headers: fetchHeaders }, 3000);
+                if (response.ok) {
+                  await cacheImageToStorage(adminClient, conn.platform, conn.platform_user_id, freshUrl, fetchHeaders);
+                }
+              } else {
+                console.warn(`[PROXY] All recovery attempts failed for ${conn.platform} ID ${conn.platform_user_id}`);
               }
             }
           }
         }
       } catch (e) {
-        console.error(`[PROXY] TikTok recovery failed:`, e.message);
+        console.error(`[PROXY] Instagram/Threads recovery failed:`, e.message);
       }
     }
+
+    // 6. TikTok Expiry Recovery
 
     if (!response.ok) {
       console.error(`[PROXY] Failed to fetch after all recovery attempts. Status: ${response.status} URL: ${finalTargetUrl}`);
       return new Response("Media not found or failed to fetch", {
         status: 404,
         headers: {
-          ...corsHeaders,
+          ...corsHeaders(req),
           "Content-Type": "text/plain",
           "Cache-Control": "public, max-age=60"
         }
@@ -348,7 +400,7 @@ serve(async (req: Request) => {
     }
 
     // Prepara os headers de resposta copiando o content-type original
-    const responseHeaders = new Headers(corsHeaders);
+    const responseHeaders = new Headers(corsHeaders(req));
     const contentType = response.headers.get("content-type");
     if (contentType) {
       responseHeaders.set("Content-Type", contentType);
@@ -370,7 +422,8 @@ serve(async (req: Request) => {
     console.error(`[PROXY] Global Exception:`, error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" }
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   }
 });
+

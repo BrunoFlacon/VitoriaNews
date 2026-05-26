@@ -2,15 +2,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 // Access Deno global
 declare const Deno: any;
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
-};
+});
 
 serve(async (req: Request) => {
   // 1. Handle CORS Preflight perfectly
@@ -18,7 +19,7 @@ serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { 
       status: 200, 
-      headers: corsHeaders 
+      headers: corsHeaders(req) 
     });
   }
 
@@ -67,7 +68,7 @@ serve(async (req: Request) => {
               console.warn('[radar-api] Intelligence: Missing token');
               return new Response(JSON.stringify({ error: 'Missing token' }), { 
                   status: 401, 
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+                  headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } 
               });
           }
 
@@ -77,7 +78,7 @@ serve(async (req: Request) => {
               console.error('[radar-api] Auth error:', authError);
               return new Response(JSON.stringify({ error: 'Unauthorized', details: authError }), { 
                   status: 401, 
-                  headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+                  headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } 
               });
           }
 
@@ -124,7 +125,7 @@ serve(async (req: Request) => {
         console.warn(`[radar-api] Path not found: ${path}`);
         return new Response(JSON.stringify({ error: `Not found: ${path}` }), { 
             status: 404, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } 
         });
     }
 
@@ -132,23 +133,24 @@ serve(async (req: Request) => {
       console.error(`[radar-api] Database error for ${path}:`, error);
       return new Response(JSON.stringify({ error }), { 
           status: 400, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } 
       });
     }
 
     console.log(`[radar-api] Success for path: ${path}`);
     return new Response(JSON.stringify({ success: true, data }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         status: 200
     });
 
   } catch (err: any) {
     console.error('[radar-api] FATAL ERROR:', err.message, err.stack);
     return new Response(JSON.stringify({ error: err.message, stack: err.stack }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
         status: 500
     });
   }
 
 
 });
+

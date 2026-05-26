@@ -20,7 +20,13 @@ export interface SocialConnection {
   posts_count?: number | null;
   username?: string | null;
   metadata?: Record<string, unknown> | null;
+  isExpiringSoon?: boolean;
+  daysUntilExpiry?: number;
 }
+
+const escapeHtml = (str: string): string => {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+};
 
 const writeToPopupSafely = (win: Window | null, html: string) => {
   if (!win || win.closed) return;
@@ -94,15 +100,23 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         return accounts.find(a => a.platform === conn.platform) || null;
       };
 
+      const computeExpiry = (expiresAt: string | null): { isExpiringSoon: boolean; daysUntilExpiry: number } => {
+        if (!expiresAt) return { isExpiringSoon: false, daysUntilExpiry: Infinity };
+        const diff = new Date(expiresAt).getTime() - Date.now();
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        return { isExpiringSoon: days <= 14, daysUntilExpiry: days };
+      };
+
       const enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
         const acc = findAccount(conn);
-        if (!acc) return conn;
+        if (!acc) return { ...conn, ...computeExpiry(conn.token_expires_at) };
         const cachedPic         = acc.profile_picture || null;
         const enrichedFollowers = acc.followers_count || (acc as { followers?: number | null }).followers || conn.followers_count;
         const enrichedPosts     = acc.posts_count || conn.posts_count;
         const enrichedPageName  = conn.page_name || acc.page_name || acc.username || null;
         return {
           ...conn,
+          ...computeExpiry(conn.token_expires_at),
           profile_image_url: cachedPic || conn.profile_image_url || null,
           profile_picture:   cachedPic || conn.profile_picture   || null,
           followers_count:   enrichedFollowers || conn.followers_count,
@@ -296,15 +310,16 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         return;
       }
 
+      const safePlatform = escapeHtml(platform);
       popup.document.write(
-        `<html><head><title>Conectando ${platform}...</title>` +
+        `<html><head><title>Conectando ${safePlatform}...</title>` +
         `<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;` +
         `height:100vh;margin:0;background:#0f172a;color:white;text-align:center;}` +
         `.loader{border:4px solid #1e293b;border-top:4px solid #3b82f6;border-radius:50%;` +
         `width:40px;height:40px;animation:spin 1s linear infinite;margin:0 auto 20px;}` +
         `@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}` +
         `h1{font-size:18px;margin:0;}</style></head>` +
-        `<body><div><div class="loader"></div><h1>Conectando ao ${platform}...</h1>` +
+        `<body><div><div class="loader"></div><h1>Conectando ao ${safePlatform}...</h1>` +
         `<p>Iniciando autenticação segura...</p></div></body></html>`
       );
 
@@ -372,9 +387,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
 
         if (aErr) {
+          const safePlatform = escapeHtml(platform);
+          const safeMessage = escapeHtml(aErr.message || 'Verifique se as credenciais estão salvas nas Configurações de API.');
           writeToPopupSafely(
             popup,
-            `<html><head><title>Erro - ${platform}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="color:#ef4444;font-size:48px;margin-bottom:16px;">⚠️</div><h1>Erro ao conectar ${platform}</h1><p>${(aErr.message || 'Verifique se as credenciais estão salvas nas Configurações de API.').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
+            `<html><head><title>Erro - ${safePlatform}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="color:#ef4444;font-size:48px;margin-bottom:16px;">⚠️</div><h1>Erro ao conectar ${safePlatform}</h1><p>${safeMessage}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
           );
           toast({
             title: "Configuração pendente",
@@ -404,7 +421,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
         writeToPopupSafely(
           popup,
-          `<html><head><title>Falha de Conexão</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="font-size:48px;margin-bottom:16px;">🌐</div><h1>Falha de Conexão</h1><p>${errorMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
+          `<html><head><title>Falha de Conexão</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="font-size:48px;margin-bottom:16px;">🌐</div><h1>Falha de Conexão</h1><p>${escapeHtml(errorMessage)}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
         );
         toast({ title: "Erro de rede", description: errorMessage, variant: "destructive" });
         return;
@@ -413,70 +430,77 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let isFinalized = false;
 
       const handleMessage = async (event: MessageEvent) => {
-        // Padrão antigo: popup já finalizou tudo ou é outra origem
-        if (event.data?.type === "oauth-complete") {
-          isFinalized = true;
-          window.removeEventListener("message", handleMessage);
+        if (event.origin !== window.location.origin) return;
+        if (!event.data || typeof event.data !== 'object') return;
+        if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
+        
+        try {
           clearInterval(pollInterval);
-          await finalize(true);
-          toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
-          return;
-        }
 
-        // NOVO: Ponte de callback (GitHub Pages / webradiovitoria.com.br)
-        if (event.data?.type === "oauth-callback" && event.data?.url) {
-          isFinalized = true;
-          window.removeEventListener("message", handleMessage);
-          clearInterval(pollInterval);
-          
-          try {
-            console.log(`[OAUTH CALLBACK] Processando retorno da ponte para: ${platform}`);
-            const url = new URL(event.data.url);
-            const code = url.searchParams.get("code");
-            const state = url.searchParams.get("state");
-            
-            if (!code) {
-              console.error("[OAUTH CALLBACK] Código não encontrado na URL:", event.data.url);
-              throw new Error("Código de autorização não encontrado na URL de retorno.");
-            }
-
-            toast({ title: "Finalizando conexão...", description: "Trocando código por token de acesso." });
-
-            const { data: cbData, error: cbErr } = await supabase.functions.invoke('social-oauth-callback', {
-              body: { code, state, platform, redirect_uri: redirectUri }
-            });
-
-            if (cbErr) {
-              let errorMsg = cbErr.message;
-              try {
-                if (cbErr instanceof Error && 'context' in cbErr) {
-                  interface ErrorContext { context?: { json?: () => Promise<{ error?: string }> } }
-                  const context = (cbErr as Error & ErrorContext).context;
-                  if (context && typeof context.json === 'function') {
-                    const body = await context.json();
-                    errorMsg = body.error || errorMsg;
-                  }
-                }
-              } catch (e) {
-                console.warn("Falha ao processar corpo do erro:", e);
-              }
-              console.error("[OAUTH CALLBACK ERROR] Erro detalhado:", errorMsg);
-              throw new Error(errorMsg);
-            }
-            
-            console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso. (Dados sensíveis ocultados para conformidade de segurança)");
+          if (event.data?.type === "oauth-complete") {
+            isFinalized = true;
+            window.removeEventListener("message", handleMessage);
+            clearInterval(pollInterval);
             await finalize(true);
-            toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
-          } catch (err: unknown) {
-            console.error("[OAUTH CALLBACK CRITICAL ERROR]", err);
-            toast({ 
-              title: "Erro na finalização", 
-              description: (err instanceof Error ? err.message : undefined) || "Não foi possível completar a troca de tokens.",
-              variant: "destructive" 
-            });
-            // Mesmo com erro, finalizamos o polling
-            await finalize(false);
+            toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
+            return;
           }
+
+          if (event.data?.type === "oauth-callback" && event.data?.url) {
+            isFinalized = true;
+            window.removeEventListener("message", handleMessage);
+            clearInterval(pollInterval);
+            
+            try {
+              console.log(`[OAUTH CALLBACK] Processando retorno da ponte para: ${platform}`);
+              const url = new URL(event.data.url);
+              const code = url.searchParams.get("code");
+              const state = url.searchParams.get("state");
+              
+              if (!code) {
+                console.error("[OAUTH CALLBACK] Código não encontrado na URL:", event.data.url);
+                throw new Error("Código de autorização não encontrado na URL de retorno.");
+              }
+
+              toast({ title: "Finalizando conexão...", description: "Trocando código por token de acesso." });
+
+              const { data: cbData, error: cbErr } = await supabase.functions.invoke('social-oauth-callback', {
+                body: { code, state, platform, redirect_uri: redirectUri }
+              });
+
+              if (cbErr) {
+                let errorMsg = cbErr.message;
+                try {
+                  if (cbErr instanceof Error && 'context' in cbErr) {
+                    interface ErrorContext { context?: { json?: () => Promise<{ error?: string }> } }
+                    const context = (cbErr as Error & ErrorContext).context;
+                    if (context && typeof context.json === 'function') {
+                      const body = await context.json();
+                      errorMsg = body.error || errorMsg;
+                    }
+                  }
+                } catch (e) {
+                  console.warn("Falha ao processar corpo do erro:", e);
+                }
+                console.error("[OAUTH CALLBACK ERROR] Erro detalhado:", errorMsg);
+                throw new Error(errorMsg);
+              }
+              
+              console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso. (Dados sensíveis ocultados para conformidade de segurança)");
+              await finalize(true);
+              toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
+            } catch (err: unknown) {
+              console.error("[OAUTH CALLBACK CRITICAL ERROR]", err);
+              toast({ 
+                title: "Erro na finalização", 
+                description: (err instanceof Error ? err.message : undefined) || "Não foi possível completar a troca de tokens.",
+                variant: "destructive" 
+              });
+              await finalize(false);
+            }
+          }
+        } catch (err: unknown) {
+          console.error("[OAUTH MESSAGE HANDLER ERROR]", err);
         }
       };
 

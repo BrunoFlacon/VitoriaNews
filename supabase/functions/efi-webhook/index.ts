@@ -1,10 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+});
 
 function calculateExpiresAt(plan: string, fromDate: Date): Date {
   const planDays: Record<string, number> = {
@@ -16,22 +17,37 @@ function calculateExpiresAt(plan: string, fromDate: Date): Date {
   return new Date(fromDate.getTime() + days * 24 * 60 * 60 * 1000)
 }
 
+async function verifyHmacSignature(payload: string, signature: string, secret: string): Promise<boolean> {
+  try {
+    const encoder = new TextEncoder()
+    const keyData = encoder.encode(secret)
+    const payloadBytes = encoder.encode(payload)
+    const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+    const expectedSig = await crypto.subtle.sign('HMAC', cryptoKey, payloadBytes)
+    const expectedHex = Array.from(new Uint8Array(expectedSig)).map(b => b.toString(16).padStart(2, '0')).join('')
+    return expectedHex === signature
+  } catch {
+    return false
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: corsHeaders(req) })
   }
 
   try {
-    // ─── Webhook authentication via secret token ──────────────
+    // ─── Webhook authentication via HMAC-SHA256 signature ─────
     const webhookSecret = Deno.env.get('EFI_WEBHOOK_SECRET') ?? ''
     if (webhookSecret) {
-      const url = new URL(req.url)
-      const token = url.searchParams.get('token')
-      if (!token || token !== webhookSecret) {
-        console.error('[EFI-Webhook] Invalid or missing token')
+      const rawBody = await req.clone().text()
+      const signature = req.headers.get('x-efi-signature') || req.headers.get('x-signature-sha256') || ''
+      const isValid = await verifyHmacSignature(rawBody, signature, webhookSecret)
+      if (!signature || !isValid) {
+        console.error('[EFI-Webhook] Invalid HMAC signature')
         return new Response(
           JSON.stringify({ error: 'Unauthorized' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 401 }
+          { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 401 }
         )
       }
     }
@@ -43,7 +59,7 @@ serve(async (req) => {
 
     const payload = await req.json()
 
-    console.log('[EFI-Webhook] Received payload:', JSON.stringify(payload))
+    console.log('[EFI-Webhook] Received payment notification for txid:', payload.txid || '(pending)')
 
     const txid = payload.txid || payload?.pix?.[0]?.txid
 
@@ -51,7 +67,7 @@ serve(async (req) => {
       console.warn('[EFI-Webhook] No txid found in payload')
       return new Response(
         JSON.stringify({ received: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
@@ -65,7 +81,7 @@ serve(async (req) => {
       console.error('[EFI-Webhook] Charge not found for txid:', txid)
       return new Response(
         JSON.stringify({ error: 'Charge not found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+        { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 404 }
       )
     }
 
@@ -73,7 +89,7 @@ serve(async (req) => {
       console.log('[EFI-Webhook] Charge already paid, skipping:', txid)
       return new Response(
         JSON.stringify({ received: true, status: 'already_paid' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+        { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
       )
     }
 
@@ -163,13 +179,13 @@ serve(async (req) => {
         status: 'paid',
         customer_email: charge.customer_email,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 200 }
     )
   } catch (error) {
     console.error('[EFI-Webhook] Error:', error.message)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      { headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }, status: 400 }
     )
   }
 })

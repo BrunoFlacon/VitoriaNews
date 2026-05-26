@@ -185,7 +185,16 @@ const GatewaySection = () => {
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
       <form role="presentation" autoComplete="off" onSubmit={e => e.preventDefault()}>
-        <input type="hidden" name="username" autoComplete="username" value="admin" readOnly />
+        <input 
+          type="text" 
+          name="username" 
+          autoComplete="username" 
+          value="admin" 
+          readOnly 
+          className="sr-only" 
+          tabIndex={-1} 
+          aria-hidden="true" 
+        />
         <div className="relative">
           <Input
             type={showSecrets[fieldKey] ? "text" : "password"}

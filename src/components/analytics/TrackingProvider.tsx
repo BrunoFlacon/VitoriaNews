@@ -35,8 +35,11 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     if (!settings) return;
 
+    // Validate pixel IDs — alphanumeric only
+    const isValidPixelId = (id: string) => /^[A-Za-z0-9_-]+$/.test(id);
+
     // 1. Meta Pixel
-    if (settings.meta_pixel_id && !document.getElementById('meta-pixel-script')) {
+    if (settings.meta_pixel_id && isValidPixelId(settings.meta_pixel_id) && !document.getElementById('meta-pixel-script')) {
       const script = document.createElement('script');
       script.id = 'meta-pixel-script';
       script.innerHTML = `
@@ -59,7 +62,7 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     // 2. Google Analytics (G-TAG)
-    if (settings.google_pixel_id && !document.getElementById('google-pixel-script')) {
+    if (settings.google_pixel_id && isValidPixelId(settings.google_pixel_id) && !document.getElementById('google-pixel-script')) {
       const scriptLink = document.createElement('script');
       scriptLink.async = true;
       scriptLink.src = `https://www.googletagmanager.com/gtag/js?id=${settings.google_pixel_id}`;
@@ -77,7 +80,7 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     // 3. TikTok Pixel
-    if (settings.tiktok_pixel_id && !document.getElementById('tiktok-pixel-script')) {
+    if (settings.tiktok_pixel_id && isValidPixelId(settings.tiktok_pixel_id) && !document.getElementById('tiktok-pixel-script')) {
       const script = document.createElement('script');
       script.id = 'tiktok-pixel-script';
       script.innerHTML = `
@@ -91,7 +94,7 @@ export const TrackingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     // 4. Twitter (X) Pixel
-    if (settings.x_pixel_id && !document.getElementById('x-pixel-script')) {
+    if (settings.x_pixel_id && isValidPixelId(settings.x_pixel_id) && !document.getElementById('x-pixel-script')) {
       const script = document.createElement('script');
       script.id = 'x-pixel-script';
       script.innerHTML = `

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Users, Search, Download, MessageSquare, Send, Calendar, Star, ShieldCheck } from "lucide-react";
+import { Users, Search, Download, MessageSquare, Send, Calendar, Star, ShieldCheck, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SubscriberModal } from "./subscribers/SubscriberModal";
+import { useAuth } from "@/contexts/AuthContext";
 
 export interface Subscriber {
   id: string;
@@ -138,12 +139,18 @@ export const SubscriberAvatar = ({
   );
 };
 
+const ALLOWED_ROLES = ["dev_master", "admin_master", "admin", "dev", "contador"];
+
 export const SubscribersView = () => {
+  const { profile } = useAuth();
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selectedSubscriber, setSelectedSubscriber] = useState<Subscriber | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+
+  const userRole = profile?.role || 'user';
+  const isAuthorized = ALLOWED_ROLES.includes(userRole);
 
   const fetchSubscribers = async () => {
     setLoading(true);
@@ -182,6 +189,16 @@ export const SubscribersView = () => {
       default: return dur.toUpperCase();
     }
   };
+
+  if (!isAuthorized) {
+    return (
+      <div className="text-center py-20 border border-dashed border-red-500/20 rounded-3xl">
+        <Lock className="w-12 h-12 mx-auto text-red-400/40 mb-4" />
+        <p className="text-red-400 font-bold uppercase text-[10px] tracking-widest">Acesso restrito</p>
+        <p className="text-muted-foreground text-sm mt-2">Apenas administradores podem gerenciar assinantes.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

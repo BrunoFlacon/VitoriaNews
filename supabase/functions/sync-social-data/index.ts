@@ -2,13 +2,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cacheProfileImage } from "../_shared/media.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+});
 
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
   try {
@@ -25,7 +26,7 @@ async function getCredentials(supabase: any, userId: string, platform: string): 
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -35,7 +36,7 @@ serve(async (req: Request) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "No Authorization header found" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -43,7 +44,7 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) {
       return new Response(JSON.stringify({ error: "Invalid or expired session" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -172,7 +173,7 @@ serve(async (req: Request) => {
         } else if (conn.platform === "threads") {
           if (conn.access_token) {
             try {
-              const res = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography&access_token=${conn.access_token}`);
+              const res = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username,name,threads_profile_picture_url,threads_biography,followers_count,threads_count&access_token=${conn.access_token}`);
               if (!res.ok) {
                 console.error(`[SYNC] Threads HTTP ${res.status}:`, await res.text());
               } else {
@@ -186,22 +187,24 @@ serve(async (req: Request) => {
                     } catch { profilePicUrl = data.threads_profile_picture_url; }
                   }
                   
-                  // Fetch posts count manually for Threads since user node doesn't return it
-                  let currentPostsCount = conn.posts_count || 0;
-                  try {
-                    const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${conn.access_token}`);
-                    if (postsResp.ok) {
-                      const postsData = await postsResp.json();
-                      currentPostsCount = postsData.data?.length || 0;
-                    }
-                  } catch (e) { console.warn("[SYNC] Threads posts count failed:", e); }
+                  const apiFollowers = Number(data.followers_count) || 0;
+                  let currentPostsCount = Number(data.threads_count) || conn.posts_count || 0;
+                  if (!currentPostsCount || !apiFollowers) {
+                    try {
+                      const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${conn.access_token}`);
+                      if (postsResp.ok) {
+                        const postsData = await postsResp.json();
+                        currentPostsCount = currentPostsCount || postsData.data?.length || 0;
+                      }
+                    } catch (e) { console.warn("[SYNC] Threads posts count failed:", e); }
+                  }
 
                   stats = {
                     user_id: conn.user_id, platform: conn.platform, platform_user_id: data.id || conn.platform_user_id,
                     username: data.username || conn.username || "", page_name: data.name || data.username || conn.page_name || "",
                     profile_picture: profilePicUrl,
-                    followers: conn.followers_count || 0,
-                    followers_count: conn.followers_count || 0,
+                    followers: apiFollowers || conn.followers_count || 0,
+                    followers_count: apiFollowers || conn.followers_count || 0,
                     posts_count: currentPostsCount,
                     metadata: { posts_count: currentPostsCount },
                     views: 0, likes: 0, shares: 0, comments: 0, engagement_rate: 0,
@@ -644,12 +647,13 @@ serve(async (req: Request) => {
     }
 
     return new Response(JSON.stringify({ success: true, synced: results.length, results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (error: any) {
     return new Response(JSON.stringify({ error: error?.message || "Unknown error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });
+

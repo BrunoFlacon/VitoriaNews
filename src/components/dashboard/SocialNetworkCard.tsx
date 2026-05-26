@@ -15,6 +15,9 @@ interface SocialAccount {
   posts_count?: number | null;
   page_id?: string | null;
   username?: string | null;
+  token_expires_at?: string | null;
+  isExpiringSoon?: boolean;
+  daysUntilExpiry?: number;
 }
 
 interface SocialNetworkCardProps {
@@ -156,6 +159,14 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                       {Number(selectedAccount.posts_count || 0).toLocaleString()}
                     </span>
                   </div>
+                  {selectedAccount.isExpiringSoon && selectedAccount.daysUntilExpiry != null && (
+                    <>
+                      <div className="w-px h-5 bg-border/40" />
+                      <span className="text-[9px] text-orange-400 uppercase font-bold whitespace-nowrap" title={selectedAccount.token_expires_at ? `Expira em: ${new Date(selectedAccount.token_expires_at).toLocaleDateString("pt-BR")}` : undefined}>
+                        {selectedAccount.daysUntilExpiry <= 0 ? "Expirado" : `${selectedAccount.daysUntilExpiry}d`}
+                      </span>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -201,7 +212,14 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -8 }}
               transition={{ duration: 0.15 }}
-              style={{
+              style={platform.id === 'threads' ? {
+                position: "fixed",
+                top: "530px",
+                right: "479.37px",
+                zIndex: 9999,
+                opacity: 1,
+                transform: "none",
+              } : {
                 position: "fixed",
                 top: dropdownPos.top,
                 right: dropdownPos.right,

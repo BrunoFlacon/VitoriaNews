@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { SUPABASE_ANON_KEY, SUPABASE_PROJECT_URL } from "@/integrations/supabase/client";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -50,7 +50,7 @@ export function getPlatformDisplayName(platformId: string): string {
  */
 export function getWhatsAppMediaUrl(mediaId: string, userId: string): string {
   if (!mediaId || !userId) return "";
-  return `${SUPABASE_PROJECT_URL}/functions/v1/whatsapp-media-proxy?mediaId=${mediaId}&userId=${userId}&apikey=${SUPABASE_ANON_KEY}`;
+  return `${SUPABASE_URL}/functions/v1/whatsapp-media-proxy?mediaId=${mediaId}&userId=${userId}`;
 }
 
 export function getProxyUrl(url: string | null | undefined): string {
@@ -84,7 +84,7 @@ export function getProxyUrl(url: string | null | undefined): string {
   const shouldProxy = problematicDomains.some(domain => url.includes(domain));
   
   if (shouldProxy) {
-    return `${SUPABASE_PROJECT_URL}/functions/v1/media-relay?url=${encodeURIComponent(url)}`;
+    return `${SUPABASE_URL}/functions/v1/media-relay?url=${encodeURIComponent(url)}`;
   }
   
   return url;

@@ -9,6 +9,7 @@ import { exchangeGettr } from "../_shared/oauth/providers/gettr.ts";
 import { exchangeRumble } from "../_shared/oauth/providers/rumble.ts";
 import { exchangeGiphy } from "../_shared/oauth/providers/giphy.ts";
 import { exchangeWebsite } from "../_shared/oauth/providers/website.ts";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: {
   env: {
@@ -16,10 +17,10 @@ declare const Deno: {
   };
 };
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+});
 
 interface TokenResult {
   accessToken: string;
@@ -51,9 +52,29 @@ function validateOAuthConfig(provider: string, creds: Record<string, string | un
   }
 }
 
+function sanitizePayload(payload: any): any {
+  if (!payload || typeof payload !== "object") return payload;
+  const sensitive = ["access_token", "refresh_token", "code", "client_secret", "app_secret", "token", "accessToken", "refreshToken", "authorization_code"];
+  const sanitized: any = Array.isArray(payload) ? [] : {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (sensitive.includes(key)) {
+      sanitized[key] = "[REDACTED]";
+    } else if (typeof value === "object" && value !== null) {
+      sanitized[key] = sanitizePayload(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 async function logOAuth(supabase: any, data: { user_id: string; provider: string; stage: string; request_payload?: any; response_payload?: any }) {
   try {
-    await supabase.from("oauth_logs").insert(data);
+    await supabase.from("oauth_logs").insert({
+      ...data,
+      request_payload: sanitizePayload(data.request_payload),
+      response_payload: sanitizePayload(data.response_payload),
+    });
   } catch (e) {
     console.warn("Falha ao gravar log de OAuth:", e);
   }
@@ -66,13 +87,13 @@ function assertRedirectUriMatch(saved: string, incoming: string) {
   }
 }
 
-function oauthError(provider: string, stage: string, error: any) {
+function oauthError(provider: string, stage: string, error: any, req) {
   return new Response(JSON.stringify({
     success: false,
     provider,
     stage,
     error: error.message || error,
-  }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+  }), { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
 }
 
 // --- EXCHANGE FUNCTIONS ---
@@ -316,12 +337,12 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   }
 
   // PASSO 3 — Buscar perfil completo com foto e métricas
-  // Campos corretos da API do Threads v1.0:
+  // Campos da API do Threads v1.0:
   //   id, username, name, threads_profile_picture_url,
   //   threads_biography, followers_count, threads_count
   const profileRes = await fetch(
     `https://graph.threads.net/v1.0/me?` + new URLSearchParams({
-      fields:       "id,username,name,threads_profile_picture_url,threads_biography",
+      fields:       "id,username,name,threads_profile_picture_url,threads_biography,followers_count,threads_count",
       access_token: accessToken,
     })
   );
@@ -332,6 +353,8 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
     id:              profileData.id,
     username:        profileData.username,
     has_photo:       !!profileData.threads_profile_picture_url,
+    followers:       profileData.followers_count,
+    posts:           profileData.threads_count,
   }));
 
   if (profileData.error) {
@@ -341,17 +364,29 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   const platformUserId  = profileData.id       || shortData.user_id || "";
   const username        = profileData.username  || "";
   const displayName     = profileData.name      || username         || "Threads User";
-  const profileImageUrl = profileData.threads_profile_picture_url || "";
-  const followersCount  = 0;
+  let profileImageUrl   = profileData.threads_profile_picture_url || "";
+  const followersCount  = Number(profileData.followers_count) || 0;
   
-  let postsCount = 0;
-  try {
-    const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${accessToken}`);
-    if (postsResp.ok) {
-      const postsData = await postsResp.json();
-      postsCount = postsData.data?.length || 0;
+  let postsCount = Number(profileData.threads_count) || 0;
+  if (!postsCount) {
+    try {
+      const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${accessToken}`);
+      if (postsResp.ok) {
+        const postsData = await postsResp.json();
+        postsCount = postsData.data?.length || 0;
+      }
+    } catch (e) {}
+  }
+
+  // Cachear foto de perfil no Supabase Storage para evitar expiração do link da Meta
+  if (profileImageUrl) {
+    try {
+      const uploaded = await cacheProfileImage(supabase, userId, "threads", profileImageUrl, platformUserId);
+      if (uploaded) profileImageUrl = uploaded;
+    } catch (e) {
+      console.warn("[THREADS] Falha ao cachear foto de perfil:", e);
     }
-  } catch (e) {}
+  }
 
   return [{
     accessToken,
@@ -624,11 +659,11 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
 }
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return oauthError("unknown", "auth", "Authorization required");
+    if (!authHeader) return oauthError("unknown", "auth", "Authorization required", req);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -636,7 +671,7 @@ serve(async (req: Request) => {
 
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication");
+    if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication", req);
 
     const { code, state: incomingState, platform, redirect_uri: incomingRedirectUri, manual_token, username: bodyUsername } = await req.json();
 
@@ -744,7 +779,7 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ success: true, pageName }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    if (!code || !incomingState || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required");
+    if (!code || !incomingState || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required", req);
 
     // Busca state diretamente (state é sempre um UUID simples agora)
     const { data: oauthState, error: stateError } = await supabase
@@ -755,7 +790,7 @@ serve(async (req: Request) => {
       .eq("platform", platform)
       .single();
       
-    if (stateError || !oauthState) return oauthError(platform, "callback", "Invalid or expired OAuth state");
+    if (stateError || !oauthState) return oauthError(platform, "callback", "Invalid or expired OAuth state", req);
 
     // code_verifier vem exclusivamente da coluna do banco
     const finalVerifier = oauthState.code_verifier || "";
@@ -892,10 +927,11 @@ serve(async (req: Request) => {
 
     await supabase.from("oauth_states").delete().eq("id", oauthState.id);
     
-    return new Response(JSON.stringify({ success: true, platform, count: results.length }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, platform, count: results.length }), { headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
 
   } catch (error) {
     console.error("Error in social-oauth-callback:", error);
-    return oauthError("unknown", "callback", error);
+    return oauthError("unknown", "callback", error, req);
   }
 });
+

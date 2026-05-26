@@ -5,7 +5,7 @@ export function getAuthUrl(platform: string, redirectUri: string, state: string,
     return `https://www.threads.net/oauth/authorize?` + new URLSearchParams({
       client_id: threadsAppId,
       redirect_uri: redirectUri,
-      scope: "threads_basic,threads_content_publish,threads_manage_insights",
+      scope: "threads_basic,threads_content_publish,threads_manage_replies,threads_manage_insights",
       state,
       response_type: "code",
     });
