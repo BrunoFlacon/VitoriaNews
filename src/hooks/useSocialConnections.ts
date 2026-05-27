@@ -198,28 +198,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
       }
 
-      // ── Dedup Threads: mescla duplicatas (bug antigo de platform_user_id diferente) ──
-      {
-        const threadsConns = finalConnections.filter(c => c.platform === 'threads');
-        if (threadsConns.length > 1) {
-          const best = threadsConns.reduce((a, b) =>
-            (a.username ? 2 : 0) + (a.profile_image_url ? 1 : 0) + (Number(a.followers_count) > 0 ? 1 : 0) >
-            (b.username ? 2 : 0) + (b.profile_image_url ? 1 : 0) + (Number(b.followers_count) > 0 ? 1 : 0) ? a : b
-          );
-          const rest = threadsConns.filter(c => c !== best);
-          for (const r of rest) {
-            best.posts_count = Math.max(best.posts_count || 0, r.posts_count || 0);
-            best.followers_count = Math.max(best.followers_count || 0, r.followers_count || 0);
-            if (!best.profile_image_url && r.profile_image_url) best.profile_image_url = r.profile_image_url;
-            if (!best.username && r.username) best.username = r.username;
-          }
-          // Remove todos Threads e readiciona só o melhor
-          const withoutThreads = finalConnections.filter(c => c.platform !== 'threads');
-          finalConnections.length = 0;
-          finalConnections.push(...withoutThreads, best);
-        }
-      }
-
       finalConnections.sort((a, b) => {
         if (a.is_primary && !b.is_primary) return -1;
         if (!a.is_primary && b.is_primary) return 1;
@@ -300,10 +278,14 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Ponte de Conexão via Edge Function (para plataformas que exigem HTTPS)
-      // A Edge Function do Supabase já é HTTPS e sempre disponível, diferente do domínio de produção.
+      // Threads + TikTok + LinkedIn + Ponte de Conexão (webradiovitoria.com.br)
+      // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
       if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal) {
-        origin = "https://ghtkdkauseesambzqfrd.supabase.co/functions/v1";
+        origin = "https://webradiovitoria.com.br";
+        toast({
+          title: "Ponte de Conexão Ativada",
+          description: `Usando webradiovitoria.com.br para contornar a restrição de localhost do ${platform}.`,
+        });
       } else if (isLocal) {
         let localHostname = window.location.hostname;
         if (['twitter'].includes(platform)) localHostname = "127.0.0.1";
@@ -312,9 +294,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       }
 
       const isBridge = ['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal;
-      const redirectUri = isBridge
-        ? `${origin}/social-oauth-callback/${platform}`
-        : `${origin}/oauth/callback/${platform}/`;
+      const redirectUri = `${origin}/oauth/callback/${platform}/`;
 
       const width  = 600;
       const height = 700;
@@ -452,7 +432,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
 
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== localOrigin && !(isLocalDev && (event.origin === 'https://ghtkdkauseesambzqfrd.supabase.co' || event.origin === 'https://webradiovitoria.com.br'))) return;
+        if (event.origin !== localOrigin && !(isLocalDev && event.origin === 'https://webradiovitoria.com.br')) return;
         if (!event.data || typeof event.data !== 'object') return;
         if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
         
