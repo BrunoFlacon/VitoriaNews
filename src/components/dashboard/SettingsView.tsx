@@ -1844,7 +1844,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                     <p className="text-sm text-muted-foreground">Mantenha sua conta segura alterando sua senha periodicamente</p>
                   </div>
                 </div>
-                <div className="space-y-4 pl-14" autoComplete="on">
+                <form className="space-y-4 pl-14" autoComplete="on">
+                  <input type="text" name="username" value={profileData.email || ""} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
                   <Input id="security-current-password" name="current-password" type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
                   <Input id="security-new-password" name="new-password" type="password" placeholder="Nova senha" autoComplete="new-password" className="bg-background max-w-md" />
                   <Input id="security-confirm-password" name="confirm-password" type="password" placeholder="Confirmar nova senha" autoComplete="new-password" className="bg-background max-w-md" />
@@ -1855,7 +1856,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                   <Button type="button" variant="secondary" onClick={() => toast({ title: 'Recurso Indisponível', description: 'Por favor, recupere sua senha na tela de login caso precise alterá-la no momento.', variant: 'destructive' })}>
                     Atualizar Senha
                   </Button>
-                </div>
+                </form>
               </div>
 
 
