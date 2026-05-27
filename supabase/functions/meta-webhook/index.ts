@@ -9,6 +9,27 @@ const corsHeaders = (req) => ({
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 });
 
+async function verifyHmacSignature(rawBody: string, signatureHeader: string | null, secret: string): Promise<boolean> {
+  if (!signatureHeader || !secret) return false;
+  const expectedPrefix = "sha256=";
+  if (!signatureHeader.startsWith(expectedPrefix)) return false;
+  const providedSig = signatureHeader.slice(expectedPrefix.length);
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false, ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
+  const computedHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
+  if (computedHex.length !== providedSig.length) return false;
+  const buf1 = new Uint8Array(encoder.encode(computedHex));
+  const buf2 = new Uint8Array(encoder.encode(providedSig));
+  let result = 0;
+  for (let i = 0; i < buf1.length; i++) result |= buf1[i] ^ buf2[i];
+  return result === 0;
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders(req) });
@@ -33,11 +54,19 @@ serve(async (req: Request) => {
 
   // ── 2. ROTA POST: Recepção Omnichannel de Eventos ──
   try {
+    const rawBody = await req.text();
+    const appSecret = Deno.env.get("META_APP_SECRET") || "";
+    const signature = req.headers.get("x-hub-signature-256") || "";
+    if (appSecret && !(await verifyHmacSignature(rawBody, signature, appSecret))) {
+      console.warn("[META-WEBHOOK] HMAC signature verification failed");
+      return new Response("Forbidden", { status: 403, headers: corsHeaders(req) });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const body = await req.json();
+    const body = JSON.parse(rawBody);
     const objectType = body?.object; // 'whatsapp_business_account', 'page', 'instagram'
     const entries = body?.entry || [];
 

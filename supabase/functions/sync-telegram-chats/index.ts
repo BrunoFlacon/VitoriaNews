@@ -21,18 +21,16 @@ function json(data: any, status = 200, req?: Request) {
   });
 }
 
-function decodeJwt(token: string) {
+async function getUserIdFromToken(adminClient: any, token: string): Promise<string | null> {
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    while (payload.length % 4) {
-      payload += '=';
+    const { data: { user }, error } = await adminClient.auth.getUser(token);
+    if (error || !user) {
+      console.warn("[SYNC] getUser failed:", error?.message);
+      return null;
     }
-    const decoded = atob(payload);
-    return JSON.parse(decoded);
+    return user.id;
   } catch (err) {
-    console.error("[SYNC] decodeJwt Error:", err);
+    console.error("[SYNC] getUser Error:", err);
     return null;
   }
 }
@@ -238,8 +236,7 @@ serve(async (req: Request) => {
     } catch {}
 
     if (!userId) {
-      const jwtPayload = decodeJwt(authToken);
-      userId = jwtPayload?.sub || null;
+      userId = await getUserIdFromToken(adminClient, authToken);
     }
     
     if (!userId) return json({ error: "Unauthorized: Missing UserID" }, 401, req);

@@ -298,11 +298,34 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
     return;
   }
 
-  const { data: adminUsers } = await supabase.from("profiles").select("id").limit(1);
-  const userId = adminUsers?.[0]?.id;
+  let userId: string | null = null;
+
+  if (msg.platform === "whatsapp") {
+    const { data: connection } = await supabase
+      .from("social_connections")
+      .select("user_id")
+      .eq("platform", "whatsapp")
+      .eq("platform_user_id", msg.recipientId)
+      .maybeSingle();
+    userId = connection?.user_id || null;
+  }
 
   if (!userId) {
-    console.warn("[BOTZAP] Nenhum usuário administrador encontrado.");
+    const { data: connection } = await supabase
+      .from("social_connections")
+      .select("user_id")
+      .eq("platform_user_id", msg.recipientId)
+      .maybeSingle();
+    userId = connection?.user_id || null;
+  }
+
+  if (!userId) {
+    const { data: adminUsers } = await supabase.from("profiles").select("id").limit(1);
+    userId = adminUsers?.[0]?.id;
+  }
+
+  if (!userId) {
+    console.warn("[BOTZAP] Nenhum usuário encontrado.");
     return;
   }
 
