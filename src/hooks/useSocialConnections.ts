@@ -503,12 +503,21 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       window.addEventListener("message", handleMessage);
 
+      const showToastForPlatform = () => {
+        const savedPlatform = localStorage.getItem("oauth_platform");
+        if (savedPlatform) {
+          toast({ title: "Sucesso!", description: `${savedPlatform} conectado com sucesso.` });
+          localStorage.removeItem("oauth_platform");
+        }
+      };
+
       const finalize = async (fromMessage = false) => {
         if (!fromMessage && isFinalized) return;
         isFinalized = true;
         clearInterval(pollInterval);
         window.removeEventListener("message", handleMessage);
         await refetch();
+        if (!fromMessage) showToastForPlatform();
       };
 
       const pollInterval = setInterval(async () => {

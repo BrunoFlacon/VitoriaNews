@@ -13,6 +13,20 @@
             var pathParts = window.location.pathname.split('/').filter(Boolean);
             var platform = pathParts.length >= 3 ? pathParts[2] : '';
 
+            if (errParam) {
+                document.getElementById('status').innerText = 'Autorização cancelada ou recusada.';
+                document.getElementById('loader').style.display = 'none';
+                setTimeout(function() { window.close(); }, 2000);
+                return;
+            }
+
+            if (window.opener) {
+                window.opener.postMessage({ type: 'oauth-callback', url: window.location.href }, '*');
+                document.getElementById('status').innerText = 'Autorização concluída! Esta janela fechará em instantes.';
+            }
+
+            var closeTimer = setTimeout(function() { window.close(); }, 15000);
+
             if (code && state && platform) {
                 var supabaseUrl = 'https://ghtkdkauseesambzqfrd.supabase.co';
                 var anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodGtka2F1c2Vlc2FtYnpxZnJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NTUwMTQsImV4cCI6MjA4OTUzMTAxNH0.X1OeIwLezATvztpzJzDJWMSUgukNXIWNQp2L1rHkLGs';
@@ -25,22 +39,13 @@
                     if (data.success) {
                         document.getElementById('status').innerText = 'Conta conectada com sucesso!';
                         document.getElementById('loader').style.display = 'none';
+                        clearTimeout(closeTimer);
+                        setTimeout(function() { window.close(); }, 2000);
                     }
-                }).catch(function() {});
+                }).catch(function() {
+                    document.getElementById('loader').style.display = 'none';
+                });
             }
-
-            if (errParam) {
-                document.getElementById('status').innerText = 'Autorização cancelada ou recusada.';
-                document.getElementById('loader').style.display = 'none';
-            } else if (window.opener) {
-                window.opener.postMessage({ type: 'oauth-callback', url: window.location.href }, '*');
-                document.getElementById('status').innerText = 'Autorização concluída! Esta janela fechará em instantes.';
-            } else {
-                document.getElementById('status').innerText = 'Conexão finalizada. Verifique o painel para confirmar.';
-                document.getElementById('loader').style.display = 'none';
-            }
-
-            setTimeout(function() { window.close(); }, 2000);
         };
     </script>
     <style>
