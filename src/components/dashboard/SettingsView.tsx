@@ -115,7 +115,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       setActiveSettingsTab(defaultTab);
     }
   }, [defaultTab]);
-  const { connections, loading: connectionsLoading, initiateOAuth, disconnect, refetch } = useSocialConnections();
+  const { connections, loading: connectionsLoading, initiateOAuth, disconnect, setPrimary, refetch } = useSocialConnections();
   const { credentials, loading: credsLoading, saving, saveCredentials, deleteCredentials, hasCredentials } = useApiCredentials();
 
   const { stats: socialStats, audienceBreakdown, loading: statsLoading, refresh: refreshStats, setStatsLoading } = useSocialStats();
@@ -1463,6 +1463,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                         onRenew={() => handleRenewToken(conn)}
                                         handleDisconnectCustom={handleDisconnectCustom}
                                         handleToggleBot={handleToggleBot}
+                                        onSetPrimary={setPrimary}
                                       />
                                     );
                                   })}

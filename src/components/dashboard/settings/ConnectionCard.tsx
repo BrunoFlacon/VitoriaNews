@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Users, FileText, Check, Unplug, MessageSquare, AlertTriangle, RefreshCw } from "lucide-react";
+import { Users, FileText, Check, Unplug, MessageSquare, AlertTriangle, RefreshCw, Star } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ interface ConnectionCardProps {
   onRenew?: () => void;
   handleDisconnectCustom: (platformId: string, connectionId: string) => void;
   handleToggleBot: (active: boolean) => void;
+  onSetPrimary?: (connectionId: string) => void;
 }
 
 export const ConnectionCard = ({
@@ -47,7 +48,8 @@ export const ConnectionCard = ({
   daysUntilExpiry,
   onRenew,
   handleDisconnectCustom,
-  handleToggleBot
+  handleToggleBot,
+  onSetPrimary
 }: ConnectionCardProps) => {
   const { toast } = useToast();
   const [renewing, setRenewing] = useState(false);
@@ -145,6 +147,11 @@ export const ConnectionCard = ({
             <div className="flex items-center gap-2 mb-2 flex-wrap">
               <p className="font-black text-[17px] text-white tracking-tight">{displayName}</p>
               <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[9px] font-black uppercase tracking-tighter">Oficial</Badge>
+              {conn.is_primary && (
+                <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[9px] font-black uppercase tracking-tighter flex items-center gap-1">
+                  <Star className="w-2.5 h-2.5 fill-yellow-500" /> Padrão
+                </Badge>
+              )}
               {isExpiringSoon && (
                 <Badge
                   className={cn(
@@ -216,15 +223,28 @@ export const ConnectionCard = ({
             </div>
           </div>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="relative overflow-hidden bg-slate-900 border-border/30 text-slate-300 font-black uppercase tracking-[0.15em] text-[9px] h-11 px-6 hover:text-red-400 hover:bg-slate-900 focus:ring-0 active:scale-95 transition-all shrink-0 w-full sm:w-auto mt-3 sm:mt-0 rounded-xl"
-          onClick={() => handleDisconnectCustom(config.id, conn.id || 'all')}
-        >
-          <Unplug className="w-4 h-4 mr-2" />
-          Desconectar
-        </Button>
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto mt-3 sm:mt-0">
+          {onSetPrimary && !conn.is_primary && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-slate-900 border-border/30 text-slate-300 font-black uppercase tracking-[0.15em] text-[9px] h-11 px-4 hover:text-yellow-400 hover:bg-slate-900 focus:ring-0 active:scale-95 transition-all rounded-xl"
+              onClick={(e) => { e.stopPropagation(); onSetPrimary(conn.id); }}
+            >
+              <Star className="w-4 h-4 mr-1.5" />
+              Padrão
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-slate-900 border-border/30 text-slate-300 font-black uppercase tracking-[0.15em] text-[9px] h-11 px-6 hover:text-red-400 hover:bg-slate-900 focus:ring-0 active:scale-95 transition-all rounded-xl"
+            onClick={() => handleDisconnectCustom(config.id, conn.id || 'all')}
+          >
+            <Unplug className="w-4 h-4 mr-2" />
+            Desconectar
+          </Button>
+        </div>
       </div>
 
       {/* Robot Profile Card (Specific for WhatsApp) */}
