@@ -300,14 +300,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Threads + TikTok + LinkedIn + Ponte de Conexão (webradiovitoria.com.br)
-      // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
+      // Ponte de Conexão via Edge Function (para plataformas que exigem HTTPS)
+      // A Edge Function do Supabase já é HTTPS e sempre disponível, diferente do domínio de produção.
       if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal) {
-        origin = "https://webradiovitoria.com.br";
-        toast({
-          title: "Ponte de Conexão Ativada",
-          description: `Usando webradiovitoria.com.br para contornar a restrição de localhost do ${platform}.`,
-        });
+        origin = "https://ghtkdkauseesambzqfrd.supabase.co/functions/v1";
       } else if (isLocal) {
         let localHostname = window.location.hostname;
         if (['twitter'].includes(platform)) localHostname = "127.0.0.1";
@@ -315,7 +311,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         origin = `http://${localHostname}${port}`;
       }
 
-      const redirectUri = `${origin}/oauth/callback/${platform}/`;
+      const isBridge = ['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal;
+      const redirectUri = isBridge
+        ? `${origin}/social-oauth-callback/${platform}`
+        : `${origin}/oauth/callback/${platform}/`;
 
       const width  = 600;
       const height = 700;
@@ -453,7 +452,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
 
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== localOrigin && !(isLocalDev && event.origin === 'https://webradiovitoria.com.br')) return;
+        if (event.origin !== localOrigin && !(isLocalDev && (event.origin === 'https://ghtkdkauseesambzqfrd.supabase.co' || event.origin === 'https://webradiovitoria.com.br'))) return;
         if (!event.data || typeof event.data !== 'object') return;
         if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
         
