@@ -610,14 +610,35 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         .eq('platform', conn.platform)
         .eq('is_primary', true);
 
-      // Set new primary
-      const { error } = await supabase
-        .from('social_connections')
-        .update({ is_primary: true })
-        .eq('user_id', user.id)
-        .eq('id', connectionId);
+      // Conexão sintética (Telegram/WhatsApp via API, sem row em social_connections)
+      // → upsert um registro real para armazenar is_primary
+      if (connectionId.startsWith('telegram-api-') || connectionId.startsWith('whatsapp-api-')) {
+        const { error } = await supabase
+          .from('social_connections')
+          .upsert({
+            user_id: user.id,
+            platform: conn.platform,
+            platform_user_id: conn.platform_user_id,
+            page_name: conn.page_name || conn.platform,
+            username: conn.username,
+            is_connected: true,
+            is_primary: true,
+            followers_count: conn.followers_count,
+            posts_count: conn.posts_count,
+            profile_image_url: conn.profile_image_url || conn.profile_picture,
+          }, { onConflict: 'user_id,platform' });
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        // Conexão real → update pelo ID (UUID)
+        const { error } = await supabase
+          .from('social_connections')
+          .update({ is_primary: true })
+          .eq('user_id', user.id)
+          .eq('id', connectionId);
+
+        if (error) throw error;
+      }
 
       toast({ title: "Perfil principal definido", description: `${conn.page_name || conn.platform} será usado como padrão para publicações.` });
       await refetch();
@@ -634,7 +655,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const connectionId = parts[1];
 
       if (platform === 'telegram' && (!connectionId || connectionId.startsWith('telegram-api-'))) {
-        await supabase.from('api_credentials').delete().eq('user_id', user.id).eq('platform', 'telegram');
+        await Promise.all([
+          supabase.from('api_credentials').delete().eq('user_id', user.id).eq('platform', 'telegram'),
+          supabase.from('social_connections').delete().eq('user_id', user.id).eq('platform', 'telegram'),
+        ]);
         await refetch();
         toast({ title: "Telegram desconectado", description: "Bot Token removido com sucesso." });
         return;
