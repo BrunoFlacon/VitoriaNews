@@ -430,7 +430,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let isFinalized = false;
 
       const localOrigin = window.location.origin;
-      const isLocalDev = localOrigin === 'http://localhost:8080' || localOrigin === 'http://127.0.0.1:8080';
+      const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
 
       const handleMessage = async (event: MessageEvent) => {
         if (event.origin !== localOrigin && !(isLocalDev && event.origin === 'https://webradiovitoria.com.br')) return;
