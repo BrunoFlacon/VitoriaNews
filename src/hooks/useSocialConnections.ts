@@ -198,6 +198,12 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
       }
 
+      finalConnections.sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return 0;
+      });
+
       return finalConnections;
     },
     enabled: !!user && (options.enabled !== false),

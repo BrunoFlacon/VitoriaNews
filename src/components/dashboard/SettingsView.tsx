@@ -1128,7 +1128,11 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                 const platformConnections = connections.filter(c =>
                   c.platform === config.id &&
                   c.is_connected
-                );
+                ).sort((a, b) => {
+                  if (a.is_primary && !b.is_primary) return -1;
+                  if (!a.is_primary && b.is_primary) return 1;
+                  return 0;
+                });
 
                 const hasConnections = platformConnections.length > 0;
                 const isVerifiedFinal = (config.id === 'telegram' && hasCreds) || (config.id === 'whatsapp' && hasCreds) || socialStats.some(s => s.platform === config.id);
