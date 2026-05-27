@@ -59,13 +59,6 @@ export const SocialNetworksView = memo(() => {
           );
 
   const handleConnect = async (platformId: string) => {
-    if (platformId === 'telegram') {
-      toast({
-        title: "Telegram usa Bot Token",
-        description: "Vá em Configurações → APIs → Telegram para configurar seu Bot Token.",
-      });
-      return;
-    }
     setConnectingPlatform(platformId);
     try {
       await initiateOAuth(platformId);

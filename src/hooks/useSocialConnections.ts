@@ -110,20 +110,17 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
         const acc = findAccount(conn);
         if (!acc) return { ...conn, ...computeExpiry(conn.token_expires_at) };
-        const cachedPic = acc.profile_picture || null;
-        // Prefer acc data (social_accounts, atualizado pelo collect-social-analytics)
-        // sobre conn.page_name (definido no OAuth, pode ser genérico tipo "Threads User")
-        const enrichedPageName = acc.page_name || acc.username || conn.page_name || null;
-        // Usar ?? em vez de || para preservar 0 como valor válido de seguidores
-        const enrichedFollowers = acc.followers_count ?? (acc as { followers?: number | null }).followers ?? conn.followers_count;
-        const enrichedPosts = acc.posts_count ?? conn.posts_count;
+        const cachedPic         = acc.profile_picture || null;
+        const enrichedFollowers = acc.followers_count || (acc as { followers?: number | null }).followers || conn.followers_count;
+        const enrichedPosts     = acc.posts_count || conn.posts_count;
+        const enrichedPageName  = conn.page_name || acc.page_name || acc.username || null;
         return {
           ...conn,
           ...computeExpiry(conn.token_expires_at),
           profile_image_url: cachedPic || conn.profile_image_url || null,
           profile_picture:   cachedPic || conn.profile_picture   || null,
-          followers_count:   enrichedFollowers ?? conn.followers_count,
-          posts_count:       enrichedPosts     ?? conn.posts_count,
+          followers_count:   enrichedFollowers || conn.followers_count,
+          posts_count:       enrichedPosts     || conn.posts_count,
           page_name:         enrichedPageName,
         };
       });
@@ -157,10 +154,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           (a.page_name?.toLowerCase().includes('newsbot') || a.username?.toLowerCase().includes('newsbot'))
           && Number(a.platform_user_id || 0) > 0
         ) || platformAccounts.find(a => Number(a.platform_user_id || 0) > 0) || platformAccounts[0];
-        // Telegram: usa APENAS o registro principal do bot (que contém a soma
-        // de seguidores dos canais, não grupos). Não somar todos os registros
-        // (grupos/canais) senão duplica o valor.
-        const totalFollowers = Number(firstAcc?.followers_count) || Number((firstAcc as any)?.followers) || 0;
+        const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || Number((a as { followers?: unknown }).followers) || 0), 0);
         const totalPosts     = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
         const botToken = Array.isArray(tgCreds?.tokens) ? tgCreds.tokens[0] : (tgCreds?.bot_token || tgCreds?.token || '');
         finalConnections.push({
@@ -204,52 +198,26 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
       }
 
-      // ── Deduplicação: só para plataformas de perfil único (ex: Threads) ─────
-      // Facebook/Instagram podem ter múltiplos perfis (pessoal + páginas legítimas).
-      // Threads/Twitter/TikTok/LinkedIn só permitem 1 perfil — duplicatas são bugs.
-      const singleProfilePlatforms = ['threads', 'twitter', 'x', 'tiktok', 'linkedin', 'youtube', 'pinterest', 'spotify'];
+      // ── Dedup Threads: mescla duplicatas (bug antigo de platform_user_id diferente) ──
       {
-        const groups = new Map<string, SocialConnection[]>();
-        for (const c of finalConnections) {
-          const arr = groups.get(c.platform) || [];
-          arr.push(c);
-          groups.set(c.platform, arr);
-        }
-
-        const deduped: SocialConnection[] = [];
-        for (const [, conns] of groups) {
-          if (conns.length === 1 || !singleProfilePlatforms.includes(conns[0].platform)) {
-            deduped.push(...conns);
-            continue;
+        const threadsConns = finalConnections.filter(c => c.platform === 'threads');
+        if (threadsConns.length > 1) {
+          const best = threadsConns.reduce((a, b) =>
+            (a.username ? 2 : 0) + (a.profile_image_url ? 1 : 0) + (Number(a.followers_count) > 0 ? 1 : 0) >
+            (b.username ? 2 : 0) + (b.profile_image_url ? 1 : 0) + (Number(b.followers_count) > 0 ? 1 : 0) ? a : b
+          );
+          const rest = threadsConns.filter(c => c !== best);
+          for (const r of rest) {
+            best.posts_count = Math.max(best.posts_count || 0, r.posts_count || 0);
+            best.followers_count = Math.max(best.followers_count || 0, r.followers_count || 0);
+            if (!best.profile_image_url && r.profile_image_url) best.profile_image_url = r.profile_image_url;
+            if (!best.username && r.username) best.username = r.username;
           }
-
-          // Plataforma de perfil único com múltiplos registros → mesclar
-          const primary = conns.reduce<SocialConnection | null>((best, c) => {
-            if (!best) return c;
-            const score = (conn: SocialConnection) =>
-              (conn.username ? 2 : 0) +
-              (conn.profile_image_url ? 1 : 0) +
-              (Number(conn.followers_count) > 0 ? 1 : 0);
-            return score(c) > score(best) ? c : best;
-          }, null);
-
-          if (primary) {
-            const rest = conns.filter(c => c !== primary);
-            const merged = { ...primary };
-            for (const r of rest) {
-              merged.posts_count = Math.max(merged.posts_count || 0, r.posts_count || 0);
-              merged.followers_count = Math.max(merged.followers_count || 0, r.followers_count || 0);
-              if (!merged.profile_image_url && r.profile_image_url) merged.profile_image_url = r.profile_image_url;
-              if (!merged.username && r.username) merged.username = r.username;
-            }
-            deduped.push(merged);
-          } else {
-            deduped.push(conns[0]);
-          }
+          // Remove todos Threads e readiciona só o melhor
+          const withoutThreads = finalConnections.filter(c => c.platform !== 'threads');
+          finalConnections.length = 0;
+          finalConnections.push(...withoutThreads, best);
         }
-
-        finalConnections.length = 0;
-        finalConnections.push(...deduped);
       }
 
       finalConnections.sort((a, b) => {
@@ -332,11 +300,14 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Ponte de Conexão via Edge Function (para plataformas que exigem HTTPS)
-      // Usa a própria URL da Supabase Edge Function como callback, já que é HTTPS e sempre disponível.
-      const SUPABASE_FUNCTIONS_URL = 'https://ghtkdkauseesambzqfrd.supabase.co/functions/v1';
+      // Threads + TikTok + LinkedIn + Ponte de Conexão (webradiovitoria.com.br)
+      // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
       if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal) {
-        origin = SUPABASE_FUNCTIONS_URL;
+        origin = "https://webradiovitoria.com.br";
+        toast({
+          title: "Ponte de Conexão Ativada",
+          description: `Usando webradiovitoria.com.br para contornar a restrição de localhost do ${platform}.`,
+        });
       } else if (isLocal) {
         let localHostname = window.location.hostname;
         if (['twitter'].includes(platform)) localHostname = "127.0.0.1";
@@ -344,10 +315,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         origin = `http://${localHostname}${port}`;
       }
 
-      const isBridgePlatform = ['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal;
-      const redirectUri = isBridgePlatform
-        ? `${origin}/social-oauth-callback/${platform}`
-        : `${origin}/oauth/callback/${platform}/`;
+      const redirectUri = `${origin}/oauth/callback/${platform}/`;
 
       const width  = 600;
       const height = 700;
@@ -485,7 +453,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
 
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== localOrigin && !(isLocalDev && (event.origin === 'https://ghtkdkauseesambzqfrd.supabase.co' || event.origin === 'https://webradiovitoria.com.br'))) return;
+        if (event.origin !== localOrigin && !(isLocalDev && event.origin === 'https://webradiovitoria.com.br')) return;
         if (!event.data || typeof event.data !== 'object') return;
         if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
         
@@ -615,7 +583,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         .eq('is_primary', true);
 
       // Conexão sintética (Telegram/WhatsApp via API, sem row em social_connections)
-      // → upsert um registro real para armazenar is_primary
       if (connectionId.startsWith('telegram-api-') || connectionId.startsWith('whatsapp-api-')) {
         const { error } = await supabase
           .from('social_connections')
@@ -631,16 +598,13 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             posts_count: conn.posts_count,
             profile_image_url: conn.profile_image_url || conn.profile_picture,
           }, { onConflict: 'user_id,platform' });
-
         if (error) throw error;
       } else {
-        // Conexão real → update pelo ID (UUID)
         const { error } = await supabase
           .from('social_connections')
           .update({ is_primary: true })
           .eq('user_id', user.id)
           .eq('id', connectionId);
-
         if (error) throw error;
       }
 
