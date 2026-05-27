@@ -429,8 +429,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       let isFinalized = false;
 
+      const localOrigin = window.location.origin;
+      const isLocalDev = localOrigin === 'http://localhost:8080' || localOrigin === 'http://127.0.0.1:8080';
+
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
+        if (event.origin !== localOrigin && !(isLocalDev && event.origin === 'https://webradiovitoria.com.br')) return;
         if (!event.data || typeof event.data !== 'object') return;
         if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
         

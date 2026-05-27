@@ -76,8 +76,16 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
         };
       }
 
-      // ── Genuine server error — log only non-4xx (4xx = config issue) ──
+      // ── Status 0 / network error — treat as CORS/not-deployed ──
       const status = (error as any).status || 0;
+      if (status === 0) {
+        return {
+          data: null,
+          error: new Error(`Network error for ${fnName}. Function may not be deployed.`)
+        };
+      }
+
+      // ── Genuine server error — log only non-4xx (4xx = config issue) ──
       if (status < 400 || status >= 500) {
         console.error(`[safeInvoke] Function ${fnName} failed:`, status, detailMsg);
       } else if (!silent) {
