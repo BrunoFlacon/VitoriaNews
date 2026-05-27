@@ -6,50 +6,41 @@
     <title>Conectando LinkedIn - Vitória Net</title>
     <script>
         window.onload = function() {
-            (function() {
-                var urlParams = new URLSearchParams(window.location.search);
-                var code = urlParams.get('code');
-                var state = urlParams.get('state');
-                var errParam = urlParams.get('error');
-                var pathParts = window.location.pathname.split('/').filter(Boolean);
-                var platform = pathParts.length >= 3 ? pathParts[2] : '';
-                
-                // Direct edge function call (works even when postMessage fails due to COOP/CORS)
-                if (code && state && platform) {
-                    var supabaseUrl = 'https://ghtkdkauseesambzqfrd.supabase.co';
-                    var anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodGtka2F1c2Vlc2FtYnpxZnJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NTUwMTQsImV4cCI6MjA4OTUzMTAxNH0.X1OeIwLezATvztpzJzDJWMSUgukNXIWNQp2L1rHkLGs';
-                    var redirectUri = window.location.origin + window.location.pathname;
-                    fetch(supabaseUrl + '/functions/v1/social-oauth-callback', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + anonKey },
-                        body: JSON.stringify({ code: code, state: state, platform: platform, redirect_uri: redirectUri })
-                    }).then(function(r) { return r.json(); }).then(function(data) {
-                        if (data.success) {
-                            document.getElementById('status').innerText = 'Conta conectada com sucesso!';
-                            document.getElementById('loader').style.display = 'none';
-                        }
-                    }).catch(function(err) {
-                        console.warn('[OAUTH CALLBACK] Fallback error:', err);
-                    });
-                }
-                
-                if (errParam) {
-                    document.getElementById('status').innerText = 'Autorização cancelada ou recusada.';
-                    document.getElementById('loader').style.display = 'none';
-                    return;
-                }
-                
-                if (window.opener) {
-                    console.log('[OAUTH BRIDGE] Enviando dados para a janela principal...');
-                    window.opener.postMessage({ type: 'oauth-callback', url: window.location.href }, '*');
-                    document.getElementById('status').innerText = 'Autorização concluída! Esta janela fechará em instantes.';
-                    setTimeout(function() { window.close(); }, 1500);
-                } else {
-                    console.warn('[OAUTH BRIDGE] Janela principal não encontrada.');
-                    document.getElementById('status').innerText = 'Conexão finalizada. Verifique o painel para confirmar.';
-                    document.getElementById('loader').style.display = 'none';
-                }
-            })();
+            var urlParams = new URLSearchParams(window.location.search);
+            var code = urlParams.get('code');
+            var state = urlParams.get('state');
+            var errParam = urlParams.get('error');
+            var pathParts = window.location.pathname.split('/').filter(Boolean);
+            var platform = pathParts.length >= 3 ? pathParts[2] : '';
+
+            if (code && state && platform) {
+                var supabaseUrl = 'https://ghtkdkauseesambzqfrd.supabase.co';
+                var anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodGtka2F1c2Vlc2FtYnpxZnJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NTUwMTQsImV4cCI6MjA4OTUzMTAxNH0.X1OeIwLezATvztpzJzDJWMSUgukNXIWNQp2L1rHkLGs';
+                var redirectUri = window.location.origin + window.location.pathname;
+                fetch(supabaseUrl + '/functions/v1/social-oauth-callback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + anonKey },
+                    body: JSON.stringify({ code: code, state: state, platform: platform, redirect_uri: redirectUri })
+                }).then(function(r) { return r.json(); }).then(function(data) {
+                    if (data.success) {
+                        document.getElementById('status').innerText = 'Conta conectada com sucesso!';
+                        document.getElementById('loader').style.display = 'none';
+                    }
+                }).catch(function() {});
+            }
+
+            if (errParam) {
+                document.getElementById('status').innerText = 'Autorização cancelada ou recusada.';
+                document.getElementById('loader').style.display = 'none';
+            } else if (window.opener) {
+                window.opener.postMessage({ type: 'oauth-callback', url: window.location.href }, '*');
+                document.getElementById('status').innerText = 'Autorização concluída! Esta janela fechará em instantes.';
+            } else {
+                document.getElementById('status').innerText = 'Conexão finalizada. Verifique o painel para confirmar.';
+                document.getElementById('loader').style.display = 'none';
+            }
+
+            setTimeout(function() { window.close(); }, 2000);
         };
     </script>
     <style>

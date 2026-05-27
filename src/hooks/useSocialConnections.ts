@@ -39,7 +39,6 @@ const writeToPopupSafely = (win: Window | null, html: string) => {
       return;
     }
   } catch (e) {
-    console.warn("[OAUTH] Não é possível acessar o documento do popup (CORS). Fechando popup.");
   }
   try {
     win.close();
@@ -237,7 +236,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         .maybeSingle();
 
       if (error) {
-        console.warn(`[META CREDS] Erro ao buscar '${p}':`, error.message);
         continue;
       }
 
@@ -249,12 +247,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const appSecret = creds?.app_secret?.trim() || creds?.client_secret?.trim() || null;
 
       if (appId) {
-        console.log(`[META CREDS] app_id encontrado em '${p}': ${appId.substring(0, 5)}...`);
         return { appId, appSecret, source: p };
       }
     }
 
-    console.warn(`[META CREDS] app_id NÃO encontrado. Verificados:`, platforms);
     return { appId: null, appSecret: null, source: 'not_found' };
   };
 
@@ -276,10 +272,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       // Threads + TikTok + LinkedIn + Ponte de Conexão (webradiovitoria.com.br)
       // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
       if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal) {
-        if (platform === 'threads') console.log("[THREADS] Ativando ponte de conexão via webradiovitoria.com.br");
-        if (platform === 'tiktok') console.log("[TIKTOK] Ativando ponte de conexão via webradiovitoria.com.br (TikTok não aceita localhost)");
-        if (platform === 'linkedin') console.log("[LINKEDIN] Ativando ponte de conexão via webradiovitoria.com.br");
-        if (['facebook', 'instagram', 'whatsapp'].includes(platform)) console.log(`[${platform.toUpperCase()}] Ativando ponte de conexão via webradiovitoria.com.br (bypassing localhost App Domain limit)`);
         origin = "https://webradiovitoria.com.br";
         toast({
           title: "Ponte de Conexão Ativada",
@@ -344,7 +336,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             return;
           }
 
-          console.log(`[OAUTH INIT] Plataforma: ${platform} | Fonte: ${source} | app_id: ${appId.substring(0, 5)}...`);
           extraBody = { client_id: appId, client_secret: appSecret };
         } else if (platform === 'tiktok') {
           // TikTok usa "client_key" — buscamos do banco antes de chamar a Edge Function
@@ -358,7 +349,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
               .maybeSingle();
             tikTokCreds = data?.credentials as Record<string, string | undefined> | undefined;
           } catch (e) {
-            console.warn('Failed to fetch TikTok credentials', e);
           }
 
           const clientKey = tikTokCreds?.client_key?.trim() || tikTokCreds?.client_id?.trim();
@@ -411,7 +401,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         
         // CORREÇÃO CRÍTICA: threads.com é uma empresa diferente. O Threads da Meta usa .net
         if (platform === 'threads' && finalUrl.includes('threads.com')) {
-          console.warn("[OAUTH] Corrigindo domínio threads.com para threads.net automaticamente.");
           finalUrl = finalUrl.replace('threads.com', 'www.threads.net');
         }
 
@@ -455,7 +444,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             clearInterval(pollInterval);
             
             try {
-              console.log(`[OAUTH CALLBACK] Processando retorno da ponte para: ${platform}`);
               const url = new URL(event.data.url);
               const code = url.searchParams.get("code");
               const state = url.searchParams.get("state");
@@ -483,12 +471,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
                     }
                   }
                 } catch (e) {
-                  console.warn("Falha ao processar corpo do erro:", e);
                 }
 
                 // If the state was already processed by the callback page's direct call, treat as success
                 if (errorMsg.includes("Invalid or expired OAuth state")) {
-                  console.log("[OAUTH CALLBACK] State já processado — callback direto salvou a conexão.");
                   await finalize(true);
                   toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
                   return;
@@ -498,7 +484,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
                 throw new Error(errorMsg);
               }
               
-              console.log("[OAUTH CALLBACK SUCCESS] Conexão finalizada com sucesso. (Dados sensíveis ocultados para conformidade de segurança)");
               await finalize(true);
               toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
             } catch (err: unknown) {
