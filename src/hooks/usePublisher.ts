@@ -139,7 +139,7 @@ export function usePublisher() {
           user_id: session.session.user.id,
           content,
           platforms,
-          media_ids: mediaUrls.length > 0 ? mediaUrls : [],
+          media_ids: [],
           media_type: mediaUrls.length > 0 ? getMediaType(mediaUrls[0]) : 'image',
           status: 'scheduled',
           scheduled_at: new Date().toISOString(),
