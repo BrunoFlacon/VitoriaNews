@@ -19,7 +19,9 @@ export async function publishLinkedin(
         return { success: false, error: "Áudio puro não é suportado no LinkedIn" };
     }
 
-    const author = `urn:li:person:${connection.platform_user_id}`;
+    const author = connection.platform_user_id.startsWith("urn:li:")
+      ? connection.platform_user_id
+      : `urn:li:person:${connection.platform_user_id}`;
 
     // Cabeçalhos comuns — LinkedIn-Version obrigatório na nova REST API
     const headers: Record<string, string> = {

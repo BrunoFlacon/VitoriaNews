@@ -252,16 +252,26 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 }
 
                 const [channelsData, postsData] = await Promise.all([
-                  adminClient.from("messaging_channels").select("members_count").eq("user_id", uid).eq("platform", "telegram"),
+                  adminClient.from("messaging_channels").select("channel_type, members_count").eq("user_id", uid).eq("platform", "telegram"),
                   adminClient.from("scheduled_posts").select("id", { count: "exact", head: true }).eq("user_id", uid).contains("platforms", ["telegram"]).eq("status", "published")
                 ]);
                 
-                const totalMembers = (channelsData.data || []).reduce((sum: number, ch: any) => sum + (ch.members_count || 0), 0);
+                // Seguidores = APENAS canais (broadcast), não grupos
+                const channelFollowers = (channelsData.data || [])
+                  .filter((ch: any) => ch.channel_type === "channel")
+                  .reduce((sum: number, ch: any) => sum + (ch.members_count || 0), 0);
+                // Membros = apenas grupos (supergroup/group)
+                const groupMembers = (channelsData.data || [])
+                  .filter((ch: any) => ch.channel_type !== "channel")
+                  .reduce((sum: number, ch: any) => sum + (ch.members_count || 0), 0);
+                
                 metrics = {
-                  followers: totalMembers,
+                  followers: channelFollowers,
                   posts_count: postsData.count || 0,
                   username: botInfo?.username || conn.username || conn.page_name,
-                  profile_picture: botInfo?.profile_picture || null
+                  profile_picture: botInfo?.profile_picture || null,
+                  // Dados extras para breakdown no frontend
+                  members_count: groupMembers,
                 };
                 break;
               }

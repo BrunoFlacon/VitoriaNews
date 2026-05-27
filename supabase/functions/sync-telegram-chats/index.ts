@@ -272,21 +272,28 @@ serve(async (req: Request) => {
 
     // Final Aggregation for UI
     try {
-      const { data: accountsData } = await adminClient
-        .from("social_accounts")
-        .select("followers, platform_user_id, chat_id")
+      // Soma APENAS os canais (type = 'channel'), NÃO grupos nem o bot
+      const { data: tgChannels } = await adminClient
+        .from("messaging_channels")
+        .select("channel_type, members_count")
         .eq("user_id", userId)
         .eq("platform", "telegram");
-      
-      const totalFollowers = (accountsData || []).reduce((sum, acc) => sum + (Number(acc.followers) || 0), 0);
+
+      const channelSubscribers = (tgChannels || [])
+        .filter(ch => ch.channel_type === "channel")
+        .reduce((sum, ch) => sum + (Number(ch.members_count) || 0), 0);
+
       const mainBotId = botIds[0];
 
-      // UPDATE THE BOT RECORD with total followers (sum of groups/channels)
-      // This ensures the main dashboard shows the consolidated number for the bot
-      if (totalFollowers > 0 && mainBotId) {
+      if (mainBotId) {
+        // Atualiza o registro do bot com APENAS seguidores de canais
+        // (grupos não entram como "seguidores" — são membros)
         await adminClient
           .from("social_accounts")
-          .update({ followers: totalFollowers, followers_count: totalFollowers })
+          .update({
+            followers: channelSubscribers,
+            followers_count: channelSubscribers,
+          })
           .eq("user_id", userId)
           .eq("platform", "telegram")
           .eq("platform_user_id", mainBotId);
@@ -304,9 +311,9 @@ serve(async (req: Request) => {
             user_id: userId,
             platform: "telegram",
             platform_user_id: mainBotId,
-            followers_count: totalFollowers,
+            followers_count: channelSubscribers,
             posts_count: postsCount || 0,
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
           }, { onConflict: "user_id,platform,platform_user_id" });
       }
     } catch (aggErr) { console.warn("[SYNC] Aggregation failed:", aggErr.message); }

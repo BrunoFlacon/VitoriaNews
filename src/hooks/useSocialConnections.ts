@@ -154,7 +154,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           (a.page_name?.toLowerCase().includes('newsbot') || a.username?.toLowerCase().includes('newsbot'))
           && Number(a.platform_user_id || 0) > 0
         ) || platformAccounts.find(a => Number(a.platform_user_id || 0) > 0) || platformAccounts[0];
-        const totalFollowers = platformAccounts.reduce((sum, a) => sum + (Number(a.followers_count) || Number((a as { followers?: unknown }).followers) || 0), 0);
+        // Telegram: usa APENAS o registro principal do bot (que contém a soma
+        // de seguidores dos canais, não grupos). Não somar todos os registros
+        // (grupos/canais) senão duplica o valor.
+        const totalFollowers = Number(firstAcc?.followers_count) || Number((firstAcc as any)?.followers) || 0;
         const totalPosts     = platformAccounts.reduce((sum, a) => sum + (Number(a.posts_count) || 0), 0);
         const botToken = Array.isArray(tgCreds?.tokens) ? tgCreds.tokens[0] : (tgCreds?.bot_token || tgCreds?.token || '');
         finalConnections.push({
@@ -196,6 +199,53 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           username: firstAcc?.username || null,
           metadata: { from_api_credentials: true },
         });
+      }
+
+      // ── Deduplicação: agrupa conexões que representam o mesmo perfil ─────────
+      // Útil para plataformas pessoais (ex: Threads) onde podem existir registros
+      // duplicados com platform_user_id diferente devido a falhas anteriores.
+      {
+        const groups = new Map<string, SocialConnection[]>();
+        for (const c of finalConnections) {
+          const arr = groups.get(c.platform) || [];
+          arr.push(c);
+          groups.set(c.platform, arr);
+        }
+
+        const deduped: SocialConnection[] = [];
+        for (const [, conns] of groups) {
+          if (conns.length === 1) {
+            deduped.push(conns[0]);
+            continue;
+          }
+
+          // Se há múltiplas conexões na mesma plataforma, tenta encontrar a
+          // "principal" (aquela com username preenchido e nome não genérico)
+          const primary = conns.find(c =>
+            c.username && !/user|profile/i.test(c.page_name || "")
+          );
+          const rest = conns.filter(c => c !== primary);
+
+          if (primary && rest.length > 0) {
+            const merged = { ...primary };
+            for (const r of rest) {
+              merged.posts_count = (merged.posts_count || 0) + (r.posts_count || 0);
+              merged.followers_count = Math.max(
+                merged.followers_count || 0,
+                r.followers_count || 0
+              );
+              if (!merged.profile_image_url && r.profile_image_url) {
+                merged.profile_image_url = r.profile_image_url;
+              }
+            }
+            deduped.push(merged);
+          } else {
+            deduped.push(...conns);
+          }
+        }
+
+        finalConnections.length = 0;
+        finalConnections.push(...deduped);
       }
 
       finalConnections.sort((a, b) => {
@@ -278,14 +328,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Threads + TikTok + LinkedIn + Ponte de Conexão (webradiovitoria.com.br)
-      // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
+      // Ponte de Conexão via Edge Function (para plataformas que exigem HTTPS)
+      // Usa a própria URL da Supabase Edge Function como callback, já que é HTTPS e sempre disponível.
+      const SUPABASE_FUNCTIONS_URL = 'https://ghtkdkauseesambzqfrd.supabase.co/functions/v1';
       if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal) {
-        origin = "https://webradiovitoria.com.br";
-        toast({
-          title: "Ponte de Conexão Ativada",
-          description: `Usando webradiovitoria.com.br para contornar a restrição de localhost do ${platform}.`,
-        });
+        origin = SUPABASE_FUNCTIONS_URL;
       } else if (isLocal) {
         let localHostname = window.location.hostname;
         if (['twitter'].includes(platform)) localHostname = "127.0.0.1";
@@ -293,7 +340,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         origin = `http://${localHostname}${port}`;
       }
 
-      const redirectUri = `${origin}/oauth/callback/${platform}/`;
+      const isBridgePlatform = ['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal;
+      const redirectUri = isBridgePlatform
+        ? `${origin}/social-oauth-callback/${platform}`
+        : `${origin}/oauth/callback/${platform}/`;
 
       const width  = 600;
       const height = 700;
@@ -431,7 +481,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
 
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== localOrigin && !(isLocalDev && event.origin === 'https://webradiovitoria.com.br')) return;
+        if (event.origin !== localOrigin && !(isLocalDev && (event.origin === 'https://ghtkdkauseesambzqfrd.supabase.co' || event.origin === 'https://webradiovitoria.com.br'))) return;
         if (!event.data || typeof event.data !== 'object') return;
         if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
         

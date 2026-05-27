@@ -26,17 +26,20 @@ export async function publishToLinkedIn(
     );
   }
 
-  // LinkedIn usa platformUserId (pessoa), nunca pageId — o URN é montado no
-  // publishLinkedin(), portanto não devemos adicionar o prefixo novamente aqui.
   const rawUserId = creds.platformUserId as string | undefined;
+  const pageId = creds.pageId as string | undefined;
+
   if (!rawUserId) {
     throw new Error(
       "LinkedIn: platform_user_id não encontrado na conexão. Reconecte a conta."
     );
   }
 
-  // Remove prefixo "urn:li:person:" caso já exista (prevenção de duplicação)
-  const platformUserId = rawUserId.replace(/^urn:li:person:/, "");
+  // Se pageId existir, é uma company page → usa URN de organização
+  // Caso contrário, é perfil pessoal → usa URN de pessoa
+  const platformUserId = pageId
+    ? `urn:li:organization:${pageId}`
+    : rawUserId.replace(/^urn:li:person:/, "");
 
   // ── Converter mediaUrls[] → Array<{ url, altText? }> ─────────────────────
   const mediaItems: Array<{ url: string; altText?: string }> | null =
