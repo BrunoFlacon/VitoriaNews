@@ -32,11 +32,7 @@ export const APIFields = ({ config, credentials, fields, updateFormField, formVa
         const val = (formValues[config.id] || credentials[config.id] || {})[field.key] || "";
 
         return (
-          <form key={field.key} onSubmit={(e) => e.preventDefault()} className="space-y-1.5">
-            {/* Hidden inputs para acessibilidade e parar o aviso do navegador */}
-            <input type="text" name={`username_${field.key}`} autoComplete="username" className="sr-only" tabIndex={-1} value={`api_user_${config.id}`} readOnly />
-            <button type="submit" className="hidden">Submit</button>
-
+          <div key={field.key} className="space-y-1.5">
             <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">
               {field.label.includes("TOKEN") && config.id === 'telegram' ? "BOT TOKEN (@BOTFATHER)" : field.label}
             </label>
@@ -65,7 +61,7 @@ export const APIFields = ({ config, credentials, fields, updateFormField, formVa
                 </button>
               )}
             </div>
-          </form>
+          </div>
         );
       })}
     </div>
