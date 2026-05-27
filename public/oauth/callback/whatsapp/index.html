@@ -13,7 +13,7 @@
                 
                 // Envia a URL completa de volta para a janela principal do Hub
                 // O Hub local vai processar o código de autorização
-                window.opener.postMessage({ type: "oauth-callback", url: window.location.href }, "https://webradiovitoria.com.br"); 
+                window.opener.postMessage({ type: "oauth-callback", url: window.location.href }, "*"); 
                 
                 // Exibe mensagem de sucesso visual
                 document.getElementById('status').innerText = "Autorização concluída! Esta janela fechará em instantes.";

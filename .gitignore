@@ -74,3 +74,6 @@ testsprite_tests/
 # Supabase function test files
 supabase/functions/**/tests/
 
+# Supabase CLI temp files (leak project ref and pooler URL)
+supabase/.temp/
+

@@ -14,7 +14,7 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders(req) });
   }
 
-  const verifyToken = Deno.env.get("WEBHOOK_VERIFY_TOKEN") || Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "vitoria_net_omni_secure";
+  const verifyToken = Deno.env.get("WEBHOOK_VERIFY_TOKEN") || Deno.env.get("WHATSAPP_VERIFY_TOKEN") || "";
 
   if (req.method === "GET") {
     const url = new URL(req.url);

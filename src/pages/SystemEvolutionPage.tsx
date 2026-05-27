@@ -154,7 +154,7 @@ export default function SystemEvolutionPage() {
 
   const handleAuthorize = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === "devmaster2026") {
+    if (password === import.meta.env.VITE_SYSTEM_MASTER_PASSWORD) {
       setIsAuthorized(true);
       toast({ title: "Acesso Concedido", description: "Bem-vindo aos registros mestre de evolução." });
     } else {

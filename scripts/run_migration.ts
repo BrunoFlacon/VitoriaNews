@@ -1,9 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const supabase = createClient(
-  "https://ghtkdkauseesambzqfrd.supabase.co",
-  "" // I'll get this from env
-);
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "https://ghtkdkauseesambzqfrd.supabase.co";
+const SUPABASE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 async function run() {
   const query = `

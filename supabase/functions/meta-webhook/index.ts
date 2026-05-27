@@ -14,7 +14,7 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders(req) });
   }
 
-  const verifyToken = Deno.env.get("WEBHOOK_VERIFY_TOKEN") || "vitoria_net_omni_secure";
+  const verifyToken = Deno.env.get("WEBHOOK_VERIFY_TOKEN") || "";
 
   // ── 1. ROTA GET: Validação do Webhook (Meta Challenge) ──
   if (req.method === "GET") {

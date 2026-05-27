@@ -1,10 +1,10 @@
 {
-  "exclude": ["src/", "node_modules/", "supabase/.temp/"],
+  "exclude": ["src/", "node_modules/", "backups/", "supabase/.temp/"],
   "lint": {
-    "exclude": ["src/", "node_modules/", "supabase/.temp/"]
+    "exclude": ["src/", "node_modules/", "backups/", "supabase/.temp/"]
   },
   "test": {
-    "exclude": ["src/", "node_modules/", "supabase/.temp/"]
+    "exclude": ["src/", "node_modules/", "backups/", "supabase/.temp/"]
   },
   "importMap": "supabase/functions/import_map.json"
 }
