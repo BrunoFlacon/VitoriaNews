@@ -191,10 +191,11 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           await invokeFn('sync-twitter');
         }
       } else if (platformId === 'meta_ads') {
-        if (hasCredentials('meta_ads')) {
+        const metaCreds = credentials['meta_ads'] || {};
+        if (metaCreds.access_token) {
           await invokeFn('collect-meta-ads-analytics', { platform: 'meta_ads' }).catch(e => warnFilter('[Ads]', e));
         } else {
-          console.info("[Ads] Sync skipped: No credentials configured.");
+          console.info("[Ads] Sync skipped: access_token not configured.");
         }
       } else if (platformId === 'google_cloud' || platformId === 'youtube') {
         const hasGP = hasCredentials('google_cloud') || hasCredentials('youtube');
@@ -214,7 +215,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         if (hasCredentials('instagram')) tasks.push(invokeFn('collect-social-analytics', { platform: 'instagram' }).catch(e => warnFilter('[Social]', e)));
         if (hasCredentials('facebook')) tasks.push(invokeFn('collect-social-analytics', { platform: 'facebook' }).catch(e => warnFilter('[Social]', e)));
         if (hasCredentials('twitter')) tasks.push(invokeFn('sync-twitter').catch(e => warnFilter('[Twitter]', e)));
-        if (hasCredentials('meta_ads')) tasks.push(invokeFn('collect-meta-ads-analytics').catch(e => warnFilter('[Ads]', e)));
+        if (credentials['meta_ads']?.access_token) tasks.push(invokeFn('collect-meta-ads-analytics').catch(e => warnFilter('[Ads]', e)));
         if (hasCredentials('google_cloud') || hasCredentials('youtube')) {
           tasks.push(invokeFn('collect-youtube-analytics').catch(e => warnFilter('[YT]', e)));
           tasks.push(invokeFn('collect-google-analytics').catch(e => warnFilter('[GA]', e)));

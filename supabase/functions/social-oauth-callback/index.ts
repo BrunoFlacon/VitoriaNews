@@ -662,18 +662,27 @@ serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) return oauthError("unknown", "auth", "Authorization required", req);
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication", req);
-
     const { code, state: incomingState, platform, redirect_uri: incomingRedirectUri, manual_token, username: bodyUsername } = await req.json();
+
+    // Determine user: JWT auth (preferred) OR state-authenticated fallback
+    let user = null;
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "");
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token);
+      if (!authError && authUser) {
+        user = authUser;
+      }
+    }
+
+    // manual_token always requires JWT authentication
+    if (manual_token && !user) {
+      return oauthError(platform || "unknown", "auth", "Authentication required for manual token", req);
+    }
 
     // -------------------------------------------------------------------------
     // NOVO: SUPORTE A TOKEN MANUAL (THREADS)
@@ -782,15 +791,34 @@ serve(async (req: Request) => {
     if (!code || !incomingState || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required", req);
 
     // Busca state diretamente (state é sempre um UUID simples agora)
-    const { data: oauthState, error: stateError } = await supabase
-      .from("oauth_states")
-      .select("*")
-      .eq("state", incomingState)
-      .eq("user_id", user.id)
-      .eq("platform", platform)
-      .single();
-      
+    let oauthState;
+    let stateError;
+    if (user) {
+      const result = await supabase
+        .from("oauth_states")
+        .select("*")
+        .eq("state", incomingState)
+        .eq("user_id", user.id)
+        .eq("platform", platform)
+        .single();
+      oauthState = result.data;
+      stateError = result.error;
+    } else {
+      const result = await supabase
+        .from("oauth_states")
+        .select("*")
+        .eq("state", incomingState)
+        .eq("platform", platform)
+        .single();
+      oauthState = result.data;
+      stateError = result.error;
+      if (oauthState) {
+        user = { id: oauthState.user_id };
+      }
+    }
+
     if (stateError || !oauthState) return oauthError(platform, "callback", "Invalid or expired OAuth state", req);
+    if (!user) return oauthError(platform, "callback", "Invalid or expired OAuth state", req);
 
     // code_verifier vem exclusivamente da coluna do banco
     const finalVerifier = oauthState.code_verifier || "";

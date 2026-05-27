@@ -52,8 +52,8 @@ serve(async (req: Request) => {
     let adAccountId = creds?.ad_account_id || creds?.adAccountId || "";
 
     if (!accessToken) {
-      return new Response(JSON.stringify({ error: "Meta Ads access token not configured" }), {
-        status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+      return new Response(JSON.stringify({ success: false, error: "Meta Ads access token not configured" }), {
+        status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -64,15 +64,15 @@ serve(async (req: Request) => {
       );
       const accountsData = await accountsRes.json();
       if (accountsData.error) {
-        return new Response(JSON.stringify({ error: `Failed to fetch ad accounts: ${accountsData.error.message}` }), {
-          status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+        return new Response(JSON.stringify({ success: false, error: `Failed to fetch ad accounts: ${accountsData.error.message}` }), {
+          status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
         });
       }
       if (accountsData.data?.length > 0) {
         adAccountId = accountsData.data[0].id;
       } else {
-        return new Response(JSON.stringify({ error: "No ad accounts found" }), {
-          status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+        return new Response(JSON.stringify({ success: false, error: "No ad accounts found" }), {
+          status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
         });
       }
     }
@@ -95,8 +95,8 @@ serve(async (req: Request) => {
     const campaignsData = await campaignsRes.json();
 
     if (campaignsData.error) {
-      return new Response(JSON.stringify({ error: `Failed to fetch campaigns: ${campaignsData.error.message}` }), {
-        status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+      return new Response(JSON.stringify({ success: false, error: `Failed to fetch campaigns: ${campaignsData.error.message}` }), {
+        status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 

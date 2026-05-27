@@ -485,6 +485,15 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
                 } catch (e) {
                   console.warn("Falha ao processar corpo do erro:", e);
                 }
+
+                // If the state was already processed by the callback page's direct call, treat as success
+                if (errorMsg.includes("Invalid or expired OAuth state")) {
+                  console.log("[OAUTH CALLBACK] State já processado — callback direto salvou a conexão.");
+                  await finalize(true);
+                  toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
+                  return;
+                }
+
                 console.error("[OAUTH CALLBACK ERROR] Erro detalhado:", errorMsg);
                 throw new Error(errorMsg);
               }

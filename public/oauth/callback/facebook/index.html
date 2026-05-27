@@ -2,32 +2,54 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://ghtkdkauseesambzqfrd.supabase.co; font-src 'self'; frame-src 'self';">
     <title>Conectando Threads - Vitória Net</title>
     <script>
-        // Esta página serve como ponte entre o GitHub Pages e o nosso Hub
-        // Ela captura o 'code' da URL e envia para a janela principal (opener)
         window.onload = function() {
-            if (window.opener) {
-                console.log("[OAUTH BRIDGE] Enviando dados para a janela principal...");
+            (function() {
+                var urlParams = new URLSearchParams(window.location.search);
+                var code = urlParams.get('code');
+                var state = urlParams.get('state');
+                var errParam = urlParams.get('error');
+                var pathParts = window.location.pathname.split('/').filter(Boolean);
+                var platform = pathParts.length >= 3 ? pathParts[2] : '';
                 
-                // Envia a URL completa de volta para a janela principal do Hub
-                // O Hub local vai processar o código de autorização
-                window.opener.postMessage({ type: "oauth-callback", url: window.location.href }, "*"); 
+                // Direct edge function call (works even when postMessage fails due to COOP/CORS)
+                if (code && state && platform) {
+                    var supabaseUrl = 'https://ghtkdkauseesambzqfrd.supabase.co';
+                    var anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodGtka2F1c2Vlc2FtYnpxZnJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NTUwMTQsImV4cCI6MjA4OTUzMTAxNH0.X1OeIwLezATvztpzJzDJWMSUgukNXIWNQp2L1rHkLGs';
+                    var redirectUri = window.location.origin + window.location.pathname;
+                    fetch(supabaseUrl + '/functions/v1/social-oauth-callback', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + anonKey },
+                        body: JSON.stringify({ code: code, state: state, platform: platform, redirect_uri: redirectUri })
+                    }).then(function(r) { return r.json(); }).then(function(data) {
+                        if (data.success) {
+                            document.getElementById('status').innerText = 'Conta conectada com sucesso!';
+                            document.getElementById('loader').style.display = 'none';
+                        }
+                    }).catch(function(err) {
+                        console.warn('[OAUTH CALLBACK] Fallback error:', err);
+                    });
+                }
                 
-                // Exibe mensagem de sucesso visual
-                document.getElementById('status').innerText = "Autorização concluída! Esta janela fechará em instantes.";
+                if (errParam) {
+                    document.getElementById('status').innerText = 'Autorização cancelada ou recusada.';
+                    document.getElementById('loader').style.display = 'none';
+                    return;
+                }
                 
-                // Fecha a janela do popup após um pequeno delay para garantir o postMessage
-                setTimeout(() => {
-                    window.close();
-                }, 1500);
-            } else {
-                // Caso a pessoa abra direto ou o opener tenha sido perdido
-                console.warn("[OAUTH BRIDGE] Janela principal não encontrada.");
-                document.getElementById('status').innerText = "Conexão finalizada. Você pode fechar esta aba.";
-                document.getElementById('loader').style.display = 'none';
-            }
+                if (window.opener) {
+                    console.log('[OAUTH BRIDGE] Enviando dados para a janela principal...');
+                    window.opener.postMessage({ type: 'oauth-callback', url: window.location.href }, '*');
+                    document.getElementById('status').innerText = 'Autorização concluída! Esta janela fechará em instantes.';
+                    setTimeout(function() { window.close(); }, 1500);
+                } else {
+                    console.warn('[OAUTH BRIDGE] Janela principal não encontrada.');
+                    document.getElementById('status').innerText = 'Conexão finalizada. Verifique o painel para confirmar.';
+                    document.getElementById('loader').style.display = 'none';
+                }
+            })();
         };
     </script>
     <style>
