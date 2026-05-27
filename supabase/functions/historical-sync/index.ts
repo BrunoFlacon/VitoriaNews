@@ -6,7 +6,43 @@ const _corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-serve(async (req) => {
+interface YTPlaylistItem {
+  contentDetails: { videoId: string };
+  snippet: { publishedAt: string };
+}
+
+interface YTVideo {
+  id: string;
+  statistics: { viewCount: string; likeCount: string; commentCount: string };
+}
+
+interface MetaMediaItem {
+  id: string;
+  media_type?: string;
+  created_time?: string;
+  timestamp?: string;
+  like_count?: number;
+  comments_count?: number;
+  likes?: { summary?: { total_count?: number } };
+  comments?: { summary?: { total_count?: number } };
+  shares?: { count?: number };
+}
+
+interface PostMetric {
+  user_id: string;
+  social_account_id: string;
+  post_id: string;
+  platform: string;
+  post_type: string;
+  post_url: string;
+  published_at: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+}
+
+serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: _corsHeaders })
 
   try {
@@ -40,7 +76,7 @@ serve(async (req) => {
         return new Response(JSON.stringify({ status: 'idle', message: 'Nada pendente e todas as atualizações recentes já feitas.' }), { headers: _corsHeaders });
       }
       states = ongoingStates;
-      ongoingMode = true; // Se ativou o modo continuo, nós só rodaremos 1 PÁGINA (a página atual) sem paginação velha!
+      ongoingMode = true; 
     }
 
     const state = states[0];
@@ -52,47 +88,41 @@ serve(async (req) => {
     }
 
     const platform = state.platform.toLowerCase();
-    // Se estiver em Ongoing Mode, queremos puxar a Home fresca (cursor null). Se não, puxamos o cursor antigo salvo.
     let nextCursor = ongoingMode ? null : state.next_cursor;
-    let isCompleted = ongoingMode ? true : false;
-    let allNewPosts: any[] = [];
+    let isCompleted = ongoingMode;
+    let allNewPosts: Partial<PostMetric>[] = [];
     
-    // VAI RODAR UM LAÇO MODERADO (MÁXIMO 3 PÁGINAS POR CICLO NO MODO HISTÓRICO)
-    // No modo "Ongoing" rola apenas 1 página (a home principal com os posts mais novos).
     let pagesProcessed = 0;
     const MAX_PAGES = ongoingMode ? 1 : 3;
-
-    // Função de delay para escalonar as chamadas e não bater nas portas da API tudo num milisegundo
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     while (pagesProcessed < MAX_PAGES && !isCompleted) {
-       let pagePosts = [];
+       const pagePosts: Partial<PostMetric>[] = [];
        pagesProcessed++;
 
        if (pagesProcessed > 1) {
-           await delay(1500); // 1.5 segundos de respiro entre páginas para escalonamento
+           await delay(1500); 
        }
 
        if (platform === 'youtube') {
            const accessToken = creds.access_token;
-           let playlistId = state.metadata?.uploads_playlist_id || account.platform_user_id.replace(/^UC/, 'UU');
+           const playlistId = state.metadata?.uploads_playlist_id || account.platform_user_id.replace(/^UC/, 'UU');
 
-           // Limite 50 é o MÁXIMO da API do Youtube por página. O "While" cuida de puxar várias páginas até o fim.
            const ytUrl = `https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails,snippet&maxResults=50&playlistId=${playlistId}${nextCursor ? `&pageToken=${nextCursor}` : ''}`;
            const res = await fetch(ytUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
            const data = await res.json();
 
            if (data.error) throw new Error(data.error.message);
 
-           const videoIds = data.items?.map((item: any) => item.contentDetails.videoId).join(',');
+           const videoIds = data.items?.map((item: YTPlaylistItem) => item.contentDetails.videoId).join(',');
            
            if (videoIds) {
              const statsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds}`;
              const statRes = await fetch(statsUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
              const statData = await statRes.json();
              
-             (statData.items || []).forEach((vid: any) => {
-                const orig = data.items.find((i:any) => i.contentDetails.videoId === vid.id);
+             (statData.items || []).forEach((vid: YTVideo) => {
+                const orig = (data.items as YTPlaylistItem[]).find(i => i.contentDetails.videoId === vid.id);
                 pagePosts.push({
                    user_id: account.user_id,
                    social_account_id: state.social_account_id,
@@ -112,7 +142,6 @@ serve(async (req) => {
        } 
        
        else if (platform === 'facebook' || platform === 'instagram') {
-           // Meta Graph API Pagination LIMIT=100
            const accessToken = creds.access_token;
            const edge = platform === 'facebook' ? 'published_posts' : 'media';
            const fields = platform === 'facebook' ? 'id,created_time,shares,comments.summary(true),likes.summary(true),views' : 'id,timestamp,media_url,like_count,comments_count,media_type';
@@ -123,7 +152,7 @@ serve(async (req) => {
            
            if (data.error) throw new Error(data.error.message);
 
-           (data.data || []).forEach((item: any) => {
+           (data.data || []).forEach((item: MetaMediaItem) => {
               pagePosts.push({
                   user_id: account.user_id,
                   social_account_id: state.social_account_id,
@@ -141,21 +170,19 @@ serve(async (req) => {
            if (!nextCursor || data.data.length === 0) isCompleted = true;
        }
        else {
-           isCompleted = true; // Placeholder para Twitter/Linkedin futuramente
+           isCompleted = true; 
        }
 
        allNewPosts = [...allNewPosts, ...pagePosts];
        
-       if (isCompleted) break; // Sai do laço se não houver mais páginas antigas do ano de criação
+       if (isCompleted) break; 
     }
 
-    // Salva a porrada de posts de uma só vez
     if (allNewPosts.length > 0) {
       const { error: insErr } = await supabase.from('post_metrics').upsert(allNewPosts, { onConflict: 'social_account_id,post_id' });
       if (insErr) console.error("Database upsert error:", insErr);
     }
 
-    // Grava onde parou, para o próximo ciclo de 5min puxar mais 1000 posts (se faltar algum)
     await supabase.from('historical_sync_state').update({
        next_cursor: nextCursor,
        is_completed: isCompleted,
@@ -165,6 +192,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ status: 'success', total_posts_archived: allNewPosts.length }), { headers: _corsHeaders })
     
   } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: _corsHeaders })
+    const err = error as Error;
+    return new Response(JSON.stringify({ error: err.message }), { status: 400, headers: _corsHeaders })
   }
 })
