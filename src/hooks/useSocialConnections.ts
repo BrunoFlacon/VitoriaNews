@@ -204,9 +204,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
       }
 
-      // ── Deduplicação: agrupa conexões que representam o mesmo perfil ─────────
-      // Útil para plataformas pessoais (ex: Threads) onde podem existir registros
-      // duplicados com platform_user_id diferente devido a falhas anteriores.
+      // ── Deduplicação: só para plataformas de perfil único (ex: Threads) ─────
+      // Facebook/Instagram podem ter múltiplos perfis (pessoal + páginas legítimas).
+      // Threads/Twitter/TikTok/LinkedIn só permitem 1 perfil — duplicatas são bugs.
+      const singleProfilePlatforms = ['threads', 'twitter', 'x', 'tiktok', 'linkedin', 'youtube', 'pinterest', 'spotify'];
       {
         const groups = new Map<string, SocialConnection[]>();
         for (const c of finalConnections) {
@@ -217,43 +218,32 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
         const deduped: SocialConnection[] = [];
         for (const [, conns] of groups) {
-          if (conns.length === 1) {
-            deduped.push(conns[0]);
+          if (conns.length === 1 || !singleProfilePlatforms.includes(conns[0].platform)) {
+            deduped.push(...conns);
             continue;
           }
 
-          // Encontra a conexão principal: aquela com mais dados reais
-          // (username, foto, nome não genérico)
+          // Plataforma de perfil único com múltiplos registros → mesclar
           const primary = conns.reduce<SocialConnection | null>((best, c) => {
             if (!best) return c;
             const score = (conn: SocialConnection) =>
               (conn.username ? 2 : 0) +
               (conn.profile_image_url ? 1 : 0) +
-              (!/user|profile|threads/i.test(conn.page_name || "") ? 1 : 0) +
               (Number(conn.followers_count) > 0 ? 1 : 0);
             return score(c) > score(best) ? c : best;
           }, null);
 
-          const rest = conns.filter(c => c !== primary);
-
-          if (primary && rest.length > 0) {
+          if (primary) {
+            const rest = conns.filter(c => c !== primary);
             const merged = { ...primary };
             for (const r of rest) {
-              merged.posts_count = (merged.posts_count || 0) + (r.posts_count || 0);
-              merged.followers_count = Math.max(
-                merged.followers_count || 0,
-                r.followers_count || 0
-              );
-              if (!merged.profile_image_url && r.profile_image_url) {
-                merged.profile_image_url = r.profile_image_url;
-              }
-              if (!merged.username && r.username) {
-                merged.username = r.username;
-              }
+              merged.posts_count = Math.max(merged.posts_count || 0, r.posts_count || 0);
+              merged.followers_count = Math.max(merged.followers_count || 0, r.followers_count || 0);
+              if (!merged.profile_image_url && r.profile_image_url) merged.profile_image_url = r.profile_image_url;
+              if (!merged.username && r.username) merged.username = r.username;
             }
             deduped.push(merged);
           } else {
-            // Se não achou primary mas há duplicatas, usa a primeira
             deduped.push(conns[0]);
           }
         }
