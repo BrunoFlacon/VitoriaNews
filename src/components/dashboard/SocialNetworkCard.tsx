@@ -1,7 +1,7 @@
 import { forwardRef, useState, useEffect, useRef, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Plus, Settings, Loader2, User, X } from "lucide-react";
+import { Check, Plus, Settings, Loader2, Star, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { SafeImage } from "@/components/ui/SafeImage";
@@ -18,6 +18,7 @@ interface SocialAccount {
   token_expires_at?: string | null;
   isExpiringSoon?: boolean;
   daysUntilExpiry?: number | null;
+  is_primary?: boolean;
 }
 
 interface SocialNetworkCardProps {
@@ -31,6 +32,7 @@ interface SocialNetworkCardProps {
   accounts?: SocialAccount[];
   selectedAccountId?: string | null;
   onSelectAccount?: (account: SocialAccount) => void;
+  onSetPrimary?: (connectionId: string) => void;
 }
 
 export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCardProps>(
@@ -45,6 +47,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
     accounts = [],
     selectedAccountId,
     onSelectAccount,
+    onSetPrimary,
   }, ref) => {
     const [gearOpen, setGearOpen] = useState(false);
     const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
@@ -269,8 +272,11 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
+                          <p className="text-sm font-medium truncate flex items-center gap-1.5">
                             {account.username ? `@${account.username}` : (account.page_name || account.platform_user_id || "Perfil")}
+                            {account.is_primary && (
+                              <Star className="w-3 h-3 fill-yellow-500 text-yellow-500 shrink-0" />
+                            )}
                           </p>
                             <div className="flex flex-wrap items-center gap-x-2">
                               {account.followers_count != null && !(platform.id === 'whatsapp' && account.followers_count === 0) && (
@@ -288,12 +294,33 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                               )}
                             </div>
                         </div>
-                        {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                        <div className="flex items-center gap-1">
+                          {account.is_primary && (
+                            <span className="text-[8px] font-black uppercase tracking-wider text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Padrão</span>
+                          )}
+                          {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                        </div>
                       </button>
                     );
                   })
                 )}
               </div>
+              {accounts.length > 1 && onSetPrimary && (
+                <div className="border-t border-border/60 p-1.5">
+                  {accounts.map((account) => (
+                    !account.is_primary ? (
+                      <button
+                        key={`set-primary-${account.id}`}
+                        onClick={(e) => { e.stopPropagation(); onSetPrimary(account.id); setGearOpen(false); }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        <Star className="w-3.5 h-3.5" />
+                        Definir &ldquo;{account.username ? `@${account.username}` : (account.page_name || "este perfil")}&rdquo; como padrão
+                      </button>
+                    ) : null
+                  ))}
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>,
           document.body

@@ -24,6 +24,28 @@ export function usePublisher() {
   const { toast } = useToast();
   const { addNotification } = useNotifications();
 
+  const resolvePrimaryPages = async (platforms: string[]): Promise<string[]> => {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) return platforms;
+
+    const { data: connections } = await supabase
+      .from('social_connections')
+      .select('platform, platform_user_id')
+      .eq('user_id', session.session.user.id)
+      .eq('is_primary', true)
+      .in('platform', platforms);
+
+    if (!connections || connections.length === 0) return platforms;
+
+    return platforms.map(p => {
+      const primary = connections.find(c => c.platform === p);
+      if (primary?.platform_user_id) {
+        return `${p}|${primary.platform_user_id}`;
+      }
+      return p;
+    });
+  };
+
   const publishPost = async (
     postId: string,
     platforms: string[],
@@ -47,6 +69,8 @@ export function usePublisher() {
         throw new Error("Sessão inválida");
       }
 
+      const resolvedPlatforms = await resolvePrimaryPages(platforms);
+
       const baseUrl = import.meta.env.VITE_SUPABASE_URL;
       const response = await fetch(
         `${baseUrl}/functions/v1/publish-post`,
@@ -58,7 +82,7 @@ export function usePublisher() {
           },
           body: JSON.stringify({
             postId,
-            platforms,
+            platforms: resolvedPlatforms,
             content,
             mediaUrls,
           }),

@@ -9,6 +9,7 @@ export interface SocialConnection {
   id: string;
   platform: string;
   is_connected: boolean;
+  is_primary: boolean;
   page_name: string | null;
   platform_user_id: string | null;
   token_expires_at: string | null;
@@ -58,7 +59,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const results = await Promise.allSettled([
         supabase
           .from('social_connections')
-          .select('id, platform, is_connected, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
+          .select('id, platform, is_connected, is_primary, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
           .eq('user_id', user.id),
         supabase
           .from('social_accounts')
@@ -160,6 +161,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           id: `telegram-api-${user.id}`,
           platform: 'telegram',
           is_connected: true,
+          is_primary: false,
           page_name: firstAcc?.username ? `@${firstAcc.username}` : 'Bot Telegram',
           platform_user_id: firstAcc?.platform_user_id || null,
           token_expires_at: null,
@@ -182,6 +184,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           id: `whatsapp-api-${user.id}`,
           platform: 'whatsapp',
           is_connected: true,
+          is_primary: false,
           page_name: firstAcc?.username || firstAcc?.page_name || 'WhatsApp Business',
           platform_user_id: firstAcc?.platform_user_id || null,
           token_expires_at: null,
@@ -537,6 +540,36 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
     }
   };
 
+  const setPrimary = async (connectionId: string) => {
+    if (!user) return;
+    try {
+      const conn = connections.find(c => c.id === connectionId);
+      if (!conn) return;
+
+      // Unset previous primary for this platform
+      await supabase
+        .from('social_connections')
+        .update({ is_primary: false })
+        .eq('user_id', user.id)
+        .eq('platform', conn.platform)
+        .eq('is_primary', true);
+
+      // Set new primary
+      const { error } = await supabase
+        .from('social_connections')
+        .update({ is_primary: true })
+        .eq('user_id', user.id)
+        .eq('id', connectionId);
+
+      if (error) throw error;
+
+      toast({ title: "Perfil principal definido", description: `${conn.page_name || conn.platform} será usado como padrão para publicações.` });
+      await refetch();
+    } catch (error) {
+      toast({ title: "Erro", description: "Não foi possível definir o perfil principal.", variant: "destructive" });
+    }
+  };
+
   const disconnect = async (platformOrKey: string) => {
     if (!user) return;
     try {
@@ -555,6 +588,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         .from('social_connections')
         .update({
           is_connected:  false,
+          is_primary:    false,
           access_token:  null,
           refresh_token: null,
           updated_at:    new Date().toISOString(),
@@ -574,5 +608,5 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
     }
   };
 
-  return { connections, loading: isLoading, initiateOAuth, disconnect, refetch };
+  return { connections, loading: isLoading, initiateOAuth, disconnect, setPrimary, refetch };
 }

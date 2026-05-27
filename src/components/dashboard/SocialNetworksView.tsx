@@ -21,7 +21,7 @@ const SOCIAL_PLATFORM_IDS = socialPlatforms
 export const SocialNetworksView = memo(() => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { connections, loading, initiateOAuth, disconnect, refetch } = useSocialConnections();
+  const { connections, loading, initiateOAuth, disconnect, setPrimary, refetch } = useSocialConnections();
   const { stats, refresh: refreshStats } = useSocialStats();
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -197,18 +197,19 @@ export const SocialNetworksView = memo(() => {
              const displayPhoto = getProxyUrl(rawPhoto);
  
              return {
-               id: conn.id,
-               page_name: accountStats?.username || conn.page_name || conn.username,
-               platform_user_id: conn.platform_user_id,
-               profile_image_url: displayPhoto,
-               followers_count: Math.max(Number(accountStats?.followers_count || 0), Number(conn.followers_count || 0)),
-               posts_count: Math.max(Number(accountStats?.posts_count || 0), Number(conn.posts_count || 0)),
-               page_id: conn.page_id,
-               username: accountStats?.username || conn.username,
-               token_expires_at: conn.token_expires_at,
-               isExpiringSoon: conn.isExpiringSoon,
-               daysUntilExpiry: conn.daysUntilExpiry,
-             };
+                id: conn.id,
+                page_name: accountStats?.username || conn.page_name || conn.username,
+                platform_user_id: conn.platform_user_id,
+                profile_image_url: displayPhoto,
+                followers_count: Math.max(Number(accountStats?.followers_count || 0), Number(conn.followers_count || 0)),
+                posts_count: Math.max(Number(accountStats?.posts_count || 0), Number(conn.posts_count || 0)),
+                page_id: conn.page_id,
+                username: accountStats?.username || conn.username,
+                token_expires_at: conn.token_expires_at,
+                isExpiringSoon: conn.isExpiringSoon,
+                daysUntilExpiry: conn.daysUntilExpiry,
+                is_primary: conn.is_primary,
+              };
            });
 
           return (
@@ -226,6 +227,7 @@ export const SocialNetworksView = memo(() => {
               onSelectAccount={(account) =>
                 setSelectedAccounts((prev) => ({ ...prev, [platformId]: account.id }))
               }
+              onSetPrimary={setPrimary}
             />
           );
         })}

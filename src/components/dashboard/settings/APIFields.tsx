@@ -29,7 +29,9 @@ export const APIFields = ({ config, credentials, fields, updateFormField, formVa
         const fieldId = `${config.id}-${field.key}`;
         const isVisible = visibleFields[fieldId] || false;
         const savedValue = credentials[config.id]?.[field.key];
-        const val = (formValues[config.id] || credentials[config.id] || {})[field.key] || "";
+        const formVal = formValues[config.id]?.[field.key];
+        const credVal = credentials[config.id]?.[field.key];
+        const val = formVal !== undefined && formVal !== "" ? formVal : (credVal || "");
 
         return (
           <div key={field.key} className="space-y-1.5">
