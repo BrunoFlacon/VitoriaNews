@@ -369,31 +369,17 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 let threadsPhoto = conn.profile_image_url || conn.profile_picture || null;
                 let threadsRealId = threadsUserId;
 
-                // Passo 1: Buscar Perfil Básico
+                // Passo 1: Buscar Perfil Básico (Threads API v1.0 só retorna id, username, name)
                 try {
-                  const profileUrl = `https://graph.threads.net/v1.0/${node}?fields=id,username,name,threads_profile_picture_url,threads_biography,followers_count,threads_count&access_token=${conn.access_token}`;
+                  const profileUrl = `https://graph.threads.net/v1.0/${node}?fields=id,username,name&access_token=${conn.access_token}`;
                   const profileResp = await fetch(profileUrl);
 
                   if (profileResp.ok) {
                     const profileData = await profileResp.json();
                     threadsUsername = profileData.username || threadsUsername;
-                    threadsPhoto = profileData.threads_profile_picture_url || profileData.profile_picture_url || threadsPhoto;
                     threadsRealId = profileData.id || threadsRealId;
                     
-                    console.log(`[COLLECT] Threads API Raw Response:`, JSON.stringify(profileData));
-
-                    if (profileData.followers_count !== undefined && profileData.followers_count !== null) {
-                      threadsFollowers = Number(profileData.followers_count);
-                      console.log(`[COLLECT] Threads Followers (from basic profile): ${threadsFollowers}`);
-                    } else {
-                      console.warn(`[COLLECT] Threads Followers field missing in basic profile!`);
-                    }
-                    
-                    if (profileData.threads_count !== undefined && profileData.threads_count !== null) {
-                      threadsTotalPosts = Number(profileData.threads_count);
-                      console.log(`[COLLECT] Threads Total Posts (from basic profile): ${threadsTotalPosts}`);
-                    }
-                    console.log(`[COLLECT] Threads profile OK: @${threadsUsername} | Photo: ${threadsPhoto?.substring(0, 50)}...`);
+                    console.log(`[COLLECT] Threads profile OK: @${threadsUsername}`);
                   } else {
                     const errText = await profileResp.text();
                     console.error(`[COLLECT] Threads Profile Error ${profileResp.status}: ${errText}`);
@@ -402,19 +388,35 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   console.error(`[COLLECT] Threads profile request failed:`, e);
                 }
 
+                // Busca foto separadamente (threads_profile_picture_url funciona como campo único)
+                try {
+                  const photoUrl = `https://graph.threads.net/v1.0/${node}?fields=threads_profile_picture_url&access_token=${conn.access_token}`;
+                  const photoResp = await fetch(photoUrl);
+                  if (photoResp.ok) {
+                    const photoData = await photoResp.json();
+                    if (photoData.threads_profile_picture_url) {
+                      threadsPhoto = photoData.threads_profile_picture_url;
+                      console.log(`[COLLECT] Threads photo fetched`);
+                    }
+                  }
+                } catch (e) {}
+
                 // Passo 1.5: Buscar Métricas de Seguidores via Insights (Método Oficial)
+                // A resposta tem formato: { data: [{ name, total_value: { value } }] }
                 try {
                   const insightsUrl = `https://graph.threads.net/v1.0/${node}/threads_insights?metric=followers_count&access_token=${conn.access_token}`;
                   const insightsResp = await fetch(insightsUrl);
                   
                   if (insightsResp.ok) {
                     const insightsData = await insightsResp.json();
-                    // A API retorna um array de métricas; filtramos a contagem de seguidores
                     if (insightsData.data && insightsData.data.length > 0) {
                       const followerMetric = insightsData.data.find((m: any) => m.name === 'followers_count');
-                      if (followerMetric && followerMetric.values && followerMetric.values.length > 0) {
-                        threadsFollowers = followerMetric.values[0].value;
-                        console.log(`[COLLECT] Threads Followers coletado (via insights): ${threadsFollowers}`);
+                      if (followerMetric?.total_value?.value !== undefined && followerMetric.total_value.value !== null) {
+                        threadsFollowers = Number(followerMetric.total_value.value);
+                        console.log(`[COLLECT] Threads Followers (via insights total_value): ${threadsFollowers}`);
+                      } else if (followerMetric?.values?.[0]?.value !== undefined) {
+                        threadsFollowers = Number(followerMetric.values[0].value);
+                        console.log(`[COLLECT] Threads Followers (via insights values array): ${threadsFollowers}`);
                       }
                     }
                   } else {

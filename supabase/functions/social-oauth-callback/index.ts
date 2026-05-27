@@ -337,12 +337,13 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   }
 
   // PASSO 3 — Buscar perfil completo com foto e métricas
-  // Campos da API do Threads v1.0:
-  //   id, username, name, threads_profile_picture_url,
-  //   threads_biography, followers_count, threads_count
+  // Threads API v1.0:
+  //   Perfil básico: id, username, name (NÃO tem followers_count nem threads_count)
+  //   Insights: /threads_insights?metric=followers_count (retorna total_value.value)
+  //   Foto: threads_profile_picture_url NÃO é campo válido no perfil básico
   const profileRes = await fetch(
     `https://graph.threads.net/v1.0/me?` + new URLSearchParams({
-      fields:       "id,username,name,threads_profile_picture_url,threads_biography,followers_count,threads_count",
+      fields:       "id,username,name",
       access_token: accessToken,
     })
   );
@@ -352,9 +353,7 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   console.log("[THREADS] Dados do perfil:", JSON.stringify({
     id:              profileData.id,
     username:        profileData.username,
-    has_photo:       !!profileData.threads_profile_picture_url,
-    followers:       profileData.followers_count,
-    posts:           profileData.threads_count,
+    name:            profileData.name,
   }));
 
   if (profileData.error || !profileData.id) {
@@ -365,10 +364,35 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
   const platformUserId  = profileData.id;
   const username        = profileData.username  || "";
   const displayName     = profileData.name      || username         || "";
-  let profileImageUrl   = profileData.threads_profile_picture_url || "";
-  const followersCount  = Number(profileData.followers_count) || 0;
   
-  let postsCount = Number(profileData.threads_count) || 0;
+  // Busca foto via Threads API (endpoint /v20.0 + profile_picture_url)
+  let profileImageUrl = "";
+  try {
+    const photoResp = await fetch(
+      `https://graph.threads.net/v1.0/me?fields=threads_profile_picture_url&access_token=${accessToken}`
+    );
+    if (photoResp.ok) {
+      const photoData = await photoResp.json();
+      profileImageUrl = photoData.threads_profile_picture_url || "";
+    }
+  } catch (e) {}
+
+  // Busca seguidores via Insights
+  let followersCount = 0;
+  try {
+    const insResp = await fetch(
+      `https://graph.threads.net/v1.0/me/threads_insights?metric=followers_count&access_token=${accessToken}`
+    );
+    if (insResp.ok) {
+      const insData = await insResp.json();
+      if (insData.data?.[0]?.total_value?.value) {
+        followersCount = Number(insData.data[0].total_value.value);
+      }
+    }
+  } catch (e) {}
+
+  // Busca contagem de posts via /me/threads
+  let postsCount = 0;
   if (!postsCount) {
     try {
       const postsResp = await fetch(`https://graph.threads.net/v1.0/me/threads?fields=id&limit=100&access_token=${accessToken}`);
