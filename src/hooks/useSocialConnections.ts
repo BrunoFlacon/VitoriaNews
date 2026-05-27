@@ -278,9 +278,13 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Threads + TikTok + LinkedIn + Ponte de Conexão (webradiovitoria.com.br)
-      // Ambas as plataformas não aceitam localhost. Se estivermos em local, usamos o domínio de produção como ponte.
-      if (['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal) {
+      // Ponte de Conexão via Edge Function (para LinkedIn e TikTok que exigem HTTPS mas
+      // podem não ter o callback registrado no domínio de produção).
+      // Meta platforms (Threads, Facebook, Instagram, WhatsApp) usam webradiovitoria.com.br
+      // porque esse domínio já está registrado nos apps da Meta.
+      if (['linkedin', 'tiktok'].includes(platform) && isLocal) {
+        origin = "https://ghtkdkauseesambzqfrd.supabase.co/functions/v1";
+      } else if (['threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
         origin = "https://webradiovitoria.com.br";
         toast({
           title: "Ponte de Conexão Ativada",
@@ -293,8 +297,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         origin = `http://${localHostname}${port}`;
       }
 
-      const isBridge = ['threads', 'tiktok', 'facebook', 'instagram', 'whatsapp', 'linkedin'].includes(platform) && isLocal;
-      const redirectUri = `${origin}/oauth/callback/${platform}/`;
+      const isWebRadioBridge = ['threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal;
+      const isEdgeBridge = ['linkedin', 'tiktok'].includes(platform) && isLocal;
+      const redirectUri = isEdgeBridge
+        ? `${origin}/social-oauth-callback/${platform}`
+        : `${origin}/oauth/callback/${platform}/`;
 
       const width  = 600;
       const height = 700;
@@ -432,7 +439,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
 
       const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== localOrigin && !(isLocalDev && event.origin === 'https://webradiovitoria.com.br')) return;
+        if (event.origin !== localOrigin && !(isLocalDev && (event.origin === 'https://webradiovitoria.com.br' || event.origin === 'https://ghtkdkauseesambzqfrd.supabase.co'))) return;
         if (!event.data || typeof event.data !== 'object') return;
         if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
         
