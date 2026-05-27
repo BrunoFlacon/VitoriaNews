@@ -739,90 +739,22 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
-  // ── GET: Serve callback HTML page (usado como ponte para plataformas que exigem HTTPS) ──
+  // ── GET: Redirect to production domain's OAuth callback popup ──
   if (req.method === "GET") {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     const error = url.searchParams.get("error");
+
     const pathParts = url.pathname.split("/").filter(Boolean);
     const platform = pathParts[pathParts.length - 1] || "unknown";
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    // Se LinkedIn devolver erro, redireciona com o erro
+    const redirectUrl = error
+      ? `http://localhost:8081/oauth/callback/${platform}/?error=${encodeURIComponent(error)}`
+      : `http://localhost:8081/oauth/callback/${platform}/?code=${encodeURIComponent(code || "")}&state=${encodeURIComponent(state || "")}`;
 
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Conectando ${platform}...</title>
-  <style>
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;}
-    .container{max-width:400px;padding:40px;background:rgba(30,41,59,0.5);border-radius:24px;border:1px solid rgba(255,255,255,0.1);}
-    .icon{font-size:64px;margin-bottom:24px;}
-    h1{font-size:20px;margin:0 0 12px;font-weight:700;}
-    p{color:#94a3b8;font-size:14px;line-height:1.6;}
-    .loader{border:3px solid rgba(255,255,255,0.1);border-top:3px solid #3b82f6;border-radius:50%;width:24px;height:24px;animation:spin 1s linear infinite;margin:20px auto 0;}
-    @keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="icon">🔗</div>
-    <h1>${platform.charAt(0).toUpperCase() + platform.slice(1)}</h1>
-    <p id="status">Sincronizando autorização...</p>
-    <div id="loader" class="loader"></div>
-  </div>
-  <script>
-    window.onload = function() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      const state = urlParams.get('state');
-      const errParam = urlParams.get('error');
-      const pathParts = window.location.pathname.split('/').filter(Boolean);
-      const platform = pathParts[pathParts.length - 1] || '';
-
-      if (errParam) {
-        document.getElementById('status').innerText = 'Autoriza\u00e7\u00e3o cancelada ou recusada.';
-        document.getElementById('loader').style.display = 'none';
-        setTimeout(function() { window.close(); }, 2000);
-        return;
-      }
-
-      if (window.opener) {
-        window.opener.postMessage({ type: 'oauth-callback', url: window.location.href }, '*');
-        document.getElementById('status').innerText = 'Autoriza\u00e7\u00e3o conclu\u00edda!';
-      }
-
-      if (code && state && platform) {
-        const supabaseUrl = '${supabaseUrl}';
-        const anonKey = '${anonKey}';
-        const redirectUri = window.location.origin + window.location.pathname;
-        fetch(supabaseUrl + '/functions/v1/social-oauth-callback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + anonKey },
-          body: JSON.stringify({ code, state, platform, redirect_uri: redirectUri })
-        }).then(function(r) { return r.json(); }).then(function(data) {
-          if (data.success) {
-            document.getElementById('status').innerText = 'Conta conectada com sucesso!';
-            document.getElementById('loader').style.display = 'none';
-            setTimeout(function() { window.close(); }, 2000);
-          }
-        }).catch(function() {
-          document.getElementById('loader').style.display = 'none';
-        });
-      }
-    };
-  </script>
-</body>
-</html>`;
-
-    return new Response(html, {
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        ...corsHeaders(req),
-      },
-    });
+    return Response.redirect(redirectUrl, 302);
   }
 
   try {

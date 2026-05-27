@@ -33,6 +33,14 @@ const OAuthCallback = () => {
         return;
       }
 
+      // Em popup, repassamos a URL para o opener (que tem sessão) fazer o exchange
+      if (isPopup) {
+        window.opener?.postMessage({ type: "oauth-callback", url: window.location.href }, "*");
+        setStatus("Autorização recebida, aguarde...");
+        setTimeout(() => window.close(), 2000);
+        return;
+      }
+
       try {
         setStatus("Trocando código por token...");
 
