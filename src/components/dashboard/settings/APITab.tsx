@@ -155,7 +155,14 @@ export const APITab = memo(({
                           </Button>
                         </div>
                         <div className="grid grid-cols-1 gap-3">
-                          {platformConnections.map(conn => {
+                          {platformConnections
+                            .filter((conn, index, self) => {
+                              // Para Telegram e WhatsApp, mostramos apenas uma "Entidade" (Bot/Número)
+                              // Para outros (ex: Facebook), mantemos todas as páginas/contas individuais
+                              if (config.id !== 'telegram' && config.id !== 'whatsapp') return true;
+                              return index === self.findIndex((c) => c.platform_user_id === conn.platform_user_id);
+                            })
+                            .map(conn => {
                             const stats = socialStats.find(s => {
                               if (s.platform !== config.id) return false;
                               const s_pid = String(s.platform_user_id || "").toLowerCase();

@@ -155,24 +155,9 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
           if (countJson.ok) followers = countJson.result;
         } catch {}
 
-        accountRecords.push({
-          user_id: userId,
-          platform: "telegram",
-          platform_user_id: chatId.toString(),
-          chat_id: chatId,
-          username: chat.username || chat.title || chat.first_name || chatId,
-          profile_picture: chatPhoto,
-          followers,
-          posts_count: 0,
-          views: 0,
-          likes: 0,
-          shares: 0,
-          comments: 0,
-          engagement_rate: 0,
-          is_connected: true,
-          last_synced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
+        // We no longer create social_accounts records for each channel/chat.
+        // Telegram profiles in analytics should be consolidated under the Bot ID.
+        // Individual channels are stored in messaging_channels for the inbox.
 
         channelRecords.push({
           user_id: userId,
@@ -298,12 +283,34 @@ serve(async (req: Request) => {
           .eq("platform", "telegram")
           .eq("platform_user_id", mainBotId);
 
+        // Get the account ID for account_metrics insertion
         const { count: postsCount } = await adminClient
           .from("scheduled_posts")
           .select("*", { count: "exact", head: true })
           .eq("user_id", userId)
           .eq("status", "published")
           .contains("platforms", ["telegram"]);
+
+        // Get the account ID for account_metrics insertion
+        const { data: mainAccount } = await adminClient
+          .from("social_accounts")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("platform", "telegram")
+          .eq("platform_user_id", mainBotId)
+          .maybeSingle();
+
+        if (mainAccount) {
+          // Insert into account_metrics for Dashboard chart
+          await adminClient.from("account_metrics").insert({
+            user_id: userId,
+            social_account_id: mainAccount.id,
+            platform: "telegram",
+            followers: channelSubscribers,
+            posts_count: postsCount || 0,
+            collected_at: new Date().toISOString()
+          });
+        }
 
         await adminClient
           .from("social_connections")

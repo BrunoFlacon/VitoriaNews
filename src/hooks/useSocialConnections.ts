@@ -570,25 +570,25 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       // Conexão sintética (Telegram/WhatsApp via API, sem row em social_connections)
       if (connectionId.startsWith('telegram-api-') || connectionId.startsWith('whatsapp-api-')) {
-        const { error } = await supabase
-          .from('social_connections')
-          .upsert({
-            user_id: user.id,
-            platform: conn.platform,
-            platform_user_id: conn.platform_user_id,
-            page_name: conn.page_name || conn.platform,
-            username: conn.username,
-            is_connected: true,
-            is_primary: true,
-            followers_count: conn.followers_count,
-            posts_count: conn.posts_count,
-            profile_image_url: conn.profile_image_url || conn.profile_picture,
-          }, { onConflict: 'user_id,platform' });
+        const { error } = await (supabase
+        .from("social_connections")
+        .upsert({
+          user_id: user.id,
+          platform: conn.platform,
+          platform_user_id: conn.platform_user_id,
+          page_name: conn.page_name || conn.platform,
+          username: conn.username,
+          is_connected: true,
+          is_primary: true,
+          followers_count: conn.followers_count,
+          posts_count: conn.posts_count,
+          profile_image_url: conn.profile_image_url || conn.profile_picture,
+        } as any, { onConflict: 'user_id,platform,platform_user_id' }) as any);
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('social_connections')
-          .update({ is_primary: true })
+          .update({ is_primary: true } as any)
           .eq('user_id', user.id)
           .eq('id', connectionId);
         if (error) throw error;

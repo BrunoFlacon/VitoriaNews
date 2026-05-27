@@ -160,7 +160,18 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         channel_id: ch.channel_id || null,
       }));
 
-      const finalStats = [...normalized];
+      // TELEGRAM DEDUP: Remove channel/group entries (negative platform_user_id).
+      // Telegram channels/groups have negative IDs (e.g. -1001234567890).
+      // Only Bot accounts (positive IDs) should appear as profiles in Analytics.
+      const filteredNormalized = normalized.filter(acc => {
+        if (acc.platform === 'telegram' && acc.platform_user_id) {
+          const numId = Number(acc.platform_user_id);
+          if (!isNaN(numId) && numId < 0) return false; // skip channel/group records
+        }
+        return true;
+      });
+
+      const finalStats = [...filteredNormalized];
       const existingPlatforms = new Set(finalStats.map(s => s.platform));
       channels.forEach(ch => {
         if (!existingPlatforms.has(ch.platform)) {

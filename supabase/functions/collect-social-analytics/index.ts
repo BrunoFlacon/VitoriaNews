@@ -270,6 +270,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   posts_count: postsData.count || 0,
                   username: botInfo?.username || conn.username || conn.page_name,
                   profile_picture: botInfo?.profile_picture || null,
+                  platform_user_id: botInfo?.id?.toString() || conn.platform_user_id, // FORCE BOT ID
                   // Dados extras para breakdown no frontend
                   members_count: groupMembers,
                 };
@@ -1094,10 +1095,11 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 }
               }
 
-              const actualId = metrics.platform_user_id || 
+              const actualId = metrics?.platform_user_id || 
+                (conn.platform === 'telegram' ? (metrics?.platform_user_id || conn.platform_user_id) :
                 (conn.platform === 'facebook' || conn.platform === 'instagram' 
                   ? (conn.page_id || conn.platform_user_id) 
-                  : (conn.platform_user_id || conn.page_id));
+                  : (conn.platform_user_id || conn.page_id)));
 
               const totalLikes = fetchedPosts.reduce((s, p) => s + (p.likes || 0), 0);
               const totalShares = fetchedPosts.reduce((s, p) => s + (p.shares || 0), 0);

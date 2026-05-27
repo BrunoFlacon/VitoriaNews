@@ -551,19 +551,34 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   const groupedFollowers = useMemo(() => {
     if (!followerData || followerData.length === 0) return [];
     
-    // Group by platform
-    const grouped = (followerData as any[]).reduce((acc: Record<string, any>, curr: any) => {
+    // 1. First deduplicate the raw followerData by platform_user_id
+    const uniqueRawProfiles: any[] = [];
+    const seenIds = new Set();
+    
+    (followerData as any[]).forEach(p => {
+      const uniqueId = `${p.platform}-${p.platform_user_id || p.username}`;
+      if (!seenIds.has(uniqueId)) {
+        seenIds.add(uniqueId);
+        uniqueRawProfiles.push(p);
+      }
+    });
+
+    // 2. Group by platform for the UI structure
+    const grouped = uniqueRawProfiles.reduce((acc: Record<string, any>, curr: any) => {
       const platformKey = curr.platform;
 
-      // TELEGRAM FIX: Allow all accounts but prioritize bots in the later UI sorting
-      if (platformKey === 'telegram') {
-        // We include all, including groups/channels for full visibility
+      // WHATSAPP/TELEGRAM FIX: Skip loose items without enough data if they are duplicates
+      if ((platformKey === 'whatsapp' || platformKey === 'telegram') && !curr.username && !curr.profileImage && curr.currentFollowers === 0) {
+        return acc;
       }
 
-      // WHATSAPP FIX: Try to identify the main bot/number and skip loose channels
-      if (platformKey === 'whatsapp') {
-        // Main WhatsApp API accounts typically have valid usernames or are the primary connection
-        if (!curr.username && !curr.profileImage) return acc;
+      // TELEGRAM CHANNEL FIX: Telegram channels/groups have NEGATIVE platform_user_id.
+      // Only Bot/User accounts have positive IDs. Filter out channel entries from the profile list.
+      if (platformKey === 'telegram' && curr.platform_user_id) {
+        const numericId = Number(curr.platform_user_id);
+        if (!isNaN(numericId) && numericId < 0) {
+          return acc; // This is a channel/group record, skip it as a standalone profile
+        }
       }
 
       if (!acc[platformKey]) {
