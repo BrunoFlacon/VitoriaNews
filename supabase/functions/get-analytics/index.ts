@@ -504,6 +504,9 @@ serve(async (req: Request) => {
 
     for (const acc of (socialAccounts as any[])) {
       const normalized = normalizePlatform(acc.platform);
+      // Pula registros de grupos/canais Telegram (não são perfis reais)
+      // O bot não tem chat_id; grupos/canais têm chat_id preenchido
+      if (normalized === 'telegram' && acc.chat_id) continue;
       const alreadyIncluded = followerData.some(f =>
         f.platform === normalized &&
         (f.platform_user_id === acc.platform_user_id || f.username === acc.username)
@@ -526,11 +529,19 @@ serve(async (req: Request) => {
       }
     }
 
-    // Post-processing: enrich Telegram entries with totalMembers from messaging_channels
+    // Post-processing: enriquecer Telegram com SÓ canais (não grupos)
     for (const fd of followerData) {
-      if (fd.platform === 'telegram' || fd.platform === 'whatsapp') {
+      if (fd.platform === 'telegram') {
         const channelTotal = messagingChannels
-          .filter((ch: any) => ch.platform === fd.platform || !ch.platform)
+          .filter((ch: any) => ch.platform === 'telegram' && ch.channel_type === 'channel')
+          .reduce((sum: number, ch: any) => sum + (Number(ch.members_count) || 0), 0);
+        if (channelTotal > fd.currentFollowers) {
+          fd.currentFollowers = channelTotal;
+        }
+      } else if (fd.platform === 'whatsapp') {
+        // WhatsApp: mantém comportamento original (soma todos os canais)
+        const channelTotal = messagingChannels
+          .filter((ch: any) => ch.platform === 'whatsapp' || !ch.platform)
           .reduce((sum: number, ch: any) => sum + (Number(ch.members_count) || 0), 0);
         if (channelTotal > fd.currentFollowers) {
           fd.currentFollowers = channelTotal;
@@ -538,10 +549,11 @@ serve(async (req: Request) => {
       }
     }
     // Ensure Telegram appears even if social_connections is missing but social_accounts has entry
-    const telegramAccounts = socialAccounts.filter((a: any) => normalizePlatform(a.platform) === 'telegram');
+    // Filtra SÓ o bot (sem chat_id), ignorando grupos/canais
+    const telegramAccounts = socialAccounts.filter((a: any) => normalizePlatform(a.platform) === 'telegram' && !a.chat_id);
     if (telegramAccounts.length > 0 && !followerData.some(f => f.platform === 'telegram')) {
       const telegramChannelTotal = messagingChannels
-        .filter((ch: any) => ch.platform === 'telegram')
+        .filter((ch: any) => ch.platform === 'telegram' && ch.channel_type === 'channel')
         .reduce((sum: number, ch: any) => sum + (Number(ch.members_count) || 0), 0);
       const tgAcc = telegramAccounts[0];
       const tgMetrics = accountMetrics.filter((m: AccountMetric) => m.social_account_id === tgAcc.id);

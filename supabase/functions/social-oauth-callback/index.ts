@@ -364,7 +364,7 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
 
   const platformUserId  = profileData.id;
   const username        = profileData.username  || "";
-  const displayName     = profileData.name      || username         || "Threads User";
+  const displayName     = profileData.name      || username         || "";
   let profileImageUrl   = profileData.threads_profile_picture_url || "";
   const followersCount  = Number(profileData.followers_count) || 0;
   
@@ -1064,7 +1064,7 @@ serve(async (req: Request) => {
         await supabase.from("social_connections").upsert({
           user_id: user.id, platform, access_token: result.accessToken, refresh_token: result.refreshToken || null,
           token_expires_at: expiresAt, platform_user_id: result.platformUserId, page_name: result.pageName,
-          page_id: result.pageId || null, profile_image_url: cachedProfilePic || null,
+          page_id: result.pageId || null, profile_image_url: cachedProfilePic || null, profile_picture: cachedProfilePic || null,
           username: result.username || null, is_connected: true, updated_at: new Date().toISOString(),
           // CORREÇÃO: salva métricas em social_connections para exibição imediata no painel
           followers_count: result.followers  ?? null,

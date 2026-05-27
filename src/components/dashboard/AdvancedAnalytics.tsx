@@ -555,11 +555,6 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     const grouped = (followerData as any[]).reduce((acc: Record<string, any>, curr: any) => {
       const platformKey = curr.platform;
 
-      // TELEGRAM FIX: Allow all accounts but prioritize bots in the later UI sorting
-      if (platformKey === 'telegram') {
-        // We include all, including groups/channels for full visibility
-      }
-
       // WHATSAPP FIX: Try to identify the main bot/number and skip loose channels
       if (platformKey === 'whatsapp') {
         // Main WhatsApp API accounts typically have valid usernames or are the primary connection

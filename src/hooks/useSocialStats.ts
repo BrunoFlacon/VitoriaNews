@@ -119,7 +119,25 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         }
       });
 
-      const normalized: SocialAccountStat[] = (statsRes.data || []).map((acc: any) => {
+      let rawStats = (statsRes.data || []) as any[];
+
+      // Telegram: filtra para manter APENAS o registro do bot (não grupos/canais).
+      // Grupos e canais têm chat_id preenchido e username/genérico (group_xxx, channel_xxx).
+      // O bot tem platform_user_id numérico sem chat_id próprio.
+      if (rawStats.some(a => a.platform === 'telegram')) {
+        const tgAccounts = rawStats.filter(a => a.platform === 'telegram');
+        const botAcc = tgAccounts.find(a =>
+          Number(a.platform_user_id || 0) > 0 &&
+          (a.username?.toLowerCase().includes('newsbot') || a.page_name?.toLowerCase().includes('newsbot'))
+        ) || tgAccounts.find(a => Number(a.platform_user_id || 0) > 0 && !a.chat_id)
+          || tgAccounts.find(a => Number(a.platform_user_id || 0) > 0)
+          || tgAccounts[0];
+        // Remove todos Telegram, readiciona só o bot
+        rawStats = rawStats.filter(a => a.platform !== 'telegram');
+        if (botAcc) rawStats.push(botAcc);
+      }
+
+      const normalized: SocialAccountStat[] = rawStats.map((acc: any) => {
         const platformKey = acc.platform;
         const totalActions = actionCounts[platformKey] || 0;
         const totalBotActions = botActionCounts[platformKey] || 0;
@@ -239,7 +257,10 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     const accounts = byPlatform[platform];
     if (!accounts || accounts.length === 0) return null;
     const channels = messagingChannels.filter(c => c.platform === platform);
-    const totalMembers = channels.reduce((sum, ch) => sum + ch.members_count, 0);
+    // Telegram: fallback usa SÓ canais (não grupos) para followers
+    const totalMembers = platform === 'telegram'
+      ? channels.filter(c => c.channel_type === 'channel').reduce((sum, ch) => sum + ch.members_count, 0)
+      : channels.reduce((sum, ch) => sum + ch.members_count, 0);
 
     return {
       id: accounts[0].id,

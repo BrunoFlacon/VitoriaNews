@@ -110,17 +110,20 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
         const acc = findAccount(conn);
         if (!acc) return { ...conn, ...computeExpiry(conn.token_expires_at) };
-        const cachedPic         = acc.profile_picture || null;
-        const enrichedFollowers = acc.followers_count || (acc as { followers?: number | null }).followers || conn.followers_count;
-        const enrichedPosts     = acc.posts_count || conn.posts_count;
-        const enrichedPageName  = conn.page_name || acc.page_name || acc.username || null;
+        const cachedPic = acc.profile_picture || null;
+        // Prefer acc data (social_accounts, atualizado pelo collect-social-analytics)
+        // sobre conn.page_name (definido no OAuth, pode ser genérico tipo "Threads User")
+        const enrichedPageName = acc.page_name || acc.username || conn.page_name || null;
+        // Usar ?? em vez de || para preservar 0 como valor válido de seguidores
+        const enrichedFollowers = acc.followers_count ?? (acc as { followers?: number | null }).followers ?? conn.followers_count;
+        const enrichedPosts = acc.posts_count ?? conn.posts_count;
         return {
           ...conn,
           ...computeExpiry(conn.token_expires_at),
           profile_image_url: cachedPic || conn.profile_image_url || null,
           profile_picture:   cachedPic || conn.profile_picture   || null,
-          followers_count:   enrichedFollowers || conn.followers_count,
-          posts_count:       enrichedPosts     || conn.posts_count,
+          followers_count:   enrichedFollowers ?? conn.followers_count,
+          posts_count:       enrichedPosts     ?? conn.posts_count,
           page_name:         enrichedPageName,
         };
       });
@@ -219,11 +222,18 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             continue;
           }
 
-          // Se há múltiplas conexões na mesma plataforma, tenta encontrar a
-          // "principal" (aquela com username preenchido e nome não genérico)
-          const primary = conns.find(c =>
-            c.username && !/user|profile/i.test(c.page_name || "")
-          );
+          // Encontra a conexão principal: aquela com mais dados reais
+          // (username, foto, nome não genérico)
+          const primary = conns.reduce<SocialConnection | null>((best, c) => {
+            if (!best) return c;
+            const score = (conn: SocialConnection) =>
+              (conn.username ? 2 : 0) +
+              (conn.profile_image_url ? 1 : 0) +
+              (!/user|profile|threads/i.test(conn.page_name || "") ? 1 : 0) +
+              (Number(conn.followers_count) > 0 ? 1 : 0);
+            return score(c) > score(best) ? c : best;
+          }, null);
+
           const rest = conns.filter(c => c !== primary);
 
           if (primary && rest.length > 0) {
@@ -237,10 +247,14 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
               if (!merged.profile_image_url && r.profile_image_url) {
                 merged.profile_image_url = r.profile_image_url;
               }
+              if (!merged.username && r.username) {
+                merged.username = r.username;
+              }
             }
             deduped.push(merged);
           } else {
-            deduped.push(...conns);
+            // Se não achou primary mas há duplicatas, usa a primeira
+            deduped.push(conns[0]);
           }
         }
 
