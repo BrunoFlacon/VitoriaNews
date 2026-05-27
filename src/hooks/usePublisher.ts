@@ -114,6 +114,12 @@ export function usePublisher() {
     }
   };
 
+  const getMediaType = (url: string): string => {
+    if (/\.(mp4|webm|ogg|mov)$/i.test(url)) return 'video';
+    if (/\.(mp3|wav|ogg|aac)$/i.test(url)) return 'audio';
+    return 'image';
+  };
+
   const publishNow = async (
     content: string,
     platforms: string[],
@@ -133,8 +139,8 @@ export function usePublisher() {
           user_id: session.session.user.id,
           content,
           platforms,
-          media_ids: [],
-          media_type: 'image',
+          media_ids: mediaUrls.length > 0 ? mediaUrls : [],
+          media_type: mediaUrls.length > 0 ? getMediaType(mediaUrls[0]) : 'image',
           status: 'scheduled',
           scheduled_at: new Date().toISOString(),
         })

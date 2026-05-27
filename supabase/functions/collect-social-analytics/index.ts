@@ -76,7 +76,7 @@ serve(async (req: Request) => {
         .from("social_sync_tasks")
         .select("*, social_connections(*)")
         .eq("status", "pending")
-        .or(`next_sync_at.lte.${new Date().toISOString()},next_sync_at.is.null`)
+        .or(`next_sync_at.lte.${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")},next_sync_at.is.null`)
         .order("sync_type", { ascending: true }) // historical first
         .limit(5);
       

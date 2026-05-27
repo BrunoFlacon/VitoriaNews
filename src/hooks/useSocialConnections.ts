@@ -21,7 +21,7 @@ export interface SocialConnection {
   username?: string | null;
   metadata?: Record<string, unknown> | null;
   isExpiringSoon?: boolean;
-  daysUntilExpiry?: number;
+  daysUntilExpiry?: number | null;
 }
 
 const escapeHtml = (str: string): string => {
@@ -101,7 +101,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       };
 
       const computeExpiry = (expiresAt: string | null): { isExpiringSoon: boolean; daysUntilExpiry: number } => {
-        if (!expiresAt) return { isExpiringSoon: false, daysUntilExpiry: Infinity };
+        if (!expiresAt) return { isExpiringSoon: false, daysUntilExpiry: null };
         const diff = new Date(expiresAt).getTime() - Date.now();
         const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
         return { isExpiringSoon: days <= 14, daysUntilExpiry: days };

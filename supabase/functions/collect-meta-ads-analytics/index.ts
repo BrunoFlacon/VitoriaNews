@@ -150,13 +150,14 @@ serve(async (req: Request) => {
           cpc,
           cpm,
           conversions,
+          date: new Date().toISOString().split("T")[0],
           metadata: {
             ad_account_id: adAccountId,
             stop_time: campaign.stop_time,
             collected_at: new Date().toISOString()
           },
           updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id,campaign_id" });
+        }, { onConflict: "user_id,campaign_id,date" });
 
         totalImpressions += impressions;
         totalClicks += clicks;

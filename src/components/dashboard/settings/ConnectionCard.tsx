@@ -51,7 +51,7 @@ export const ConnectionCard = ({
 }: ConnectionCardProps) => {
   const { toast } = useToast();
   const [renewing, setRenewing] = useState(false);
-  const isBotOn = localBotActive !== null ? localBotActive : waMetadata.is_active === true;
+  const isBotOn = localBotActive !== null ? localBotActive : waMetadata?.is_active === true;
 
   const handleRenewToken = useCallback(async () => {
     if (onRenew) {

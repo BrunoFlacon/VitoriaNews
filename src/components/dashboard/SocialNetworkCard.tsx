@@ -17,7 +17,7 @@ interface SocialAccount {
   username?: string | null;
   token_expires_at?: string | null;
   isExpiringSoon?: boolean;
-  daysUntilExpiry?: number;
+  daysUntilExpiry?: number | null;
 }
 
 interface SocialNetworkCardProps {
@@ -212,14 +212,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: -8 }}
               transition={{ duration: 0.15 }}
-              style={platform.id === 'threads' ? {
-                position: "fixed",
-                top: "530px",
-                right: "479.37px",
-                zIndex: 9999,
-                opacity: 1,
-                transform: "none",
-              } : {
+              style={{
                 position: "fixed",
                 top: dropdownPos.top,
                 right: dropdownPos.right,

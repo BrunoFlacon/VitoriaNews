@@ -4,7 +4,7 @@ export function getAuthUrl(redirectUri: string, state: string, creds: any, pkce:
   return `https://accounts.spotify.com/authorize?` + new URLSearchParams({
     client_id: clientId,
     response_type: "code",
-    redirectUri,
+    redirect_uri: redirectUri,
     state,
     scope: "user-read-private user-read-email user-follow-read user-top-read playlist-read-private user-library-read",
     code_challenge_method: "S256",

@@ -184,7 +184,7 @@ serve(async (req: Request) => {
           totalLikes += likes;
           totalComments += comments;
 
-          await supabase.from("youtube_analytics").insert({
+          await supabase.from("youtube_analytics").upsert({
             user_id: userId,
             video_id: video.id,
             channel_id: channelId,

@@ -108,7 +108,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
   );
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const multiFileInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
   const overlayInputRef = useRef<HTMLInputElement>(null);
   
   // Recording States
@@ -117,6 +117,21 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+
+  const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    const ext = file.name.split(".").pop();
+    const path = `${user.id}/story_media_${Date.now()}.${ext}`;
+    const { data: uploadData } = await supabase.storage.from("media").upload(path, file);
+    if (uploadData) {
+      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+      const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(file.name);
+      const isAudio = /\.(mp3|wav|ogg|aac)$/i.test(file.name);
+      const storyType = isVideo ? "video" : isAudio ? "audio" : "image";
+      updateActiveStory({ url: urlData.publicUrl, type: storyType });
+    }
+  };
 
   const activeStory = stories[activeIndex];
   const [activeTool, setActiveTool] = useState<"none" | "text" | "stickers" | "trim" | "music" | "record" | "transform" | "link">("none");
@@ -223,8 +238,13 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
   // Load draft if exists
   useEffect(() => {
     const draft = localStorage.getItem(`story_draft_${user?.id}`);
-    if (draft && stories.some(s => s.url === "")) {
-       // Only prompt/load if we have a blank state or user wants to recover
+    if (draft) {
+      try {
+        const parsed = JSON.parse(draft);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setStories(parsed);
+        }
+      } catch {}
     }
   }, [user?.id]);
 
@@ -295,12 +315,13 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
         
         if (uploadData) {
           const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+          const template = stories[0] || { textConfig: { position: { x: 0, y: 0 }, scale: 1, rotation: 0, fontSize: 24, color: "#ffffff", bgColor: "#000000", bgOpacity: 0.6, alignment: "center" as const, fontFamily: "Inter, sans-serif" } };
           const newStory: StoryItem = {
             id: `story-rec-${Date.now()}`,
             url: urlData.publicUrl,
             type: type === "video" ? "video" : "audio",
             text: "",
-            textConfig: { ...stories[0].textConfig },
+            textConfig: { ...template.textConfig },
             mediaConfig: { position: { x: 0, y: 0 }, scale: 1, rotation: 0 },
             duration: 15,
             startTime: 0,
@@ -341,13 +362,17 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
   };
 
   const addStory = () => {
+    const template = stories[0] || {
+      textConfig: { position: { x: 0, y: 0 }, scale: 1, rotation: 0, fontSize: 24, color: "#ffffff", bgColor: "#000000", bgOpacity: 0.6, alignment: "center" as const, fontFamily: "Inter, sans-serif" },
+      mediaConfig: { position: { x: 0, y: 0 }, scale: 1, rotation: 0 },
+    };
     const newStory: StoryItem = {
       id: `story-${stories.length}-${Date.now()}`,
       url: "", // Empty slot
       type: "image",
       text: "",
-      textConfig: { ...stories[0].textConfig },
-      mediaConfig: { ...stories[0].mediaConfig },
+      textConfig: { ...template.textConfig },
+      mediaConfig: { ...template.mediaConfig },
       duration: 15,
       startTime: 0,
       endTime: 15,
@@ -436,6 +461,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
           <ToolButton icon={LinkIcon} active={activeTool === "link"} onClick={() => setActiveTool("link")} label="Link" />
           <ToolButton icon={ImageIcon} active={false} onClick={() => overlayInputRef.current?.click()} label="Sobrepor" />
           <input ref={overlayInputRef} type="file" accept="image/*" className="hidden" onChange={handleOverlayUpload} />
+          <input ref={mediaInputRef} type="file" accept="image/*,video/*,audio/*" className="hidden" onChange={handleMediaUpload} />
         </div>
 
         {/* Center Canvas */}
@@ -490,10 +516,10 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                     <img src={activeStory.url} className="w-full h-full object-cover select-none" referrerPolicy="no-referrer" />
                   )
                 ) : (
-                  <div className="flex flex-col items-center gap-4 text-white/20">
+                  <button type="button" onClick={() => mediaInputRef.current?.click()} className="flex flex-col items-center gap-4 text-white/20 cursor-pointer hover:text-white/40 transition-colors">
                     <Plus className="w-12 h-12" />
                     <span className="text-xs font-bold uppercase tracking-widest">Toque para adicionar</span>
-                  </div>
+                  </button>
                 )}
               </div>
             </SelectionWrapper>

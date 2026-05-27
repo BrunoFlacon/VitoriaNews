@@ -174,17 +174,17 @@ serve(async (req: Request) => {
 
           // Save each row
           for (let i = 0; i < metricSet.metrics.length; i++) {
-            await supabase.from("google_analytics_data").insert({
+            await supabase.from("google_analytics_data").upsert({
               user_id: userId,
               property_id: propertyId,
               metric_name: metricSet.metrics[i],
               metric_value: metricValues[i] || 0,
-              dimension: metricSet.dimensions.join(","),
+              dimension_name: metricSet.dimensions.join(","),
               dimension_value: dimensionValues.join(" | "),
               date: dimensionValues[0] ? new Date(dimensionValues[0]).toISOString().split("T")[0] : null,
               metadata: { metric_set: metricSet.name, dimensions: dimensionValues },
               created_at: new Date().toISOString()
-            });
+            }, { onConflict: "user_id,property_id,metric_name,date,dimension_name,dimension_value" });
           }
 
           totalUsers += metricValues[0] || 0;
