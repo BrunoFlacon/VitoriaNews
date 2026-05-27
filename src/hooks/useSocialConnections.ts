@@ -59,7 +59,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const results = await Promise.allSettled([
         supabase
           .from('social_connections')
-          .select('id, platform, is_connected, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
+          .select('id, platform, is_connected, is_primary, page_name, platform_user_id, token_expires_at, page_id, profile_image_url, profile_picture, followers_count, posts_count, username, metadata')
           .eq('user_id', user.id),
         supabase
           .from('social_accounts')
@@ -77,8 +77,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const credsRes    = results[2].status === 'fulfilled' ? results[2].value : { data: [] };
 
       const oauthConnections = (oauthRes.data || []) as unknown as SocialConnection[];
-      // is_primary defaults to false until migration is applied;
-      // after running the migration, add .select('id, is_primary') above and inject here
       const accounts         = (accountsRes.data || []) as Array<{
         platform: string;
         platform_user_id: string | null;
