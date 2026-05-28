@@ -35,6 +35,7 @@ tmp/
 .system_generated/
 *.webp
 *.png
+!public/bot-avatar.png
 *.jpg
 *.log
 
