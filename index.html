@@ -14,6 +14,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" as="style">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Roboto:wght@400;500;700;900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
     <title>Novo Portal - A Redação Multimídia de Tupã e Região</title>
     <meta name="title" content="Novo Portal - A Redação Multimídia de Tupã e Região">
     <meta name="description" content="A Redação Multimídia de Tupã e Região. Análises de Precisão, Breaking News, Podcasts, Reportagens Exclusivas. Assine!">
@@ -28,29 +29,21 @@
     <meta name="msapplication-TileColor" content="#010202">
     <meta name="format-detection" content="telephone=no">
 
-    <!-- Open Graph / Facebook / WhatsApp (Essencial para a aprovação na Meta) -->
+    <!-- Open Graph / Facebook / WhatsApp -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://webradiovitoria.com.br/">
-    
-    
-    <!-- Dica: Coloque o link absoluto de uma imagem de capa (1200x630) aqui depois -->
+    <meta property="og:title" content="Novo Portal - A Redação Multimídia de Tupã e Região">
+    <meta property="og:description" content="A Redação Multimídia de Tupã e Região. Análises de Precisão, Breaking News, Podcasts, Reportagens Exclusivas. Assine!">
     <meta property="og:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/v8eOTTirS5eh2QRNGh4yC1wmieu2/social-images/social-1779512218977-Foto_para_o_SEO_do_portal.webp"> 
 
     <!-- Twitter / X -->
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://webradiovitoria.com.br/">
-    <meta property="twitter:title" content="Novo Portal - A Redação Multimídia de Tupã e Região">
-    <meta property="twitter:description" content="A Redação Multimídia de Tupã e Região. Análises de Precisão, Breaking News, Podcasts, Reportagens Exclusivas. Assine!">
-    <meta property="twitter:image" content="https://webradiovitoria.com.br/assets/capa.jpg">
-    <meta property="og:title" content="Novo Portal - A Redação Multimídia de Tupã e Região">
-  <meta name="twitter:title" content="Novo Portal - A Redação Multimídia de Tupã e Região">
-  <meta property="og:description" content="A Redação Multimídia de Tupã e Região. Análises de Precisão, Breaking News, Podcasts, Reportagens Exclusivas. Assine!">
-  <meta name="twitter:description" content="A Redação Multimídia de Tupã e Região. Análises de Precisão, Breaking News, Podcasts, Reportagens Exclusivas. Assine!">
-  <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/v8eOTTirS5eh2QRNGh4yC1wmieu2/social-images/social-1779512218977-Foto_para_o_SEO_do_portal.webp">
-  <meta name="twitter:card" content="summary_large_image">
-</head>
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://webradiovitoria.com.br/">
+    <meta name="twitter:title" content="Novo Portal - A Redação Multimídia de Tupã e Região">
+    <meta name="twitter:description" content="A Redação Multimídia de Tupã e Região. Análises de Precisão, Breaking News, Podcasts, Reportagens Exclusivas. Assine!">
+    <meta name="twitter:image" content="https://storage.googleapis.com/gpt-engineer-file-uploads/v8eOTTirS5eh2QRNGh4yC1wmieu2/social-images/social-1779512218977-Foto_para_o_SEO_do_portal.webp">
+  </head>
 
-  <!-- SPA Routing Fix for GitHub Pages: restaura a rota após redirect do 404.html -->
   <script>
     (function () {
       var redirect = sessionStorage.getItem('spa_redirect');
@@ -58,7 +51,6 @@
         sessionStorage.removeItem('spa_redirect');
         window.history.replaceState(null, null, redirect);
       } else {
-        // Lê o padrão /?/path gerado pelo 404.html
         var loc = window.location;
         if (loc.search && loc.search[1] === '/') {
           var parts = loc.search.slice(1).split('&');
@@ -72,6 +64,7 @@
       }
     }());
   </script>
+  
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
