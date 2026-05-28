@@ -161,7 +161,8 @@ serve(async (req: Request) => {
       { data: trendsData },
       { data: politicalTrendsData },
       { data: attacksData },
-      { data: messagingChannelsResp }
+      { data: messagingChannelsResp },
+      { data: monetizationData }
     ] = await Promise.all([
       supabase.from("scheduled_posts").select("id, status, type, post_type, platforms, created_at, published_at, content").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("post_metrics").select("id, post_id, external_id, platform, likes, comments, shares, impressions, reach, content, published_at, collected_at").eq("user_id", user.id).or(`published_at.gte.${startDate.toISOString()},collected_at.gte.${startDate.toISOString()}`),
@@ -177,7 +178,8 @@ serve(async (req: Request) => {
       supabase.from("trends").select("id, keyword, volume, platform, detected_at").gte("detected_at", startDate.toISOString()),
       supabase.from("political_trends").select("id, keyword, sentiment, detected_at").gte("detected_at", startDate.toISOString()),
       supabase.from("eventos_de_ataque").select("id, tipo, severidade, detectado_em").gte("detectado_em", startDate.toISOString()),
-      supabase.from("messaging_channels").select("id, platform, members_count").eq("user_id", user.id)
+      supabase.from("messaging_channels").select("id, platform, members_count").eq("user_id", user.id),
+      supabase.from("social_monetization_metrics").select("id, platform, post_type, source, amount, currency, description, collected_at").eq("user_id", user.id).gte("collected_at", startDate.toISOString())
     ]);
 
     const posts = postsResp || [];
@@ -589,6 +591,20 @@ serve(async (req: Request) => {
       ? Math.round((totalSentM / (totalSentM + totalFailedM)) * 100) 
       : 0;
 
+    // Monetization aggregation
+    const monetizationRows = (monetizationData as any[]) || [];
+    const monetizationTotal = monetizationRows.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const monetizationByPlatform: Record<string, number> = {};
+    const monetizationBySource: Record<string, number> = {};
+    const monetizationByType: Record<string, number> = {};
+    monetizationRows.forEach((r: any) => {
+      const p = r.platform || 'unknown';
+      monetizationByPlatform[p] = (monetizationByPlatform[p] || 0) + Number(r.amount || 0);
+      const s = r.source || 'other';
+      monetizationBySource[s] = (monetizationBySource[s] || 0) + Number(r.amount || 0);
+      const t = r.post_type || 'unknown';
+      monetizationByType[t] = (monetizationByType[t] || 0) + Number(r.amount || 0);
+    });
 
     const lastSyncedAt = socialAccountsData && (socialAccountsData as any[]).length > 0 
       ? (socialAccountsData as any[]).reduce((max, acc) => {
@@ -656,6 +672,22 @@ serve(async (req: Request) => {
         }))
       },
       messagingChannels,
+      monetization: {
+        total: monetizationTotal,
+        byPlatform: monetizationByPlatform,
+        bySource: monetizationBySource,
+        byType: monetizationByType,
+        recent: monetizationRows.slice(0, 20).map((r: any) => ({
+          id: r.id,
+          platform: r.platform,
+          post_type: r.post_type,
+          source: r.source,
+          amount: r.amount,
+          currency: r.currency || 'BRL',
+          description: r.description,
+          collected_at: r.collected_at
+        }))
+      },
       period: requestedPeriod || "30d",
       generatedAt: new Date().toISOString(),
       dataSource: "real",

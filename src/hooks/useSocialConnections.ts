@@ -308,11 +308,25 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const left   = window.screenX + (window.outerWidth  - width)  / 2;
       const top    = window.screenY + (window.outerHeight - height) / 2;
 
-      const popup = window.open(
-        "about:blank",
-        `oauth_${platform}`,
-        `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
-      );
+      let popup: Window | null = null;
+      try {
+        popup = window.open(
+          "about:blank",
+          `oauth_${platform}`,
+          `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
+        );
+      } catch (e) {
+        console.warn("[OAuth] Popup open failed, retrying without name:", e);
+        try {
+          popup = window.open(
+            "about:blank",
+            "_blank",
+            `width=${width},height=${height},left=${left},top=${top}`
+          );
+        } catch (e2) {
+          console.error("[OAuth] Popup open failed entirely:", e2);
+        }
+      }
 
       if (!popup) {
         toast({ title: "Popup bloqueado", description: "Permita popups para este site e tente novamente.", variant: "destructive" });

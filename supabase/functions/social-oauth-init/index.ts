@@ -165,6 +165,7 @@ serve(async (req: Request) => {
       client_secret: getVal("client_secret", "GOOGLE_CLIENT_SECRET"),
       app_id:        getVal("app_id", "META_APP_ID") || getVal("client_id", "THREADS_CLIENT_ID"),
       app_secret:    getVal("app_secret", "META_APP_SECRET") || getVal("client_secret", "THREADS_CLIENT_SECRET"),
+      client_key:    getVal("client_key", "TIKTOK_CLIENT_KEY"),
     };
 
     // --- PKCE ---

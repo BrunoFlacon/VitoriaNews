@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { SubscribersView } from "@/components/dashboard/SubscribersView";
+import { MonetizationSection } from "./MonetizationSection";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface GatewaySettings {
@@ -1172,6 +1173,9 @@ export const BillingTab = () => {
           <TabsTrigger value="financial" className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background py-2 px-4">
             <BarChart3 className="w-4 h-4" /> Financeiro
           </TabsTrigger>
+          <TabsTrigger value="monetization" className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background py-2 px-4 text-emerald-400 data-[state=active]:text-emerald-400">
+            <DollarSign className="w-4 h-4" /> Monetização
+          </TabsTrigger>
           <TabsTrigger value="subscribers" className="flex items-center gap-2 rounded-lg data-[state=active]:bg-background py-2 px-4 text-yellow-500 data-[state=active]:text-yellow-500">
             <Users className="w-4 h-4" /> Assinantes
           </TabsTrigger>
@@ -1182,6 +1186,15 @@ export const BillingTab = () => {
         <TabsContent value="services"><ServicesSection /></TabsContent>
         <TabsContent value="founders"><FoundingMemberSection /></TabsContent>
         <TabsContent value="financial"><FinancialSection /></TabsContent>
+        <TabsContent value="monetization">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl border border-border/40 bg-card/60 backdrop-blur-sm p-6"
+          >
+            <MonetizationSection />
+          </motion.div>
+        </TabsContent>
         <TabsContent value="subscribers">
           <motion.div
             initial={{ opacity: 0, y: 8 }}

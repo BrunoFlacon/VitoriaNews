@@ -5,6 +5,6 @@ export function getAuthUrl(redirectUri: string, state: string, creds: any) {
     redirect_uri: redirectUri,
     state,
     response_type: "code",
-    scope: "openid profile email w_member_social r_member_social w_organization_social r_organization_social",
+    scope: "openid profile email", // w_member_social r_member_social w_organization_social r_organization_social requerem produtos LinkedIn adicionais
   });
 }

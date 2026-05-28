@@ -78,8 +78,8 @@ const App = () => (
                     <Route path="/login" element={<Login />} />
                     <Route path="/register" element={<Register />} />
                     <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                    <Route path="/oauth/callback" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
-                    <Route path="/oauth/callback/:platform" element={<ProtectedRoute><OAuthCallback /></ProtectedRoute>} />
+                    <Route path="/oauth/callback" element={<OAuthCallback />} />
+                    <Route path="/oauth/callback/:platform" element={<OAuthCallback />} />
                     <Route path="/news" element={<News />} />
                     <Route path="/news/:slug" element={<ArticlePage />} />
                     <Route path="/terms" element={<TermsPage />} />
