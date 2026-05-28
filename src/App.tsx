@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SystemProvider } from "@/contexts/SystemContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { lazy, Suspense } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -69,6 +70,7 @@ const App = () => (
               <Toaster />
               <Sonner />
               <ThemeEngine />
+              <ErrorBoundary>
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <Suspense fallback={<LoadingFallback />}>
                   <Routes>
@@ -91,6 +93,7 @@ const App = () => (
                   </Routes>
                 </Suspense>
               </BrowserRouter>
+              </ErrorBoundary>
             </TrackingProvider>
           </TooltipProvider>
         </NotificationProvider>

@@ -28,7 +28,7 @@ export function usePublisher() {
     const { data: session } = await supabase.auth.getSession();
     if (!session?.session?.user) return platforms;
 
-    const { data: connections } = await supabase
+    const { data: connections } = await (supabase as any)
       .from('social_connections')
       .select('platform, platform_user_id')
       .eq('user_id', session.session.user.id)
@@ -157,7 +157,7 @@ export function usePublisher() {
       }
 
       // Create post first
-      const { data: post, error } = await supabase
+      const { data: post, error } = await (supabase as any)
         .from('scheduled_posts')
         .insert({
           user_id: session.session.user.id,

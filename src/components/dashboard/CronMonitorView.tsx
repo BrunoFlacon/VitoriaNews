@@ -41,7 +41,7 @@ interface SyncTask {
     platform: string;
     username: string;
     page_name: string;
-  };
+  } | null;
 }
 
 export const CronMonitorView = () => {
@@ -399,12 +399,12 @@ export const CronMonitorView = () => {
           <Card key={task.id} className="glass-card p-4 border-border flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4 flex-1">
               <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center font-bold uppercase text-xs">
-                {task.social_connections.platform.substring(0, 2)}
+                {task.social_connections?.platform?.substring(0, 2) ?? 'NA'}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-sm">
-                    {task.social_connections.page_name || task.social_connections.username}
+                    {task.social_connections?.page_name || task.social_connections?.username || 'Desconhecido'}
                   </span>
                   <Badge variant="outline" className="text-[10px] capitalize">
                     {task.sync_type.replace('_', ' ')}
@@ -422,7 +422,7 @@ export const CronMonitorView = () => {
                   </Badge>
                 </div>
                 <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-2">
-                  <span>Plataforma: <span className="capitalize">{task.social_connections.platform}</span></span>
+                  <span>Plataforma: <span className="capitalize">{task.social_connections?.platform ?? 'N/A'}</span></span>
                   {task.sync_type === 'historical_15d' && (
                     <span className="px-1.5 py-0.5 bg-primary/5 rounded">Faltam {task.days_offset} dias</span>
                   )}

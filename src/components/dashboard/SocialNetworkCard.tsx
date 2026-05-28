@@ -1,4 +1,5 @@
-import { forwardRef, useState, useEffect, useRef, memo } from "react";
+import React, { forwardRef, useState, useEffect, useRef, memo } from "react";
+
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Plus, Settings, Loader2, Star, User, X } from "lucide-react";

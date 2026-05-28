@@ -163,7 +163,7 @@ const Dashboard = () => {
       case "dashboard":
         return (
           <div className="min-h-[70vh] w-full contents">
-            <DashboardHomeView 
+            <ErrorBoundary><DashboardHomeView 
               platform={platform}
               setPlatform={setPlatform}
               isPlatformMenuOpen={isPlatformMenuOpen}
@@ -182,13 +182,13 @@ const Dashboard = () => {
               isConnected={isConnected}
               setActiveTab={handleTabChange}
               setEditingPost={setEditingPost}
-            />
+            /></ErrorBoundary>
           </div>
         );
       case "create":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <CreatePostPanel
+            <ErrorBoundary><CreatePostPanel
               editingPost={editingPost}
               onPostSaved={() => {
                 setActiveTab("dashboard");
@@ -200,13 +200,13 @@ const Dashboard = () => {
               submitForApproval={submitForApproval}
               approvePost={approvePost}
               rejectPost={rejectPost}
-            />
+            /></ErrorBoundary>
           </Suspense>
         );
       case "calendar":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <CalendarView 
+            <ErrorBoundary><CalendarView 
             posts={scheduledPosts}
             loading={scheduledPostsLoading}
             deletePost={deletePost}
@@ -218,7 +218,7 @@ const Dashboard = () => {
               setEditingPost(post);
               setActiveTab("create");
             }}
-          />
+          /></ErrorBoundary>
           </Suspense>
         );
       case "analytics":
@@ -229,71 +229,71 @@ const Dashboard = () => {
             </ErrorBoundary>
           </Suspense>
         );
-      case "stories":
+        case "stories":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <StoriesLivesView />
+            <ErrorBoundary><StoriesLivesView /></ErrorBoundary>
           </Suspense>
         );
       case "messaging":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <MessagingView />
+            <ErrorBoundary><MessagingView /></ErrorBoundary>
           </Suspense>
         );
       case "news":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <NewsPortal />
+            <ErrorBoundary><NewsPortal /></ErrorBoundary>
           </Suspense>
         );
       case "documents":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <DocumentsView />
+            <ErrorBoundary><DocumentsView /></ErrorBoundary>
           </Suspense>
         );
       case "networks":
       case "accounts":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <SocialNetworksView />
+            <ErrorBoundary><SocialNetworksView /></ErrorBoundary>
           </Suspense>
         );
       case "sys_portal":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <PortalSettingsWrapper />
+            <ErrorBoundary><PortalSettingsWrapper /></ErrorBoundary>
           </Suspense>
         );
       case "settings":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <SettingsView defaultTab={settingsSubTab} />
+            <ErrorBoundary><SettingsView defaultTab={settingsSubTab} /></ErrorBoundary>
           </Suspense>
         );
       case "notifications":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <NotificationsFullView />
+            <ErrorBoundary><NotificationsFullView /></ErrorBoundary>
           </Suspense>
         );
       case "manual":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <ManualView />
+            <ErrorBoundary><ManualView /></ErrorBoundary>
           </Suspense>
         );
       case "robot":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <RobotBuilder />
+            <ErrorBoundary><RobotBuilder /></ErrorBoundary>
           </Suspense>
         );
       case "monitoring":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <CronMonitorView />
+            <ErrorBoundary><CronMonitorView /></ErrorBoundary>
           </Suspense>
         );
       default:
@@ -330,16 +330,16 @@ const Dashboard = () => {
           </div>
         </main>
         <Suspense fallback={null}>
-          <SystemFooter />
+          <ErrorBoundary><SystemFooter /></ErrorBoundary>
         </Suspense>
       </div>
-      <NotificationsPanel
+      <ErrorBoundary><NotificationsPanel
         isOpen={showNotifications}
         onClose={() => setShowNotifications(false)}
         onViewAll={() => handleTabChange("notifications")}
-      />
+      /></ErrorBoundary>
       <Suspense fallback={null}>
-        <FloatingWhatsApp onOpenMessaging={() => handleTabChange("messaging")} />
+        <ErrorBoundary><FloatingWhatsApp onOpenMessaging={() => handleTabChange("messaging")} /></ErrorBoundary>
       </Suspense>
     </div>
   );

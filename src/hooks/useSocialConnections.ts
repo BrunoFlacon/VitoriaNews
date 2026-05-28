@@ -561,7 +561,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       if (!conn) return;
 
       // Unset previous primary for this platform
-      await supabase
+      await (supabase as any)
         .from('social_connections')
         .update({ is_primary: false })
         .eq('user_id', user.id)
@@ -570,7 +570,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       // Conexão sintética (Telegram/WhatsApp via API, sem row em social_connections)
       if (connectionId.startsWith('telegram-api-') || connectionId.startsWith('whatsapp-api-')) {
-        const { error } = await (supabase
+        const { error } = await ((supabase as any)
         .from("social_connections")
         .upsert({
           user_id: user.id,
@@ -583,7 +583,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           followers_count: conn.followers_count,
           posts_count: conn.posts_count,
           profile_image_url: conn.profile_image_url || conn.profile_picture,
-        } as any, { onConflict: 'user_id,platform,platform_user_id' }) as any);
+        }, { onConflict: 'user_id,platform,platform_user_id' }) as any);
         if (error) throw error;
       } else {
         const { error } = await supabase
