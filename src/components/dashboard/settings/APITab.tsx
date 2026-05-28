@@ -206,18 +206,18 @@ export const APITab = memo(({
                                ? individualChannels.reduce((sum, ch) => sum + (ch.members_count || 0), 0)
                                : 0;
 
-                             const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
-                               ? (individualMembers || Math.max(Number(conn.followers_count || 0), Number(stats?.followers_count || 0)))
-                               : Math.max(Number(stats?.followers_count || 0), Number(conn.followers_count || 0));
+                              const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
+                                ? (individualMembers || Number(stats?.followers_count ?? conn.followers_count ?? 0))
+                                : Number(stats?.followers_count ?? conn.followers_count ?? 0);
 
-                             const waMetadata = (stats?.metadata as any) || {};
-                             const displayPosts = config.id === 'whatsapp'
-                               ? Number(conn.posts_count || waMetadata.official_posts_count || stats?.posts_count || 0)
-                               : (config.id === 'youtube')
-                                 ? Number(stats?.posts_count || stats?.metadata?.video_count || 0)
-                                 : (config.id === 'threads')
-                                   ? Math.max(Number(stats?.posts_count || 0), Number(conn.posts_count || 0))
-                                   : Math.max(Number(stats?.posts_count || 0), Number((conn.metadata as any)?.posts_count || conn.posts_count || 0));
+                              const waMetadata = (stats?.metadata as any) || {};
+                              const displayPosts = config.id === 'whatsapp'
+                                ? Number(conn.posts_count || waMetadata.official_posts_count || stats?.posts_count || 0)
+                                : (config.id === 'youtube')
+                                  ? Number(stats?.posts_count || stats?.metadata?.video_count || 0)
+                                  : (config.id === 'threads')
+                                    ? Number(stats?.posts_count ?? conn.posts_count ?? 0)
+                                    : Number(stats?.posts_count ?? (conn.metadata as any)?.posts_count ?? conn.posts_count ?? 0);
 
                             return (
                               <ConnectionCard
