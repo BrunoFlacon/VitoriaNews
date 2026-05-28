@@ -169,7 +169,7 @@ serve(async (req: Request) => {
       supabase.from("social_connections").select("id, platform, username, page_name, followers_count, profile_image_url, is_connected, platform_user_id, page_id").eq("user_id", user.id),
       supabase.from("social_accounts").select("id, platform, platform_user_id, username, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, metadata, updated_at").eq("user_id", user.id),
       supabase.from("platform_hourly_performance").select("platform, day_of_week, hour, avg_likes, avg_comments, avg_shares, avg_impressions").order("avg_likes", { ascending: false }).limit(50),
-      supabase.from("messages").select("id, status, platform, content, recipient_name, created_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: false }),
+      supabase.from("messages").select("id, status, platform, content, recipient_name, recipient_phone, created_at, metadata").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: false }),
       supabase.from("meta_ads_campaigns").select("id, impressions, reach, clicks, amount_spent, created_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()),
       supabase.from("google_analytics_data").select("id, metric_name, metric_value, date").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
       supabase.from("youtube_analytics").select("id, views, likes, comments, subscribers_gained, estimated_minutes_watched, date").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
@@ -583,23 +583,6 @@ serve(async (req: Request) => {
       if (!messagePlatformStats[p]) messagePlatformStats[p] = { sent: 0, failed: 0 };
       if (m.status === 'sent') messagePlatformStats[p].sent++;
       if (m.status === 'failed') messagePlatformStats[p].failed++;
-    });
-
-    // Add scheduled posts to message stats
-    filteredPosts.forEach((post: any) => {
-      if (post.status === 'published' || post.status === 'failed') {
-        const platforms = post.platforms || [];
-        
-        if (post.status === 'published') totalSentM++;
-        if (post.status === 'failed') totalFailedM++;
-        
-        platforms.forEach((p: string) => {
-          const normP = normalizePlatform(p);
-          if (!messagePlatformStats[normP]) messagePlatformStats[normP] = { sent: 0, failed: 0 };
-          if (post.status === 'published') messagePlatformStats[normP].sent++;
-          if (post.status === 'failed') messagePlatformStats[normP].failed++;
-        });
-      }
     });
 
     const successRateM = (totalSentM + totalFailedM) > 0 

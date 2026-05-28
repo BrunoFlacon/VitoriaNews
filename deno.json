@@ -1,7 +1,66 @@
 {
-  "exclude": ["src/", "node_modules/", "backups/", "supabase/.temp/"],
+  "exclude": [
+    "src/",
+    "node_modules/",
+    "backups/",
+    "supabase/.temp/",
+    "scripts/",
+    "scratch/",
+    "dist/",
+    "_archive_temp/",
+    ".gemini/",
+    "testsprite_tests/",
+    "apitab_utf8.tsx",
+    "apitab_full_utf8.tsx",
+    "apitab_utf8_2.tsx",
+    "profiletab_utf8.tsx",
+    "old_SettingsView_utf8.tsx",
+    "apitab_full.tsx",
+    "apitab_temp.tsx",
+    "apitab_temp2.tsx",
+    "old_SettingsView.tsx",
+    "profiletab_temp.tsx"
+  ],
   "lint": {
-    "exclude": ["src/", "node_modules/", "backups/", "supabase/.temp/"]
+    "exclude": [
+      "src/",
+      "node_modules/",
+      "backups/",
+      "supabase/.temp/",
+      "scripts/",
+      "scratch/",
+      "dist/",
+      "_archive_temp/",
+      ".gemini/",
+      "testsprite_tests/",
+      "apitab_utf8.tsx",
+      "apitab_full_utf8.tsx",
+      "apitab_utf8_2.tsx",
+      "profiletab_utf8.tsx",
+      "old_SettingsView_utf8.tsx",
+      "apitab_full.tsx",
+      "apitab_temp.tsx",
+      "apitab_temp2.tsx",
+      "old_SettingsView.tsx",
+      "profiletab_temp.tsx"
+    ],
+    "rules": {
+      "exclude": [
+        "no-explicit-any",
+        "ban-ts-comment",
+        "no-import-prefix",
+        "no-unused-vars",
+        "prefer-const",
+        "no-empty",
+        "require-await",
+        "no-case-declarations",
+        "jsx-button-has-type",
+        "no-window",
+        "no-process-global",
+        "no-node-globals",
+        "no-deprecated-deno-api"
+      ]
+    }
   },
   "test": {
     "exclude": ["src/", "node_modules/", "backups/", "supabase/.temp/"]

@@ -41,6 +41,14 @@ export interface AudienceBreakdown {
   channels: MessagingChannelStat[];
 }
 
+export interface MessageDeliveryStats {
+  totalSent: number;
+  totalFailed: number;
+  successRate: number;
+  platformStats: Record<string, { sent: number; failed: number }>;
+  recentMessages: any[];
+}
+
 export interface SocialStatsByPlatform {
   [platform: string]: SocialAccountStat[];
 }
@@ -71,10 +79,10 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           .eq('user_id', user.id),
         supabase
           .from('messages')
-          .select('platform, channel_id, status, metadata')
+          .select('id, platform, status, content, recipient_name, recipient_phone, created_at, metadata')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(100),
+          .limit(500),
         supabase
           .from('scheduled_posts')
           .select('platforms, status')
@@ -103,12 +111,29 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       const actionCounts: Record<string, number> = {};
       const botActionCounts: Record<string, number> = {};
       
+      let msgTotalSent = 0;
+      let msgTotalFailed = 0;
+      const msgPlatformStats: Record<string, { sent: number; failed: number }> = {};
+      
       (messagesRes.data || []).forEach((m: any) => {
         const p = (m.platform || 'unknown').toLowerCase().trim();
         const isBot = m.metadata?.integration_type === 'bot';
         if (isBot) botActionCounts[p] = (botActionCounts[p] || 0) + 1;
         else actionCounts[p] = (actionCounts[p] || 0) + 1;
+
+        if (!msgPlatformStats[p]) msgPlatformStats[p] = { sent: 0, failed: 0 };
+        if (m.status === 'sent') {
+          msgPlatformStats[p].sent++;
+          msgTotalSent++;
+        } else if (m.status === 'failed') {
+          msgPlatformStats[p].failed++;
+          msgTotalFailed++;
+        }
       });
+
+      const msgSuccessRate = (msgTotalSent + msgTotalFailed) > 0
+        ? Math.round((msgTotalSent / (msgTotalSent + msgTotalFailed)) * 100)
+        : 0;
 
       (scheduledRes.data || []).forEach((post: any) => {
         if (post.platforms && Array.isArray(post.platforms)) {
@@ -208,7 +233,35 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         stats: finalStats,
         messagingChannels: channels,
         apiConnections: (credsRes.data || []).map(r => r.platform),
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
+        messageStats: {
+          totalSent: msgTotalSent,
+          totalFailed: msgTotalFailed,
+          successRate: msgSuccessRate,
+          platformStats: msgPlatformStats,
+          recentMessages: (messagesRes.data || []).slice(0, 500).map((m: any) => ({
+            id: m.id,
+            platform: m.platform,
+            content: m.content,
+            recipient: m.recipient_name || m.recipient_phone,
+            status: m.status,
+            created_at: m.created_at,
+          })),
+        },
+        messageDeliveryStats: {
+          totalSent: msgTotalSent,
+          totalFailed: msgTotalFailed,
+          successRate: msgSuccessRate,
+          platformStats: msgPlatformStats,
+          recentMessages: (messagesRes.data || []).slice(0, 15).map((m: any) => ({
+            id: m.id,
+            platform: m.platform,
+            content: m.content,
+            recipient: m.recipient_name || m.recipient_phone,
+            status: m.status,
+            created_at: m.created_at,
+          })),
+        }
       };
     },
     enabled: !!user && (options.enabled !== false),
@@ -308,6 +361,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     audienceBreakdown,
     loading: isLoading || manualLoading,
     setStatsLoading: (loading: boolean) => setManualLoading(loading),
+    messageStats: data?.messageStats || { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {}, recentMessages: [] },
     lastUpdated: data?.lastUpdated || null,
     totalFollowers,
     totalPosts,
@@ -315,6 +369,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     getPlatformStats,
     isConnected,
     refresh: refetch,
+    messageDeliveryStats: data?.messageDeliveryStats || { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {}, recentMessages: [] },
   };
 }
 

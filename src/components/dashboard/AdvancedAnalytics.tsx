@@ -166,7 +166,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     syncAnalytics, refetch 
   } = useAnalytics();
   const { user, logout } = useAuth();
-  const { stats, byPlatform, totalFollowers: localTotalFollowers, totalPosts: localTotalPosts, messagingChannels, audienceBreakdown, lastUpdated, loading: statsLoading, refresh: refreshStats } = useSocialStats();
+  const { stats, byPlatform, totalFollowers: localTotalFollowers, totalPosts: localTotalPosts, messagingChannels, audienceBreakdown, lastUpdated, loading: statsLoading, refresh: refreshStats, messageDeliveryStats: hookMessageStats } = useSocialStats();
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
@@ -308,14 +308,14 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   // In that case, fall back to local DB which also uses social_accounts
   // but allows us to build charts and breakdowns from followerData.
   const shouldUseLocalFallback = useMemo(() => {
-    if (stats.length === 0) return false;
     if (!data) return true;
     const d = data as any;
-    // Only fall back if engagement metrics are zero while there IS data to show
     const hasEngagement = (d.engagement?.views || 0) > 0 || (d.engagement?.likes || 0) > 0 || (d.engagement?.comments || 0) > 0;
+    if (hasEngagement) return false;
     const hasLocalData = stats.some(s => s.followers_count > 0 || s.posts_count > 0);
-    return !hasEngagement && hasLocalData;
-  }, [data, stats]);
+    const hasMessagingData = messagingChannels.length > 0 || (hookMessageStats?.totalSent || 0) > 0 || (hookMessageStats?.totalFailed || 0) > 0;
+    return hasLocalData || hasMessagingData;
+  }, [data, stats, messagingChannels, hookMessageStats]);
 
   // Query account_metrics time-series data (refetches when invalidated via sync)
   const userId = user?.id;
@@ -467,27 +467,17 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         comments: ytStats.reduce((s, a) => s + a.comments_count, 0),
       };
 
-      // Compute message stats from messaging channels
-      const msgTotalSent = messagingChannels.reduce((s, ch) => s + ch.members_count, 0);
-      const msgPlatformStats: Record<string, { sent: number; failed: number }> = {};
-      messagingChannels.forEach(ch => {
-        const p = ch.platform || 'unknown';
-        if (!msgPlatformStats[p]) msgPlatformStats[p] = { sent: 0, failed: 0 };
-        msgPlatformStats[p].sent += ch.members_count || 0;
-      });
-      const msgRecent = messagingChannels.slice(0, 5).map(ch => ({
-        id: ch.id,
-        platform: ch.platform,
-        content: `Canal: ${ch.channel_name}`,
-        recipient: `${ch.members_count} membros`,
-        status: 'sent',
-        created_at: new Date().toISOString(),
-      }));
+      // Use hookMessageStats from hook (computed from real messages data)
+      const msgTotalSent = hookMessageStats.totalSent || 0;
+      const msgTotalFailed = hookMessageStats.totalFailed || 0;
+      const successRateM = hookMessageStats.successRate || 0;
+      const msgPlatformStats = hookMessageStats.platformStats || {};
+      const msgRecent = hookMessageStats.recentMessages || [];
 
       const overview = {
         totalPosts: stats.reduce((s, a) => s + a.posts_count, 0),
         publishedPosts: stats.reduce((s, a) => s + a.posts_count, 0),
-        scheduledPosts: 0, draftPosts: 0, failedPosts: 0,
+        scheduledPosts: 0, draftPosts: 0, failedPosts: hookMessageStats.totalFailed || 0,
         publishRate: stats.length > 0 ? 100 : 0,
         totalFollowers: totalFollow,
         lastSyncedAt: null,
@@ -515,7 +505,8 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         attacksData: [],
         messageStats: {
           totalSent: msgTotalSent,
-          totalFailed: 0, successRate: 100,
+          totalFailed: msgTotalFailed,
+          successRate: successRateM,
           platformStats: msgPlatformStats,
           recentMessages: msgRecent,
         },
@@ -542,10 +533,10 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       viralData: d.viralData || [],
       trendsData: d.trendsData || [],
       attacksData: d.attacksData || [],
-      messageStats: d.messageStats || { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {}, recentMessages: [] },
+      messageStats: (d.messageStats?.totalSent || d.messageStats?.totalFailed) ? d.messageStats : hookMessageStats,
       followerData: d.followerData || [],
     };
-  }, [data, stats, accountMetrics, messagingChannels, period, platform]);
+  }, [data, stats, accountMetrics, messagingChannels, period, platform, hookMessageStats]);
 
   // Aggregating Follower Data to prevent duplicates
   const groupedFollowers = useMemo(() => {
@@ -1255,8 +1246,8 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                  if (audienceTypeInfo !== 'all' && ch.channel_type !== audienceTypeInfo) return false;
                  // Online Filter
                  if (audienceOnlineInfo === 'online' && !(ch.online_count > 0)) return false;
-                 // Recent filter fallback mock
-                 if (audienceOnlineInfo === 'active_recent' && (Math.random() > 0.5)) return false; // simulated mock for now
+                  // Recent filter — no real data yet, just pass through
+                  if (audienceOnlineInfo === 'active_recent' && ch.online_count === 0) return false;
                  
                  return true;
               });
@@ -1309,16 +1300,15 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                      </div>
                    </div>
 
-                   {/* TRACKING SESSION MOCK VISUAL */}
-                   <div className="flex justify-between items-center pt-3 border-t border-border/50 text-[10px]">
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                         <Clock className="w-3 h-3" />
-                         <span>Tempo Médio Sessão: <strong className="text-foreground">{Math.floor(Math.random() * 4) + 1}m {Math.floor(Math.random() * 59)}s</strong></span>
-                      </div>
-                      <div className="text-right border-l border-border/50 pl-2">
-                         <button onClick={() => onNavigate?.('messaging')} className="text-primary font-bold cursor-pointer hover:underline">Ver Histórico</button>
-                      </div>
-                   </div>
+                    <div className="flex justify-between items-center pt-3 border-t border-border/50 text-[10px]">
+                       <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          <span>Tempo Médio Sessão: <strong className="text-foreground">--</strong></span>
+                       </div>
+                       <div className="text-right border-l border-border/50 pl-2">
+                          <button onClick={() => onNavigate?.('messaging')} className="text-primary font-bold cursor-pointer hover:underline">Ver Histórico</button>
+                       </div>
+                    </div>
 
                  </div>
                  );

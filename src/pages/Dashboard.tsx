@@ -13,6 +13,7 @@ import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { cn } from "@/lib/utils";
 
 // Core UI Components
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { MobileNav } from "@/components/dashboard/MobileNav";
@@ -223,7 +224,9 @@ const Dashboard = () => {
       case "analytics":
         return (
           <Suspense fallback={<ViewLoader />}>
-            <AdvancedAnalytics />
+            <ErrorBoundary>
+              <AdvancedAnalytics />
+            </ErrorBoundary>
           </Suspense>
         );
       case "stories":
