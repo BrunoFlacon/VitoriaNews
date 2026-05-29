@@ -278,13 +278,8 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Ponte de Conexão via Edge Function (para LinkedIn e TikTok que exigem HTTPS mas
-      // podem não ter o callback registrado no domínio de produção).
-      // Meta platforms (Threads, Facebook, Instagram, WhatsApp) usam webradiovitoria.com.br
-      // porque esse domínio já está registrado nos apps da Meta.
-      if (['linkedin'].includes(platform) && isLocal) {
-        origin = "https://ghtkdkauseesambzqfrd.supabase.co/functions/v1";
-      } else if (['tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
+      // Meta/TikTok usam webradiovitoria.com.br porque esse domínio já está registrado nos apps.
+      if (['tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
         origin = "https://webradiovitoria.com.br";
         toast({
           title: "Ponte de Conexão Ativada",
@@ -298,10 +293,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       }
 
       const isWebRadioBridge = ['tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal;
-      const isEdgeBridge = ['linkedin'].includes(platform) && isLocal;
-      const redirectUri = isEdgeBridge
-        ? `${origin}/social-oauth-callback/${platform}`
-        : `${origin}/oauth/callback/${platform}`;
+      const redirectUri = `${origin}/oauth/callback/${platform}`;
 
       const width  = 600;
       const height = 700;
