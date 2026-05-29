@@ -684,6 +684,7 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
   }];
 
   // Buscar company pages que o usuário administra
+  let orgApiAccessible = false;
   try {
     const orgAclsRes = await fetch(
       "https://api.linkedin.com/v2/organizationalEntityAcls?q=roleAssignee&role=ADMINISTRATOR",
@@ -691,6 +692,7 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
     );
 
     if (orgAclsRes.ok) {
+      orgApiAccessible = true;
       const orgAclsData = await orgAclsRes.json();
       const elements = orgAclsData.elements as Array<any> | undefined;
 
@@ -733,7 +735,7 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
     console.warn("[LinkedIn] Erro ao buscar company pages:", err);
   }
 
-  return results;
+  return { results, orgApiAccessible };
 }
 
 serve(async (req: Request) => {
@@ -993,6 +995,7 @@ serve(async (req: Request) => {
     }
 
     let results: TokenResult[];
+    let responseWarning = "";
 
     switch (platform) {
       case "google":
@@ -1001,7 +1004,14 @@ serve(async (req: Request) => {
       case "instagram":
       case "whatsapp": results = await exchangeMeta(code, oauthState.redirect_uri, platform, formattedCreds, supabase, user.id); break;
       case "threads": results = await exchangeThreads(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
-      case "linkedin": results = await exchangeLinkedIn(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
+      case "linkedin": {
+        const liResult = await exchangeLinkedIn(code, oauthState.redirect_uri, formattedCreds, supabase, user.id);
+        results = liResult.results;
+        if (!liResult.orgApiAccessible && results.length === 1) {
+          responseWarning = "LinkedIn conectado. Para ver páginas empresariais, ative o Marketing Developer Platform no portal do LinkedIn e reconecte.";
+        }
+        break;
+      }
       case "reddit": results = await exchangeReddit(code, oauthState.redirect_uri, { 
         client_id: raw.client_id, 
         client_secret: raw.client_secret 
@@ -1066,7 +1076,9 @@ serve(async (req: Request) => {
 
     await supabase.from("oauth_states").delete().eq("id", oauthState.id);
     
-      return new Response(JSON.stringify({ success: true, platform, count: results.length }), { headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
+      const responseBody: any = { success: true, platform, count: results.length };
+      if (responseWarning) responseBody.warning = responseWarning;
+      return new Response(JSON.stringify(responseBody), { headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
 
   } catch (error) {
     console.error("Error in social-oauth-callback:", error);
