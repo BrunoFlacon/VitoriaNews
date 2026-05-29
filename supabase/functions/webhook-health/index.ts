@@ -132,6 +132,18 @@ serve(async (req: Request) => {
       }
     }
 
+    if (platform === "all" || platform === "twitter") {
+      const twKey = Deno.env.get("TWITTER_CONSUMER_SECRET");
+      const twId = Deno.env.get("TWITTER_CONSUMER_KEY");
+      webhookStatuses["twitter"] = {
+        configured: !!twKey && !!twId,
+        healthy: !!twKey && !!twId,
+        details: (twKey && twId)
+          ? "Twitter Consumer Key & Secret configurados. Registre o webhook no X Developer Console."
+          : "TWITTER_CONSUMER_KEY e TWITTER_CONSUMER_SECRET necessários — configure no Supabase",
+      };
+    }
+
     for (const p of ["tiktok", "linkedin"]) {
       if (platform !== "all" && platform !== p) continue;
       const key = Deno.env.get(p === "tiktok" ? "TIKTOK_CLIENT_SECRET" : "LINKEDIN_CLIENT_SECRET");

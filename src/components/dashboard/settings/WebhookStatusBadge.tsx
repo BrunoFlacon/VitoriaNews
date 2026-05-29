@@ -26,6 +26,7 @@ const WEBHOOK_PLATFORMS: Record<string, { label: string; docField: string }> = {
   instagram: { label: "Instagram", docField: "instagram" },
   tiktok: { label: "TikTok", docField: "tiktok" },
   linkedin: { label: "LinkedIn", docField: "linkedin" },
+  twitter: { label: "X (Twitter)", docField: "twitter" },
   meta: { label: "Meta (Geral)", docField: "meta" },
 };
 

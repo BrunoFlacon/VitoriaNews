@@ -145,7 +145,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                 {isConnecting
                   ? "Conectando..."
                   : isConnected
-                    ? (selectedAccount?.username ? `@${selectedAccount.username}` : (selectedAccount?.page_name || pageName || "Conectado"))
+                    ? (selectedAccount?.page_name || (selectedAccount?.username ? `@${selectedAccount.username}` : pageName || "Conectado"))
                     : "Clique para conectar"}
               </p>
               {isConnected && selectedAccount && (
@@ -274,7 +274,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate flex items-center gap-1.5">
-                            {account.username ? `@${account.username}` : (account.page_name || account.platform_user_id || "Perfil")}
+                            {account.page_name || (account.username ? `@${account.username}` : account.platform_user_id || "Perfil")}
                             {account.is_primary && (
                               <Star className="w-3 h-3 fill-yellow-500 text-yellow-500 shrink-0" />
                             )}
@@ -316,7 +316,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                         className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                       >
                         <Star className="w-3.5 h-3.5" />
-                        Definir &ldquo;{account.username ? `@${account.username}` : (account.page_name || "este perfil")}&rdquo; como padrão
+                        Definir &ldquo;{account.page_name || (account.username ? `@${account.username}` : "este perfil")}&rdquo; como padrão
                       </button>
                     ) : null
                   ))}

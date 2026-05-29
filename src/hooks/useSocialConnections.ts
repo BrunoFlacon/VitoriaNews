@@ -278,8 +278,8 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Meta/TikTok/LinkedIn usam webradiovitoria.com.br porque esse domínio já está registrado nos apps.
-      if (['linkedin', 'tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
+      // Plataformas que usam webradiovitoria.com.br como ponte por restrição de localhost nos apps.
+      if (['linkedin', 'tiktok', 'threads', 'facebook', 'instagram', 'whatsapp', 'twitter', 'google', 'youtube'].includes(platform) && isLocal) {
         origin = "https://webradiovitoria.com.br";
         toast({
           title: "Ponte de Conexão Ativada",
@@ -287,12 +287,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
       } else if (isLocal) {
         let localHostname = window.location.hostname;
-        if (['twitter'].includes(platform)) localHostname = "127.0.0.1";
-        else if (['facebook', 'instagram', 'whatsapp', 'threads', 'google', 'youtube', 'tiktok', 'linkedin'].includes(platform)) localHostname = "localhost";
+        if (['facebook', 'instagram', 'whatsapp', 'threads', 'google', 'youtube', 'tiktok', 'linkedin'].includes(platform)) localHostname = "localhost";
         origin = `http://${localHostname}${port}`;
       }
 
-      const isWebRadioBridge = ['linkedin', 'tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal;
+      const isWebRadioBridge = ['linkedin', 'tiktok', 'threads', 'facebook', 'instagram', 'whatsapp', 'twitter', 'google', 'youtube'].includes(platform) && isLocal;
       const redirectUri = `${origin}/oauth/callback/${platform}`;
 
       const width  = 600;
@@ -395,7 +394,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         }
 
         const { data, error: aErr } = await safeInvoke('social-oauth-init', {
-          body: { platform, redirect_uri: redirectUri, callback_domain: window.location.origin, ...extraBody },
+          body: { platform, redirect_uri: redirectUri, callback_domain: origin, ...extraBody },
           timeoutMs: 20000,
         });
 
@@ -543,10 +542,13 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         if (!fromMessage) showToastForPlatform();
       };
 
+      let coopBlocked = false;
       const pollInterval = setInterval(async () => {
         try {
           if (popup && popup.closed) { clearInterval(pollInterval); await finalize(); }
-        } catch (e) { clearInterval(pollInterval); await finalize(); }
+        } catch (e) {
+          coopBlocked = true;
+        }
       }, 2000);
 
       setTimeout(() => finalize(), 300000);

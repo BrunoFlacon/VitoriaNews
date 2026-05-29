@@ -188,7 +188,7 @@ export const APITab = memo(({
                               ? `${rawPhoto}${rawPhoto.includes('?') ? '&' : '?'}v=${stats?.updated_at ? new Date(stats.updated_at).getTime() : Date.now()}`
                               : rawPhoto;
                             const displayPhoto = getProxyUrl(cacheBustedPhoto);
-                            const displayName = stats?.username || conn.page_name || conn.username || (config.id === 'threads' ? "Threads Profile" : "Conta Conectada");
+                            const displayName = conn.page_name || stats?.page_name || stats?.username || conn.username || (config.id === 'threads' ? "Threads Profile" : "Conta Conectada");
 
                             const individualChannels = (config.id === 'telegram' || config.id === 'whatsapp')
                                ? (audienceBreakdown?.flatMap(b => b.channels) || []).filter(ch => {

@@ -1411,7 +1411,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                       ? `${rawPhoto}${rawPhoto.includes('?') ? '&' : '?'}v=${stats?.updated_at ? new Date(stats.updated_at).getTime() : Date.now()}`
                                       : rawPhoto;
                                     const displayPhoto = getProxyUrl(cacheBustedPhoto);
-                                    const displayName = stats?.username || conn.page_name || conn.username || "Conta Conectada";
+                                    const displayName = conn.page_name || stats?.page_name || stats?.username || conn.username || "Conta Conectada";
 
                                     const individualChannels = (config.id === 'telegram' || config.id === 'whatsapp')
                                        ? (audienceBreakdown?.flatMap(b => b.channels) || []).filter(ch => {
