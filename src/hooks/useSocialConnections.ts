@@ -301,7 +301,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const isEdgeBridge = ['linkedin', 'tiktok'].includes(platform) && isLocal;
       const redirectUri = isEdgeBridge
         ? `${origin}/social-oauth-callback/${platform}`
-        : `${origin}/oauth/callback/${platform}/`;
+        : `${origin}/oauth/callback/${platform}`;
 
       const width  = 600;
       const height = 700;
