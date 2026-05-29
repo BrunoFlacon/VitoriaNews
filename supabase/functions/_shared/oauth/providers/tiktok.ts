@@ -5,7 +5,7 @@ export function getAuthUrl(redirectUri: string, state: string, creds: any, _pkce
   const params: Record<string, string> = {
     client_key: tiktokClientKey,
     response_type: "code",
-    scope: "user.info.basic,video.list,video.publish",
+    scope: "user.info.basic,user.info.stats,video.list,video.publish",
     redirect_uri: redirectUri,
     state,
   };
