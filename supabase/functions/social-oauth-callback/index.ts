@@ -727,7 +727,7 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
         }
       }
     } else {
-      console.warn("[LinkedIn] Sem permissão para listar company pages (pode ser normal para contas pessoais)");
+      console.warn("[LinkedIn] Sem permissão para listar company pages. Ative o Marketing Developer Platform no portal do LinkedIn.");
     }
   } catch (err) {
     console.warn("[LinkedIn] Erro ao buscar company pages:", err);
