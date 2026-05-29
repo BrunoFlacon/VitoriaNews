@@ -739,7 +739,7 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
-  // ── GET: Redirect to production domain's OAuth callback popup ──
+  // ── GET: Redirect to the original callback domain (stored in oauth_states) ──
   if (req.method === "GET") {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
@@ -749,12 +749,27 @@ serve(async (req: Request) => {
     const pathParts = url.pathname.split("/").filter(Boolean);
     const platform = pathParts[pathParts.length - 1] || "unknown";
 
-    // Se LinkedIn devolver erro, redireciona com o erro
-    const redirectUrl = error
-      ? `http://localhost:8081/oauth/callback/${platform}/?error=${encodeURIComponent(error)}`
-      : `http://localhost:8081/oauth/callback/${platform}/?code=${encodeURIComponent(code || "")}&state=${encodeURIComponent(state || "")}`;
+    let callbackDomain = "http://localhost:8081";
+    if (state) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const { data: oauthState } = await supabase
+          .from("oauth_states")
+          .select("callback_domain")
+          .eq("state", state)
+          .maybeSingle();
+        if (oauthState?.callback_domain) {
+          callbackDomain = oauthState.callback_domain;
+        }
+      } catch { }
+    }
 
-    return Response.redirect(redirectUrl, 302);
+    if (error) {
+      return Response.redirect(`${callbackDomain}/oauth/callback/${platform}?error=${encodeURIComponent(error)}`, 302);
+    }
+    return Response.redirect(`${callbackDomain}/oauth/callback/${platform}?code=${encodeURIComponent(code || "")}&state=${encodeURIComponent(state || "")}`, 302);
   }
 
   try {

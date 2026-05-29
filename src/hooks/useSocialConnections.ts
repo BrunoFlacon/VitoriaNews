@@ -282,9 +282,9 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       // podem não ter o callback registrado no domínio de produção).
       // Meta platforms (Threads, Facebook, Instagram, WhatsApp) usam webradiovitoria.com.br
       // porque esse domínio já está registrado nos apps da Meta.
-      if (['linkedin', 'tiktok'].includes(platform) && isLocal) {
+      if (['linkedin'].includes(platform) && isLocal) {
         origin = "https://ghtkdkauseesambzqfrd.supabase.co/functions/v1";
-      } else if (['threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
+      } else if (['tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
         origin = "https://webradiovitoria.com.br";
         toast({
           title: "Ponte de Conexão Ativada",
@@ -297,8 +297,8 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         origin = `http://${localHostname}${port}`;
       }
 
-      const isWebRadioBridge = ['threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal;
-      const isEdgeBridge = ['linkedin', 'tiktok'].includes(platform) && isLocal;
+      const isWebRadioBridge = ['tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal;
+      const isEdgeBridge = ['linkedin'].includes(platform) && isLocal;
       const redirectUri = isEdgeBridge
         ? `${origin}/social-oauth-callback/${platform}`
         : `${origin}/oauth/callback/${platform}`;
@@ -403,7 +403,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         }
 
         const { data, error: aErr } = await safeInvoke('social-oauth-init', {
-          body: { platform, redirect_uri: redirectUri, ...extraBody },
+          body: { platform, redirect_uri: redirectUri, callback_domain: window.location.origin, ...extraBody },
           timeoutMs: 20000,
         });
 

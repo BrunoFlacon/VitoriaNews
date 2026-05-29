@@ -118,6 +118,7 @@ serve(async (req: Request) => {
     const body = await req.json();
     const platform     = body.platform     as string | undefined;
     const redirect_uri = body.redirect_uri as string | undefined;
+    const callback_domain = (body.callback_domain as string | undefined) || null;
     const bodyClientId     = (body.client_id     as string | undefined)?.trim() || null;
     const bodyClientSecret = (body.client_secret as string | undefined)?.trim() || null;
 
@@ -180,8 +181,9 @@ serve(async (req: Request) => {
     await supabase.from("oauth_states").insert({ 
       user_id: user.id, 
       platform, 
-      state,        // state simples, sem ~verifier
+      state,
       redirect_uri,
+      callback_domain,
       code_verifier: pkce?.verifier || null
     });
 
