@@ -8,7 +8,7 @@ const corsHeaders = (req) => ({
 });
 
 // Platforms that use OAuth2 refresh_token (have a refresh_token column)
-const OAUTH_REFRESH_PLATFORMS = ["google", "youtube", "twitter"];
+const OAUTH_REFRESH_PLATFORMS = ["google", "youtube", "twitter", "tiktok", "linkedin"];
 // Platforms that use Facebook Page Token exchange (no refresh_token, use fb_exchange_token)
 const FB_EXCHANGE_PLATFORMS = ["facebook", "instagram"];
 
@@ -171,6 +171,70 @@ serve(async (req: Request) => {
         if (data.error) throw new Error(data.error_description || data.error);
         newAccessToken = data.access_token;
         newExpiresIn = data.expires_in || 7200;
+        break;
+      }
+      case "tiktok": {
+        const tiktokClientKey = Deno.env.get("TIKTOK_CLIENT_KEY") || "";
+        const tiktokClientSecret = Deno.env.get("TIKTOK_CLIENT_SECRET") || "";
+
+        if (!connection.refresh_token) {
+          return new Response(
+            JSON.stringify({ error: "TikTok refresh token não disponível. Reconecte a conta.", needsReconnect: true }),
+            { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+          );
+        }
+
+        const tiktokPayload = new URLSearchParams({
+          client_key: tiktokClientKey,
+          client_secret: tiktokClientSecret,
+          grant_type: "refresh_token",
+          refresh_token: connection.refresh_token,
+        });
+
+        const tiktokRes = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: tiktokPayload.toString(),
+        });
+        const tiktokData = await tiktokRes.json();
+        if (tiktokData.error) throw new Error(tiktokData.error_description || tiktokData.error);
+        newAccessToken = tiktokData.access_token;
+        newExpiresIn = tiktokData.expires_in || 86400;
+        if (tiktokData.refresh_token) {
+          await supabase.from("social_connections").update({ refresh_token: tiktokData.refresh_token }).eq("id", connection.id);
+        }
+        break;
+      }
+      case "linkedin": {
+        const linkedinClientId = Deno.env.get("LINKEDIN_CLIENT_ID") || "";
+        const linkedinClientSecret = Deno.env.get("LINKEDIN_CLIENT_SECRET") || "";
+
+        if (!connection.refresh_token) {
+          return new Response(
+            JSON.stringify({ error: "LinkedIn refresh token não disponível. Reconecte a conta.", needsReconnect: true }),
+            { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+          );
+        }
+
+        const linkedinPayload = new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: connection.refresh_token,
+          client_id: linkedinClientId,
+          client_secret: linkedinClientSecret,
+        });
+
+        const linkedinRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: linkedinPayload.toString(),
+        });
+        const linkedinData = await linkedinRes.json();
+        if (linkedinData.error) throw new Error(linkedinData.error_description || linkedinData.error);
+        newAccessToken = linkedinData.access_token;
+        newExpiresIn = linkedinData.expires_in || 3600;
+        if (linkedinData.refresh_token) {
+          await supabase.from("social_connections").update({ refresh_token: linkedinData.refresh_token }).eq("id", connection.id);
+        }
         break;
       }
       default:
