@@ -278,8 +278,8 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let origin = window.location.origin;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      // Meta/TikTok usam webradiovitoria.com.br porque esse domínio já está registrado nos apps.
-      if (['tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
+      // Meta/TikTok/LinkedIn usam webradiovitoria.com.br porque esse domínio já está registrado nos apps.
+      if (['linkedin', 'tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal) {
         origin = "https://webradiovitoria.com.br";
         toast({
           title: "Ponte de Conexão Ativada",
@@ -292,7 +292,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         origin = `http://${localHostname}${port}`;
       }
 
-      const isWebRadioBridge = ['tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal;
+      const isWebRadioBridge = ['linkedin', 'tiktok', 'threads', 'facebook', 'instagram', 'whatsapp'].includes(platform) && isLocal;
       const redirectUri = `${origin}/oauth/callback/${platform}`;
 
       const width  = 600;
