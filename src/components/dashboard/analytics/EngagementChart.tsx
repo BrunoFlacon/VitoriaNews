@@ -85,6 +85,7 @@ export const EngagementChart = React.memo(({ chartData }: EngagementChartProps) 
             <Area 
               type="monotone" 
               dataKey="views" 
+              name="Visualizações"
               stroke="#3b82f6" 
               strokeWidth={3}
               fillOpacity={1} 
@@ -94,6 +95,7 @@ export const EngagementChart = React.memo(({ chartData }: EngagementChartProps) 
             <Area 
               type="monotone" 
               dataKey="engagement" 
+              name="Engajamento"
               stroke="#8b5cf6" 
               strokeWidth={3}
               fillOpacity={1} 

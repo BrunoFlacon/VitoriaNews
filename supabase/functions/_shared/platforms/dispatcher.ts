@@ -1,6 +1,8 @@
+export type ContentType = 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'location' | 'contact' | 'carousel' | 'story' | 'live' | 'animation' | 'voice' | 'video_note';
+
 export interface PublishPayload {
   platform: string;
-  contentType: 'text' | 'image' | 'video' | 'audio' | 'carousel' | 'story' | 'live';
+  contentType: ContentType;
   content: string;
   mediaUrls?: string[];
   userId?: string;

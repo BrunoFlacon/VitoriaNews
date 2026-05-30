@@ -8,9 +8,6 @@ const corsHeaders = (req) => ({
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 });
 
-/**
- * 📲 Envio via Telegram Bot API
- */
 async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
   try {
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
@@ -25,6 +22,32 @@ async function sendTelegramMessage(botToken: string, chatId: string, text: strin
   }
 }
 
+function getFileId(msg: any): string | null {
+  const mediaFields = ["photo", "video", "audio", "document", "sticker", "animation", "voice", "video_note"];
+  for (const field of mediaFields) {
+    const val = msg[field];
+    if (val) {
+      if (Array.isArray(val) && val.length > 0) return val[val.length - 1]?.file_id;
+      if (val.file_id) return val.file_id;
+    }
+  }
+  return null;
+}
+
+function getTelegramContentType(message: any): string {
+  if (message.photo) return "image";
+  if (message.video) return "video";
+  if (message.audio) return "audio";
+  if (message.document) return "document";
+  if (message.sticker) return "sticker";
+  if (message.animation) return "animation";
+  if (message.voice) return "voice";
+  if (message.video_note) return "video_note";
+  if (message.location) return "location";
+  if (message.contact) return "contact";
+  return "text";
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
 
@@ -35,7 +58,6 @@ serve(async (req: Request) => {
     const body = await req.json();
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Telegram Update Object
     const message = body.message || body.channel_post || body.edited_message;
     if (!message) return new Response("OK", { status: 200 });
 
@@ -45,10 +67,6 @@ serve(async (req: Request) => {
     const senderName = message.from?.username || message.from?.first_name || "Telegram User";
     const isGroup = message.chat.type === "group" || message.chat.type === "supergroup";
 
-    // 1. Encontrar o usuário através do Bot Token
-    // No Telegram, o token é único. Precisamos achar qual credencial tem esse token.
-    // Dica: O token está na URL do webhook (prática comum) ou fazemos lookup no banco.
-    // Vamos usar a URL do webhook: /telegram-webhook?token=BOT_TOKEN
     const url = new URL(req.url);
     const botToken = url.searchParams.get("token");
 
@@ -57,17 +75,12 @@ serve(async (req: Request) => {
       return new Response("Missing token", { status: 400 });
     }
 
-    console.log(`[TG-WEBHOOK] Update Received. Bot Token (partial): ${botToken?.substring(0, 5)}...`);
-
-    // Busca resiliente para Telegram
     const { data: allCreds, error: credsError } = await supabase
       .from("api_credentials")
       .select("user_id, credentials")
       .eq("platform", "telegram");
 
     if (credsError) console.error("[TG-WEBHOOK] Creds Fetch Error:", credsError);
-
-    console.log(`[TG-WEBHOOK] Found ${allCreds?.length || 0} telegram credential(s)`);
 
     const creds = allCreds?.find((c: any) => {
       const cred = c.credentials || {};
@@ -79,32 +92,62 @@ serve(async (req: Request) => {
     });
 
     if (!creds) {
-      const sampleKeys = allCreds?.length > 0
-        ? Object.keys(allCreds[0].credentials || {}).join(", ")
-        : "no credentials";
-      console.warn(`[TG-WEBHOOK] No user found for bot token. Token prefix: ${botToken?.substring(0, 15)}... Cred keys: ${sampleKeys}. Total: ${allCreds?.length || 0}`);
+      console.warn(`[TG-WEBHOOK] No user found for bot token.`);
       return new Response("Unauthorized", { status: 401 });
     }
 
     const userId = creds.user_id;
+    const fileId = getFileId(message);
+    const contentType = getTelegramContentType(message);
 
-    // 2. Log da Mensagem Recebida (Inbox)
+    let mediaUrl: string | null = null;
+    if (fileId) {
+      mediaUrl = `https://api.telegram.org/file/bot${botToken}/`;
+      try {
+        const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+        const fileData = await fileRes.json();
+        if (fileData.ok && fileData.result?.file_path) {
+          mediaUrl = `https://api.telegram.org/file/bot${botToken}/${fileData.result.file_path}`;
+        }
+      } catch (e) {
+        console.warn("[TG-WEBHOOK] Failed to resolve file path:", e);
+      }
+    }
+
+    const location = message.location ? { lat: message.location.latitude, lng: message.location.longitude } : undefined;
+    const contact = message.contact ? { phone: message.contact.phone_number, name: message.contact.first_name } : undefined;
+
     await logInteraction(supabase, {
       userId, platform: "telegram", chatId,
-      content: text, status: "received",
-      metadata: { tg_msg_id: message.message_id, sender_name: senderName, is_group: isGroup }
+      content: text,
+      status: "received",
+      metadata: {
+        tg_msg_id: message.message_id,
+        sender_name: senderName,
+        is_group: isGroup,
+        media_type: contentType !== "text" ? contentType : undefined,
+        media_url: mediaUrl,
+        file_id: fileId,
+        location,
+        contact,
+        filename: message.document?.file_name,
+        mime_type: message.document?.mime_type,
+        sticker_emoji: message.sticker?.emoji,
+        sticker_set: message.sticker?.set_name,
+        duration: message.voice?.duration || message.video_note?.duration,
+        caption: message.caption
+      }
     });
 
-    // 3. Processar Resposta (Engine Compartilhada)
     const result = await getSmartResponse({
-      supabaseUrl, supabaseServiceKey, userId, 
+      supabaseUrl, supabaseServiceKey, userId,
       platform: "telegram", chatId, message: text, isGroup
     });
 
     if (result && typeof result === "object" && result.error) {
       await logInteraction(supabase, {
         userId, platform: "telegram", chatId,
-        content: `[SISTEMA] Robô silenciado: ${result.error}`,
+        content: `[SISTEMA] Bot silenced: ${result.error}`,
         status: "received",
         isBot: true,
         metadata: { bot_error: result.error, is_system_log: true }
@@ -124,4 +167,3 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
   }
 });
-

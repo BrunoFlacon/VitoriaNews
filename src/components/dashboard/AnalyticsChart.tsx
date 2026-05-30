@@ -42,88 +42,113 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
       className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col"
     >
       <div className="mb-4 md:mb-6">
-        <div>
-          <h2 className="font-display font-bold text-lg md:text-xl text-white">Visão Geral</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Performance dos últimos 7 dias</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-display font-bold text-lg md:text-xl text-white">Visão Geral</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">Performance dos últimos 7 dias</p>
+          </div>
         </div>
-        <div className="flex items-center gap-4 mt-3">
+        <div className="flex items-center gap-4 mt-4">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-[#4F8AFF]" />
+            <div className="w-3 h-3 rounded-full bg-[#3b82f6]" />
             <span className="text-xs text-muted-foreground font-medium">Visualizações</span>
           </div>
+           <div className="flex items-center gap-1.5">
+             <div className="w-3 h-3 rounded-full bg-[hsl(260.78deg_85.65%_59.02%)]" />
+             <span className="text-xs text-muted-foreground font-medium">Engajamento</span>
+           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-[#8B5CF6]" />
-            <span className="text-xs text-muted-foreground font-medium">Engajamento</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-green-500" />
+            <div className="w-3 h-3 rounded-full bg-[#22c55e]" />
             <span className="text-xs text-muted-foreground font-medium">Alcance</span>
           </div>
         </div>
       </div>
 
-      <div className="h-[300px]">
+      <div className="h-[300px] w-full" style={{ contain: 'layout style' }}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={displayData}>
+          <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorEngagement" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(262, 83%, 58%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(262, 83%, 58%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorReach" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(142, 70%, 45%)" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="hsl(142, 70%, 45%)" stopOpacity={0} />
+                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 18%)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 18%)" vertical={false} />
             <XAxis 
               dataKey="name" 
               stroke="hsl(215, 20%, 55%)" 
-              fontSize={12}
+              fontSize={11}
               tickLine={false}
               axisLine={false}
+              tickMargin={10}
             />
             <YAxis 
               stroke="hsl(215, 20%, 55%)" 
-              fontSize={12}
+              fontSize={11}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `${value / 1000}k`}
+              tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(222, 47%, 10%)",
-                border: "1px solid hsl(222, 30%, 18%)",
+                backgroundColor: "hsl(222, 47%, 11%)",
+                border: "1px solid hsl(222, 30%, 22%)",
                 borderRadius: "12px",
-                boxShadow: "0 10px 40px -10px rgba(0,0,0,0.5)"
+                boxShadow: "0 10px 40px -10px rgba(0,0,0,0.6)",
+                padding: "10px 14px"
               }}
-              labelStyle={{ color: "hsl(210, 40%, 98%)" }}
+              itemStyle={{ fontSize: "14px", fontWeight: 600 }}
+              labelStyle={{ color: "hsl(210, 40%, 98%)", fontWeight: "bold", fontSize: "13px", marginBottom: '6px' }}
+              formatter={(value: any, name: string) => {
+                const colorMap: Record<string, string> = {
+                  'Visualizações': '#3b82f6',
+                  'Engajamento': '#8b5cf6',
+                  'Alcance': '#22c55e',
+                };
+                const color = colorMap[name] || '#fff';
+                const displayValue = Number(value).toLocaleString('pt-BR');
+                return [<span key="v" style={{ color, fontWeight: 700 }}>{displayValue}</span>, name];
+              }}
             />
             <Area
               type="monotone"
               dataKey="views"
-              stroke="hsl(217, 91%, 60%)"
-              strokeWidth={2}
+              name="Visualizações"
+              stroke="#3b82f6"
+              strokeWidth={3}
+              fillOpacity={1}
               fill="url(#colorViews)"
+              animationDuration={1000}
             />
-            <Area
-              type="monotone"
-              dataKey="engagement"
-              stroke="hsl(262, 83%, 58%)"
-              strokeWidth={2}
-              fill="url(#colorEngagement)"
-            />
+             <Area
+               type="monotone"
+               dataKey="engagement"
+               name="Engajamento"
+               stroke="hsl(260.78deg 85.65% 59.02%)"
+               strokeWidth={3}
+               fillOpacity={1}
+               fill="url(#colorEngagement)"
+               animationDuration={1000}
+             />
             <Area
               type="monotone"
               dataKey="reach"
-              stroke="hsl(142, 70%, 45%)"
-              strokeWidth={2}
+              name="Alcance"
+              stroke="#22c55e"
+              strokeWidth={3}
+              fillOpacity={1}
               fill="url(#colorReach)"
+              animationDuration={1000}
             />
+
           </AreaChart>
         </ResponsiveContainer>
       </div>

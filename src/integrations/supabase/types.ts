@@ -1941,6 +1941,45 @@ export type Database = {
         }
         Relationships: []
       }
+      social_monetization_metrics: {
+        Row: {
+          amount: number
+          collected_at: string
+          currency: string | null
+          description: string | null
+          id: string
+          platform: string | null
+          post_id: string | null
+          post_type: string | null
+          source: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          collected_at?: string
+          currency?: string | null
+          description?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          post_type?: string | null
+          source?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          collected_at?: string
+          currency?: string | null
+          description?: string | null
+          id?: string
+          platform?: string | null
+          post_id?: string | null
+          post_type?: string | null
+          source?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       social_platforms: {
         Row: {
           api_base_url: string | null

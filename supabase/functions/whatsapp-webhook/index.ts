@@ -30,6 +30,33 @@ async function verifyHmacSignature(rawBody: string, signatureHeader: string | nu
   return result === 0;
 }
 
+function getTextFromMsg(msg: any): string {
+  if (msg.text?.body) return msg.text.body;
+  if (msg.caption) return msg.caption;
+  if (msg.type === "location") return `${msg.location?.latitude},${msg.location?.longitude}`;
+  if (msg.type === "contacts") return msg.contacts?.map?.(c => c.name?.formatted_name).join(", ") || "[Contato]";
+  if (msg.type === "interactive") return msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "[Interativo]";
+  if (msg.type === "order") return "[Pedido]";
+  if (msg.type === "system") return msg.system?.body || "[Alerta do Sistema]";
+  if (msg.type === "request_welcome") return "[Solicitação de Boas-Vindas]";
+  return "[Mídia]";
+}
+
+function getMediaInfo(msg: any): { mediaId?: string; mediaUrl?: string; mimeType?: string; filename?: string } {
+  const mediaTypes = ["image", "video", "audio", "document", "sticker"];
+  for (const t of mediaTypes) {
+    if (msg[t]) {
+      return {
+        mediaId: msg[t]?.id,
+        mediaUrl: msg[t]?.link,
+        mimeType: msg[t]?.mime_type,
+        filename: msg[t]?.filename
+      };
+    }
+  }
+  return {};
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders(req) });
@@ -44,10 +71,10 @@ serve(async (req: Request) => {
     const challenge = url.searchParams.get("hub.challenge");
 
     if (mode === "subscribe" && token === verifyToken) {
-      console.log("[WA-WEBHOOK-COMPAT] Verificação bem-sucedida!");
+      console.log("[WA-WEBHOOK-COMPAT] Verification successful!");
       return new Response(challenge, { status: 200, headers: corsHeaders(req) });
     }
-    console.warn(`[WA-WEBHOOK-COMPAT] Tentativa de verificação falhou. Modo: ${mode}, token length: ${(token || "").length}`);
+    console.warn(`[WA-WEBHOOK-COMPAT] Verification failed. Mode: ${mode}`);
     return new Response("Forbidden", { status: 403, headers: corsHeaders(req) });
   }
 
@@ -78,18 +105,36 @@ serve(async (req: Request) => {
 
           const contacts = change.value.contacts || [];
           const contact = contacts.find((c: any) => c.wa_id === msg.from);
-          
+          const mediaInfo = getMediaInfo(msg);
+
+          const text = getTextFromMsg(msg);
+          const isGroup = msg.from.includes("@g.us") || msg.from.length > 15;
+
+          let mediaUrl: string | undefined;
+          if (mediaInfo.mediaId) {
+            mediaUrl = `${supabaseUrl}/functions/v1/whatsapp-media-proxy?mediaId=${mediaInfo.mediaId}&userId=`;
+          } else if (mediaInfo.mediaUrl) {
+            mediaUrl = mediaInfo.mediaUrl;
+          }
+
           const normalized: NormalizedMessage = {
             platform: "whatsapp",
             chatId: msg.from,
             recipientId: phoneNumberId,
-            text: msg.text?.body || msg.caption || "[Mídia]",
+            text,
             timestamp: parseInt(msg.timestamp || "0"),
             senderName: contact?.profile?.name || msg.from,
-            isGroup: msg.from.includes("@g.us") || msg.from.length > 15,
+            isGroup,
             isComment: false,
             mediaType: msg.type !== "text" ? msg.type : undefined,
-            rawPayload: msg
+            mediaUrl,
+            rawPayload: {
+              ...msg,
+              _media_id: mediaInfo.mediaId,
+              _mime_type: mediaInfo.mimeType,
+              _filename: mediaInfo.filename,
+              _location: msg.type === "location" ? { lat: msg.location?.latitude, lng: msg.location?.longitude, name: msg.location?.name } : undefined
+            }
           };
 
           await processOmnichannelMessage(supabase, normalized);
@@ -102,11 +147,10 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (error: any) {
-    console.error("[WA-WEBHOOK-COMPAT] Erro no processamento:", error);
+    console.error("[WA-WEBHOOK-COMPAT] Processing error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 200,
       headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });
-

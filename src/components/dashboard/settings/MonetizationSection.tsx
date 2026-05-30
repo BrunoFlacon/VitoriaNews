@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RPieChart, Pie, Cell, LineChart, Line, Legend } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getPlatformDetails } from "@/components/icons/platform-metadata";
 
 const COLORS = ["#8B5CF6", "#EC4899", "#F59E0B", "#10B981", "#3B82F6", "#EF4444", "#14B8A6", "#F97316"];
 
@@ -42,7 +43,7 @@ const KpiCard = ({ title, value, subtitle, icon: Icon, trend }: { title: string;
 
 export const MonetizationSection = () => {
   const { user } = useAuth();
-  const { data: analytics, isLoading: analyticsLoading } = useAnalytics();
+  const { data: analytics, loading: analyticsLoading } = useAnalytics();
   const [monetizationData, setMonetizationData] = useState<MonetizationRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -78,7 +79,10 @@ export const MonetizationSection = () => {
   }, [monetizationData]);
 
   const platformChartData = useMemo(() =>
-    Object.entries(stats.byPlatform).map(([name, value]) => ({ name, value: Math.round(value) })),
+    Object.entries(stats.byPlatform).map(([id, value]) => ({ 
+      name: getPlatformDetails(id)?.name || id, 
+      value: Math.round(value) 
+    })),
     [stats.byPlatform]
   );
 
@@ -172,7 +176,7 @@ export const MonetizationSection = () => {
             </h3>
             <ResponsiveContainer width="100%" height={250}>
               <BarChart data={monthlyChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip formatter={(value: number) => `R$ ${value}`} />
@@ -181,15 +185,33 @@ export const MonetizationSection = () => {
             </ResponsiveContainer>
           </Card>
 
-          {/* Gráfico: Distribuição por Fonte */}
+          {/* Gráfico: Distribuição por Tipo e Fonte */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="p-6 border-border/40 bg-card/60 backdrop-blur-sm">
+              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-primary" /> Receita por Tipo de Conteúdo
+              </h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={Object.entries(stats.byType).map(([name, value]) => ({ 
+                  name: name === 'post' ? 'Post' : name === 'live' ? 'Live' : name === 'story' ? 'Story' : name === 'reels' ? 'Reels' : name === 'shorts' ? 'Shorts' : name, 
+                  value: Math.round(value) 
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(value: number) => `R$ ${value}`} />
+                  <Bar dataKey="value" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+
             <Card className="p-6 border-border/40 bg-card/60 backdrop-blur-sm">
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
                 <Coins className="w-4 h-4 text-primary" /> Receita por Fonte
               </h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={sourceChartData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                   <XAxis type="number" tick={{ fontSize: 12 }} />
                   <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} />
                   <Tooltip formatter={(value: number) => `R$ ${value}`} />
@@ -197,6 +219,7 @@ export const MonetizationSection = () => {
                 </BarChart>
               </ResponsiveContainer>
             </Card>
+          </div>
 
             {/* Últimos Registros */}
             <Card className="p-6 border-border/40 bg-card/60 backdrop-blur-sm">
@@ -218,9 +241,8 @@ export const MonetizationSection = () => {
                 ))}
               </div>
             </Card>
-          </div>
-        </>
-      )}
-    </motion.div>
+          </>
+        )}
+      </motion.div>
   );
 };

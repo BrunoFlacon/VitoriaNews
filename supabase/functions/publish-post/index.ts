@@ -72,7 +72,8 @@ serve(async (req: Request) => {
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
+    const allOk = results.every(r => r.success !== false);
+    return new Response(JSON.stringify({ success: allOk, results }), {
       headers: { ...corsHeaders(req), 'Content-Type': 'application/json' }
     });
   } catch (error: any) {

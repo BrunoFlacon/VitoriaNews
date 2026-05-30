@@ -189,14 +189,17 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   const [bestTimesFilter, setBestTimesFilter] = useState<string>('all');
   const [chartMetric, setChartMetric] = useState<string>('views');
   const [pieMetric, setPieMetric] = useState<string>('followers');
+  const [pieSelectedPlatform, setPieSelectedPlatform] = useState<string | null>(null);
 
   const METRIC_OPTIONS = [
-    { value: 'views', label: 'Visualizações', color: '#3b82f6' },
-    { value: 'engagement', label: 'Engajamento', color: '#8b5cf6' },
+    { value: 'views', label: 'Visualizações', color: '#4F8AFF' },
+    { value: 'engagement', label: 'Engajamento', color: '#8B5CF6' },
+    { value: 'reach', label: 'Alcance', color: '#22c55e' },
+    { value: 'followers', label: 'Seguidores', color: '#ec4899' },
     { value: 'likes', label: 'Curtidas', color: '#ef4444' },
     { value: 'comments', label: 'Comentários', color: '#10b981' },
     { value: 'shares', label: 'Compartilhamentos', color: '#f59e0b' },
-    { value: 'reach', label: 'Alcance', color: '#06b6d4' },
+    { value: 'posts', label: 'Posts', color: '#84cc16' },
   ] as const;
 
   const METRIC_LABEL = chartMetric === 'all' ? 'Todas as Métricas' : METRIC_OPTIONS.find(m => m.value === chartMetric)?.label || 'Métrica';
@@ -357,35 +360,41 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   } = useMemo(() => {
     // Fallback: compute from local DB data when Edge Function is not available or returns zeros
     if (shouldUseLocalFallback) {
-      const totalViews = stats.reduce((s, a) => s + a.views_count, 0);
-      const totalLikes = stats.reduce((s, a) => s + a.likes_count, 0);
-      const totalComments = stats.reduce((s, a) => s + a.comments_count, 0);
-      const totalShares = stats.reduce((s, a) => s + a.shares_count, 0);
-      const totalEng = totalLikes + totalComments + totalShares;
-      const totalFollow = stats.reduce((s, a) => s + a.followers_count, 0);
+      let totalViews = 0, totalLikes = 0, totalComments = 0, totalShares = 0, totalFollow = 0, totalPosts = 0;
 
-      const pb: Record<string, { posts: number; engagement: number; views: number; likes: number; comments: number; shares: number; followers: number }> = {};
+      const pb: Record<string, { posts: number; engagement: number; views: number; likes: number; comments: number; shares: number; followers: number; reach: number }> = {};
       const fd: Array<{ platform: string; username: string | null; currentFollowers: number; postsCount: number; growth: number; profileImage: string | null; is_connected: boolean }> = [];
       stats.forEach(a => {
-        const p = a.platform;
-        if (!pb[p]) pb[p] = { posts: 0, engagement: 0, views: 0, likes: 0, comments: 0, shares: 0, followers: 0 };
-        pb[p].posts += a.posts_count;
+        const isChannel = a.metadata?.is_channel_members === true;
+        const p = normalizePlatform(a.platform);
+        if (!pb[p]) pb[p] = { posts: 0, engagement: 0, views: 0, likes: 0, comments: 0, shares: 0, followers: 0, reach: 0 };
+        pb[p].posts += isChannel ? 0 : a.posts_count;
         pb[p].views += a.views_count;
         pb[p].likes += a.likes_count;
         pb[p].comments += a.comments_count;
         pb[p].shares += a.shares_count;
-        pb[p].followers += a.followers_count;
+        pb[p].followers += isChannel ? 0 : a.followers_count;
         pb[p].engagement += a.likes_count + a.comments_count + a.shares_count;
-        fd.push({
-          platform: p,
-          username: a.username,
-          currentFollowers: a.followers_count,
-          postsCount: a.posts_count,
-          growth: 0,
-          profileImage: a.profile_picture,
-          is_connected: true,
-        });
+        pb[p].reach += Math.round(Number(a.views_count || 0) * 0.35);
+        totalViews += a.views_count;
+        totalLikes += a.likes_count;
+        totalComments += a.comments_count;
+        totalShares += a.shares_count;
+        totalFollow += isChannel ? 0 : a.followers_count;
+        totalPosts += isChannel ? 0 : a.posts_count;
+        if (!isChannel) {
+          fd.push({
+            platform: normalizePlatform(a.platform),
+            username: a.username,
+            currentFollowers: a.followers_count,
+            postsCount: a.posts_count,
+            growth: 0,
+            profileImage: a.profile_picture,
+            is_connected: true,
+          });
+        }
       });
+      const totalEng = totalLikes + totalComments + totalShares;
 
       // Build time-series chart data — dates on X-axis
       let cd: any[];
@@ -393,34 +402,43 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
       // Filter stats by platform for per-platform chart data
       const filteredStats = platform !== 'all'
-        ? stats.filter(s => s.platform === platform)
+        ? stats.filter(s => normalizePlatform(s.platform) === platform)
         : stats;
-      const pfViews = filteredStats.reduce((s, a) => s + a.views_count, 0);
-      const pfLikes = filteredStats.reduce((s, a) => s + a.likes_count, 0);
-      const pfComments = filteredStats.reduce((s, a) => s + a.comments_count, 0);
-      const pfShares = filteredStats.reduce((s, a) => s + a.shares_count, 0);
+      let pfViews = 0, pfLikes = 0, pfComments = 0, pfShares = 0, pfFollow = 0, pfPosts = 0;
+      filteredStats.forEach(a => {
+        pfViews += a.views_count;
+        pfLikes += a.likes_count;
+        pfComments += a.comments_count;
+        pfShares += a.shares_count;
+        pfFollow += a.followers_count;
+        pfPosts += a.posts_count;
+      });
       const pfEng = pfLikes + pfComments + pfShares;
-      const pfFollow = filteredStats.reduce((s, a) => s + a.followers_count, 0);
 
       // Filter account_metrics by platform if a specific platform is selected
       const filteredMetrics = platform !== 'all'
-        ? (accountMetrics as any[]).filter((m: any) => m.platform === platform)
+        ? (accountMetrics as any[]).filter((m: any) => normalizePlatform(m.platform) === platform)
         : (accountMetrics as any[]);
 
       // Merge account_metrics into a date map for real time-series
       const dateMap: Record<string, any> = {};
       filteredMetrics.forEach((m: any) => {
         const d = new Date(m.collected_at);
-        const dateKey = `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`;
+        const dayVal = d.getDate();
+        const monthsNames = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+        const dateKey = `${dayVal} de ${monthsNames[d.getMonth()]}`;
         if (!dateMap[dateKey]) {
-          dateMap[dateKey] = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0 };
+          dateMap[dateKey] = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0, followers: 0, posts: 0 };
         }
         dateMap[dateKey].views += Number(m.views || 0);
         dateMap[dateKey].likes += Number(m.likes || 0);
         dateMap[dateKey].comments += Number(m.comments || 0);
         dateMap[dateKey].shares += Number(m.shares || 0);
         dateMap[dateKey].engagement += Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0);
-        dateMap[dateKey].reach += Number(m.followers || 0);
+        // reach is estimated from views (35%), NOT same as followers
+        dateMap[dateKey].reach += Math.round(Number(m.views || 0) * 0.35);
+        dateMap[dateKey].followers += Number(m.followers || 0);
+        dateMap[dateKey].posts += Number(m.posts || 0);
       });
 
       const dateKeysWithData = Object.keys(dateMap);
@@ -430,7 +448,9 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       for (let i = periodDays; i >= 0; i--) {
         const dt = new Date();
         dt.setDate(dt.getDate() - i);
-        const key = `${dt.getDate().toString().padStart(2, '0')}/${(dt.getMonth() + 1).toString().padStart(2, '0')}`;
+        const day = dt.getDate();
+        const months = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+        const key = `${day} de ${months[dt.getMonth()]}`;
         const existing = dateMap[key];
         if (hasTimeSeries) {
           cd.push({
@@ -441,26 +461,36 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             shares: existing?.shares || 0,
             engagement: existing?.engagement || 0,
             reach: existing?.reach || 0,
+            followers: existing?.followers || 0,
+            posts: existing?.posts || 0,
           });
         } else {
           const daysCount = periodDays + 1;
-          const progress = 1 - (i / daysCount);
-          const variation = 0.15 * Math.sin(i * 1.7 + daysCount * 0.3);
-          const weight = Math.max(0.5, 0.75 + 0.5 * progress + variation);
+          const baseWeight = 0.75 + 0.5 * (1 - i / daysCount);
+          const perMetric = {
+            views: Math.max(0.6, baseWeight + 0.2 * Math.sin(i * 1.1 + 0.3)),
+            likes: Math.max(0.6, baseWeight + 0.2 * Math.sin(i * 0.9 + 1.7)),
+            comments: Math.max(0.6, baseWeight + 0.2 * Math.sin(i * 1.3 + 2.1)),
+            shares: Math.max(0.6, baseWeight + 0.2 * Math.sin(i * 0.7 + 0.8)),
+            followers: Math.max(0.6, baseWeight + 0.15 * Math.sin(i * 0.5 + 3.4)),
+            posts: Math.max(0.6, baseWeight + 0.15 * Math.sin(i * 1.5 + 4.2)),
+          };
           cd.push({
             name: key,
-            views: Math.max(1, Math.round((pfViews / daysCount) * weight)),
-            likes: Math.max(1, Math.round((pfLikes / daysCount) * weight)),
-            comments: Math.max(1, Math.round((pfComments / daysCount) * weight)),
-            shares: Math.max(1, Math.round((pfShares / daysCount) * weight)),
-            engagement: Math.max(1, Math.round((pfEng / daysCount) * weight)),
-            reach: Math.max(1, Math.round((pfFollow / daysCount) * weight)),
+            views: Math.max(1, Math.round((pfViews / daysCount) * perMetric.views)),
+            likes: Math.max(1, Math.round((pfLikes / daysCount) * perMetric.likes)),
+            comments: Math.max(1, Math.round((pfComments / daysCount) * perMetric.comments)),
+            shares: Math.max(1, Math.round((pfShares / daysCount) * perMetric.shares)),
+            engagement: Math.max(1, Math.round((pfEng / daysCount) * ((perMetric.likes + perMetric.comments + perMetric.shares) / 3))),
+            reach: Math.max(1, Math.round((pfViews * 0.35 / daysCount) * perMetric.views)),
+            followers: Math.max(1, Math.round((pfFollow / daysCount) * perMetric.followers)),
+            posts: pfPosts > 0 ? Math.max(1, Math.round((pfPosts / daysCount) * perMetric.posts)) : 0,
           });
         }
       }
 
       // Compute youtube stats from stats data
-      const ytStats = stats.filter(s => s.platform === 'youtube');
+      const ytStats = stats.filter(s => normalizePlatform(s.platform) === 'youtube');
       const youtubeStats = {
         views: ytStats.reduce((s, a) => s + a.views_count, 0),
         likes: ytStats.reduce((s, a) => s + a.likes_count, 0),
@@ -475,8 +505,8 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       const msgRecent = hookMessageStats.recentMessages || [];
 
       const overview = {
-        totalPosts: stats.reduce((s, a) => s + a.posts_count, 0),
-        publishedPosts: stats.reduce((s, a) => s + a.posts_count, 0),
+        totalPosts,
+        publishedPosts: totalPosts,
         scheduledPosts: 0, draftPosts: 0, failedPosts: hookMessageStats.totalFailed || 0,
         publishRate: stats.length > 0 ? 100 : 0,
         totalFollowers: totalFollow,
@@ -485,7 +515,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
       const engagement = {
         views: totalViews, likes: totalLikes, comments: totalComments,
-        shares: totalShares, reach: totalFollow,
+        shares: totalShares, reach: Math.round(totalViews * 0.35),
         engagementRate: totalViews > 0 ? ((totalEng / totalViews) * 100).toFixed(2) : "0",
         growth: "0",
       };
@@ -524,7 +554,10 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         views: 0, likes: 0, comments: 0, reach: 0, shares: 0, growth: "0" 
       },
       chartData: d.chartData || [],
-      platformBreakdown: d.platformBreakdown || {},
+      platformBreakdown: Object.fromEntries(
+        Object.entries((d.platformBreakdown || {}) as Record<string, any>)
+          .map(([k, v]) => [normalizePlatform(k), v])
+      ),
       topContent: d.topContent || [],
       bestTimes: d.bestTimes || [],
       adsStats: d.adsStats || { impressions: 0, reach: 0, clicks: 0, spend: 0 },
@@ -534,7 +567,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       trendsData: d.trendsData || [],
       attacksData: d.attacksData || [],
       messageStats: (d.messageStats?.totalSent || d.messageStats?.totalFailed) ? d.messageStats : hookMessageStats,
-      followerData: d.followerData || [],
+      followerData: (d.followerData || []).map((f: any) => ({ ...f, platform: normalizePlatform(f.platform) })),
     };
   }, [data, stats, accountMetrics, messagingChannels, period, platform, hookMessageStats]);
 
@@ -614,6 +647,48 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     }
   }, [followerData, platformActiveProfile]);
 
+  function normalizePlatform(platform: string): string {
+    const value = platform.toLowerCase().trim();
+    if (value === "x" || value === "twitter" || value === "x (twitter)") return "twitter";
+    if (value === "truth social") return "truthsocial";
+    if (value === "google news") return "googlenews";
+    return value;
+  }
+
+  const getPlatformDetails = (id: string) => 
+    socialPlatforms.find(p => p.id === id) || { name: id, color: 'bg-muted', icon: Activity };
+
+  const getPlatformHex = (id: string) => {
+    switch (normalizePlatform(id)) {
+      case 'facebook': return '#1877F2';
+      case 'instagram': return '#E4405F';
+      case 'twitter': return '#94a3b8';
+      case 'linkedin': return '#0A66C2';
+      case 'youtube': return '#FF0000';
+      case 'tiktok': return '#69C9D0';
+      case 'whatsapp': return '#25D366';
+      case 'telegram': return '#0088CC';
+      case 'threads': return '#a78bfa';
+      case 'kwai': return '#FF5000';
+      case 'rumble': return '#85C742';
+      case 'truthsocial': return '#00AEEF';
+      case 'gettr': return '#E11A27';
+      case 'spotify': return '#1DB954';
+      case 'googlenews': return '#4285F4';
+      default: return '#3b82f6';
+    }
+  }
+
+  const pieData = useMemo(() => {
+    const entries = Object.entries(platformBreakdown as Record<string, any>);
+    if (entries.length === 0) return [];
+    return entries.map(([key, d]) => ({
+      key,
+      name: getPlatformDetails(key).name,
+      value: typeof d[pieMetric as keyof typeof d] === 'number' ? (d[pieMetric as keyof typeof d] as number) : 0,
+      fill: getPlatformHex(key),
+    }));
+  }, [platformBreakdown, pieMetric]);
 
   // 2. Early returns happen only AFTER hooks
   if (loading) {
@@ -650,38 +725,6 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       </div>
     );
   };
-
-  const getPlatformDetails = (id: string) => 
-    socialPlatforms.find(p => p.id === id) || { name: id, color: 'bg-muted', icon: Activity };
-
-  const getPlatformHex = (id: string) => {
-    switch (normalizePlatform(id)) {
-      case 'facebook': return '#1877F2';
-      case 'instagram': return '#E4405F';
-      case 'twitter': return '#000000';
-      case 'linkedin': return '#0A66C2';
-      case 'youtube': return '#FF0000';
-      case 'tiktok': return '#000000';
-      case 'whatsapp': return '#25D366';
-      case 'telegram': return '#0088CC';
-      case 'threads': return '#000000';
-      case 'kwai': return '#FF5000';
-      case 'rumble': return '#85C742';
-      case 'truthsocial': return '#00AEEF';
-      case 'gettr': return '#E11A27';
-      case 'spotify': return '#1DB954';
-      case 'googlenews': return '#4285F4';
-      default: return '#3b82f6';
-    }
-  }
-
-  function normalizePlatform(platform: string): string {
-    const value = platform.toLowerCase().trim();
-    if (value === "x" || value === "twitter" || value === "x (twitter)") return "twitter";
-    if (value === "truth social") return "truthsocial";
-    if (value === "google news") return "googlenews";
-    return value;
-  }
 
   return (
     <div className="space-y-8 pb-12 w-full animate-fade-in">
@@ -891,7 +934,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" style={{ contain: "layout style" }}>
         {[
           { label: "Total de Visualizações", value: engagement.views, icon: Eye, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "Engajamento Total", value: engagement.likes + engagement.comments, icon: Heart, color: "text-purple-500", bg: "bg-purple-500/10" },
+          { label: "Engajamento Total", value: (engagement.likes || 0) + (engagement.comments || 0) + (engagement.shares || 0), icon: Heart, color: "text-purple-500", bg: "bg-purple-500/10" },
           { label: "Alcance Estimado", value: engagement.reach, icon: Users, color: "text-green-500", bg: "bg-green-500/10" },
           { label: "Compartilhamentos", value: engagement.shares, icon: Share2, color: "text-orange-500", bg: "bg-orange-500/10" },
         ].map((stat, i) => (
@@ -950,9 +993,26 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="p-6 col-span-1 lg:col-span-2 shadow-sm border-border bg-card relative" style={{ contain: "layout style" }}>
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-            <div>
-              <h3 className="font-display font-bold text-lg text-card-foreground">Performance Geral</h3>
-              <p className="text-sm text-muted-foreground">Dados por plataforma</p>
+            <div className="flex flex-col gap-2">
+              <div>
+                <h3 className="font-display font-bold text-lg text-card-foreground">Performance Geral</h3>
+                <p className="text-sm text-muted-foreground">Dados por plataforma</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 mt-1">
+                {chartMetric === 'all' ? (
+                  METRIC_OPTIONS.map(m => (
+                    <div key={m.value} className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />
+                      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{m.label}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: METRIC_OPTIONS.find(m => m.value === chartMetric)?.color }} />
+                    <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">{METRIC_LABEL}</span>
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <DropdownMenu>
@@ -986,15 +1046,24 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                     <stop offset="95%" stopColor={METRIC_OPTIONS.find(m => m.value === chartMetric)?.color || '#3b82f6'} stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 18%)" vertical={false} />
                 <XAxis dataKey="name" stroke="#888" fontSize={12} tickMargin={10} axisLine={false} tickLine={false} />
                 <YAxis stroke="#888" fontSize={12} tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(1)}k` : val} axisLine={false} tickLine={false} />
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  itemStyle={{ color: '#fff' }}
-                />
+                 <RechartsTooltip 
+                   contentStyle={{ 
+                     backgroundColor: 'hsl(222, 47%, 10%)', 
+                     border: '1px solid hsl(222, 30%, 18%)', 
+                     borderRadius: '12px',
+                     color: '#fff',
+                     padding: '12px 16px',
+                     fontSize: '14px'
+                   }}
+                   itemStyle={{ fontSize: '14px' }}
+                   labelStyle={{ color: '#f8fafc', marginBottom: '8px', fontSize: '14px' }}
+                   formatter={(value: any, name: any) => [`${Number(value).toLocaleString('pt-BR')}`, name]}
+                 />
                 {chartMetric === 'all' ? METRIC_OPTIONS.map(m => (
-                  <Area key={m.value} type="monotone" dataKey={m.value} name={m.label} stroke={m.color} strokeWidth={2} fillOpacity={0.08} fill={m.color} />
+                  <Area key={m.value} type="monotone" dataKey={m.value} name={m.label} stroke={m.color} strokeWidth={2} fillOpacity={0.12} fill={m.color} />
                 )) : (
                   <Area type="monotone" dataKey={chartMetric} name={METRIC_LABEL} stroke={METRIC_OPTIONS.find(m => m.value === chartMetric)?.color || '#3b82f6'} strokeWidth={2} fillOpacity={1} fill="url(#colorMetric)" />
                 )}
@@ -1026,46 +1095,102 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           </div>
           <p className="text-sm text-muted-foreground mb-6">Distribuição por rede social</p>
           
-          {Object.keys(platformBreakdown).length > 0 ? (
-            <div className="h-[250px] w-full relative min-h-[250px]" style={{ contain: "layout size style" }}>
-              <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={250}>
-                <PieChart>
-                  <Pie
-                    data={Object.entries(platformBreakdown as Record<string, any>).map(([key, d]) => ({
-                      name: key,
-                      value: d[pieMetric as keyof typeof d] || d.engagement || d.posts || d.followers,
-                      fill: getPlatformHex(key)
-                    }))}
-                    cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
-                  >
-                    {Object.keys(platformBreakdown).map((key) => (
-                      <Cell key={`cell-${key}`} fill={getPlatformHex(key)} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="mt-4 space-y-3">
-                {Object.entries(platformBreakdown as Record<string, any>).slice(0, 4).map(([key, data]) => {
-                  const p = getPlatformDetails(key);
-                  const metricValue = data[pieMetric as keyof typeof data];
-                  const metricLabel = METRIC_OPTIONS.find(m => m.value === pieMetric)?.label || 'posts';
-                  return (
-                    <div key={key} className="flex items-center justify-between text-sm group">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getPlatformHex(key) }} />
-                        <span className="text-card-foreground group-hover:text-primary transition-colors">{p.name}</span>
-                      </div>
-                      <span className="text-muted-foreground">{(metricValue || data.posts || data.followers || 0).toLocaleString()} {metricLabel.toLowerCase()}</span>
-                    </div>
-                  );
-                })}
+          {pieData.length > 0 ? (() => {
+            const metricLabel = METRIC_OPTIONS.find(m => m.value === pieMetric)?.label || pieMetric;
+
+            return (
+              <div>
+                <div className="h-[220px] w-full relative" style={{ contain: 'layout size style' }}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
+                    <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%" cy="50%"
+                          innerRadius={55} outerRadius={80}
+                          paddingAngle={3}
+                          dataKey="value"
+                          onClick={(entry: any) => {
+                            if (entry && entry.key) {
+                              setPieSelectedPlatform(prev => prev === entry.key ? null : entry.key);
+                              setPlatform(prev => prev === entry.key ? 'all' : entry.key);
+                            }
+                          }}
+                      >
+                        {pieData.map((entry) => (
+                          <Cell
+                            key={`cell-${entry.key}`}
+                            fill={entry.fill}
+                            opacity={pieSelectedPlatform && pieSelectedPlatform !== entry.key ? 0.3 : 1}
+                            stroke={pieSelectedPlatform === entry.key ? '#fff' : 'transparent'}
+                            strokeWidth={pieSelectedPlatform === entry.key ? 2 : 0}
+                            style={{ cursor: 'pointer', transition: 'opacity 0.2s' }}
+                          />
+                        ))}
+                      </Pie>
+                       <RechartsTooltip
+                         contentStyle={{ 
+                           backgroundColor: '#0f172a', 
+                           border: '1px solid #334155', 
+                           borderRadius: '10px', 
+                           color: '#fff', 
+                           fontSize: '14px', 
+                           padding: '12px 16px'
+                         }}
+                         itemStyle={{ color: '#fff', fontSize: '14px' }}
+                         formatter={(value: any, name: any) => [`${Number(value).toLocaleString('pt-BR')}`, name]}
+                       />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Scrollable legend - all platforms, no visible scrollbar */}
+                <div
+                  className="mt-3 space-y-2.5 max-h-[160px] overflow-y-auto pr-1 pie-legend-container"
+                  style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                  <style>{`.pie-legend-container::-webkit-scrollbar { display: none; }`}</style>
+                  {pieData.map(({ key, name, value, fill }) => {
+                    const isSelected = pieSelectedPlatform === key;
+                    return (
+                       <button
+                         key={key}
+                         type="button"
+                         onClick={() => { setPieSelectedPlatform(prev => prev === key ? null : key); setPlatform(prev => prev === key ? 'all' : key); }}
+                         className={`w-full flex items-center justify-between text-sm rounded-lg px-2 py-1.5 transition-all duration-200 ${
+                           isSelected
+                             ? 'bg-white/10 ring-1 ring-white/20'
+                             : 'hover:bg-white/5 opacity-80 hover:opacity-100'
+                         }`}
+                       >
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0 transition-transform duration-200"
+                            style={{
+                              backgroundColor: fill,
+                              boxShadow: isSelected ? `0 0 6px ${fill}` : 'none',
+                              transform: isSelected ? 'scale(1.3)' : 'scale(1)'
+                            }}
+                          />
+                          <span className={`font-medium transition-colors ${isSelected ? 'text-white' : 'text-muted-foreground font-semibold'}`}>
+                            {name}
+                          </span>
+                        </div>
+                        <span className="text-white font-bold tabular-nums">
+                          {Number(value).toLocaleString('pt-BR')}
+                          <span className="text-[10px] text-muted-foreground font-normal ml-1">
+                            {metricLabel.toLowerCase()}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            );
+          })() : (
+            <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm italic">
+              Nenhum dado das plataformas neste período.
             </div>
-          ) : (
-             <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm italic">
-                Nenhum dado das plataformas neste período.
-             </div>
           )}
         </Card>
       </div>
