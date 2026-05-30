@@ -544,12 +544,13 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       let coopBlocked = false;
       const pollInterval = setInterval(async () => {
+        if (coopBlocked) return;
         try {
           if (popup && popup.closed) { clearInterval(pollInterval); await finalize(); }
-        } catch (e) {
+        } catch {
           coopBlocked = true;
         }
-      }, 2000);
+      }, 4000);
 
       setTimeout(() => finalize(), 300000);
 

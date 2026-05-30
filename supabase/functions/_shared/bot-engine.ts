@@ -115,12 +115,12 @@ export async function getSmartResponse(config: BotEngineConfig) {
         apiUrl = "https://openrouter.ai/api/v1/chat/completions";
         break;
       case 'google':
-        apiKey = settings.gemini_api_key || Deno.env.get("GEMINI_API_KEY");
-        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-1.5-flash'}:generateContent?key=${apiKey}`;
+        apiKey = settings.gemini_api_key || Deno.env.get("GEMINI_API_KEY") || '';
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`;
         break;
     }
 
-    if (!apiKey && provider !== 'google') {
+    if (!apiKey) {
       console.warn(`[BOT-ENGINE] [${platform}] Missing API Key for ${provider}`);
       return { error: `Chave de API do ${provider} ausente ou inválida.` };
     }
@@ -144,7 +144,14 @@ export async function getSmartResponse(config: BotEngineConfig) {
           body: JSON.stringify(payload),
         });
         
-        if (!response.ok) throw new Error(`Google API returned ${response.status}`);
+        if (!response.ok) {
+          const errText = await response.text().catch(() => '');
+          console.error(`[BOT-ENGINE] Google API Error (${response.status}):`, errText);
+          if (response.status === 429) {
+            return "Estou processando muitas requisições. Aguarde um momento e tente novamente.";
+          }
+          return "Desculpe, tive um problema ao processar sua mensagem. Pode repetir?";
+        }
         
         const aiData = await response.json();
         const reply = aiData.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -196,10 +203,10 @@ export async function getSmartResponse(config: BotEngineConfig) {
 }
 
 export async function logInteraction(supabase: any, {
-  userId, platform, chatId, content, status, isBot = false, metadata = {}
+  userId, platform, chatId, content, status, isBot = false, metadata = {}, mediaUrl
 }: any) {
   try {
-    await supabase.from("messages").insert({
+    const insertPayload: any = {
       user_id: userId,
       content,
       platform,
@@ -207,7 +214,11 @@ export async function logInteraction(supabase: any, {
       status,
       sent_at: new Date().toISOString(),
       metadata: { ...metadata, bot_reply: isBot }
-    });
+    };
+    if (mediaUrl) {
+      insertPayload.media_url = mediaUrl;
+    }
+    await supabase.from("messages").insert(insertPayload);
   } catch (err) {
     console.error(`[BOT-ENGINE] Log Error:`, err);
   }
@@ -229,6 +240,13 @@ export interface NormalizedMessage {
   mediaType?: string;
   mediaUrl?: string;
   rawPayload?: any;
+  mediaId?: string;
+  mimeType?: string;
+  filename?: string;
+  location?: { lat: number; lng: number; name?: string };
+  contact?: { phone: string; name: string };
+  stickerEmoji?: string;
+  duration?: number;
 }
 
 export async function sendMetaGraphMessage(msg: NormalizedMessage, replyText: string) {
@@ -329,12 +347,25 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
     return;
   }
 
+  const mediaMetadata: any = {
+    media_type: msg.mediaType,
+    media_id: msg.mediaId,
+    mime_type: msg.mimeType,
+    filename: msg.filename,
+    location: msg.location,
+    contact: msg.contact,
+    sticker_emoji: msg.stickerEmoji,
+    duration: msg.duration
+  };
+  if (msg.rawPayload?._location) mediaMetadata.location = msg.rawPayload._location;
+
   await logInteraction(supabase, {
     userId,
     platform: msg.platform,
     chatId: msg.chatId,
     content: msg.text,
     status: "received",
+    mediaUrl: msg.mediaUrl,
     isBot: false,
     metadata: {
       sender_name: msg.senderName,
@@ -342,7 +373,7 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
       is_comment: msg.isComment,
       comment_id: msg.commentId,
       post_id: msg.postId,
-      media_type: msg.mediaType
+      ...mediaMetadata
     }
   });
 

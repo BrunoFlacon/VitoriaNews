@@ -1,4 +1,4 @@
-import { memo, Suspense, lazy } from "react";
+import { memo, Suspense, lazy, useCallback } from "react";
 import { motion } from "framer-motion";
 import { 
   Eye, 
@@ -11,7 +11,7 @@ import {
   Check 
 } from "lucide-react";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
-import { cn } from "@/lib/utils";
+import { cn, normalizePlatform } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -72,6 +72,39 @@ export const DashboardHomeView = memo(({
   setActiveTab,
   setEditingPost
 }: DashboardHomeViewProps) => {
+  // Helper to compute average follower growth from followerData for selected platform
+  const computeFollowerGrowth = useCallback(() => {
+    if (!analyticsData?.followerData || analyticsData.followerData.length === 0) return undefined;
+    
+    const filteredData = platform === 'all' 
+      ? analyticsData.followerData 
+      : analyticsData.followerData.filter(f => normalizePlatform(f.platform) === normalizePlatform(platform));
+    
+    if (filteredData.length === 0) return undefined;
+    
+    const totalGrowth = filteredData.reduce((sum, f) => sum + (f.growth || 0), 0);
+    return Number((totalGrowth / filteredData.length).toFixed(2));
+  }, [analyticsData?.followerData, platform]);
+
+  // Helper to compute engagement rate from local stats when analytics data is not real
+  const computeEngagementRateFromLocal = useCallback(() => {
+    if (!localStats || localStats.length === 0) return 0;
+    
+    const filteredStats = platform === 'all' 
+      ? localStats 
+      : localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform));
+    
+    if (filteredStats.length === 0) return 0;
+    
+    const totalEngagement = filteredStats.reduce((sum, s) => 
+      sum + (s.likes_count || 0) + (s.comments_count || 0) + (s.shares_count || 0), 0);
+    const totalViews = filteredStats.reduce((sum, s) => sum + (s.views_count || 0), 0);
+    
+    return totalViews > 0 ? Number(((totalEngagement / totalViews) * 100).toFixed(2)) : 0;
+  }, [localStats, platform]);
+
+  // Determine if we have real data (not fallback/seeded) for reliable growth metrics
+  const hasRealData = analyticsData?.dataSource === 'real';
   return (
     <>
       <div 
@@ -201,55 +234,55 @@ export const DashboardHomeView = memo(({
 
       <Suspense fallback={<div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6"><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /></div>}>
         <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6" style={{ contain: 'layout' }}>
-          <StatsCard 
-            title="Total de Posts" 
-            value={(analyticsData?.overview.totalPosts || (platform !== 'all' ? localStats.filter(s => s.platform === platform).reduce((s, a) => s + a.posts_count, 0) : localTotalPosts)).toString()} 
-            icon={TrendingUp} 
-            trend={parseFloat(analyticsData?.engagement.growth || "0")} 
-            trendLabel="este mês" 
-            color="primary" 
-            delay={0} 
-          />
-          <StatsCard 
-            title="Visualizações" 
-            value={(
-              analyticsData?.engagement.views ||
-              (platform !== 'all' ? localStats.filter(s => s.platform === platform).reduce((sum, s) => sum + s.views_count, 0) : localStats.reduce((sum, s) => sum + s.views_count, 0))
-            ).toLocaleString()} 
-            icon={Eye} 
-            trend={parseFloat(analyticsData?.engagement.growth || "0")} 
-            trendLabel="vs mês anterior" 
-            color="accent" 
-            delay={0.1} 
-          />
-          <StatsCard 
-            title="Engajamento" 
-            value={(
-              (analyticsData?.engagement.likes || 0) + 
-              (analyticsData?.engagement.comments || 0) + 
-              (analyticsData?.engagement.shares || 0) ||
-              (platform !== 'all' ? localStats.filter(s => s.platform === platform).reduce((sum, s) => sum + s.likes_count + s.comments_count + s.shares_count, 0) : localEngagement)
-            ).toLocaleString()} 
-            icon={Heart} 
-            trend={parseFloat(analyticsData?.engagement.engagementRate || "0")} 
-            trendLabel="taxa" 
-            color="success" 
-            delay={0.1} 
-          />
-          <StatsCard 
-            title="Seguidores" 
-            value={(
-              analyticsData?.overview.totalFollowers ||
-              analyticsData?.followerData?.reduce((acc, curr: any) => acc + curr.currentFollowers, 0) || 
-              localFollowers ||
-              localStats.reduce((acc, c) => acc + (c.followers_count || 0), 0)
-            ).toLocaleString()} 
-            icon={Users} 
-            trend={analyticsData?.overview.followersGrowth !== undefined ? parseFloat(analyticsData.overview.followersGrowth.toString()) : undefined}
-            trendLabel="este mês" 
-            color="warning" 
-            delay={0.1} 
-          />
+<StatsCard 
+             title="Total de Posts" 
+             value={(analyticsData?.overview.totalPosts || (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((s, a) => s + a.posts_count, 0) : localTotalPosts)).toString()} 
+             icon={TrendingUp} 
+             trend={hasRealData ? parseFloat(analyticsData?.engagement.growth || "0") : undefined} 
+             trendLabel="este mês" 
+             color="primary" 
+             delay={0} 
+           />
+<StatsCard 
+             title="Visualizações" 
+             value={(
+               analyticsData?.engagement.views ||
+               (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((sum, s) => sum + s.views_count, 0) : localStats.reduce((sum, s) => sum + s.views_count, 0))
+             ).toLocaleString()} 
+             icon={Eye} 
+             trend={hasRealData ? parseFloat(analyticsData?.engagement.growth || "0") : undefined} 
+             trendLabel="vs mês anterior" 
+             color="accent" 
+             delay={0.1} 
+           />
+<StatsCard 
+             title="Engajamento" 
+             value={(
+               (analyticsData?.engagement.likes || 0) + 
+               (analyticsData?.engagement.comments || 0) + 
+               (analyticsData?.engagement.shares || 0) ||
+               (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((sum, s) => sum + s.likes_count + s.comments_count + s.shares_count, 0) : localEngagement)
+             ).toLocaleString()} 
+             icon={Heart} 
+             trend={hasRealData ? parseFloat(analyticsData?.engagement.engagementRate || "0") : computeEngagementRateFromLocal()} 
+             trendLabel="taxa" 
+             color="success" 
+             delay={0.1} 
+           />
+<StatsCard 
+             title="Seguidores" 
+             value={(
+               analyticsData?.overview.totalFollowers ||
+               analyticsData?.followerData?.reduce((acc, curr: any) => acc + curr.currentFollowers, 0) || 
+               localFollowers ||
+               (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((acc, c) => acc + (c.followers_count || 0), 0) : localStats.reduce((acc, c) => acc + (c.followers_count || 0), 0))
+             ).toLocaleString()} 
+             icon={Users} 
+             trend={hasRealData ? (analyticsData?.overview.followersGrowth !== undefined ? parseFloat(analyticsData.overview.followersGrowth.toString()) : undefined) : computeFollowerGrowth()}
+             trendLabel="este mês" 
+             color="warning" 
+             delay={0.1} 
+           />
         </div>
       </Suspense>
 

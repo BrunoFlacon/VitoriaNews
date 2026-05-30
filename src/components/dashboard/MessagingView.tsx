@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   MessageCircle, Plus, Trash2, Send, SendHorizontal, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw, Megaphone, Info, BarChart3, Copy, UserPlus, Link2, MapPin, ArrowLeft
-} from "lucide-react";
+, Smile, Play, Download, Music, Globe } from "lucide-react";
 import { cn, getProxyUrl } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,8 @@ interface Message {
   recipient_name: string | null;
   platform: string | null;
   created_at: string;
+  metadata?: Record<string, any>;
+  mime_type?: string | null;
 }
 
 const messagingPlatformConfigs = [
@@ -85,6 +87,8 @@ const messageStatusConfig: Record<string, { label: string; color: string; icon: 
   scheduled: { label: "Agendada", color: "text-blue-500", icon: Calendar },
   sent: { label: "Enviada", color: "text-green-500", icon: CheckCircle2 },
   failed: { label: "Falhou", color: "text-red-500", icon: AlertCircle },
+  received: { label: "Recebida", color: "text-purple-500", icon: MessageCircle },
+  sending: { label: "Enviando", color: "text-blue-300", icon: Loader2 },
 };
 
 const getChatPhoto = (url: string | null | undefined) => {
@@ -903,24 +907,76 @@ export const MessagingView = () => {
     setComposeTarget(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
   };
 
-  const handleReply = async () => {
-    if (!user || !activeChatId || !replyMessage.trim()) return;
+  async function uploadAttachments(files: { url?: string; type: string; name: string; file?: File }[]): Promise<string[]> {
+    if (!files.length) return [];
+    const urls: string[] = [];
+    for (const att of files) {
+      if (att.url && !att.url.startsWith("blob:")) {
+        urls.push(att.url);
+        continue;
+      }
+      if (!att.file) continue;
+      try {
+        const ext = att.file.name.split(".").pop() || "bin";
+        const path = `${user!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await supabase.storage.from("media").upload(path, att.file, { cacheControl: '3600' });
+        if (error) throw error;
+        const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+        urls.push(urlData.publicUrl);
+      } catch (err) {
+        console.error("[UPLOAD] Failed:", err);
+      }
+    }
+    return urls;
+  }
+
+  const inferMediaType = (mediaUrl: string | null, mimeType?: string | null): string => {
+    if (!mediaUrl) return "text";
+    const firstUrl = mediaUrl.split(",")[0];
+    if (mimeType?.startsWith("image/")) return "image";
+    if (mimeType?.startsWith("video/")) return "video";
+    if (mimeType?.startsWith("audio/")) return "audio";
+    const ext = firstUrl.split("?").shift()?.split("#").shift()?.split(".").pop()?.toLowerCase() || "";
+    if (["jpg","jpeg","png","gif","webp","svg","bmp","ico"].includes(ext)) return "image";
+    if (["mp4","webm","ogg","mov","avi","mkv","m3u8"].includes(ext)) return "video";
+    if (["mp3","wav","aac","flac","m4a","opus","wma"].includes(ext)) return "audio";
+    if (["pdf","doc","docx","xls","xlsx","ppt","pptx","zip","rar","7z","txt","csv"].includes(ext)) return "document";
+    return "document";
+  };
+
+  const handleReply = async (incomingAttachments?: any[]) => {
+    const hasText = replyMessage.trim().length > 0;
+    const allAttachments = incomingAttachments || attachments;
+    if (!user || !activeChatId || (!hasText && allAttachments.length === 0)) {
+      setSendingReply(false);
+      return;
+    }
     setSendingReply(true);
     
     const now = new Date().toISOString();
     const tempId = `temp-${Date.now()}`;
     
-    // Detectar se estamos respondendo em um canal (grupo/channel) ou individual
     const activeChat = processedChats.find(c => c.key === activeChatId);
     const isChannel = activeChat?.type === "channel";
-    const channelDbId = isChannel ? activeChat.id : null; // UUID do messaging_channels
+    const channelDbId = isChannel ? activeChat.id : null;
     const chatPlatform = activeChat?.platform || "telegram";
+
+    // Upload attachments first
+    const mediaUrls = await uploadAttachments(allAttachments);
+    const firstMedia = mediaUrls[0] || null;
+    const contentType = allAttachments.length > 0
+      ? (allAttachments[0].type === "image" ? "image"
+        : allAttachments[0].type === "video" ? "video"
+        : allAttachments[0].type === "audio" ? "audio"
+        : allAttachments[0].type === "location" ? "location"
+        : "document")
+      : "text";
 
     const optimisticMsg: Message = {
       id: tempId,
       user_id: user.id,
       content: replyMessage.trim(),
-      media_url: null,
+      media_url: firstMedia,
       status: "sending",
       scheduled_at: null,
       sent_at: now,
@@ -931,18 +987,25 @@ export const MessagingView = () => {
       channel_id: channelDbId
     } as Message;
     
-    // Optimistic: aparece instantaneamente na tela
     queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => [optimisticMsg, ...(old || [])]);
     setReplyMessage("");
+    setAttachments([]);
     
     try {
       const insertPayload: any = {
         user_id: user.id,
         content: optimisticMsg.content,
-        status: "sent",
+        status: "sending",
         sent_at: now,
-        platform: chatPlatform
+        platform: chatPlatform,
+        metadata: {
+          media_type: contentType,
+          filename: allAttachments[0]?.name || null,
+          mime_type: allAttachments[0]?.type || null,
+        }
       };
+      
+      if (firstMedia) insertPayload.media_url = mediaUrls.join(",");
       
       if (isChannel) {
         insertPayload.channel_id = channelDbId;
@@ -951,20 +1014,25 @@ export const MessagingView = () => {
       }
 
       const { data, error } = await supabase.from("messages").insert(insertPayload).select().single();
-
       if (error) throw error;
       
-      // DISPARO REAL: Chamar a Edge Function publish-post
+      // Update optimistic with real ID
+      queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
+        old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id } : m) || []
+      );
+      
       try {
         const session = (await supabase.auth.getSession()).data.session;
         const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
         const baseUrl = (supabase as any).functionsUrl || import.meta.env.VITE_SUPABASE_URL + '/functions/v1';
 
-        const publishPayload = {
+        const publishPayload: any = {
           content: optimisticMsg.content,
           postId: data.id,
           platforms: [chatPlatform],
           postType: "message",
+          mediaType: contentType,
+          mediaUrls,
           recipientPhone: !isChannel ? (activeChatId.startsWith('ind-') ? activeChatId.slice(4) : activeChatId) : undefined,
           channelId: isChannel ? channelDbId : undefined
         };
@@ -981,28 +1049,25 @@ export const MessagingView = () => {
         
         const resultData = await response.json();
         if (!response.ok || !resultData?.success) {
-          console.error("[REPLY] Publish failed:", resultData);
           await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
           queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
             old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
           );
           toast({ title: "Erro no envio", description: resultData?.error || "Falha na API da plataforma", variant: "destructive" });
         } else {
-          // Substituir o temporário pelo ID real do banco com status final
+          await supabase.from("messages").update({ status: "sent", sent_at: now } as any).eq("id", data.id);
           queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-            old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id, status: "sent" } : m) || []
+            old?.map(m => m.id === (data as any).id ? { ...m, status: "sent" } : m) || []
           );
           toast({ title: "Resposta enviada!" });
         }
       } catch (publishErr: any) {
-        console.error("[REPLY] Network error during publish:", publishErr);
         await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
         queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
           old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
         );
       }
     } catch (e: any) {
-      // Reverter optimistic update em caso de erro
       queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
         old?.filter(m => m.id !== tempId) || []
       );
@@ -1066,9 +1131,11 @@ export const MessagingView = () => {
       const mediaUrls = attachments.length > 0 ? attachments.map(a => a.url) : [];
       const isScheduled = !!composeScheduledAt;
 
+      const contentType = attachments.length > 0 ? attachments[0].type === "location" ? "location" : attachments[0].type : "text";
       const payload: any = {
         content: composeMessage.trim(),
         mediaUrls,
+        mediaType: contentType,
         postType: "message",
         platforms: [],
       };
@@ -1105,6 +1172,11 @@ export const MessagingView = () => {
           recipient_phone: composeIndividualPhone.trim(),
           recipient_name: composeIndividualName.trim() || null,
           platform: composeIndividualPlatform,
+          metadata: {
+            media_type: contentType,
+            filename: attachments[0]?.name || null,
+            mime_type: attachments[0]?.type || null,
+          }
         } as any).select().single();
         
         if (error) {
@@ -1185,6 +1257,11 @@ export const MessagingView = () => {
             status: isScheduled ? "scheduled" : "sending",
             scheduled_at: composeScheduledAt || null,
             platform: ch.platform,
+            metadata: {
+              media_type: contentType,
+              filename: attachments[0]?.name || null,
+              mime_type: attachments[0]?.type || null,
+            }
           } as any).select().single();
 
           if (error) {
@@ -1241,22 +1318,33 @@ export const MessagingView = () => {
     setComposeSending(true);
     try {
       const mediaUrl = attachments.length > 0 ? attachments.map(a => a.url).join(",") : null;
+      const draftContentType = attachments.length > 0
+        ? (attachments[0].type === "location" ? "location" : attachments[0].type)
+        : "text";
+      const draftMeta = {
+        media_type: draftContentType,
+        filename: attachments[0]?.name || null,
+        mime_type: attachments[0]?.type || null,
+      };
       if (sendMode === "individual") {
         const { error } = await supabase.from("messages").insert({
           user_id: user.id, content: composeMessage.trim(), media_url: mediaUrl,
           status: "draft", recipient_phone: composeIndividualPhone.trim() || null,
           recipient_name: composeIndividualName.trim() || null, platform: composeIndividualPlatform,
+          metadata: draftMeta,
         } as any);
         if (error) throw error;
       } else {
         if (composeTarget.length === 0) {
           const { error } = await supabase.from("messages").insert({
             user_id: user.id, content: composeMessage.trim(), media_url: mediaUrl, status: "draft", platform: null,
+            metadata: draftMeta,
           } as any);
           if (error) throw error;
         } else {
           const inserts = composeTarget.map(channelId => ({
             user_id: user.id, channel_id: channelId, content: composeMessage.trim(), media_url: mediaUrl, status: "draft", platform: channels.find(c => c.id === channelId)?.platform || null,
+            metadata: draftMeta,
           }));
           const { error } = await supabase.from("messages").insert(inserts as any);
           if (error) throw error;
@@ -1455,9 +1543,9 @@ export const MessagingView = () => {
 
         {/* ===== INBOX TAB (INDIVIDUAL MESSAGES) ===== */}
         <TabsContent value="inbox">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[650px]">
-            {/* Sidebar: Unified Chat List */}
-            <div className="md:col-span-4 glass-card rounded-2xl border border-border flex flex-col overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[calc(100vh-280px)] md:h-[650px]">
+            {/* Sidebar: Unified Chat List - hidden on mobile when chat is active */}
+            <div className={cn("md:col-span-4 glass-card rounded-2xl border border-border flex flex-col overflow-hidden", activeChatId ? "hidden md:flex" : "flex")}>
               <div className="p-4 border-b border-border space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-lg">Conversas</h3>
@@ -1505,7 +1593,7 @@ export const MessagingView = () => {
                             setActiveChatType(chat.type as any);
                           }}
                           className={cn(
-                            "w-full rounded-2xl transition-all text-left relative group border border-white/5 overflow-hidden mb-3 aspect-[16/6] md:aspect-auto",
+                            "w-full rounded-2xl transition-all text-left relative group border border-white/5 overflow-hidden mb-2 md:mb-3 aspect-[4/1] md:aspect-auto",
                             isActive 
                               ? "ring-2 ring-primary/40 ring-offset-2 ring-offset-background shadow-2xl scale-[1.02] z-10"
                               : "hover:bg-white/5 opacity-80 hover:opacity-100"
@@ -1584,7 +1672,7 @@ export const MessagingView = () => {
             </div>
 
             {/* Main Chat Area */}
-            <div className="md:col-span-8 glass-card rounded-2xl border border-border flex flex-col overflow-hidden bg-muted/5">
+            <div className={cn("md:col-span-8 glass-card rounded-2xl border border-border flex flex-col overflow-hidden bg-muted/5", !activeChatId && "hidden md:flex")}>
               {activeChatId ? (
                 (() => {
                   const isChannel = activeChatType === "channel";
@@ -1722,14 +1810,18 @@ export const MessagingView = () => {
                           <p className="text-sm font-medium">Nenhuma mensagem encontrada</p>
                         </div>
                       ) : (
-                        <div className={cn("flex-1 overflow-y-auto p-6 space-y-4", styles.chatBg)}>
+                        <div className={cn("flex-1 overflow-y-auto p-3 md:p-6 space-y-3 md:space-y-4", styles.chatBg)}>
                           {activeMessages.map((msg) => {
-                            const isSelf = true;
+                            const isSelf = msg.status !== "received";
                             const msgStyles = getPlatformStyles(msg.platform);
+                            const mediaType = msg.metadata?.media_type || inferMediaType(msg.media_url, msg.mime_type);
+                            const mediaId = msg.metadata?.media_id;
+                            const mediaUrl = msg.media_url || (mediaId ? getWhatsAppMediaUrl(mediaId, msg.user_id) : null);
+                            const location = msg.metadata?.location;
                             return (
                               <div key={msg.id} className={cn("flex flex-col", isSelf ? "items-end" : "items-start")}>
                                 <div className={cn(
-                                  "max-w-[85%] px-4 py-2.5 rounded-2xl text-[14px] relative shadow-xl backdrop-blur-md group/msg",
+                                  "max-w-[95%] sm:max-w-[85%] px-3 md:px-4 py-2.5 rounded-2xl text-[14px] relative shadow-xl backdrop-blur-md group/msg",
                                   isSelf ? cn(msgStyles.bubbleSelf, "rounded-tr-none") : cn(msgStyles.bubbleOther, "rounded-tl-none")
                                 )}>
                                   <div className="absolute top-1 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity z-10 bg-background/20 backdrop-blur-md rounded-md">
@@ -1749,10 +1841,72 @@ export const MessagingView = () => {
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
-                                  <p className="leading-relaxed font-medium">{msg.content}</p>
+                                  {mediaType === "sticker" ? (
+                                    mediaUrl ? (
+                                      <SafeImage src={mediaUrl} alt="Sticker" className="max-w-[150px] md:max-w-[200px] max-h-[200px]" isWhatsAppImage={!!mediaId} />
+                                    ) : (
+                                      <div className="p-2 text-sm italic opacity-60">🎨 Figurinha</div>
+                                    )
+                                  ) : (
+                                    <>
+                                      {msg.content && <p className="leading-relaxed font-medium whitespace-pre-wrap break-words">{msg.content}</p>}
+
+                                      {(mediaUrl || mediaId) && mediaType === "image" && (
+                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                          <SafeImage src={mediaUrl!} alt="Imagem" className="max-h-[300px] w-full object-contain" isWhatsAppImage={msg.platform === "whatsapp"} />
+                                        </div>
+                                      )}
+
+                                      {(mediaUrl || mediaId) && (mediaType === "video" || msg.mime_type?.startsWith("video/")) && (
+                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                          <video src={mediaUrl!} controls preload="metadata" className="max-h-[300px] w-full" style={{ aspectRatio: "16/9" }}>
+                                            Seu navegador não suporta vídeo.
+                                          </video>
+                                        </div>
+                                      )}
+
+                                      {(mediaUrl || mediaId) && (mediaType === "audio" || mediaType === "voice") && (
+                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20 p-3">
+                                          <audio src={mediaUrl!} controls preload="metadata" className="w-full h-10" />
+                                          {msg.metadata?.duration && <p className="text-xs opacity-50 mt-1">{Math.round(msg.metadata.duration)}s</p>}
+                                        </div>
+                                      )}
+
+                                      {(mediaUrl || mediaId) && (mediaType === "document" || msg.metadata?.filename) && (
+                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20 p-3 flex items-center gap-3">
+                                          <FileText className="w-8 h-8 text-amber-400 shrink-0" />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-bold truncate">{msg.metadata?.filename || "Documento"}</p>
+                                            {msg.metadata?.mime_type && <p className="text-[10px] opacity-50">{msg.metadata.mime_type}</p>}
+                                          </div>
+                                          {msg.metadata?.filename?.endsWith(".pdf") && mediaUrl && (
+                                            <a href={mediaUrl} target="_blank" rel="noopener noreferrer" download={msg.metadata.filename}>
+                                              <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full"><Download className="w-4 h-4" /></Button>
+                                            </a>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {location && (
+                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
+                                          <iframe src={`https://maps.google.com/maps?q=${location.lat},${location.lng}&z=15&output=embed`} className="w-full h-[150px] md:h-[200px]" style={{ border: 0 }} loading="lazy" title="Localização" />
+                                        </div>
+                                      )}
+
+                                      {msg.metadata?.contact && (
+                                        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3 flex items-center gap-3">
+                                          <User className="w-8 h-8 text-blue-400" />
+                                          <div>
+                                            <p className="font-bold text-sm">{msg.metadata.contact.name}</p>
+                                            {msg.metadata.contact.phone && <p className="text-xs opacity-70">{msg.metadata.contact.phone}</p>}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
                                   <div className="flex items-center justify-end gap-1.5 mt-1 opacity-40 text-[9px] font-bold uppercase">
                                     <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    {isSelf && <CheckCircle2 className="w-2.5 h-2.5" />}
+                                    {isSelf && <CheckCircle2 className={cn("w-2.5 h-2.5", msg.status === "failed" && "text-red-500")} />}
                                   </div>
                                 </div>
                               </div>
@@ -1761,14 +1915,19 @@ export const MessagingView = () => {
                         </div>
                       )}
 
-                      <div className="p-4 border-t border-border bg-background/80 backdrop-blur-sm">
-                        <div className="flex items-end gap-3 max-w-4xl mx-auto">
-                          <div className="flex gap-1 mb-1.5 shrink-0">
-                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary" onClick={() => openFileDialog("*/*")} title="Anexar Arquivo"><Paperclip className="w-4 h-4" /></Button>
+                      <div className="p-2 md:p-4 border-t border-border bg-background/80 backdrop-blur-sm">
+                        <div className="flex items-end gap-2 md:gap-3 max-w-4xl mx-auto">
+                          <div className="flex gap-0.5 md:gap-1 mb-1.5 shrink-0">
+                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary hidden sm:flex" onClick={() => openFileDialog("*/*")} title="Anexar Arquivo"><Paperclip className="w-4 h-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary" onClick={() => openFileDialog("image/*")} title="Anexar Imagem"><Image className="w-4 h-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary" onClick={() => openFileDialog("video/*")} title="Anexar Vídeo"><Video className="w-4 h-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary" onClick={() => openFileDialog("audio/*")} title="Gravar Áudio"><Mic className="w-4 h-4" /></Button>
-                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary" onClick={handleLocationAttach} title="Enviar Localização"><MapPin className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary hidden sm:flex" onClick={handleLocationAttach} title="Enviar Localização"><MapPin className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl hover:bg-primary/10 text-primary" onClick={() => {
+                              const emojis = ["😀","😂","😍","🤔","😎","🙏","💪","🔥","❤️","🎉","👍","✅","⭐","💯","🎯","🚀"];
+                              const pick = emojis[Math.floor(Math.random() * emojis.length)];
+                              setReplyMessage(prev => prev + pick);
+                            }} title="Adicionar Emoji"><Smile className="w-4 h-4" /></Button>
                           </div>
                           
                           <div className="flex-1 relative">
@@ -1778,7 +1937,7 @@ export const MessagingView = () => {
                               placeholder="Digite uma mensagem..."
                               value={replyMessage}
                               onChange={(e) => setReplyMessage(e.target.value)}
-                              className="min-h-[44px] max-h-[200px] resize-none py-3 pr-12 bg-muted/30 border-border/50 rounded-2xl focus:ring-primary/30"
+                              className="min-h-[44px] max-h-[200px] resize-none py-3 pr-12 bg-muted/30 border-border/50 rounded-2xl focus:ring-primary/30 text-sm"
                               disabled={sendingReply}
                               aria-label="Responder mensagem"
                               onKeyDown={(e) => {
@@ -1801,7 +1960,7 @@ export const MessagingView = () => {
                                 })()
                               )}
                               onClick={handleReply}
-                              disabled={sendingReply || !replyMessage.trim()}
+                              disabled={sendingReply || (!replyMessage.trim() && attachments.length === 0)}
                             >
                               <Send className="w-4 h-4" />
                             </Button>
@@ -2216,7 +2375,7 @@ export const MessagingView = () => {
                 />
               </div>
               <div className="flex gap-1">
-                {[{ id: "all", label: "Todas" }, { id: "draft", label: "Rascunhos" }, { id: "scheduled", label: "Agendadas" }, { id: "sent", label: "Enviadas" }, { id: "failed", label: "Falhas" }].map(f => (
+                {[{ id: "all", label: "Todas" }, { id: "draft", label: "Rascunhos" }, { id: "scheduled", label: "Agendadas" }, { id: "sent", label: "Enviadas" }, { id: "received", label: "Recebidas" }, { id: "failed", label: "Falhas" }].map(f => (
                   <Button key={f.id} variant={historyFilter === f.id ? "default" : "outline"} size="sm" onClick={() => setHistoryFilter(f.id)}>
                     {f.label}
                   </Button>

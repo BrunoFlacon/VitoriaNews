@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Radio, Video, Clock, Plus, Play, Eye, Heart, MessageCircle, Calendar, Trash2, X, Upload, 
-  Loader2, MoreVertical, Edit2, Send, Scissors, Copy, Square, Download
+  Loader2, MoreVertical, Edit2, Send, Scissors, Copy, Square, Download, CheckCircle2, Globe, Instagram, Phone
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { StoryEditor } from "./StoryEditor";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface StoryLive {
   id: string;
@@ -492,6 +493,9 @@ export const StoriesLivesView = () => {
           <TabsTrigger value="clips" className="rounded-lg data-[state=active]:bg-background gap-2">
             <Scissors className="w-4 h-4" /> Cortes de Vídeo
           </TabsTrigger>
+          <TabsTrigger value="published" className="rounded-lg data-[state=active]:bg-background gap-2">
+            <CheckCircle2 className="w-4 h-4" /> Publicados
+          </TabsTrigger>
         </TabsList>
 
         {/* ===== STORIES TAB ===== */}
@@ -541,7 +545,7 @@ export const StoriesLivesView = () => {
                     {memories.map(mem => (
                       <div key={mem.id} className="relative w-32 aspect-[9/16] shrink-0 rounded-xl overflow-hidden group cursor-pointer border border-pink-500/30">
                         {mem.thumbnail_url ? (
-                          <img src={mem.thumbnail_url} className="w-full h-full object-cover transition-transform group-hover:scale-110" referrerPolicy="no-referrer" />
+                          <SafeImage src={mem.thumbnail_url} className="w-full h-full object-cover transition-transform group-hover:scale-110" placeholderIcon={null} />
                         ) : (
                           <div className="w-full h-full bg-muted flex items-center justify-center"><Radio className="w-8 h-8 text-muted-foreground" /></div>
                         )}
@@ -588,7 +592,7 @@ export const StoriesLivesView = () => {
                     className="relative aspect-[9/16] rounded-2xl overflow-hidden glass-card border border-border group hover:border-primary/50 transition-all cursor-pointer"
                   >
                     {story.thumbnail_url ? (
-                      <img src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <SafeImage src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" placeholderIcon={null} />
                     ) : (
                       <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
                         <Radio className="w-8 h-8" />
@@ -783,6 +787,80 @@ export const StoriesLivesView = () => {
             </div>
           )}
         </TabsContent>
+
+        {/* ===== PUBLISHED TAB ===== */}
+        <TabsContent value="published" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="font-display font-bold text-xl">Stories Publicados</h2>
+                <p className="text-sm text-muted-foreground">Conteúdo publicado no WhatsApp, Telegram, Instagram e outras redes</p>
+              </div>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+          ) : stories.length === 0 ? (
+            <div className="text-center py-16 glass-card rounded-2xl border border-dashed border-border">
+              <CheckCircle2 className="w-12 h-12 mx-auto text-muted-foreground mb-4 opacity-50" />
+              <p className="text-muted-foreground">Nenhum story publicado ainda.</p>
+              <p className="text-xs text-muted-foreground mt-1">Publique stories para vê-los aqui.</p>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Group by platform */}
+              {storyPlatforms.map(platformId => {
+                const published = stories.filter(s => s.platform === platformId);
+                if (published.length === 0) return null;
+                const platform = socialPlatforms.find(p => p.id === platformId);
+                const Icon = platform?.icon || Globe;
+                return (
+                  <div key={platformId}>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", platform?.color || "bg-muted")}>
+                        <Icon className="w-4 h-4 text-white" />
+                      </div>
+                      <h3 className="font-bold text-base">{platform?.name || platformId}</h3>
+                      <span className="text-sm text-muted-foreground">({published.length})</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                      {published.map((story) => (
+                        <motion.div key={story.id}
+                          initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                          className="relative aspect-[9/16] rounded-2xl overflow-hidden border border-border/50 group cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+                        >
+                          {story.thumbnail_url ? (
+                            <SafeImage src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" placeholderIcon={null} />
+                          ) : (
+                            <div className="w-full h-full bg-muted flex items-center justify-center">
+                              <Icon className="w-6 h-6 text-muted-foreground/50" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+                          <div className="absolute bottom-2 left-2 right-2">
+                            <p className="text-white text-[11px] font-bold truncate leading-tight">{story.title}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Eye className="w-2.5 h-2.5 text-white/60" />
+                              <span className="text-[9px] text-white/60">{story.viewers}</span>
+                              <span className="text-[9px] text-white/40 ml-auto">{new Date(story.created_at).toLocaleDateString("pt-BR")}</span>
+                            </div>
+                          </div>
+                          <div className={cn("absolute top-2 left-2 w-6 h-6 rounded-md flex items-center justify-center", platform?.color)}>
+                            <Icon className="w-3.5 h-3.5 text-white" />
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* Create Dialog — Integrated */}
@@ -859,7 +937,7 @@ export const StoriesLivesView = () => {
                     <div className="grid grid-cols-4 gap-2 mt-2">
                        {thumbnailUrls.map((url, i) => (
                          <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border group">
-                            <img src={url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <SafeImage src={url} className="w-full h-full object-cover" placeholderIcon={null} />
                             <button type="button" onClick={() => setThumbnailUrls(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
                               <X className="w-3 h-3 text-white" />
                             </button>

@@ -1,8 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const OAUTH_REFRESH_PLATFORMS = ["google", "youtube", "twitter"];
-const FB_EXCHANGE_PLATFORMS = ["facebook", "instagram"];
+const PLATFORM_REFRESH_TYPES: Record<string, string> = {
+  google: "oauth2", youtube: "oauth2", twitter: "oauth2",
+  linkedin: "oauth2", tiktok: "oauth2",
+  facebook: "fb_exchange", instagram: "fb_exchange",
+  pinterest: "oauth2", snapchat: "oauth2",
+};
+
+const RETRY_BACKOFF_HOURS = 24;
 
 serve(async (_req: Request) => {
   try {
@@ -12,17 +18,19 @@ serve(async (_req: Request) => {
 
     console.log("[TOKEN-CRON] Scanning for expiring tokens...");
 
-    // Buscar todas as conexões com token expirando em até 7 dias
-    const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const fourteenDaysFromNow = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
     const now = new Date().toISOString();
+
+    // Skip connections that failed refresh recently (respect backoff)
+    const backoffCutoff = new Date(Date.now() - RETRY_BACKOFF_HOURS * 60 * 60 * 1000).toISOString();
 
     const { data: expiring, error } = await supabase
       .from("social_connections")
       .select("*")
       .eq("is_connected", true)
       .not("token_expires_at", "is", null)
-      .lte("token_expires_at", sevenDaysFromNow)
-      .gte("token_expires_at", now)  // Ainda não expirou, mas vai expirar
+      .lte("token_expires_at", fourteenDaysFromNow)
+      .or(`last_refresh_attempt.is.null,last_refresh_attempt.lte.${backoffCutoff}`)
       .order("token_expires_at", { ascending: true });
 
     if (error) {
@@ -43,6 +51,10 @@ serve(async (_req: Request) => {
     const googleClientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
     const twitterKey = Deno.env.get("TWITTER_CONSUMER_KEY");
     const twitterSecret = Deno.env.get("TWITTER_CONSUMER_SECRET");
+    const linkedinClientId = Deno.env.get("LINKEDIN_CLIENT_ID");
+    const linkedinClientSecret = Deno.env.get("LINKEDIN_CLIENT_SECRET");
+    const tiktokClientKey = Deno.env.get("TIKTOK_CLIENT_KEY");
+    const tiktokClientSecret = Deno.env.get("TIKTOK_CLIENT_SECRET");
 
     let refreshed = 0;
     let skipped = 0;
@@ -50,57 +62,81 @@ serve(async (_req: Request) => {
 
     for (const conn of expiring) {
       const platform = conn.platform;
+      const refreshType = PLATFORM_REFRESH_TYPES[platform] || "none";
+
+      // Mark refresh attempt timestamp
+      await supabase.from("social_connections").update({
+        last_refresh_attempt: new Date().toISOString()
+      }).eq("id", conn.id);
 
       try {
         let newAccessToken = "";
-        let newExpiresIn = 5184000; // default 60 days
+        let newExpiresIn = 5184000;
+        let newRefreshToken: string | undefined;
 
-        if (OAUTH_REFRESH_PLATFORMS.includes(platform)) {
+        if (refreshType === "oauth2") {
           if (!conn.refresh_token) {
             console.warn(`[TOKEN-CRON] ${platform} ${conn.id}: No refresh_token.`);
             skipped++;
             continue;
           }
 
+          let tokenUrl = "";
+          let bodyParams: Record<string, string> = {};
+          let authHeader: Record<string, string> = {};
+
           if (platform === "twitter") {
             if (!twitterKey || !twitterSecret) throw new Error("Twitter env vars not configured");
-            const res = await fetch("https://api.x.com/2/oauth2/token", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-                Authorization: `Basic ${btoa(`${twitterKey}:${twitterSecret}`)}`,
-              },
-              body: new URLSearchParams({
-                refresh_token: conn.refresh_token,
-                grant_type: "refresh_token",
-              }),
-            });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error_description || data.error);
-            newAccessToken = data.access_token;
-            newExpiresIn = data.expires_in || 7200;
-          } else {
-            // google / youtube
+            tokenUrl = "https://api.x.com/2/oauth2/token";
+            authHeader = { Authorization: `Basic ${btoa(`${twitterKey}:${twitterSecret}`)}` };
+            bodyParams = { refresh_token: conn.refresh_token, grant_type: "refresh_token" };
+            newExpiresIn = 7200;
+          } else if (platform === "google" || platform === "youtube") {
             if (!googleClientId || !googleClientSecret) throw new Error("Google env vars not configured");
-            const res = await fetch("https://oauth2.googleapis.com/token", {
-              method: "POST",
-              headers: { "Content-Type": "application/x-www-form-urlencoded" },
-              body: new URLSearchParams({
-                client_id: googleClientId,
-                client_secret: googleClientSecret,
-                refresh_token: conn.refresh_token,
-                grant_type: "refresh_token",
-              }),
-            });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error_description || data.error);
-            newAccessToken = data.access_token;
-            newExpiresIn = data.expires_in || 3600;
-            if (data.refresh_token) {
-              await supabase.from("social_connections").update({ refresh_token: data.refresh_token }).eq("id", conn.id);
-            }
+            tokenUrl = "https://oauth2.googleapis.com/token";
+            bodyParams = {
+              client_id: googleClientId, client_secret: googleClientSecret,
+              refresh_token: conn.refresh_token, grant_type: "refresh_token",
+            };
+            newExpiresIn = 3600;
+          } else if (platform === "linkedin") {
+            if (!linkedinClientId || !linkedinClientSecret) throw new Error("LinkedIn env vars not configured");
+            tokenUrl = "https://api.linkedin.com/v2/accessToken";
+            bodyParams = {
+              client_id: linkedinClientId, client_secret: linkedinClientSecret,
+              refresh_token: conn.refresh_token, grant_type: "refresh_token",
+            };
+            newExpiresIn = 5184000;
+          } else if (platform === "tiktok") {
+            if (!tiktokClientKey || !tiktokClientSecret) throw new Error("TikTok env vars not configured");
+            tokenUrl = "https://open.tiktokapis.com/v2/oauth/token/";
+            bodyParams = {
+              client_key: tiktokClientKey, client_secret: tiktokClientSecret,
+              grant_type: "refresh_token", refresh_token: conn.refresh_token,
+            };
+            newExpiresIn = 86400;
+          } else {
+            // Fallback: try generic Google-style OAuth
+            tokenUrl = "https://oauth2.googleapis.com/token";
+            bodyParams = {
+              client_id: googleClientId || "", client_secret: googleClientSecret || "",
+              refresh_token: conn.refresh_token, grant_type: "refresh_token",
+            };
+            newExpiresIn = 3600;
           }
-        } else if (FB_EXCHANGE_PLATFORMS.includes(platform)) {
+
+          const res = await fetch(tokenUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded", ...authHeader },
+            body: new URLSearchParams(bodyParams),
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error_description || data.error || data.message);
+          newAccessToken = data.access_token;
+          if (data.expires_in) newExpiresIn = data.expires_in;
+          newRefreshToken = data.refresh_token;
+
+        } else if (refreshType === "fb_exchange") {
           if (!metaAppId || !metaAppSecret) {
             console.warn(`[TOKEN-CRON] ${platform}: META_APP_ID/ SECRET not configured.`);
             skipped++;
@@ -119,7 +155,6 @@ serve(async (_req: Request) => {
           newAccessToken = data.access_token;
           newExpiresIn = data.expires_in || 5184000;
         } else if (platform === "threads") {
-          // Threads não tem refresh — avisar usuário (pula no cron)
           console.log(`[TOKEN-CRON] Threads ${conn.id}: No refresh available. Skipping.`);
           skipped++;
           continue;
@@ -130,14 +165,15 @@ serve(async (_req: Request) => {
 
         const newExpiresAt = new Date(Date.now() + newExpiresIn * 1000).toISOString();
 
-        await supabase
-          .from("social_connections")
-          .update({
-            access_token: newAccessToken,
-            token_expires_at: newExpiresAt,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", conn.id);
+        const updateData: Record<string, any> = {
+          access_token: newAccessToken,
+          token_expires_at: newExpiresAt,
+          refresh_error: null,
+          updated_at: new Date().toISOString(),
+        };
+        if (newRefreshToken) updateData.refresh_token = newRefreshToken;
+
+        await supabase.from("social_connections").update(updateData).eq("id", conn.id);
 
         console.log(`[TOKEN-CRON] Refreshed ${platform} ${conn.id}. Expires: ${newExpiresAt}`);
         refreshed++;
@@ -146,17 +182,22 @@ serve(async (_req: Request) => {
         console.error(`[TOKEN-CRON] Failed to refresh ${platform} ${conn.id}:`, err.message);
         failed++;
 
-        // Se o refresh falhou, podemos marcar como desconectado
-        // (evita continuar tentando em vão a cada execução)
-        if (err.message?.includes("token") || err.message?.includes("expired") || err.message?.includes("invalid")) {
-          await supabase
-            .from("social_connections")
-            .update({
-              is_connected: false,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", conn.id);
-          console.log(`[TOKEN-CRON] Marked ${platform} ${conn.id} as disconnected due to refresh failure.`);
+        await supabase.from("social_connections").update({
+          refresh_error: err.message?.substring(0, 500),
+          updated_at: new Date().toISOString(),
+        }).eq("id", conn.id);
+
+        // Only disconnect if the refresh token is permanently invalid
+        const permanentErrors = ["token", "expired", "invalid", "revoked", "unauthorized", "not found"];
+        const isPermanent = permanentErrors.some(e => 
+          err.message?.toLowerCase().includes(e)
+        );
+        if (isPermanent) {
+          await supabase.from("social_connections").update({
+            is_connected: false,
+            updated_at: new Date().toISOString(),
+          }).eq("id", conn.id);
+          console.log(`[TOKEN-CRON] Marked ${platform} ${conn.id} as disconnected (permanent failure).`);
         }
       }
     }

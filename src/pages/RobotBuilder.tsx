@@ -663,7 +663,7 @@ const RobotBuilder = () => {
                                   { id: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'openai' },
                                   { id: 'mixtral-8x7b-32768', label: 'Mixtral (Live)', provider: 'groq' },
                                   { id: 'llama3-70b-8192', label: 'Llama 3 70B', provider: 'groq' },
-                                  { id: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash', provider: 'google' },
+                                  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', provider: 'google' },
                                 ].map((m) => (
                                   <button
                                     key={m.id}

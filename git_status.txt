@@ -1,0 +1,43 @@
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add/rm <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	deleted:    package-lock.json
+	modified:   src/components/ErrorBoundary.tsx
+	modified:   src/components/dashboard/AdvancedAnalytics.tsx
+	modified:   src/components/dashboard/AnalyticsChart.tsx
+	modified:   src/components/dashboard/DashboardHomeView.tsx
+	modified:   src/components/dashboard/MessagingView.tsx
+	modified:   src/components/dashboard/StatsCard.tsx
+	modified:   src/components/dashboard/StoriesLivesView.tsx
+	modified:   src/components/dashboard/SubscribersView.tsx
+	modified:   src/components/dashboard/analytics/EngagementChart.tsx
+	modified:   src/components/dashboard/messaging/ChatWindow.tsx
+	modified:   src/components/dashboard/settings/MonetizationSection.tsx
+	modified:   src/hooks/useSocialConnections.ts
+	modified:   src/hooks/useSocialStats.ts
+	modified:   src/integrations/supabase/types.ts
+	modified:   src/main.tsx
+	modified:   src/pages/Dashboard.tsx
+	modified:   src/pages/RobotBuilder.tsx
+	modified:   supabase/functions/_shared/automation/content-generator.ts
+	modified:   supabase/functions/_shared/bot-engine.ts
+	modified:   supabase/functions/_shared/credentials.ts
+	modified:   supabase/functions/_shared/platforms/dispatcher.ts
+	modified:   supabase/functions/_shared/platforms/telegram.ts
+	modified:   supabase/functions/_shared/platforms/whatsapp.ts
+	modified:   supabase/functions/collect-social-analytics/index.ts
+	modified:   supabase/functions/get-analytics/index.ts
+	modified:   supabase/functions/media-relay/index.ts
+	modified:   supabase/functions/publish-post/index.ts
+	modified:   supabase/functions/refresh-tokens-cron/index.ts
+	modified:   supabase/functions/telegram-webhook/index.ts
+	modified:   supabase/functions/whatsapp-webhook/index.ts
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	supabase/migrations/20260529010000_optimize_cron_and_tokens.sql
+
+no changes added to commit (use "git add" and/or "git commit -a")

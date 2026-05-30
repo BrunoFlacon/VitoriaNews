@@ -87,8 +87,8 @@ export async function getMetaCredentials(
 
     platformUserId: creds.platformUserId,
 
-    phoneNumberId: creds.phone_number_id || creds.phone_id,
-    wabaId: creds.waba_id
+    phoneNumberId: creds.phone_number_id || creds.phone_id || creds.platformUserId,
+    wabaId: creds.waba_id || creds.pageId
   };
 }
 

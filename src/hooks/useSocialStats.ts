@@ -44,8 +44,11 @@ export interface AudienceBreakdown {
 export interface MessageDeliveryStats {
   totalSent: number;
   totalFailed: number;
+  totalDraft: number;
+  totalScheduled: number;
+  totalReceived: number;
   successRate: number;
-  platformStats: Record<string, { sent: number; failed: number }>;
+  platformStats: Record<string, { sent: number; failed: number; draft: number; scheduled: number; received: number }>;
   recentMessages: any[];
 }
 
@@ -81,8 +84,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           .from('messages')
           .select('id, platform, status, content, recipient_name, recipient_phone, created_at, metadata')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(500),
+          .order('created_at', { ascending: false }),
         supabase
           .from('scheduled_posts')
           .select('platforms, status')
@@ -113,7 +115,10 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       
       let msgTotalSent = 0;
       let msgTotalFailed = 0;
-      const msgPlatformStats: Record<string, { sent: number; failed: number }> = {};
+      let msgTotalDraft = 0;
+      let msgTotalScheduled = 0;
+      let msgTotalReceived = 0;
+      const msgPlatformStats: Record<string, { sent: number; failed: number; draft: number; scheduled: number; received: number }> = {};
       
       (messagesRes.data || []).forEach((m: any) => {
         const p = (m.platform || 'unknown').toLowerCase().trim();
@@ -121,13 +126,22 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         if (isBot) botActionCounts[p] = (botActionCounts[p] || 0) + 1;
         else actionCounts[p] = (actionCounts[p] || 0) + 1;
 
-        if (!msgPlatformStats[p]) msgPlatformStats[p] = { sent: 0, failed: 0 };
+        if (!msgPlatformStats[p]) msgPlatformStats[p] = { sent: 0, failed: 0, draft: 0, scheduled: 0, received: 0 };
         if (m.status === 'sent') {
           msgPlatformStats[p].sent++;
           msgTotalSent++;
         } else if (m.status === 'failed') {
           msgPlatformStats[p].failed++;
           msgTotalFailed++;
+        } else if (m.status === 'draft') {
+          msgPlatformStats[p].draft++;
+          msgTotalDraft++;
+        } else if (m.status === 'scheduled') {
+          msgPlatformStats[p].scheduled++;
+          msgTotalScheduled++;
+        } else if (m.status === 'received') {
+          msgPlatformStats[p].received++;
+          msgTotalReceived++;
         }
       });
 
@@ -148,7 +162,11 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         const platformKey = acc.platform;
         const totalActions = actionCounts[platformKey] || 0;
         const totalBotActions = botActionCounts[platformKey] || 0;
-        const effectivePosts = Math.max(Number(acc.posts_count ?? 0), totalActions);
+        const apiPostsCount = Number(acc.posts_count ?? 0);
+        const effectivePosts = Math.max(apiPostsCount, totalActions);
+
+        const rawFollowers = Number(acc.followers_count || acc.followers || 0);
+        const channelMembersFromMeta = Number(acc.metadata?.members_count || 0);
 
         return {
           id: acc.id,
@@ -156,7 +174,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           platform_user_id: acc.platform_user_id,
           username: acc.username,
           profile_picture: acc.profile_picture,
-          followers_count: Number(acc.followers_count ?? acc.followers ?? 0),
+          followers_count: Math.max(rawFollowers, channelMembersFromMeta),
           posts_count: effectivePosts,
           views_count: Number(acc.views ?? 0),
           likes_count: Number(acc.likes ?? 0),
@@ -167,7 +185,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           chat_id: acc.chat_id,
           metadata: {
             ...(acc.metadata || {}),
-            official_posts_count: effectivePosts,
+            official_posts_count: apiPostsCount,
             bot_posts_count: totalBotActions,
             ...(platformKey === 'whatsapp' && botActiveStatus !== null ? { is_active: botActiveStatus } : {}),
           },
@@ -209,8 +227,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
             platform_user_id: ch.channel_id,
             username: ch.channel_name,
             profile_picture: ch.profile_picture,
-            followers_count: ch.members_count,
-            posts_count: totalActions,
+            followers_count: 0,
+            posts_count: 0,
             views_count: 0,
             likes_count: 0,
             shares_count: 0,
@@ -220,7 +238,9 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
             chat_id: ch.channel_id,
             metadata: {
               is_virtual: true,
-              official_posts_count: totalActions,
+              is_channel_members: true,
+              members_count: ch.members_count,
+              official_posts_count: 0,
               bot_posts_count: totalBotActions,
               ...(ch.platform === 'whatsapp' && botActiveStatus !== null ? { is_active: botActiveStatus } : {})
             },
@@ -237,6 +257,9 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         messageStats: {
           totalSent: msgTotalSent,
           totalFailed: msgTotalFailed,
+          totalDraft: msgTotalDraft,
+          totalScheduled: msgTotalScheduled,
+          totalReceived: msgTotalReceived,
           successRate: msgSuccessRate,
           platformStats: msgPlatformStats,
           recentMessages: (messagesRes.data || []).slice(0, 500).map((m: any) => ({
@@ -251,6 +274,9 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         messageDeliveryStats: {
           totalSent: msgTotalSent,
           totalFailed: msgTotalFailed,
+          totalDraft: msgTotalDraft,
+          totalScheduled: msgTotalScheduled,
+          totalReceived: msgTotalReceived,
           successRate: msgSuccessRate,
           platformStats: msgPlatformStats,
           recentMessages: (messagesRes.data || []).slice(0, 15).map((m: any) => ({
@@ -361,7 +387,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     audienceBreakdown,
     loading: isLoading || manualLoading,
     setStatsLoading: (loading: boolean) => setManualLoading(loading),
-    messageStats: data?.messageStats || { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {}, recentMessages: [] },
+    messageStats: data?.messageStats || { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] },
     lastUpdated: data?.lastUpdated || null,
     totalFollowers,
     totalPosts,
@@ -369,7 +395,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     getPlatformStats,
     isConnected,
     refresh: refetch,
-    messageDeliveryStats: data?.messageDeliveryStats || { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {}, recentMessages: [] },
+    messageDeliveryStats: data?.messageDeliveryStats || { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] },
   };
 }
 

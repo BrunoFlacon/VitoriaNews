@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { Users, Search, Download, MessageSquare, Send, Calendar, Star, ShieldCheck, Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SubscriberModal } from "./subscribers/SubscriberModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 export interface Subscriber {
   id: string;
@@ -51,90 +52,29 @@ export const SubscriberAvatar = ({
   telegramUsername?: string;
   className?: string;
 }) => {
-  const [imgSrc, setImgSrc] = useState<string>("");
-  const [attempt, setAttempt] = useState(0);
-  const [imgFailed, setImgFailed] = useState(false);
+  const initials = fullName
+    ? fullName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
+    : "??";
 
-  const cleanInsta = instagramUsername?.replace("@", "").trim();
-  const cleanTele = telegramUsername?.replace("@", "").trim();
-
-  // Ordem de prioridade de fotos (sem SVGs externos)
-  const getFallbackUrls = useCallback(() => {
-    const urls: string[] = [];
-
-    // 1. URL Direta (http/https ou Base64 data:)
-    if (profilePictureUrl && (profilePictureUrl.startsWith("http") || profilePictureUrl.startsWith("data:"))) {
-      urls.push(profilePictureUrl.trim());
-    }
-
-    // 2. Telegram (via unavatar)
-    if (cleanTele) {
-      urls.push(`https://unavatar.io/telegram/${cleanTele}`);
-    }
-
-    // 3. Instagram (via unavatar)
-    if (cleanInsta) {
-      urls.push(`https://unavatar.io/instagram/${cleanInsta}`);
-    }
-
-    // 4. Gravatar pelo e-mail
-    if (email) {
-      urls.push(`https://unavatar.io/gravatar/${email.trim().toLowerCase()}`);
-    }
-
-    return urls;
-  }, [profilePictureUrl, cleanTele, cleanInsta, email, phone, fullName]);
-
-  useEffect(() => {
-    const urls = getFallbackUrls();
-    if (urls.length > 0) {
-      setImgSrc(urls[0]);
-      setAttempt(0);
-      setImgFailed(false);
-    } else {
-      setImgSrc("");
-      setImgFailed(true);
-    }
-  }, [getFallbackUrls]);
-
-  const handleError = () => {
-    const urls = getFallbackUrls();
-    const nextIndex = attempt + 1;
-    if (nextIndex < urls.length) {
-      setImgSrc(urls[nextIndex]);
-      setAttempt(nextIndex);
-    } else {
-      // Todas as URLs falharam → usa fallback JSX (iniciais)
-      setImgFailed(true);
-    }
-  };
-
-  // Fallback JSX: iniciais ou ícone Star
-  if (imgFailed || !imgSrc) {
-    const initials = fullName
-      ? fullName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
-      : "";
-    return (
-      <div className={cn(
-        "w-full h-full flex items-center justify-center",
-        "bg-gradient-to-br from-purple-600 to-pink-500",
-        className
-      )}>
-        {initials ? (
-          <span className="text-white font-bold text-sm select-none">{initials}</span>
-        ) : (
-          <Star className="text-white w-5 h-5" />
-        )}
-      </div>
-    );
-  }
+  // Use the profile picture URL if available, otherwise try common fallbacks
+  const src = profilePictureUrl || 
+              (instagramUsername ? `https://unavatar.io/instagram/${instagramUsername.replace("@", "")}` : "") ||
+              (telegramUsername ? `https://unavatar.io/telegram/${telegramUsername.replace("@", "")}` : "") ||
+              (email ? `https://unavatar.io/gravatar/${email.toLowerCase()}` : "");
 
   return (
-    <img
-      src={imgSrc}
+    <SafeImage
+      src={src}
       alt={fullName}
-      className={cn("w-full h-full object-cover", className)}
-      onError={handleError}
+      className={cn("w-full h-full", className)}
+      placeholderIcon={
+        <div className={cn(
+          "w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-600/40 to-pink-500/40",
+          className
+        )}>
+          <span className="text-white/60 font-bold text-sm tracking-tighter">{initials}</span>
+        </div>
+      }
     />
   );
 };
@@ -173,10 +113,13 @@ export const SubscribersView = () => {
     fetchSubscribers();
   }, []);
 
-  const filtered = subscribers.filter(s => 
-    s.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-    s.phone?.includes(search) ||
-    s.email?.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(() => 
+    subscribers.filter(s => 
+      s.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      s.phone?.includes(search) ||
+      s.email?.toLowerCase().includes(search.toLowerCase())
+    ),
+    [subscribers, search]
   );
 
   const translateDuration = (dur?: string) => {

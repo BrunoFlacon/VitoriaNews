@@ -166,7 +166,7 @@ serve(async (req: Request) => {
     ] = await Promise.all([
       supabase.from("scheduled_posts").select("id, status, type, post_type, platforms, created_at, published_at, content").eq("user_id", user.id).order("created_at", { ascending: false }),
       supabase.from("post_metrics").select("id, post_id, external_id, platform, likes, comments, shares, impressions, reach, content, published_at, collected_at").eq("user_id", user.id).or(`published_at.gte.${startDate.toISOString()},collected_at.gte.${startDate.toISOString()}`),
-      supabase.from("account_metrics").select("id, social_account_id, platform, followers, posts_count, views, likes, comments, shares, collected_at").eq("user_id", user.id).gte("collected_at", startDate.toISOString()).order("collected_at", { ascending: true }),
+      supabase.from("account_metrics").select("id, social_account_id, platform, followers, views, likes, comments, shares, collected_at").eq("user_id", user.id).gte("collected_at", startDate.toISOString()).order("collected_at", { ascending: true }),
       supabase.from("social_connections").select("id, platform, username, page_name, followers_count, profile_image_url, is_connected, platform_user_id, page_id").eq("user_id", user.id),
       supabase.from("social_accounts").select("id, platform, platform_user_id, username, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, metadata, updated_at").eq("user_id", user.id),
       supabase.from("platform_hourly_performance").select("platform, day_of_week, hour, avg_likes, avg_comments, avg_shares, avg_impressions").order("avg_likes", { ascending: false }).limit(50),
@@ -241,6 +241,17 @@ serve(async (req: Request) => {
       acc.watch_time_minutes = (acc.watch_time_minutes || 0) + Number(current.estimated_minutes_watched || 0);
       return acc;
     }, { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 });
+
+    // Fallback: if youtube_analytics is empty, use social_accounts data
+    if (youtubeStats.views === 0 && youtubeStats.subscribers_gained === 0) {
+      const ytAccounts = socialAccounts.filter((a: any) => normalizePlatform(a.platform) === 'youtube');
+      if (ytAccounts.length > 0) {
+        youtubeStats.views = ytAccounts.reduce((s: number, a: any) => s + (a.views || 0), 0);
+        youtubeStats.likes = ytAccounts.reduce((s: number, a: any) => s + (a.likes || 0), 0);
+        youtubeStats.comments = ytAccounts.reduce((s: number, a: any) => s + (a.comments || 0), 0);
+        youtubeStats.subscribers_gained = ytAccounts.reduce((s: number, a: any) => s + (a.followers || 0), 0);
+      }
+    }
 
     const filteredGaData = (requestedPlatform === "all" || normalizedReqPlatform === "google") ? (gaData || []) : [];
     const gaStats = filteredGaData.reduce((acc: any, current: any) => {
@@ -343,9 +354,15 @@ serve(async (req: Request) => {
       // 2. Use post metrics for Views/Engagement (activity)
       // 3. If source is 'api', prioritize raw metrics
       
-      const viewsCount = Math.max(0, requestedSource === 'api' 
-        ? Math.max(bucketPosts.reduce((s, m) => s + (Number(m.impressions) || 0), 0), platformFilteredAcc.reduce((s, m) => s + (Number(m.views) || 0), 0))
-        : (platformFilteredAcc.reduce((s, m) => s + (Number(m.views) || 0), 0) || bucketPosts.reduce((s, m) => s + (Number(m.impressions) || 0), 0)));
+      const accViews = platformFilteredAcc.reduce((s, m) => s + (Number(m.views) || 0), 0);
+      const postViews = bucketPosts.reduce((s, m) => s + (Number(m.impressions) || 0), 0);
+      let viewsCount = requestedSource === 'api'
+        ? Math.max(postViews, accViews)
+        : (accViews || postViews);
+      // Fallback: distribute globalViews evenly across days if account/post metrics are all zero
+      if (viewsCount === 0 && days > 0 && globalViews > 0) {
+        viewsCount = Math.round(globalViews / days);
+      }
 
       const engagementCount = Math.max(0, bucketPosts.reduce((s, m) => s + (Number(m.likes) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0), 0) || 
                                platformFilteredAcc.reduce((s, m) => s + (Number(m.likes) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0), 0));

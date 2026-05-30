@@ -4,6 +4,14 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cacheProfileImage } from "../_shared/media.ts";
 import { resolveCorsOrigin } from "../_shared/cors.ts";
 
+const PLATFORM_PRIORITY: Record<string, number> = {
+  instagram: 1, facebook: 1,
+  threads: 2, twitter: 2, linkedin: 2, youtube: 2, telegram: 2,
+  tiktok: 3, pinterest: 3, whatsapp: 3,
+  snapchat: 4, reddit: 4, spotify: 4, kwai: 4, truth_social: 4, gettr: 4, rumble: 4, giphy: 4, website: 4,
+};
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 const corsHeaders = (req) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-authorization',
@@ -50,38 +58,70 @@ serve(async (req: Request) => {
     const isCronSync = bodyPayload?.is_cron === true;
 
     // --- AUTH LOGIC ---
-    if (token) {
-      if (token === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")) {
-        // Authorized as SYSTEM
-      } else {
-        const { data: { user }, error: authErr } = await adminClient.auth.getUser(token);
-        if (authErr) console.warn("[COLLECT] Auth error:", authErr.message);
-        if (user) userId = user.id;
-      }
+    // Check if token is the SUPABASE_SERVICE_ROLE_KEY env var (set by runtime)
+    const envServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const isEnvKey = token && envServiceKey && token === envServiceKey;
+    
+    // Check if token matches the key stored in settings table
+    let isSettingsKey = false;
+    try {
+      const { data: sk } = await adminClient
+        .from("settings")
+        .select("value")
+        .eq("key", "supabase_service_role_key")
+        .maybeSingle();
+      isSettingsKey = !!(token && sk?.value && token === sk.value);
+    } catch (e) {
+      console.warn("[COLLECT] settings fetch error:", e?.message);
+    }
+    
+    if (token && !isEnvKey && !isSettingsKey) {
+      const { data: { user }, error: authErr } = await adminClient.auth.getUser(token);
+      if (authErr) console.warn("[COLLECT] Auth error:", authErr.message);
+      if (user) userId = user.id;
     }
 
     if (!userId && bodyPayload?.userId) userId = bodyPayload.userId;
 
-    if (!userId && !token?.includes(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "!!")) {
+    // Only reject if we have NO valid auth path
+    if (!userId && !isEnvKey && !isSettingsKey) {
        return new Response(JSON.stringify({ error: "Unauthorized" }), { 
          status: 401, headers: corsHeaders(req) 
        });
     }
 
-    // --- TASK QUEUE LOGIC ---
+    // --- TASK QUEUE LOGIC (SMART BATCHING) ---
     let tasksToProcess: any[] = [];
     if (isCronSync) {
-      // Pick next 5 pending tasks (staggered to avoid rate limits)
       const { data: pendingTasks } = await adminClient
         .from("social_sync_tasks")
         .select("*, social_connections(*)")
         .eq("status", "pending")
         .or(`next_sync_at.lte.${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")},next_sync_at.is.null`)
-        .order("sync_type", { ascending: true }) // historical first
-        .limit(5);
+        .order("sync_type", { ascending: true })
+        .limit(8);
       
-      tasksToProcess = pendingTasks || [];
-      console.log(`[COLLECT] Found ${tasksToProcess.length} pending tasks to process via CRON.`);
+      // Prioritize: historical first, then high-priority platforms, 
+      // skip platforms with expired tokens
+      const now = Date.now();
+      tasksToProcess = (pendingTasks || [])
+        .filter(t => {
+          if (!t.social_connections) return false;
+          const conn = t.social_connections;
+          // Skip platforms with expired tokens (tokens refresh cron handles renewal)
+          if (conn.token_expires_at && conn.platform !== "telegram") {
+            return new Date(conn.token_expires_at).getTime() > now;
+          }
+          return conn.is_connected !== false;
+        })
+        .sort((a, b) => {
+          const pA = PLATFORM_PRIORITY[a.social_connections?.platform] || 99;
+          const pB = PLATFORM_PRIORITY[b.social_connections?.platform] || 99;
+          return pA - pB;
+        })
+        .slice(0, 3);
+      
+      console.log(`[COLLECT] Found ${pendingTasks?.length || 0} pending, processing ${tasksToProcess.length} (smart batched).`);
     }
 
     // --- TARGET USERS (Manual Sync) ---
@@ -96,16 +136,19 @@ serve(async (req: Request) => {
 
     const globalResults: any[] = [];
 
-    // --- CASE 1: CRON SYNC (PROCESS QUEUE) ---
+    // --- CASE 1: CRON SYNC (PROCESS QUEUE - SMART BATCHING) ---
     if (isCronSync) {
-      for (const task of tasksToProcess) {
+      for (let i = 0; i < tasksToProcess.length; i++) {
+        const task = tasksToProcess[i];
         try {
+          // Rate limiting: add 2s delay between tasks to avoid API thundering
+          if (i > 0) await delay(2000);
+          
           await adminClient.from("social_sync_tasks").update({ status: "processing" }).eq("id", task.id);
           
           const conn = task.social_connections;
           const result = await processSyncTask(adminClient, conn, task);
           
-          // Update task state
           const updates: any = { 
             status: "completed", 
             last_sync_at: new Date().toISOString(),
@@ -115,10 +158,9 @@ serve(async (req: Request) => {
           if (task.sync_type === "historical_15d" && task.days_offset > 0) {
             updates.days_offset = task.days_offset - 1;
             updates.status = updates.days_offset === 0 ? "completed" : "pending";
-            // Stagger next 15-day sync by 1 hour (less aggressive)
             updates.next_sync_at = new Date(Date.now() + 1000 * 60 * 60).toISOString(); 
           } else if (task.sync_type === "polling_4h") {
-            updates.next_sync_at = new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString();
+            updates.next_sync_at = new Date(Date.now() + 1000 * 60 * 60 * 6).toISOString();
             updates.status = "pending";
           }
 
@@ -129,7 +171,7 @@ serve(async (req: Request) => {
           await adminClient.from("social_sync_tasks").update({ 
             status: "failed", 
             error_log: err.message,
-            next_sync_at: new Date(Date.now() + 1000 * 60 * 60).toISOString()
+            next_sync_at: new Date(Date.now() + 1000 * 60 * 60 * 2).toISOString()
           }).eq("id", task.id);
           globalResults.push({ task_id: task.id, status: "error", error: err.message });
         }
@@ -336,9 +378,11 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                     ? media.filter((m: any) => m.timestamp.startsWith(targetDate))
                     : media;
 
+                  let totalImpressions = 0;
                   filteredMedia.forEach((m: any) => {
                     const impressions = m.insights?.data?.find((i: any) => i.name === "impressions")?.values?.[0]?.value || 0;
                     const reach = m.insights?.data?.find((i: any) => i.name === "reach")?.values?.[0]?.value || 0;
+                    totalImpressions += impressions;
 
                     fetchedPosts.push({
                       external_id: m.id, content: m.caption || "", published_at: m.timestamp,
@@ -353,7 +397,8 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                     posts_count: data.media_count || media.length,
                     username: data.username,
                     profile_picture: data.profile_picture_url,
-                    platform_user_id: igUserId
+                    platform_user_id: igUserId,
+                    views: totalImpressions
                   };
                 }
                 break;
@@ -434,7 +479,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   
                   let totalFetched = 0;
                   let pageCount = 0;
-                  const MAX_PAGES = 50; // limite de segurança (1250 posts)
+                  const MAX_PAGES = 10; // limite reduzido para evitar consumo excessivo (250 posts)
 
                   while (nextUrl && pageCount < MAX_PAGES) {
                     const pageResp = await fetch(nextUrl);
@@ -1084,7 +1129,9 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
             }
 
             if (metrics) {
-              if (metrics.profile_picture) {
+              // Only re-cache profile image if the URL actually changed since last sync
+              const lastPic = conn.profile_picture || conn.profile_image_url;
+              if (metrics.profile_picture && metrics.profile_picture !== lastPic) {
                 try {
                   metrics.profile_picture = await cacheProfileImage(
                     adminClient, uid, conn.platform, metrics.profile_picture,
@@ -1093,6 +1140,8 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 } catch (imgErr) {
                   console.warn(`[COLLECT] Image cache fail for ${conn.platform}:`, imgErr);
                 }
+              } else if (lastPic && !metrics.profile_picture) {
+                metrics.profile_picture = lastPic;
               }
 
               const actualId = metrics?.platform_user_id || 
@@ -1152,7 +1201,6 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   social_account_id: account?.id || null,
                   platform: conn.platform,
                   followers: upsertPayload.followers_count,
-                  posts_count: upsertPayload.posts_count,
                   views: upsertPayload.views,
                   likes: upsertPayload.likes,
                   shares: upsertPayload.shares,
