@@ -348,11 +348,16 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     refetchOnMount: true,
   });
 
-  // Real-time subscription - Single global instance via queryClient invalidation
+  // Real-time subscription - Use unique channel name per instance to avoid collisions
   useEffect(() => {
     if (!user || options.enabled === false) return;
+    
+    // Generate a unique channel name for this specific instance
+    const channelId = Math.random().toString(36).substring(7);
+    const channelName = `social-stats-realtime-${channelId}`;
+    
     const channel = supabase
-      .channel('social-stats-realtime')
+      .channel(channelName)
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
@@ -360,11 +365,21 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         filter: `user_id=eq.${user.id}`,
       }, () => {
         queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
-      })
-      .subscribe();
+      });
 
-    return () => { supabase.removeChannel(channel); };
-  }, [user, queryClient]);
+    // Subscribe with error handling
+    channel.subscribe((status) => {
+      if (status === 'CHANNEL_ERROR') {
+        console.error('Supabase Realtime subscription error for channel:', channelName);
+      }
+    });
+
+    return () => { 
+      supabase.removeChannel(channel).catch(err => {
+        console.warn('Error removing Supabase channel:', err);
+      });
+    };
+  }, [user, queryClient, options.enabled]);
 
   const stats = data?.stats || [];
   const messagingChannels = data?.messagingChannels || [];
