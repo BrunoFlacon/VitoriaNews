@@ -212,14 +212,26 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
   useEffect(() => {
     if (!user || options.enabled === false) return;
+    
+    // Generate unique channel ID to avoid collisions
+    const channelId = Math.random().toString(36).substring(7);
+    const channelName = `connections-realtime-${channelId}`;
+    
     const connectionsChannel = supabase
-      .channel('connections-realtime')
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_connections' }, () =>
         queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, () =>
         queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
-      .subscribe();
-    return () => { supabase.removeChannel(connectionsChannel); };
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime error in connections channel:', channelName);
+        }
+      });
+
+    return () => { 
+      supabase.removeChannel(connectionsChannel).catch(() => {}); 
+    };
   }, [user, queryClient, options.enabled]);
 
   // ---------------------------------------------------------------------------

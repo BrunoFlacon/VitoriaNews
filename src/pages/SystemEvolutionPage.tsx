@@ -131,7 +131,10 @@ export default function SystemEvolutionPage() {
   useEffect(() => {
     if (!isAuthorized || !isDev) return;
 
-    const channel = supabase.channel('evolution-timeline-updates')
+    const channelId = Math.random().toString(36).substring(7);
+    const channelName = `evolution-timeline-updates-${channelId}`;
+    
+    const channel = supabase.channel(channelName)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'platform_evolution_milestones' },
@@ -145,10 +148,14 @@ export default function SystemEvolutionPage() {
            queryClient.invalidateQueries({ queryKey: ["platform-milestones"] }); 
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime error in evolution channel:', channelName);
+        }
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel).catch(() => {});
     };
   }, [isAuthorized, isDev, toast, queryClient]);
 

@@ -27,8 +27,13 @@ export default defineConfig(({ mode }) => ({
   build: {
     target: "es2020",
     chunkSizeWarningLimit: 500,
+    sourcemap: false, // Hide original source code
     rollupOptions: {
       output: {
+        // Use non-descriptive names for build files
+        entryFileNames: `assets/v-[hash].js`,
+        chunkFileNames: `assets/c-[hash].js`,
+        assetFileNames: `assets/a-[hash].[ext]`,
         manualChunks: {
           "react-core": ["react", "react-dom", "react-router-dom"],
           "vendor-libs": ["framer-motion", "lucide-react", "@tanstack/react-query", "@supabase/supabase-js", "zustand"]

@@ -138,13 +138,17 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     refetch: refetchScheduledPosts 
   } = useScheduledPosts({ enabled: isCalendarTab });
 
-  // Sync activeTab with URL params
+  // Sync activeTab with URL params (initial load only)
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab");
     if (tabFromUrl && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
     }
-  }, [searchParams]);
+    // Deep security: Hide the tab parameter from the address bar immediately
+    if (window.location.search) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []); // Only run once on mount
 
   useEffect(() => {
     if (!user) {
@@ -173,9 +177,9 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     startTransition(() => {
       setActiveTab(tab);
       if (tab !== 'settings') setSettingsSubTab(undefined);
-      setSearchParams({ tab });
+      // Remove setSearchParams to hide the tab name from the URL after /dashboard
     });
-  }, [setSearchParams]);
+  }, []);
 
   const connectedPlatforms = useMemo(() => 
     socialPlatforms.filter(p => connections?.some(c => c.platform === p.id)),
