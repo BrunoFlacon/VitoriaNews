@@ -39,6 +39,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          NODE_OPTIONS: "--max_old_space_size=4096"
         run: npm run build
 
       - name: Setup GitHub Pages
