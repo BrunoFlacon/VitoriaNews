@@ -33,18 +33,16 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
-
-      - name: TypeScript check (diagnostic)
-        continue-on-error: true
-        run: npx tsc --noEmit 2>&1 | head -50
+        run: |
+          rm -f package-lock.json
+          npm install --legacy-peer-deps
 
       - name: Build the project
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           NODE_OPTIONS: "--max_old_space_size=4096"
-        run: npm run build 2>&1
+        run: npm run build
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v4
