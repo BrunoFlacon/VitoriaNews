@@ -102,16 +102,11 @@ serve(async (req: Request) => {
         .limit(8);
       
       // Prioritize: historical first, then high-priority platforms, 
-      // skip platforms with expired tokens
-      const now = Date.now();
+      // Inclui plataformas com token expirado — processSyncTask tenta renovar
       tasksToProcess = (pendingTasks || [])
         .filter(t => {
           if (!t.social_connections) return false;
           const conn = t.social_connections;
-          // Skip platforms with expired tokens (tokens refresh cron handles renewal)
-          if (conn.token_expires_at && conn.platform !== "telegram") {
-            return new Date(conn.token_expires_at).getTime() > now;
-          }
           return conn.is_connected !== false;
         })
         .sort((a, b) => {
@@ -237,14 +232,46 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
   let metrics: any = null;
   let fetchedPosts: any[] = [];
 
-  // ── Token Expiry Check ──────────────────────────────────────────────
-  // Skip collection if token is expired — refresh-tokens-cron handles renewal + disconnect
+  // ── Token Expiry Check + Auto-Refresh ──────────────────────────────
+  // Se o token expirou, tenta renovar automaticamente antes de desistir
   if (conn.token_expires_at && platform !== "telegram") {
     const expiresAt = new Date(conn.token_expires_at).getTime();
     const now = Date.now();
     if (expiresAt - now < 0) {
-      console.warn(`[COLLECT] Token expirado para ${platform} user ${uid}. Expirou em: ${conn.token_expires_at}. Coleta ignorada.`);
-      return { skipped: true, reason: "token_expired" };
+      console.log(`[COLLECT] Token expirado para ${platform} user ${uid}. Tentando renovar...`);
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        const refreshRes = await fetch(`${supabaseUrl}/functions/v1/refresh-social-token`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({ platform, connectionId: conn.id }),
+        });
+        if (refreshRes.ok) {
+          const refreshData = await refreshRes.json();
+          if (refreshData.success) {
+            console.log(`[COLLECT] Token renovado para ${platform} user ${uid}. Expira em: ${refreshData.expiresAt}`);
+            // Recarrega a conexão com o novo token
+            const { data: refreshedConn } = await adminClient
+              .from("social_connections")
+              .select("*")
+              .eq("id", conn.id)
+              .single();
+            if (refreshedConn) conn = refreshedConn;
+          } else {
+            throw new Error(refreshData.error || "Falha ao renovar token");
+          }
+        } else {
+          const errData = await refreshRes.text();
+          throw new Error(`HTTP ${refreshRes.status}: ${errData}`);
+        }
+      } catch (refreshErr: any) {
+        console.warn(`[COLLECT] Falha ao renovar token para ${platform} user ${uid}: ${refreshErr.message}. Coleta ignorada.`);
+        return { skipped: true, reason: "token_expired" };
+      }
     }
   }
 

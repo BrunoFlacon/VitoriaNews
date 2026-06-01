@@ -8,7 +8,12 @@ const PLATFORM_REFRESH_TYPES: Record<string, string> = {
   pinterest: "oauth2", snapchat: "oauth2",
 };
 
-const RETRY_BACKOFF_HOURS = 24;
+// Backoff dinâmico baseado no tempo de vida do token da plataforma
+function getBackoffHours(platform: string, expiresIn: number): number {
+  if (platform === "twitter" || platform === "youtube" || platform === "google") return 0.5;
+  if (platform === "tiktok") return 6;
+  return 12; // LinkedIn, Facebook, Instagram: renovar antes de expirar
+}
 
 serve(async (_req: Request) => {
   try {
@@ -19,18 +24,14 @@ serve(async (_req: Request) => {
     console.log("[TOKEN-CRON] Scanning for expiring tokens...");
 
     const fourteenDaysFromNow = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-    const now = new Date().toISOString();
 
-    // Skip connections that failed refresh recently (respect backoff)
-    const backoffCutoff = new Date(Date.now() - RETRY_BACKOFF_HOURS * 60 * 60 * 1000).toISOString();
-
+    // Busca TODOS os tokens que expiram em até 14 dias (sem backoff fixo)
     const { data: expiring, error } = await supabase
       .from("social_connections")
       .select("*")
       .eq("is_connected", true)
       .not("token_expires_at", "is", null)
       .lte("token_expires_at", fourteenDaysFromNow)
-      .or(`last_refresh_attempt.is.null,last_refresh_attempt.lte.${backoffCutoff}`)
       .order("token_expires_at", { ascending: true });
 
     if (error) {
@@ -63,6 +64,19 @@ serve(async (_req: Request) => {
     for (const conn of expiring) {
       const platform = conn.platform;
       const refreshType = PLATFORM_REFRESH_TYPES[platform] || "none";
+
+      // Pular se já foi renovado recentemente (janela dinâmica por plataforma)
+      if (conn.last_refresh_attempt) {
+        const defaultExpiry = conn.token_expires_at
+          ? (new Date(conn.token_expires_at).getTime() - Date.now()) / 1000
+          : 86400;
+        const backoffH = getBackoffHours(platform, defaultExpiry);
+        const cutoff = new Date(Date.now() - backoffH * 60 * 60 * 1000).toISOString();
+        if (conn.last_refresh_attempt >= cutoff) {
+          skipped++;
+          continue;
+        }
+      }
 
       // Mark refresh attempt timestamp
       await supabase.from("social_connections").update({
