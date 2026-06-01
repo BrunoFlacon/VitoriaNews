@@ -9,9 +9,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { useSocialStats } from "@/hooks/useSocialStats";
-import { normalizePlatform } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
-import { cn } from "@/lib/utils";
+import { cn, normalizePlatform } from "@/lib/utils";
+import { useQuery } from '@tanstack/react-query';
 
 // Core UI Components
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -66,13 +66,60 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const [isMobilePlatformMenuOpen, setIsMobilePlatformMenuOpen] = useState(false);
+  const [dashboardPeriod, setDashboardPeriod] = useState<string>('7d');
   // TAB INTELLIGENCE: Only fetch data for active tabs
   const isDashboardTab = activeTab === 'dashboard';
   const isAnalyticsTab = activeTab === 'analytics' || isDashboardTab;
   const isCalendarTab = activeTab === 'calendar' || activeTab === 'create' || isDashboardTab;
   
   const { stats: localStats, loading: statsLoading } = useSocialStats({ enabled: isDashboardTab });
-  const { data: analyticsData, loading: analyticsLoading, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform } = useAnalytics({ enabled: isAnalyticsTab });
+  const { data: analyticsData, loading: analyticsLoading, isSyncing: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform } = useAnalytics({ enabled: isAnalyticsTab });
+
+  // Query account_metrics for real time-series chart data when Edge Function has none
+  const { data: accountMetricsData } = useQuery({
+    queryKey: ['account_metrics', user?.id, 'v3'],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('account_metrics')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('collected_at', { ascending: true });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: isDashboardTab && !!user?.id,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+  // Auto-sync when data is missing from both Edge Function and local DB
+  const hasAutoSynced = useRef(false);
+  const hasAutoSyncedChart = useRef(false);
+  useEffect(() => {
+    if (hasAutoSynced.current) return;
+    if (analyticsLoading) return;
+    if (analyticsSyncing) return;
+    const hasApiChartData = analyticsData?.chartData?.length > 0;
+    const hasLocalStats = localStats?.some(s => s.followers_count > 0 || s.posts_count > 0);
+    if (!hasApiChartData && !hasLocalStats) {
+      hasAutoSynced.current = true;
+      syncAnalytics();
+    }
+  }, [analyticsData, analyticsLoading, analyticsSyncing, localStats, syncAnalytics]);
+  // Auto-sync when Edge Function has aggregate data but chart shows zeros
+  useEffect(() => {
+    if (hasAutoSyncedChart.current) return;
+    if (analyticsLoading) return;
+    if (analyticsSyncing) return;
+    if (!analyticsData) return;
+    const hasChartData = (analyticsData.chartData?.length ?? 0) > 0;
+    const hasEngagement = (analyticsData.engagement?.views ?? 0) > 0;
+    const hasAccountMetrics = (accountMetricsData ?? []).length > 0;
+    if (hasEngagement && !hasChartData && !hasAccountMetrics) {
+      hasAutoSyncedChart.current = true;
+      syncAnalytics();
+    }
+  }, [analyticsData, analyticsLoading, analyticsSyncing, accountMetricsData, syncAnalytics]);
   const [platformState, setPlatformState] = useState<string>(analyticsPlatform ?? 'all');
   const setPlatform = useCallback((p: string) => {
     setPlatformState(p);
@@ -125,8 +172,8 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const handleTabChange = useCallback((tab: string) => {
     startTransition(() => {
       setActiveTab(tab);
-      setSearchParams({ tab });
       if (tab !== 'settings') setSettingsSubTab(undefined);
+      setSearchParams({ tab });
     });
   }, [setSearchParams]);
 
@@ -155,42 +202,79 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   );
 
   const dashboardChartData = useMemo(() => {
-    const months = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+    // Priority 1: Use Edge Function per-period chart data when available
     const rawChartData = analyticsData?.chartData || [];
-    const hasRealData = rawChartData.length > 0 && rawChartData.some((d: any) => (d.views || 0) > 0 || (d.engagement || 0) > 0);
+    if (rawChartData.length > 0) return rawChartData;
 
-    if (hasRealData) {
-      if (platformState === 'all') return rawChartData;
-      return rawChartData.map((day: any) => ({
-        ...day,
-        views: day[platformState] || 0,
-        engagement: day[`${platformState}_engagement`] || 0,
-        reach: day[`${platformState}_reach`] || 0
-      }));
-    }
+    // Priority 2: Build time-series chart from account_metrics with day-over-day deltas
+    const metrics = (accountMetricsData ?? []) as any[];
+    if (metrics.length === 0) return [];
 
-    // Fallback: build a 7-day synthetic chart from localStats aggregated totals
-    const filteredStats = platformState !== 'all'
-      ? (localStats || []).filter((s: any) => s.platform === platformState)
-      : (localStats || []);
-    const totalViews = filteredStats.reduce((s: number, a: any) => s + (a.views_count || 0), 0);
-    const totalEng = filteredStats.reduce((s: number, a: any) => s + (a.likes_count || 0) + (a.comments_count || 0) + (a.shares_count || 0), 0);
-    const totalReach = Math.round(totalViews * 0.35);
+    const filtered = platformState !== 'all'
+      ? metrics.filter((m: any) => normalizePlatform(m.platform) === platformState)
+      : metrics;
 
-    return Array.from({ length: 7 }, (_, i) => {
-      const dt = new Date();
-      dt.setDate(dt.getDate() - (6 - i));
-      const progress = i / 6;
-      const variation = 0.2 * Math.sin(i * 1.7);
-      const weight = Math.max(0.3, 0.5 + 0.7 * progress + variation);
-      return {
-        name: `${dt.getDate()} de ${months[dt.getMonth()]}`,
-        views: Math.round((totalViews / 7) * weight),
-        engagement: Math.round((totalEng / 7) * weight),
-        reach: Math.round((totalReach / 7) * weight),
-      };
+    // Group by (platform, platform_user_id, date) and take last snapshot per day per account
+    const grouped: Record<string, any> = {};
+    filtered.forEach((m: any) => {
+      const d = new Date(m.collected_at);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const accountKey = `${m.platform}-${m.platform_user_id || m.id}`;
+      const dedupKey = `${accountKey}-${dateKey}`;
+      if (!grouped[dedupKey] || new Date(m.collected_at) > new Date(grouped[dedupKey].collected_at)) {
+        grouped[dedupKey] = { ...m, _dateKey: dateKey, _accountKey: accountKey };
+      }
     });
-  }, [platformState, analyticsData, localStats]);
+
+    // For each account, sort by date and compute day-over-day deltas
+    type SnapRow = { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number; _dateKey: string; collected_at: string };
+    const accountGroups: Record<string, SnapRow[]> = {};
+    Object.values(grouped).forEach((m: any) => {
+      if (!accountGroups[m._accountKey]) accountGroups[m._accountKey] = [];
+      accountGroups[m._accountKey].push({
+        views: Number(m.views || 0),
+        likes: Number(m.likes || 0),
+        comments: Number(m.comments || 0),
+        shares: Number(m.shares || 0),
+        engagement: Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0),
+        reach: Math.round(Number(m.views || 0) * 0.35),
+        _dateKey: m._dateKey,
+        collected_at: m.collected_at,
+      });
+    });
+
+    // Compute per-day deltas by summing deltas across accounts
+    const dateDeltas: Record<string, { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number }> = {};
+    Object.values(accountGroups).forEach((snaps) => {
+      snaps.sort((a, b) => new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime());
+      snaps.forEach((snap, idx) => {
+        const prev = idx > 0 ? snaps[idx - 1] : null;
+        if (!dateDeltas[snap._dateKey]) dateDeltas[snap._dateKey] = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0 };
+        dateDeltas[snap._dateKey].views += snap.views - (prev?.views || 0);
+        dateDeltas[snap._dateKey].likes += snap.likes - (prev?.likes || 0);
+        dateDeltas[snap._dateKey].comments += snap.comments - (prev?.comments || 0);
+        dateDeltas[snap._dateKey].shares += snap.shares - (prev?.shares || 0);
+        dateDeltas[snap._dateKey].engagement += snap.engagement - (prev?.engagement || 0);
+        dateDeltas[snap._dateKey].reach += snap.reach - (prev?.reach || 0);
+      });
+    });
+
+    const periodDays = dashboardPeriod === '15d' ? 15 : dashboardPeriod === '30d' ? 30 : dashboardPeriod === '45d' ? 45 : dashboardPeriod === '60d' ? 60 : dashboardPeriod === '90d' ? 90 : 7;
+    const months = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
+    const result: any[] = [];
+    for (let i = periodDays; i >= 0; i--) {
+      const dt = new Date(); dt.setDate(dt.getDate() - i);
+      const isoKey = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      const delta = dateDeltas[isoKey];
+      result.push({
+        name: `${parseInt(String(dt.getDate()))} de ${months[dt.getMonth()]}`,
+        views: delta?.views ?? 0,
+        engagement: delta?.engagement ?? 0,
+        reach: delta?.reach ?? 0,
+      });
+    }
+    return result;
+  }, [analyticsData, accountMetricsData, platformState, dashboardPeriod]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -205,14 +289,17 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
                isMobilePlatformMenuOpen={isMobilePlatformMenuOpen}
                setIsMobilePlatformMenuOpen={setIsMobilePlatformMenuOpen}
                connectedPlatforms={connectedPlatforms}
-               syncAnalytics={syncAnalytics}
-               analyticsLoading={analyticsLoading}
-               analyticsData={analyticsData}
+                syncAnalytics={syncAnalytics}
+                analyticsLoading={analyticsLoading}
+                analyticsSyncing={analyticsSyncing}
+                analyticsData={analyticsData}
                localStats={localStats || []}
                localTotalPosts={localTotalPosts}
                localEngagement={localEngagement}
                localFollowers={localFollowers}
-               dashboardChartData={dashboardChartData}
+                dashboardChartData={dashboardChartData}
+                dashboardPeriod={dashboardPeriod}
+                setDashboardPeriod={setDashboardPeriod}
                isConnected={isConnected}
                setActiveTab={handleTabChange}
                setEditingPost={setEditingPost}

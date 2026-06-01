@@ -203,7 +203,7 @@ export const Sidebar = memo(({
               key={item.id}
               onClick={() => {
                 startTransition(() => setActiveTab(item.id));
-                if (isMobile) setIsCollapsed(true);
+                if (isMobile) requestAnimationFrame(() => setIsCollapsed(true));
               }}
               className={cn(
                 "w-full flex items-center gap-3 transition-all duration-300 group relative shrink-0",

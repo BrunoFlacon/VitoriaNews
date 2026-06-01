@@ -33,8 +33,10 @@ interface StatsGridProps {
 }
 
 export const StatsGrid = ({ engagement, overview, messageStats }: StatsGridProps) => {
-  const renderTrend = (value: string | number) => {
+  const renderTrend = (value: string | number | undefined | null) => {
+    if (value === undefined || value === null) return null;
     const numValue = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(numValue)) return null;
     const isPositive = numValue > 0;
     const isNeutral = numValue === 0;
 
@@ -72,7 +74,7 @@ export const StatsGrid = ({ engagement, overview, messageStats }: StatsGridProps
               <div className={`p-2 md:p-3 rounded-xl ${stat.bg} group-hover:scale-110 transition-transform`}>
                 <stat.icon className={`w-4 h-4 md:w-6 md:h-6 ${stat.color}`} />
               </div>
-              {renderTrend(engagement.growth || "0")}
+              {renderTrend(engagement.growth)}
             </div>
             <div>
               <h3 className="text-2xl md:text-4xl font-black font-display tracking-tighter text-foreground mb-0.5 md:mb-1">

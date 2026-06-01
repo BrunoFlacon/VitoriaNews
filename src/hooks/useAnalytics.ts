@@ -131,7 +131,7 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       setPeriodState(user.user_metadata.analytics_period);
     } else {
       const savedPeriod = localStorage.getItem('analytics_period');
-      if (savedPeriod && ['24h', '3d', '7d', '15d', '30d', '60d', '90d', '120d', '365d'].includes(savedPeriod)) {
+      if (savedPeriod && ['24h', '3d', '7d', '15d', '30d', '60d', '90d', '120d', '365d', '730d', '1095d', '1460d', '1825d'].includes(savedPeriod)) {
         setPeriodState(savedPeriod);
       }
     }
@@ -382,9 +382,12 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     }
   });
 
+  const isSyncing = syncMutation.isPending;
+
   return {
     data: data || null,
-    loading: isLoading || syncMutation.isPending,
+    loading: isLoading && !data,
+    isSyncing,
     error: analyticsErrorInfo,
     period,
     setPeriod,

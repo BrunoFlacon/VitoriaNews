@@ -1,4 +1,4 @@
-import { memo, Suspense, lazy, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { 
   Eye, 
@@ -25,11 +25,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
-
-// Lazy load non-critical internal components
-const StatsCard = lazy(() => import("@/components/dashboard/StatsCard").then(m => ({ default: m.StatsCard })));
-const RecentPosts = lazy(() => import("@/components/dashboard/RecentPosts").then(m => ({ default: m.RecentPosts })));
-const AnalyticsChart = lazy(() => import("@/components/dashboard/AnalyticsChart").then(m => ({ default: m.AnalyticsChart })));
+import { StatsCard } from "@/components/dashboard/StatsCard";
+import { RecentPosts } from "@/components/dashboard/RecentPosts";
+import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
 
 interface DashboardHomeViewProps {
   platform: string;
@@ -41,12 +39,15 @@ interface DashboardHomeViewProps {
   connectedPlatforms: any[];
   syncAnalytics: () => void;
   analyticsLoading: boolean;
+  analyticsSyncing?: boolean;
   analyticsData: any;
   localStats: any[];
   localTotalPosts: number;
   localEngagement: number;
   localFollowers: number;
   dashboardChartData: any[];
+  dashboardPeriod: string;
+  setDashboardPeriod: (p: string) => void;
   isConnected: (p: string) => boolean;
   setActiveTab: (t: string) => void;
   setEditingPost: (p: ScheduledPost) => void;
@@ -62,55 +63,64 @@ export const DashboardHomeView = memo(({
   connectedPlatforms,
   syncAnalytics,
   analyticsLoading,
+  analyticsSyncing,
   analyticsData,
   localStats,
   localTotalPosts,
   localEngagement,
   localFollowers,
   dashboardChartData,
+  dashboardPeriod,
+  setDashboardPeriod,
   isConnected,
   setActiveTab,
   setEditingPost
 }: DashboardHomeViewProps) => {
-  // Helper to compute average follower growth from followerData for selected platform
-  const computeFollowerGrowth = useCallback(() => {
-    if (!analyticsData?.followerData || analyticsData.followerData.length === 0) return undefined;
-    
-    const filteredData = platform === 'all' 
-      ? analyticsData.followerData 
-      : analyticsData.followerData.filter(f => normalizePlatform(f.platform) === normalizePlatform(platform));
-    
-    if (filteredData.length === 0) return undefined;
-    
-    const totalGrowth = filteredData.reduce((sum, f) => sum + (f.growth || 0), 0);
-    return Number((totalGrowth / filteredData.length).toFixed(2));
-  }, [analyticsData?.followerData, platform]);
-
-  // Helper to compute engagement rate from local stats when analytics data is not real
-  const computeEngagementRateFromLocal = useCallback(() => {
-    if (!localStats || localStats.length === 0) return 0;
-    
-    const filteredStats = platform === 'all' 
-      ? localStats 
-      : localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform));
-    
-    if (filteredStats.length === 0) return 0;
-    
-    const totalEngagement = filteredStats.reduce((sum, s) => 
-      sum + (s.likes_count || 0) + (s.comments_count || 0) + (s.shares_count || 0), 0);
-    const totalViews = filteredStats.reduce((sum, s) => sum + (s.views_count || 0), 0);
-    
-    return totalViews > 0 ? Number(((totalEngagement / totalViews) * 100).toFixed(2)) : 0;
+  // Compute filtered stats for the selected platform
+  const filteredStats = useMemo(() => {
+    if (!localStats || localStats.length === 0) return [];
+    if (platform === 'all') return localStats;
+    return localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform));
   }, [localStats, platform]);
 
-  // Determine if we have real data (not fallback/seeded) for reliable growth metrics
-  const hasRealData = analyticsData?.dataSource === 'real';
+  const platformTotalPosts = useMemo(() =>
+    filteredStats.reduce((s, a) => s + (a.posts_count || 0), 0),
+    [filteredStats]
+  );
+  const platformViews = useMemo(() =>
+    filteredStats.reduce((s, a) => s + (a.views_count || 0), 0),
+    [filteredStats]
+  );
+  const platformEngagement = useMemo(() =>
+    filteredStats.reduce((s, a) => s + (a.likes_count || 0) + (a.comments_count || 0) + (a.shares_count || 0), 0),
+    [filteredStats]
+  );
+  const platformFollowers = useMemo(() =>
+    filteredStats.reduce((s, a) => s + (a.followers_count || 0), 0),
+    [filteredStats]
+  );
+
+  // All trends computed from localStats — appear instantly, no API dependency
+  const computeEngagementRate = useCallback(() => {
+    if (!localStats || localStats.length === 0) return 0;
+    const fs = platform === 'all' ? localStats : localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform));
+    if (fs.length === 0) return 0;
+    const eng = fs.reduce((sum, s) => sum + (s.likes_count || 0) + (s.comments_count || 0) + (s.shares_count || 0), 0);
+    const views = fs.reduce((sum, s) => sum + (s.views_count || 0), 0);
+    return views > 0 ? Number(((eng / views) * 100).toFixed(2)) : 0;
+  }, [localStats, platform]);
+
+  const computeEngagementPerPost = useCallback(() => {
+    return platformTotalPosts > 0 && platformEngagement > 0 ? Number((platformEngagement / platformTotalPosts).toFixed(1)) : 0;
+  }, [platformTotalPosts, platformEngagement]);
+
+  const computeViewsPerFollower = useCallback(() => {
+    return platformFollowers > 0 && platformViews > 0 ? Number((platformViews / platformFollowers).toFixed(1)) : 0;
+  }, [platformViews, platformFollowers]);
+
   return (
     <>
-      <div 
-        className="flex items-center justify-between mb-8 sticky top-0 md:relative bg-background/80 backdrop-blur-md z-10 py-1"
-        style={{ contain: 'layout' }}
-      >
+      <div className="flex items-center justify-between mb-8 sticky top-0 md:relative bg-background/80 backdrop-blur-md z-10 py-1">
         <div>
           <h1 className="font-display font-bold text-2xl md:text-3xl mb-0.5 md:mb-1">
             Dashboard Principal 👋
@@ -118,6 +128,12 @@ export const DashboardHomeView = memo(({
           <p className="text-muted-foreground text-[10px] md:text-sm truncate">
             Visão geral e desempenho consolidado de todas as suas redes
           </p>
+          {analyticsSyncing && (
+            <p className="text-[10px] text-blue-400 flex items-center gap-1 mt-1">
+              <RefreshCw className="w-3 h-3 animate-spin" />
+              Sincronizando...
+            </p>
+          )}
         </div>
 
         <div className="md:hidden flex items-center gap-2">
@@ -232,69 +248,53 @@ export const DashboardHomeView = memo(({
         </div>
       </div>
 
-      <Suspense fallback={<div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6"><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /><div className="h-24 bg-muted/30 rounded-2xl animate-pulse" /></div>}>
-        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6" style={{ contain: 'layout' }}>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
 <StatsCard 
-             title="Total de Posts" 
-             value={(analyticsData?.overview.totalPosts || (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((s, a) => s + a.posts_count, 0) : localTotalPosts)).toString()} 
-             icon={TrendingUp} 
-             trend={hasRealData ? parseFloat(analyticsData?.engagement.growth || "0") : undefined} 
-             trendLabel="este mês" 
-             color="primary" 
-             delay={0} 
-           />
+              title="Total de Posts" 
+              value={platformTotalPosts.toString()} 
+              icon={TrendingUp} 
+              trend={computeEngagementPerPost()} 
+              trendLabel="por post" 
+              color="primary" 
+              delay={0} 
+            />
 <StatsCard 
-             title="Visualizações" 
-             value={(
-               analyticsData?.engagement.views ||
-               (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((sum, s) => sum + s.views_count, 0) : localStats.reduce((sum, s) => sum + s.views_count, 0))
-             ).toLocaleString()} 
-             icon={Eye} 
-             trend={hasRealData ? parseFloat(analyticsData?.engagement.growth || "0") : undefined} 
-             trendLabel="vs mês anterior" 
-             color="accent" 
-             delay={0.1} 
-           />
+              title="Visualizações" 
+              value={platformViews.toLocaleString()} 
+              icon={Eye} 
+              trend={computeViewsPerFollower()} 
+              trendLabel="por seguidor" 
+              color="accent" 
+              delay={0.1} 
+            />
 <StatsCard 
-             title="Engajamento" 
-             value={(
-               (analyticsData?.engagement.likes || 0) + 
-               (analyticsData?.engagement.comments || 0) + 
-               (analyticsData?.engagement.shares || 0) ||
-               (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((sum, s) => sum + s.likes_count + s.comments_count + s.shares_count, 0) : localEngagement)
-             ).toLocaleString()} 
-             icon={Heart} 
-             trend={hasRealData ? parseFloat(analyticsData?.engagement.engagementRate || "0") : computeEngagementRateFromLocal()} 
-             trendLabel="taxa" 
-             color="success" 
-             delay={0.1} 
-           />
+              title="Engajamento" 
+              value={platformEngagement.toLocaleString()} 
+              icon={Heart} 
+              trend={computeEngagementRate()} 
+              trendLabel="taxa" 
+              color="success" 
+              delay={0.1} 
+            />
 <StatsCard 
-             title="Seguidores" 
-             value={(
-               analyticsData?.overview.totalFollowers ||
-               analyticsData?.followerData?.reduce((acc, curr: any) => acc + curr.currentFollowers, 0) || 
-               localFollowers ||
-               (platform !== 'all' ? localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform)).reduce((acc, c) => acc + (c.followers_count || 0), 0) : localStats.reduce((acc, c) => acc + (c.followers_count || 0), 0))
-             ).toLocaleString()} 
-             icon={Users} 
-             trend={hasRealData ? (analyticsData?.overview.followersGrowth !== undefined ? parseFloat(analyticsData.overview.followersGrowth.toString()) : undefined) : computeFollowerGrowth()}
-             trendLabel="este mês" 
-             color="warning" 
-             delay={0.1} 
-           />
+              title="Seguidores" 
+              value={platformFollowers.toLocaleString()} 
+              icon={Users} 
+              trend={platformFollowers > 0 && platformEngagement > 0 ? Number(((platformEngagement / platformFollowers) * 100).toFixed(2)) : 0} 
+              trendLabel="por seguidor" 
+              color="warning" 
+              delay={0.1} 
+            />
         </div>
-      </Suspense>
 
       {/* Account List and Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <Suspense fallback={<div className="h-[350px] bg-muted/30 rounded-2xl animate-pulse" />}>
-            <AnalyticsChart 
-              data={dashboardChartData} 
-              loading={analyticsLoading} 
-            />
-          </Suspense>
+          <AnalyticsChart 
+            data={dashboardChartData}
+            periodDays={dashboardPeriod === '15d' ? 15 : dashboardPeriod === '30d' ? 30 : dashboardPeriod === '45d' ? 45 : dashboardPeriod === '60d' ? 60 : dashboardPeriod === '90d' ? 90 : 7}
+            onPeriodChange={setDashboardPeriod}
+          />
         </div>
         <div className="h-full">
           <motion.div
@@ -335,12 +335,10 @@ export const DashboardHomeView = memo(({
       </div>
 
       <div className="mt-6">
-        <Suspense fallback={<div className="h-64 bg-muted/30 rounded-2xl animate-pulse" />}>
-          <RecentPosts onEditPost={(post: ScheduledPost) => {
-            setEditingPost(post);
-            setActiveTab("create");
-          }} />
-        </Suspense>
+        <RecentPosts onEditPost={(post: ScheduledPost) => {
+          setEditingPost(post);
+          setActiveTab("create");
+        }} />
       </div>
     </>
   );

@@ -61,43 +61,65 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
   const queryClient = useQueryClient();
   const [manualLoading, setManualLoading] = useState(false);
 
+  const CACHE_KEY = `social_stats_cache_${user?.id}`;
+  const CACHE_TTL = 30 * 60 * 1000; // 30 minutes — keep data available instantly across visits
+
+  const loadCache = (): any => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached) return undefined;
+      const parsed = JSON.parse(cached);
+      if (Date.now() - parsed.timestamp < CACHE_TTL) return parsed.data;
+      return undefined;
+    } catch { return undefined; }
+  };
+
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['social_stats_all', user?.id],
+    staleTime: CACHE_TTL, // Don't refetch while cache is fresh
     queryFn: async () => {
       if (!user) return null;
       
-      const results = await Promise.allSettled([
-        supabase
+      const run = async (promise: any): Promise<{ data: any; error: any }> => {
+        try { 
+          const result = await promise;
+          return result || { data: null, error: null };
+        }
+        catch (e) { return { data: null, error: e }; }
+      };
+
+      const [statsResult, credsResult, channelsResult, messagesResult, scheduledResult] = await Promise.all([
+        run(supabase
           .from('social_accounts')
           .select('id, platform, platform_user_id, username, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, engagement_rate, updated_at, chat_id, metadata')
           .eq('user_id', user.id)
-          .order('updated_at', { ascending: false }),
-        supabase
+          .order('updated_at', { ascending: false })),
+        run(supabase
           .from('api_credentials' as any)
           .select('platform')
-          .eq('user_id', user.id),
-        supabase
+          .eq('user_id', user.id)),
+        run(supabase
           .from('messaging_channels')
           .select('id, platform, channel_name, channel_type, members_count, online_count, profile_picture, channel_id')
-          .eq('user_id', user.id),
-        supabase
+          .eq('user_id', user.id)),
+        run(supabase
           .from('messages')
           .select('id, platform, status, content, recipient_name, recipient_phone, created_at, metadata')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
-        supabase
+          .order('created_at', { ascending: false })
+          .limit(500)),
+        run(supabase
           .from('scheduled_posts')
           .select('platforms, status')
           .eq('user_id', user.id)
-          .eq('status', 'published')
-          .limit(200),
+          .limit(500)),
       ]);
 
-      const statsRes = results[0].status === 'fulfilled' ? results[0].value : { data: [], error: results[0].reason };
-      const credsRes = results[1].status === 'fulfilled' ? results[1].value : { data: [], error: results[1].reason };
-      const channelsRes = results[2].status === 'fulfilled' ? results[2].value : { data: [], error: results[2].reason };
-      const messagesRes = results[3].status === 'fulfilled' ? results[3].value : { data: [], error: results[3].reason };
-      const scheduledRes = results[4].status === 'fulfilled' ? results[4].value : { data: [], error: results[4].reason };
+      const statsRes = statsResult;
+      const credsRes = credsResult;
+      const channelsRes = channelsResult;
+      const messagesRes = messagesResult;
+      const scheduledRes = scheduledResult;
 
       let botActiveStatus: boolean | null = null;
       try {
@@ -149,28 +171,47 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         ? Math.round((msgTotalSent / (msgTotalSent + msgTotalFailed)) * 100)
         : 0;
 
+      let scheduledCount = 0, draftCount = 0, publishedCount = 0, failedCount = 0;
+      const publishedActions: Record<string, number> = {};
       (scheduledRes.data || []).forEach((post: any) => {
+        const status = (post.status || '').toLowerCase();
         if (post.platforms && Array.isArray(post.platforms)) {
           post.platforms.forEach((p: string) => {
             const pk = p.toLowerCase().trim();
             actionCounts[pk] = (actionCounts[pk] || 0) + 1;
+            if (status === 'published') {
+              publishedActions[pk] = (publishedActions[pk] || 0) + 1;
+            }
           });
         }
+        if (status === 'scheduled') scheduledCount++;
+        else if (status === 'draft') draftCount++;
+        else if (status === 'published') publishedCount++;
+        else if (status === 'failed') failedCount++;
       });
 
-      const normalized: SocialAccountStat[] = (statsRes.data || []).map((acc: any) => {
+      const dedupedAccounts: any[] = [];
+      const seenPlatformIds = new Set<string>();
+      (statsRes.data || []).forEach((acc: any) => {
         const platformKey = acc.platform;
-        const totalActions = actionCounts[platformKey] || 0;
+        const puid = acc.platform_user_id || acc.username || acc.id;
+        const dedupKey = `${platformKey}-${puid}`;
+        if (seenPlatformIds.has(dedupKey)) {
+          return;
+        }
+        seenPlatformIds.add(dedupKey);
+
         const totalBotActions = botActionCounts[platformKey] || 0;
         const apiPostsCount = Number(acc.posts_count ?? 0);
-        const effectivePosts = Math.max(apiPostsCount, totalActions);
+        const publishedPostCount = publishedActions[platformKey] || 0;
+        const effectivePosts = apiPostsCount > 0 ? apiPostsCount : publishedPostCount;
 
         const rawFollowers = Number(acc.followers_count || acc.followers || 0);
         const channelMembersFromMeta = Number(acc.metadata?.members_count || 0);
 
-        return {
+        dedupedAccounts.push({
           id: acc.id,
-          platform: acc.platform,
+          platform: platformKey,
           platform_user_id: acc.platform_user_id,
           username: acc.username,
           profile_picture: acc.profile_picture,
@@ -189,7 +230,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
             bot_posts_count: totalBotActions,
             ...(platformKey === 'whatsapp' && botActiveStatus !== null ? { is_active: botActiveStatus } : {}),
           },
-        };
+        });
       });
 
       const channels: MessagingChannelStat[] = (channelsRes.data || []).map((ch: any) => ({
@@ -204,12 +245,10 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       }));
 
       // TELEGRAM DEDUP: Remove channel/group entries (negative platform_user_id).
-      // Telegram channels/groups have negative IDs (e.g. -1001234567890).
-      // Only Bot accounts (positive IDs) should appear as profiles in Analytics.
-      const filteredNormalized = normalized.filter(acc => {
+      const filteredNormalized = dedupedAccounts.filter(acc => {
         if (acc.platform === 'telegram' && acc.platform_user_id) {
           const numId = Number(acc.platform_user_id);
-          if (!isNaN(numId) && numId < 0) return false; // skip channel/group records
+          if (!isNaN(numId) && numId < 0) return false;
         }
         return true;
       });
@@ -249,11 +288,15 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         }
       });
 
-      return {
+      const maxUpdatedAt = finalStats.reduce((latest: string | null, s) => {
+        return s.updated_at && (!latest || s.updated_at > latest) ? s.updated_at : latest;
+      }, null);
+
+      const result = {
         stats: finalStats,
         messagingChannels: channels,
         apiConnections: (credsRes.data || []).map(r => r.platform),
-        lastUpdated: new Date(),
+        lastUpdated: maxUpdatedAt ? new Date(maxUpdatedAt) : new Date(),
         messageStats: {
           totalSent: msgTotalSent,
           totalFailed: msgTotalFailed,
@@ -287,11 +330,22 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
             status: m.status,
             created_at: m.created_at,
           })),
+        },
+        postStatusCounts: {
+          published: publishedCount,
+          draft: draftCount,
+          scheduled: scheduledCount,
+          failed: failedCount,
         }
       };
+
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() })); } catch {}
+
+      return result;
     },
     enabled: !!user && (options.enabled !== false),
-    staleTime: 60 * 1000, // Fresco por 1 minuto
+    initialData: loadCache,
+    refetchOnMount: true,
   });
 
   // Real-time subscription - Single global instance via queryClient invalidation
@@ -396,6 +450,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     isConnected,
     refresh: refetch,
     messageDeliveryStats: data?.messageDeliveryStats || { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] },
+    postStatusCounts: data?.postStatusCounts || { published: 0, draft: 0, scheduled: 0, failed: 0 },
   };
 }
 

@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { Eye } from "lucide-react";
 import { 
   AreaChart, 
   Area, 
@@ -11,42 +12,53 @@ import {
 
 interface AnalyticsChartProps {
   data?: any[];
-  loading?: boolean;
+  periodDays?: number;
+  onPeriodChange?: (p: string) => void;
 }
 
-export const AnalyticsChart = ({ data: chartData = [], loading = false }: AnalyticsChartProps) => {
-  if (loading) {
+export const AnalyticsChart = ({ data: chartData = [], periodDays, onPeriodChange }: AnalyticsChartProps) => {
+  if (chartData.length === 0) {
     return (
       <div className="glass-card rounded-2xl border border-border p-6 h-[420px] flex flex-col justify-center items-center">
-        <div className="w-20 h-20 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
-        <p className="text-muted-foreground font-medium animate-pulse">Carregando métricas...</p>
+        <Eye className="w-12 h-12 text-muted-foreground/30 mb-4" />
+        <p className="text-muted-foreground font-medium">Nenhum dado disponível para o gráfico</p>
+        <p className="text-xs text-muted-foreground/50 mt-1">Conecte suas redes para visualizar métricas</p>
       </div>
     );
   }
 
-  const displayData = chartData.length > 0 ? chartData : [
-    { name: "Seg", views: 0, engagement: 0, reach: 0 },
-    { name: "Ter", views: 0, engagement: 0, reach: 0 },
-    { name: "Qua", views: 0, engagement: 0, reach: 0 },
-    { name: "Qui", views: 0, engagement: 0, reach: 0 },
-    { name: "Sex", views: 0, engagement: 0, reach: 0 },
-    { name: "Sáb", views: 0, engagement: 0, reach: 0 },
-    { name: "Dom", views: 0, engagement: 0, reach: 0 },
-  ];
-
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.2 }}
+      transition={{ delay: 0.1, duration: 0.2 }}
+      style={{ willChange: "transform" }}
       className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col"
     >
       <div className="mb-4 md:mb-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-display font-bold text-lg md:text-xl text-white">Visão Geral</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">Performance dos últimos 7 dias</p>
+            <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1">
+              Performance dos últimos
+              {onPeriodChange ? (
+                <select
+                  value={`${periodDays}d`}
+                  onChange={e => onPeriodChange(e.target.value)}
+                  className="bg-transparent border-none p-0 text-sm font-bold text-foreground cursor-pointer outline-none"
+                >
+                  {['7d','15d','30d','45d','60d','90d'].map(per => (
+                    <option key={per} value={per} className="bg-background">
+                      {per.replace('d','')} dias
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="font-bold text-foreground">{periodDays || 7} dias</span>
+              )}
+            </p>
           </div>
+          {onPeriodChange && <div className="w-4" />}
         </div>
         <div className="flex items-center gap-4 mt-4">
           <div className="flex items-center gap-1.5">
@@ -64,9 +76,9 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
         </div>
       </div>
 
-      <div className="h-[300px] w-full" style={{ contain: 'layout style' }}>
+      <div className="h-[300px] w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={displayData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
@@ -126,7 +138,7 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
               strokeWidth={3}
               fillOpacity={1}
               fill="url(#colorViews)"
-              animationDuration={1000}
+              isAnimationActive={false}
             />
              <Area
                type="monotone"
@@ -136,7 +148,7 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
                strokeWidth={3}
                fillOpacity={1}
                fill="url(#colorEngagement)"
-               animationDuration={1000}
+               isAnimationActive={false}
              />
             <Area
               type="monotone"
@@ -146,7 +158,7 @@ export const AnalyticsChart = ({ data: chartData = [], loading = false }: Analyt
               strokeWidth={3}
               fillOpacity={1}
               fill="url(#colorReach)"
-              animationDuration={1000}
+              isAnimationActive={false}
             />
 
           </AreaChart>
