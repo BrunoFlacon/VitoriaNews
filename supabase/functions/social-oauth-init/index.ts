@@ -169,6 +169,12 @@ serve(async (req: Request) => {
       client_key:    getVal("client_key", "TIKTOK_CLIENT_KEY"),
     };
 
+    // Override por plataforma (cada uma tem suas env vars específicas)
+    if (platform === "twitter") {
+      formattedCreds.client_id     = getVal("client_id", "TWITTER_CLIENT_ID");
+      formattedCreds.client_secret = getVal("client_secret", "TWITTER_CLIENT_SECRET");
+    }
+
     // --- PKCE ---
     let pkce: { verifier: string; challenge: string } | null = null;
     if (platform === "tiktok" || platform === "twitter") {
