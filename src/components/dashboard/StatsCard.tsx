@@ -1,5 +1,4 @@
 import { memo } from "react";
-import { motion } from "framer-motion";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -42,14 +41,12 @@ export const StatsCard = memo(({
   const showTrend = trend !== undefined;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5 }}
+    <div
       className={cn(
-        "glass-card rounded-2xl p-3 md:p-4 bg-gradient-to-br border",
+        "glass-card rounded-2xl p-3 md:p-4 bg-gradient-to-br border animate-fade-in",
         colorStyles[color]
       )}
+      style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}
     >
       <div className="flex items-start justify-between">
         <div>
@@ -80,7 +77,7 @@ export const StatsCard = memo(({
           <Icon className="w-4 h-4 md:w-6 md:h-6" />
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 

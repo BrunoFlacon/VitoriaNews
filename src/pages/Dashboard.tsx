@@ -73,7 +73,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const isCalendarTab = activeTab === 'calendar' || activeTab === 'create' || isDashboardTab;
   
   const { stats: localStats, loading: statsLoading } = useSocialStats({ enabled: isDashboardTab });
-  const { data: analyticsData, loading: analyticsLoading, isSyncing: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform } = useAnalytics({ enabled: isAnalyticsTab });
+  const { data: analyticsData, loading: analyticsLoading, isSyncing: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform, period: analyticsPeriod, setPeriod: setAnalyticsPeriod } = useAnalytics({ enabled: isAnalyticsTab });
 
   // Query account_metrics for real time-series chart data when Edge Function has none
   const { data: accountMetricsData } = useQuery({
@@ -85,7 +85,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         .select('*')
         .eq('user_id', user.id)
         .order('collected_at', { ascending: true });
-      if (error) return [];
+      if (error) { console.warn('[Dashboard] account_metrics query failed:', error); return []; }
       return data || [];
     },
     enabled: isDashboardTab && !!user?.id,
@@ -96,30 +96,28 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const hasAutoSynced = useRef(false);
   const hasAutoSyncedChart = useRef(false);
   useEffect(() => {
-    if (hasAutoSynced.current) return;
-    if (analyticsLoading) return;
-    if (analyticsSyncing) return;
-    const hasApiChartData = analyticsData?.chartData?.length > 0;
-    const hasLocalStats = localStats?.some(s => s.followers_count > 0 || s.posts_count > 0);
-    if (!hasApiChartData && !hasLocalStats) {
-      hasAutoSynced.current = true;
-      syncAnalytics();
-    }
-  }, [analyticsData, analyticsLoading, analyticsSyncing, localStats, syncAnalytics]);
-  // Auto-sync when Edge Function has aggregate data but chart shows zeros
-  useEffect(() => {
-    if (hasAutoSyncedChart.current) return;
-    if (analyticsLoading) return;
-    if (analyticsSyncing) return;
+    if (hasAutoSynced.current && hasAutoSyncedChart.current) return;
+    if (analyticsLoading || analyticsSyncing) return;
     if (!analyticsData) return;
-    const hasChartData = (analyticsData.chartData?.length ?? 0) > 0;
+    const hasApiChartData = (analyticsData.chartData?.length ?? 0) > 0;
     const hasEngagement = (analyticsData.engagement?.views ?? 0) > 0;
+    const hasLocalStats = localStats?.some(s => s.followers_count > 0 || s.posts_count > 0);
     const hasAccountMetrics = (accountMetricsData ?? []).length > 0;
-    if (hasEngagement && !hasChartData && !hasAccountMetrics) {
+    const needsSync = (!hasApiChartData && !hasLocalStats) || (hasEngagement && !hasApiChartData && !hasAccountMetrics);
+    if (needsSync) {
+      hasAutoSynced.current = true;
       hasAutoSyncedChart.current = true;
-      syncAnalytics();
+      // Defer to avoid blocking paint
+      const scheduleSync = () => syncAnalytics();
+      if (typeof requestIdleCallback === 'function') {
+        const id = requestIdleCallback(scheduleSync, { timeout: 2000 });
+        return () => cancelIdleCallback(id);
+      } else {
+        const id = setTimeout(scheduleSync, 1000);
+        return () => clearTimeout(id);
+      }
     }
-  }, [analyticsData, analyticsLoading, analyticsSyncing, accountMetricsData, syncAnalytics]);
+  }, [analyticsData, analyticsLoading, analyticsSyncing, localStats, accountMetricsData, syncAnalytics]);
   const [platformState, setPlatformState] = useState<string>(analyticsPlatform ?? 'all');
   const setPlatform = useCallback((p: string) => {
     setPlatformState(p);
@@ -263,7 +261,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
       });
     });
 
-    const periodDays = dashboardPeriod === '15d' ? 15 : dashboardPeriod === '30d' ? 30 : dashboardPeriod === '45d' ? 45 : dashboardPeriod === '60d' ? 60 : dashboardPeriod === '90d' ? 90 : 7;
+    const periodDays = analyticsPeriod === '15d' ? 15 : analyticsPeriod === '30d' ? 30 : analyticsPeriod === '45d' ? 45 : analyticsPeriod === '60d' ? 60 : analyticsPeriod === '90d' ? 90 : 7;
     const months = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
     const result: any[] = [];
     for (let i = periodDays; i >= 0; i--) {
@@ -302,8 +300,8 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
                localEngagement={localEngagement}
                localFollowers={localFollowers}
                 dashboardChartData={dashboardChartData}
-                dashboardPeriod={dashboardPeriod}
-                setDashboardPeriod={setDashboardPeriod}
+                dashboardPeriod={analyticsPeriod}
+                setDashboardPeriod={setAnalyticsPeriod}
                isConnected={isConnected}
                setActiveTab={handleTabChange}
                setEditingPost={setEditingPost}
@@ -448,7 +446,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
         />
-        <main className="p-4 md:p-8 flex-1 w-full max-w-7xl mx-auto">
+        <main className="p-4 md:p-8 flex-1 w-full max-w-7xl mx-auto overflow-x-hidden min-w-0">
           {/* OTIMIZAÇÃO LCP: Garantir que a área de conteúdo tenha altura mínima para ser o maior elemento do viewport */}
           <div className="min-h-[70vh] flex flex-col">
             {renderContent()}

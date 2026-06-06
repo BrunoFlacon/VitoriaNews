@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -107,7 +107,22 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         return { isExpiringSoon: days <= 14, daysUntilExpiry: days };
       };
 
-      const enrichedConnections: SocialConnection[] = oauthConnections.map(conn => {
+      // Deduplicate connections by platform + platform_user_id (keep the most complete one)
+      const seenConns = new Map<string, SocialConnection>();
+      for (const conn of oauthConnections) {
+        const key = conn.platform_user_id
+          ? `${conn.platform}-${conn.platform_user_id}`
+          : conn.page_id
+            ? `${conn.platform}-${conn.page_id}`
+            : `${conn.platform}-${conn.id}`;
+        const existing = seenConns.get(key);
+        if (!existing || (!existing.profile_image_url && conn.profile_image_url) || (!existing.is_connected && conn.is_connected)) {
+          seenConns.set(key, conn);
+        }
+      }
+      const dedupedOAuth = Array.from(seenConns.values());
+
+      const enrichedConnections: SocialConnection[] = dedupedOAuth.map(conn => {
         const acc = findAccount(conn);
         if (!acc) return { ...conn, ...computeExpiry(conn.token_expires_at) };
         const cachedPic         = acc.profile_picture || null;
@@ -210,8 +225,10 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
     staleTime: 60 * 1000,
   });
 
+  const [realtimeError, setRealtimeError] = useState(false);
   useEffect(() => {
     if (!user || options.enabled === false) return;
+    setRealtimeError(false);
     
     // Generate unique channel ID to avoid collisions
     const channelId = Math.random().toString(36).substring(7);
@@ -222,17 +239,35 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'social_connections' }, () =>
         queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, () =>
-        queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR') {
-          console.error('Realtime error in connections channel:', channelName);
+        queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }));
+    
+    let lastErrorTime = 0;
+    connectionsChannel.subscribe((status) => {
+      if (status === 'CHANNEL_ERROR') {
+        const now = Date.now();
+        if (now - lastErrorTime > 30000) {
+          console.warn('Realtime connections error (will retry):', channelName);
         }
-      });
+        lastErrorTime = now;
+        setRealtimeError(true);
+      } else if (status === 'SUBSCRIBED') {
+        setRealtimeError(false);
+      }
+    });
 
     return () => { 
       supabase.removeChannel(connectionsChannel).catch(() => {}); 
     };
   }, [user, queryClient, options.enabled]);
+
+  // Polling fallback when Realtime is unavailable
+  useEffect(() => {
+    if (!user || options.enabled === false || !realtimeError) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user, queryClient, options.enabled, realtimeError]);
 
   // ---------------------------------------------------------------------------
   // Busca o app_id Meta percorrendo múltiplas plataformas no banco.
@@ -557,11 +592,14 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       let coopBlocked = false;
       const pollInterval = setInterval(async () => {
         if (coopBlocked) return;
+        let isClosed = false;
         try {
-          if (popup && popup.closed) { clearInterval(pollInterval); await finalize(); }
+          isClosed = popup ? popup.closed : true;
         } catch {
           coopBlocked = true;
+          return;
         }
+        if (isClosed) { clearInterval(pollInterval); await finalize(); }
       }, 4000);
 
       setTimeout(() => finalize(), 300000);

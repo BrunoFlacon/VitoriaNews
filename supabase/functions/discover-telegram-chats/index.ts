@@ -259,7 +259,7 @@ serve(async (req: Request) => {
             success: true,
             name: name,
             type: "individual",
-            photo: "https://ui-avatars.com/api/?name=" + encodeURIComponent(name) + "&background=25D366&color=fff",
+            photo: null,
             isOnline: Math.random() > 0.5,
             verified,
             members: 0

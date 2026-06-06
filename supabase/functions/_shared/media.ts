@@ -25,7 +25,7 @@ export async function cacheProfileImage(
     });
     if (!response.ok) {
       console.warn(`[MEDIA] Failed to fetch remote image: ${response.statusText}`);
-      return remoteUrl;
+      return null;
     }
 
     const contentType = response.headers.get("content-type") || "image/jpeg";
@@ -50,10 +50,12 @@ export async function cacheProfileImage(
       return remoteUrl;
     }
 
-    const { data: urlData } = supabase.storage.from('media').getPublicUrl(filePath);
-    return urlData.publicUrl;
+    const { data: signedData } = await supabase.storage
+      .from('media')
+      .createSignedUrl(filePath, 365 * 24 * 60 * 60);
+    return signedData?.signedUrl || remoteUrl;
   } catch (err) {
     console.error("[MEDIA] Caching process failed:", err);
-    return remoteUrl;
+    return null;
   }
 }

@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -13,9 +14,9 @@ export function cn(...inputs: ClassValue[]) {
 export function normalizePlatform(platform: string | null | undefined): string {
   if (!platform) return "";
   const value = platform.toLowerCase().trim();
-  if (value === "x" || value === "twitter" || value === "x (twitter)") {
-    return "twitter";
-  }
+  if (value === "x" || value === "twitter" || value === "x (twitter)") return "twitter";
+  if (value === "truth social") return "truthsocial";
+  if (value === "google news") return "googlenews";
   return value;
 }
 
@@ -77,15 +78,15 @@ export function getProxyUrl(url: string | null | undefined): string {
     "tiktokv.com",
     "tiktokcdn.com",
     "tiktokcdn-us.com",
-    "threads.net",
-    "ui-avatars.com"
+    "threads.net"
   ];
   
   const shouldProxy = problematicDomains.some(domain => url.includes(domain));
   
   if (shouldProxy) {
     if (!SUPABASE_URL) return url;
-    return `${SUPABASE_URL}/functions/v1/media-relay?url=${encodeURIComponent(url)}`;
+    const anonParam = SUPABASE_ANON_KEY ? `&apikey=${SUPABASE_ANON_KEY}` : '';
+    return `${SUPABASE_URL}/functions/v1/media-relay?url=${encodeURIComponent(url)}${anonParam}`;
   }
   
   return url;

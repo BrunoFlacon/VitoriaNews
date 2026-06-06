@@ -233,6 +233,14 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         });
       });
 
+      // Build profile_picture fallback map from social accounts
+      const socialAccountPics: Record<string, string> = {};
+      dedupedAccounts.forEach(acc => {
+        if (acc.profile_picture && !socialAccountPics[acc.platform]) {
+          socialAccountPics[acc.platform] = acc.profile_picture;
+        }
+      });
+
       const channels: MessagingChannelStat[] = (channelsRes.data || []).map((ch: any) => ({
         id: ch.id,
         platform: ch.platform,
@@ -240,16 +248,15 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         channel_type: ch.channel_type || 'group',
         members_count: Number(ch.members_count ?? 0),
         online_count: Number(ch.online_count ?? 0),
-        profile_picture: ch.profile_picture || null,
+        profile_picture: ch.profile_picture || socialAccountPics[ch.platform] || null,
         channel_id: ch.channel_id || null,
       }));
 
-      // TELEGRAM DEDUP: Remove channel/group entries (negative platform_user_id).
+      // TELEGRAM DEDUP: Only filter out channels/groups (negative chat_id or @username).
+      // The bot has a numeric positive chat_id and should be kept.
       const filteredNormalized = dedupedAccounts.filter(acc => {
-        if (acc.platform === 'telegram' && acc.platform_user_id) {
-          const numId = Number(acc.platform_user_id);
-          if (!isNaN(numId) && numId < 0) return false;
-        }
+        if (acc.platform === 'telegram' && acc.chat_id &&
+          (String(acc.chat_id).startsWith('@') || Number(acc.chat_id) < 0)) return false;
         return true;
       });
 
@@ -349,13 +356,24 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
   });
 
   // Real-time subscription - Use unique channel name per instance to avoid collisions
+  const [realtimeError, setRealtimeError] = useState(false);
   useEffect(() => {
     if (!user || options.enabled === false) return;
+    setRealtimeError(false);
     
     // Generate a unique channel name for this specific instance
     const channelId = Math.random().toString(36).substring(7);
     const channelName = `social-stats-realtime-${channelId}`;
     
+    // Debounce rapid invalidation calls from burst events
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedInvalidate = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
+      }, 500);
+    };
+
     const channel = supabase
       .channel(channelName)
       .on('postgres_changes', {
@@ -363,23 +381,43 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         schema: 'public',
         table: 'social_accounts',
         filter: `user_id=eq.${user.id}`,
-      }, () => {
-        queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
-      });
+      }, debouncedInvalidate)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'messaging_channels',
+        filter: `user_id=eq.${user.id}`,
+      }, debouncedInvalidate);
 
     // Subscribe with error handling
+    let lastErrorTime = 0;
     channel.subscribe((status) => {
       if (status === 'CHANNEL_ERROR') {
-        console.error('Supabase Realtime subscription error for channel:', channelName);
+        const now = Date.now();
+        if (now - lastErrorTime > 30000) {
+          console.warn('Realtime subscription error (will retry):', channelName);
+        }
+        lastErrorTime = now;
+        setRealtimeError(true);
+      } else if (status === 'SUBSCRIBED') {
+        setRealtimeError(false);
       }
     });
 
     return () => { 
-      supabase.removeChannel(channel).catch(err => {
-        console.warn('Error removing Supabase channel:', err);
-      });
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel).catch(() => {});
     };
   }, [user, queryClient, options.enabled]);
+
+  // Polling fallback when Realtime is unavailable (15s, focused on online members)
+  useEffect(() => {
+    if (!user || options.enabled === false || !realtimeError) return;
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [user, queryClient, options.enabled, realtimeError]);
 
   const stats = data?.stats || [];
   const messagingChannels = data?.messagingChannels || [];

@@ -27,6 +27,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StoryEditor } from "./StoryEditor";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { useSignedMediaUrl } from "@/hooks/useSignedMediaUrl";
+
+const StoryThumbnail = ({ url, alt, className }: { url?: string | null; alt?: string; className?: string }) => {
+  const signedUrl = useSignedMediaUrl(url, 3600);
+  return <SafeImage src={signedUrl || url} alt={alt} className={className} placeholderIcon={null} />;
+};
 
 interface StoryLive {
   id: string;
@@ -267,8 +273,12 @@ export const StoriesLivesView = () => {
     if (error) {
       toast({ title: "Erro no upload", description: error.message, variant: "destructive" });
     } else {
-      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-      setThumbnailUrls([urlData.publicUrl]);
+      const { data: signedData, error: signedError } = await supabase.storage.from("media").createSignedUrl(path, 60 * 60 * 24 * 30);
+      if (signedError) {
+        toast({ title: "Erro ao gerar link", description: signedError.message, variant: "destructive" });
+      } else {
+        setThumbnailUrls([signedData.signedUrl]);
+      }
     }
     setUploadingThumb(false);
   };
@@ -592,7 +602,7 @@ export const StoriesLivesView = () => {
                     className="relative aspect-[9/16] rounded-2xl overflow-hidden glass-card border border-border group hover:border-primary/50 transition-all cursor-pointer"
                   >
                     {story.thumbnail_url ? (
-                      <SafeImage src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" placeholderIcon={null} />
+                      <StoryThumbnail url={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
                         <Radio className="w-8 h-8" />
@@ -834,7 +844,7 @@ export const StoriesLivesView = () => {
                           className="relative aspect-[9/16] rounded-2xl overflow-hidden border border-border/50 group cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
                         >
                           {story.thumbnail_url ? (
-                            <SafeImage src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" placeholderIcon={null} />
+                            <StoryThumbnail url={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full bg-muted flex items-center justify-center">
                               <Icon className="w-6 h-6 text-muted-foreground/50" />

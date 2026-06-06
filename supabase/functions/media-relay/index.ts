@@ -66,6 +66,14 @@ async function cacheImageToStorage(
       .eq("platform", platform)
       .eq("platform_user_id", platformUserId);
 
+    if (platform === 'telegram') {
+      await adminClient
+        .from("social_accounts")
+        .update({ profile_picture: publicUrl })
+        .eq("platform", platform)
+        .eq("platform_user_id", platformUserId);
+    }
+
     console.log(`[PROXY-CACHE] Successfully saved and cached image: ${publicUrl}`);
     return publicUrl;
   } catch (err: any) {
@@ -107,12 +115,7 @@ serve(async (req: Request) => {
       "tiktok.com",
       "tiktokv.com",
       "tiktokcdn.com",
-      "tiktokcdn-us.com",
-      "p16-common-sign.tiktokcdn.com",
-      "p16-sign.tiktokcdn-us.com",
-      "p16-amd-va.tiktokcdn.com",
-      "p77-sign.tiktokcdn-us.com",
-      "ui-avatars.com"
+      "tiktokcdn-us.com"
     ];
 
     let targetUrlObj: URL;
@@ -232,17 +235,31 @@ serve(async (req: Request) => {
     if (!response.ok && targetUrlObj.hostname.includes("whatsapp.net")) {
       console.log(`[PROXY] WhatsApp image expired (status ${response.status}). Attempting dynamic recovery...`);
       try {
-        const matches = targetUrl.match(/([^/?]+_n\.(jpg|png|jpeg))/i);
+        const matches = targetUrl.match(/([^/?]+_n\.(jpg|png|jpeg))/i) || targetUrl.match(/([^/?]+)\.(jpg|png|jpeg)/i);
         const fileName = matches ? matches[1] : null;
-        if (fileName && supabaseUrl && supabaseKey) {
+        if (supabaseUrl && supabaseKey) {
           const adminClient = createClient(supabaseUrl, supabaseKey);
 
-          const { data: conn } = await adminClient
-            .from("social_connections")
-            .select("user_id, access_token, platform_user_id, page_id")
-            .eq("platform", "whatsapp")
-            .or(`profile_image_url.ilike.%${fileName}%,profile_picture.ilike.%${fileName}%`)
-            .maybeSingle();
+          let conn = null;
+          if (fileName) {
+            const { data } = await adminClient
+              .from("social_connections")
+              .select("user_id, access_token, platform_user_id, page_id")
+              .eq("platform", "whatsapp")
+              .or(`profile_image_url.ilike.%${fileName}%,profile_picture.ilike.%${fileName}%`)
+              .maybeSingle();
+            conn = data;
+          }
+          if (!conn) {
+            const { data } = await adminClient
+              .from("social_connections")
+              .select("user_id, access_token, platform_user_id, page_id")
+              .eq("platform", "whatsapp")
+              .order("updated_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            conn = data;
+          }
 
           if (conn && conn.platform_user_id) {
             let token = conn.access_token;
@@ -262,7 +279,7 @@ serve(async (req: Request) => {
               }, 2500);
               if (metaResp.ok) {
                 const metaData = await metaResp.json();
-                const freshUrl = metaData.profile_picture_url;
+                const freshUrl = metaData.data?.profile_picture_url || metaData.profile_picture_url;
                 if (freshUrl) {
                   console.log(`[PROXY] Recovered WhatsApp URL: ${freshUrl}`);
                   response = await fetchWithTimeout(freshUrl, { method: "GET", headers: fetchHeaders }, 3000);
@@ -388,12 +405,14 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
       console.error(`[PROXY] Failed to fetch after all recovery attempts. Status: ${response.status} URL: ${finalTargetUrl}`);
-      return new Response("Media not found or failed to fetch", {
-        status: 404,
+      // Return a minimal SVG placeholder instead of 404 to avoid breaking image components
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect fill="#e2e8f0" width="64" height="64" rx="32"/><text x="32" y="38" text-anchor="middle" fill="#94a3b8" font-size="20" font-family="Arial">?</text></svg>`;
+      return new Response(svg, {
+        status: 200,
         headers: {
           ...corsHeaders(req),
-          "Content-Type": "text/plain",
-          "Cache-Control": "public, max-age=60"
+          "Content-Type": "image/svg+xml",
+          "Cache-Control": "public, max-age=300"
         }
       });
     }

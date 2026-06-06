@@ -1160,12 +1160,14 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
               const lastPic = conn.profile_picture || conn.profile_image_url;
               if (metrics.profile_picture && metrics.profile_picture !== lastPic) {
                 try {
-                  metrics.profile_picture = await cacheProfileImage(
+                  const cached = await cacheProfileImage(
                     adminClient, uid, conn.platform, metrics.profile_picture,
                     conn.page_id || conn.platform_user_id || metrics.username || uid
                   );
+                  metrics.profile_picture = cached || lastPic || metrics.profile_picture;
                 } catch (imgErr) {
                   console.warn(`[COLLECT] Image cache fail for ${conn.platform}:`, imgErr);
+                  metrics.profile_picture = lastPic || metrics.profile_picture;
                 }
               } else if (lastPic && !metrics.profile_picture) {
                 metrics.profile_picture = lastPic;

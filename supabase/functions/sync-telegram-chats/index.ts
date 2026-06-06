@@ -86,6 +86,23 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
       await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(functionUrl)}`);
     } catch {}
 
+    // Cleanup: remover duplicatas Telegram com platform_user_id diferente (sintético ou de outro bot)
+    try {
+      const { data: dups } = await adminClient
+        .from("social_accounts")
+        .select("id, platform_user_id")
+        .eq("user_id", userId)
+        .eq("platform", "telegram");
+      if (dups) {
+        for (const d of dups) {
+          if (d.platform_user_id === botId) continue;
+          if (!d.platform_user_id || !/^\d+$/.test(d.platform_user_id)) {
+            await adminClient.from("social_accounts").delete().eq("id", d.id);
+          }
+        }
+      }
+    } catch (_) {}
+
     // Add Bot account to records
     accountRecords.push({
       user_id: userId,
@@ -174,19 +191,51 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
       }
     }
 
-    // Batch UPSERT
+    // Batch UPSERT — fallback para update+insert se onConflict falhar
     if (accountRecords.length > 0) {
       const { error: accErr } = await adminClient
         .from("social_accounts")
         .upsert(accountRecords, { onConflict: "user_id,platform,platform_user_id" });
-      if (accErr) console.error("[SYNC] Batch Social Accounts Error:", accErr.message);
+      if (accErr) {
+        console.warn("[SYNC] Upsert falhou (constraint?), tentando update+insert manual:", accErr.message);
+        for (const rec of accountRecords) {
+          const { data: existing } = await adminClient
+            .from("social_accounts")
+            .select("id")
+            .eq("user_id", rec.user_id)
+            .eq("platform", "telegram")
+            .eq("platform_user_id", rec.platform_user_id)
+            .maybeSingle();
+          if (existing) {
+            await adminClient.from("social_accounts").update(rec).eq("id", existing.id);
+          } else {
+            await adminClient.from("social_accounts").insert(rec);
+          }
+        }
+      }
     }
 
     if (channelRecords.length > 0) {
       const { error: chanErr } = await adminClient
         .from("messaging_channels")
         .upsert(channelRecords, { onConflict: "user_id,platform,channel_id" });
-      if (chanErr) console.error("[SYNC] Batch Messaging Channels Error:", chanErr.message);
+      if (chanErr) {
+        console.warn("[SYNC] Channel upsert falhou, tentando update+insert manual:", chanErr.message);
+        for (const rec of channelRecords) {
+          const { data: existing } = await adminClient
+            .from("messaging_channels")
+            .select("id")
+            .eq("user_id", rec.user_id)
+            .eq("platform", "telegram")
+            .eq("channel_id", rec.channel_id)
+            .maybeSingle();
+          if (existing) {
+            await adminClient.from("messaging_channels").update(rec).eq("id", existing.id);
+          } else {
+            await adminClient.from("messaging_channels").insert(rec);
+          }
+        }
+      }
     }
 
     return { success: true, botId, bot: botInfo.username, accountsSynced: accountRecords.length };
@@ -255,6 +304,24 @@ serve(async (req: Request) => {
       }
     }
 
+    // Cleanup: remover registros Telegram com platform_user_id sintético (não numérico)
+    try {
+      const { data: staleTgAccounts } = await adminClient
+        .from("social_accounts")
+        .select("id, platform_user_id")
+        .eq("user_id", userId)
+        .eq("platform", "telegram");
+      if (staleTgAccounts) {
+        for (const sa of staleTgAccounts) {
+          if (sa.platform_user_id && !botIds.includes(sa.platform_user_id) && !/^\d+$/.test(sa.platform_user_id)) {
+            await adminClient.from("social_accounts").delete().eq("id", sa.id);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[SYNC] Cleanup stale Telegram accounts error:", e.message);
+    }
+
     // Final Aggregation for UI
     try {
       // Soma APENAS os canais (type = 'channel'), NÃO grupos nem o bot
@@ -312,12 +379,23 @@ serve(async (req: Request) => {
           });
         }
 
+        // Buscar profile_picture do social_accounts para propagar para social_connections
+        const { data: tgSocialAccount } = await adminClient
+          .from("social_accounts")
+          .select("profile_picture")
+          .eq("user_id", userId)
+          .eq("platform", "telegram")
+          .eq("platform_user_id", mainBotId)
+          .maybeSingle();
+
         await adminClient
           .from("social_connections")
           .upsert({
             user_id: userId,
             platform: "telegram",
             platform_user_id: mainBotId,
+            profile_image_url: tgSocialAccount?.profile_picture || null,
+            profile_picture: tgSocialAccount?.profile_picture || null,
             followers_count: channelSubscribers,
             posts_count: postsCount || 0,
             updated_at: new Date().toISOString(),

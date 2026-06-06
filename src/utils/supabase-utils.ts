@@ -109,8 +109,8 @@ export async function safeInvoke(fnName: string, options: InvokeOptions = {}): P
     } else if (isCorsOrNetworkError(message)) {
       // Silently handle CORS thrown from fetch itself
       message = `CORS error for ${fnName}. Expected in local development.`;
-    } else if (!silent) {
-      console.error(`[safeInvoke] Error:`, err);
+    } else {
+      console.error(`[safeInvoke] Error for ${fnName}:`, err);
     }
 
     return {

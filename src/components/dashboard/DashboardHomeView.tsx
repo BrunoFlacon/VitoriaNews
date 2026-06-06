@@ -1,5 +1,4 @@
 import { memo, useCallback, useMemo } from "react";
-import { motion } from "framer-motion";
 import { 
   Eye, 
   Heart, 
@@ -297,11 +296,9 @@ export const DashboardHomeView = memo(({
           />
         </div>
         <div className="h-full">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col justify-between"
+          <div
+            className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col justify-between animate-fade-in"
+            style={{ animationDelay: '400ms', animationFillMode: 'backwards' }}
           >
             <h3 className="font-display font-bold text-lg mb-4">Redes Conectadas</h3>
             <div className="space-y-3">
@@ -330,7 +327,7 @@ export const DashboardHomeView = memo(({
             >
               Ver todas as redes →
             </button>
-          </motion.div>
+          </div>
         </div>
       </div>
 

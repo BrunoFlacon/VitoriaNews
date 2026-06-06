@@ -11,6 +11,10 @@ interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
    * WhatsApp images often fail with 403 due to hotlink protection
    */
   isWhatsAppImage?: boolean;
+  /**
+   * Single character to show as fallback when image fails
+   */
+  fallbackLetter?: string;
 }
 
 /**
@@ -31,6 +35,7 @@ export const SafeImage = ({
   onLoadSuccess, 
   placeholderIcon,
   isWhatsAppImage = false,
+  fallbackLetter,
   ...props 
 }: SafeImageProps) => {
   const [error, setError] = useState(false);
@@ -48,16 +53,20 @@ export const SafeImage = ({
     onLoadSuccess?.();
   }, [onLoadSuccess]);
 
-  // Check if this is likely a WhatsApp image based on URL
+  // Check if this is likely a WhatsApp image based on URL (check rawSrc before proxy)
   const isWhatsAppUrl = isWhatsAppImage || 
+    rawSrc?.includes('whatsapp.net') || 
+    rawSrc?.includes('mmg.whatsapp') || 
+    rawSrc?.includes('pps.whatsapp') ||
     src?.includes('whatsapp.net') || 
     src?.includes('mmg.whatsapp') || 
-    src?.includes('pps.whatsapp');
+    src?.includes('pps.whatsapp') ||
+    decodeURIComponent(src || '').includes('whatsapp.net');
 
-  // WhatsApp CDN images (mmg.whatsapp.net, pps.whatsapp.net) use session-bound
-  // signed tokens that expire quickly and enforce hotlink protection (403).
-  // Skip loading entirely and go straight to fallback to avoid console errors.
-  const shouldSkip = !src || error;
+  // .octet-stream files are binaries without a proper browser-displayable extension
+  const isOctetStream = rawSrc?.endsWith('.octet-stream') || src?.endsWith('.octet-stream');
+
+  const shouldSkip = !src || error || isOctetStream;
 
   if (shouldSkip) {
     // If a custom fallback is provided, use it
@@ -82,10 +91,9 @@ export const SafeImage = ({
         {...(props as any)}
       >
         {placeholderIcon || (
-          <div className="flex flex-col items-center justify-center text-muted-foreground/40">
-            <User className="w-1/3 h-1/3" />
-            <span className="text-[8px] font-bold uppercase tracking-tighter mt-1">
-              {alt?.substring(0, 2).toUpperCase() || "SC"}
+          <div className="flex items-center justify-center text-muted-foreground/40">
+            <span className="text-xs font-black uppercase tracking-tighter">
+              {fallbackLetter || alt?.substring(0, 1).toUpperCase() || "?"}
             </span>
           </div>
         )}

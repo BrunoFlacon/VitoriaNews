@@ -76,6 +76,8 @@ export interface YoutubeStatsData {
   views: number;
   likes: number;
   comments: number;
+  subscribers_gained?: number;
+  watch_time_minutes?: number;
 }
 
 export interface GaStatsData {
@@ -121,6 +123,7 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
   const [platform, setPlatformState] = useState<string>('all');
   const [postType, setPostType] = useState<string>('all');
   const [source, setSource] = useState<string>('all');
+  const [dateRange, setDateRangeState] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
   const [analyticsErrorInfo, setAnalyticsErrorInfo] = useState<string | null>(null);
   
   // Initialize period and platform from user metadata or localStorage when user changes
@@ -146,7 +149,7 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
   const setPlatform = (newPlatform: string) => {
     setPlatformState(newPlatform);
     setAnalyticsErrorInfo(null);
-    localStorage.setItem('analytics_platform', newPlatform);
+    try { localStorage.setItem('analytics_platform', newPlatform); } catch {}
   };
 
   // Wrapper for setPeriod to also persist it
@@ -166,6 +169,11 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     }
   };
 
+  const setDateRange = (range: { start: string | null; end: string | null }) => {
+    setDateRangeState(range);
+    setAnalyticsErrorInfo(null);
+  };
+
   const fetchAnalyticsData = async (): Promise<AnalyticsData> => {
     if (!user) {
       throw new Error("No user available for query");
@@ -175,18 +183,19 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     
     // Use safeInvoke with a short timeout — fails fast when functions aren't deployed
     const { data: aData, error: aErr } = await safeInvoke('get-analytics', {
-      body: { period, platform, type: postType, source },
-      timeoutMs: 8000
+      body: { period, platform, type: postType, source, start_date: dateRange.start, end_date: dateRange.end },
+      timeoutMs: 15000
     });
 
     if (aErr) {
-      // Don't treat 404/not-deployed/CORS as hard error — just return empty data
+      const isExpected = `${aErr}`.includes('not found') || `${aErr}`.includes('404') || `${aErr}`.includes('CORS');
+      setAnalyticsErrorInfo(isExpected ? null : `Erro: ${aErr}`);
       return {
         overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, lastSyncedAt: null },
         engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: "0", growth: "0" },
         chartData: [], platformBreakdown: {}, topContent: [], bestTimes: [],
         followerData: [], adsStats: { impressions: 0, reach: 0, clicks: 0, spend: 0 },
-        youtubeStats: { views: 0, likes: 0, comments: 0 }, gaStats: { views: 0 },
+        youtubeStats: { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 }, gaStats: { views: 0 },
         viralData: [], trendsData: [], attacksData: [], messageStats: { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {} },
         messagingChannels: [], period, generatedAt: new Date().toISOString(), dataSource: 'fallback',
       } as unknown as AnalyticsData;
@@ -196,13 +205,14 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
   };
 
   const { data, isLoading, refetch, isError } = useQuery<AnalyticsData, Error>({
-    queryKey: ['analytics', user?.id, period, platform, postType, source],
+    queryKey: ['analytics', user?.id, period, platform, postType, source, dateRange.start, dateRange.end],
     queryFn: fetchAnalyticsData,
     enabled: !!user && (options.enabled !== false),
     staleTime: 5 * 60 * 1000,    // considerar fresco por 5 minutos
     gcTime: 10 * 60 * 1000,      // manter em cache por 10 minutos
     retry: 0,
     refetchOnWindowFocus: false,  // não rebuscar ao focar a janela
+    placeholderData: (prev) => prev, // keep showing previous data while refetching
   });
 
   // Display toast once on unhandled fetching errors (skip 404/not-deployed)
@@ -397,6 +407,8 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     setPostType,
     source,
     setSource,
+    dateRange,
+    setDateRange,
     refetch,
     syncAnalytics: () => syncMutation.mutate(),
     syncMetaAds: () => syncMetaAds.mutate(),

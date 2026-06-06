@@ -149,7 +149,7 @@ function PostCard({ post, onEdit, onDelete, onClick }: PostCardProps) {
       exit={{ opacity: 0, scale: 0.95 }}
       className="bg-card border border-border rounded-2xl overflow-hidden hover:border-primary/30 transition-all group cursor-pointer shadow-sm hover:shadow-md"
       onClick={() => startTransition(() => onClick(post))}
-      style={{ contain: "paint layout", willChange: "transform, opacity" }}
+      style={{ contain: "paint layout" }}
     >
       <div className="p-4">
         {/* Profile Header */}

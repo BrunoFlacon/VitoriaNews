@@ -16,6 +16,12 @@ export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 
       return;
     }
 
+    // Only re-sign URLs that are from supabase storage (private bucket)
+    if (!input.includes('supabase.co/storage/')) {
+      setUrl(input);
+      return;
+    }
+
     // Extract path from a previously signed URL if needed
     let path = input;
     const marker = "/object/sign/media/";

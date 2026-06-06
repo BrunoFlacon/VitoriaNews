@@ -2374,7 +2374,7 @@ export type Database = {
           comments: number | null
           created_at: string
           date: string
-          estimated_minutes_watched: number | null
+          watch_time_minutes: number | null
           id: string
           likes: number | null
           metadata: Json | null
@@ -2390,7 +2390,7 @@ export type Database = {
           comments?: number | null
           created_at?: string
           date: string
-          estimated_minutes_watched?: number | null
+          watch_time_minutes?: number | null
           id?: string
           likes?: number | null
           metadata?: Json | null
@@ -2406,7 +2406,7 @@ export type Database = {
           comments?: number | null
           created_at?: string
           date?: string
-          estimated_minutes_watched?: number | null
+          watch_time_minutes?: number | null
           id?: string
           likes?: number | null
           metadata?: Json | null

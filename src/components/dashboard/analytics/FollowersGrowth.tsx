@@ -173,9 +173,9 @@ export const FollowersGrowth = ({
                  ) : (
                    <div className="flex items-center gap-3">
                       {group.profiles[0]?.profileImage ? (
-                         <SafeImage src={group.profiles[0].profileImage} alt="" className="w-6 h-6 rounded-full object-cover border border-white/10" />
-                      ) : (
-                        <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black">@</div>
+                          <SafeImage src={group.profiles[0].profileImage} alt="" className="w-6 h-6 rounded-full object-cover border border-white/10" fallbackLetter={(group.profiles[0]?.username || 'T')[0].toUpperCase()} />
+                       ) : (
+                        <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black">{(group.profiles[0]?.username || 'T')[0].toUpperCase()}</div>
                      )}
                      <span className="text-[10px] font-black uppercase tracking-widest opacity-60 truncate">@{group.profiles[0]?.username}</span>
                    </div>

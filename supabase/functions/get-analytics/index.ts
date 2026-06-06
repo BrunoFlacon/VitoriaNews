@@ -173,7 +173,7 @@ serve(async (req: Request) => {
       supabase.from("messages").select("id, status, platform, content, recipient_name, recipient_phone, created_at, metadata").eq("user_id", user.id).gte("created_at", startDate.toISOString()).order("created_at", { ascending: false }),
       supabase.from("meta_ads_campaigns").select("id, impressions, reach, clicks, amount_spent, created_at").eq("user_id", user.id).gte("created_at", startDate.toISOString()),
       supabase.from("google_analytics_data").select("id, metric_name, metric_value, date").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
-      supabase.from("youtube_analytics").select("id, views, likes, comments, subscribers_gained, estimated_minutes_watched, date").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
+      supabase.from("youtube_analytics").select("id, views, likes, comments, subscribers_gained, watch_time_minutes, date").eq("user_id", user.id).gte("date", startDate.toISOString().split('T')[0]),
       supabase.from("viral_campaigns").select("id, title, platform, reach, detected_at").gte("detected_at", startDate.toISOString()),
       supabase.from("trends").select("id, keyword, volume, platform, detected_at").gte("detected_at", startDate.toISOString()),
       supabase.from("political_trends").select("id, keyword, sentiment, detected_at").gte("detected_at", startDate.toISOString()),
@@ -238,7 +238,7 @@ serve(async (req: Request) => {
       acc.likes += Number(current.likes || 0);
       acc.comments += Number(current.comments || 0);
       acc.subscribers_gained = (acc.subscribers_gained || 0) + Number(current.subscribers_gained || 0);
-      acc.watch_time_minutes = (acc.watch_time_minutes || 0) + Number(current.estimated_minutes_watched || 0);
+      acc.watch_time_minutes = (acc.watch_time_minutes || 0) + Number(current.watch_time_minutes || 0);
       return acc;
     }, { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 });
 
@@ -359,40 +359,104 @@ serve(async (req: Request) => {
       let viewsCount = requestedSource === 'api'
         ? Math.max(postViews, accViews)
         : (accViews || postViews);
-      // Fallback: distribute globalViews evenly across days if account/post metrics are all zero
       if (viewsCount === 0 && days > 0 && globalViews > 0) {
         viewsCount = Math.round(globalViews / days);
       }
 
-      const engagementCount = Math.max(0, bucketPosts.reduce((s, m) => s + (Number(m.likes) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0), 0) || 
-                               platformFilteredAcc.reduce((s, m) => s + (Number(m.likes) || 0) + (Number(m.comments) || 0) + (Number(m.shares) || 0), 0));
+      const postLikes = bucketPosts.reduce((s, m) => s + (Number(m.likes) || 0), 0);
+      const postComments = bucketPosts.reduce((s, m) => s + (Number(m.comments) || 0), 0);
+      const postShares = bucketPosts.reduce((s, m) => s + (Number(m.shares) || 0), 0);
+      const accLikes = platformFilteredAcc.reduce((s, m) => s + (Number(m.likes) || 0), 0);
+      const accComments = platformFilteredAcc.reduce((s, m) => s + (Number(m.comments) || 0), 0);
+      const accShares = platformFilteredAcc.reduce((s, m) => s + (Number(m.shares) || 0), 0);
+      const accFollowers = platformFilteredAcc.reduce((s, m) => s + (Number(m.followers) || 0), 0);
+
+      const likesCount = postLikes || accLikes || (globalLikes > 0 ? Math.round(globalLikes / Math.max(days, 1)) : 0);
+      const commentsCount = postComments || accComments || (globalLikes > 0 ? Math.max(0, Math.round(totalComments / Math.max(days, 1))) : 0);
+      const sharesCount = postShares || accShares || (globalShares > 0 ? Math.round(globalShares / Math.max(days, 1)) : 0);
+      const engagementCount = Math.max(0, likesCount + commentsCount + sharesCount);
 
       const reachCount = Math.max(0, platformFilteredAcc.length > 0 
-        ? platformFilteredAcc.reduce((s, m) => s + (Number(m.followers) || 0), 0) / platformFilteredAcc.length
+        ? Math.round(accFollowers / platformFilteredAcc.length)
         : (bucketPosts.reduce((s, m) => s + (Number(m.reach) || 0), 0) || globalFollowers));
+
+      const followersCount = accFollowers > 0
+        ? Math.round(accFollowers / Math.max(platformFilteredAcc.length, 1))
+        : (globalFollowers > 0 ? globalFollowers : 0);
+
+      const dayPosts = bucketPosts.length || (externalPostsCount > 0 ? Math.round(externalPostsCount / Math.max(days, 1)) : 0);
 
       chartData.push({
         name: label,
         views: Math.round(viewsCount),
+        likes: Math.round(likesCount),
+        comments: Math.round(commentsCount),
+        shares: Math.round(sharesCount),
         engagement: Math.round(engagementCount),
         reach: Math.round(reachCount),
+        followers: followersCount,
+        posts: dayPosts,
       });
     }
 
-    const platformBreakdown: Record<string, { posts: number; engagement: number }> = {};
+    const platformBreakdown: Record<string, { posts: number; engagement: number; views: number; likes: number; comments: number; shares: number; followers: number; reach: number }> = {};
+    if (socialAccounts.length > 0) {
+      const seenPB = new Set<string>();
+      socialAccounts.forEach((a: any) => {
+        const normalized = normalizePlatform(a.platform);
+        const idKey = a.platform_user_id ? `${normalized}-id-${a.platform_user_id}` : null;
+        const nameKey = a.username ? `${normalized}-name-${a.username}` : null;
+        if ((idKey && seenPB.has(idKey)) || (nameKey && seenPB.has(nameKey))) return;
+        if (!idKey && !nameKey && platformBreakdown[normalized]) return;
+        if (idKey) seenPB.add(idKey);
+        if (nameKey) seenPB.add(nameKey);
+        if (!platformBreakdown[normalized]) platformBreakdown[normalized] = { posts: 0, engagement: 0, views: 0, likes: 0, comments: 0, shares: 0, followers: 0, reach: 0 };
+        platformBreakdown[normalized].posts += (a.posts_count || a.metadata?.posts_count || 0);
+        platformBreakdown[normalized].views += (a.views || 0);
+        platformBreakdown[normalized].likes += (a.likes || 0);
+        platformBreakdown[normalized].comments += (a.comments || 0);
+        platformBreakdown[normalized].shares += (a.shares || 0);
+        platformBreakdown[normalized].followers += (a.followers || a.followers_count || 0);
+        platformBreakdown[normalized].reach += Math.round((a.views || 0) * 0.35);
+        platformBreakdown[normalized].engagement += (a.likes || 0) + (a.comments || 0) + (a.shares || 0);
+      });
+    }
     if (hasRealMetrics) {
       filteredMetrics.forEach(m => {
         const normalized = normalizePlatform(m.platform);
-        if (!platformBreakdown[normalized]) platformBreakdown[normalized] = { posts: 0, engagement: 0 };
-        platformBreakdown[normalized].posts++;
+        if (!platformBreakdown[normalized]) platformBreakdown[normalized] = { posts: 0, engagement: 0, views: 0, likes: 0, comments: 0, shares: 0, followers: 0, reach: 0 };
+        platformBreakdown[normalized].views += (m.impressions || 0);
+        platformBreakdown[normalized].likes += (m.likes || 0);
+        platformBreakdown[normalized].comments += (m.comments || 0);
+        platformBreakdown[normalized].shares += (m.shares || 0);
+        platformBreakdown[normalized].reach += (m.reach || 0);
         platformBreakdown[normalized].engagement += (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
       });
-    } else if (socialAccounts.length > 0) {
-      socialAccounts.forEach((a: any) => {
-        const normalized = normalizePlatform(a.platform);
-        if (!platformBreakdown[normalized]) platformBreakdown[normalized] = { posts: 0, engagement: 0 };
-        platformBreakdown[normalized].posts += (a.posts_count || a.metadata?.posts_count || 0);
-        platformBreakdown[normalized].engagement += (a.likes || 0) + (a.comments || 0) + (a.shares || 0);
+    }
+    // Fill missing platforms with account_metrics data
+    if (accountMetrics.length > 0) {
+      const latestPerPlatform: Record<string, AccountMetric> = {};
+      accountMetrics.forEach((m: AccountMetric) => {
+        const normalized = normalizePlatform(m.platform);
+        const existing = latestPerPlatform[normalized];
+        if (!existing || new Date(m.collected_at) > new Date(existing.collected_at)) {
+          latestPerPlatform[normalized] = m;
+        }
+      });
+      Object.entries(latestPerPlatform).forEach(([platform, m]) => {
+        if (!platformBreakdown[platform]) platformBreakdown[platform] = { posts: 0, engagement: 0, views: 0, likes: 0, comments: 0, shares: 0, followers: 0, reach: 0 };
+        if (platformBreakdown[platform].followers === 0) {
+          platformBreakdown[platform].followers = Math.max(platformBreakdown[platform].followers, m.followers || 0);
+        }
+        platformBreakdown[platform].posts = Math.max(platformBreakdown[platform].posts, m.posts_count || 0);
+        if (platformBreakdown[platform].likes === 0 && platformBreakdown[platform].views === 0 && platformBreakdown[platform].engagement === 0) {
+          platformBreakdown[platform].views += (m.views || 0);
+          platformBreakdown[platform].likes += (m.likes || 0);
+          platformBreakdown[platform].comments += (m.comments || 0);
+          platformBreakdown[platform].shares += (m.shares || 0);
+          platformBreakdown[platform].engagement += (m.likes || 0) + (m.comments || 0) + (m.shares || 0);
+          platformBreakdown[platform].reach += Math.round((m.views || 0) * 0.35);
+        }
       });
     }
 

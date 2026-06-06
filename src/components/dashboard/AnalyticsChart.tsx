@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { Eye } from "lucide-react";
 import { 
   AreaChart, 
@@ -28,12 +27,9 @@ export const AnalyticsChart = ({ data: chartData = [], periodDays, onPeriodChang
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.1, duration: 0.2 }}
-      style={{ willChange: "transform" }}
-      className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col"
+    <div
+      className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col animate-fade-in"
+      style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}
     >
       <div className="mb-4 md:mb-6">
         <div className="flex items-center justify-between">
@@ -164,6 +160,6 @@ export const AnalyticsChart = ({ data: chartData = [], periodDays, onPeriodChang
           </AreaChart>
         </ResponsiveContainer>
       </div>
-    </motion.div>
+    </div>
   );
 };

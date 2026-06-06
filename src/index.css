@@ -165,4 +165,8 @@
   .search-highlight b {
     @apply text-primary font-bold bg-primary/10 px-0.5 rounded-sm;
   }
+
+  .pie-legend-container::-webkit-scrollbar {
+    display: none;
+  }
 }

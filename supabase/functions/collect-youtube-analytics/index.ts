@@ -302,17 +302,22 @@ serve(async (req: Request) => {
       ? parseFloat((((aggregated.total_likes + aggregated.total_comments) / ytFollowers) * 100).toFixed(2))
       : 0;
 
-    await supabase.from("social_accounts").upsert({
+    // Only overwrite views/likes/comments if we have non-zero data
+    // otherwise keep the existing lifetime values from the initial sync
+    const updates: Record<string, any> = {
       user_id: userId,
       platform: "youtube",
       platform_user_id: channelId,
-      likes: aggregated.total_likes,
-      comments: aggregated.total_comments,
-      views: aggregated.total_views,
       engagement_rate: ytEngagementRate,
       last_synced_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,platform,platform_user_id" });
+    };
+    if (aggregated.total_views > 0) updates.views = aggregated.total_views;
+    if (aggregated.total_likes > 0) updates.likes = aggregated.total_likes;
+    if (aggregated.total_comments > 0) updates.comments = aggregated.total_comments;
+    if (aggregated.total_subscribers_gained > 0) updates.subscribers_gained = aggregated.total_subscribers_gained;
+
+    await supabase.from("social_accounts").upsert(updates, { onConflict: "user_id,platform,platform_user_id" });
 
     return new Response(JSON.stringify({
       success: true,
