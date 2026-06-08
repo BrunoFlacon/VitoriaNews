@@ -112,6 +112,12 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   ],
   newsapi: [
     { label: "NewsAPI.org API Key", key: "api_key", masked: true, placeholder: "Cole sua API Key do NewsAPI.org" },
+  ],
+  cloudinary: [
+    { label: "Cloud Name", key: "cloud_name", placeholder: "Ex: dxxxxxxxx" },
+    { label: "API Key", key: "api_key", placeholder: "15 dígitos" },
+    { label: "API Secret", key: "api_secret", masked: true },
+    { label: "Upload Preset", key: "upload_preset", placeholder: "Ex: social_canvas_hub" },
   ]
 };
 

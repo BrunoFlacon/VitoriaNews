@@ -34,6 +34,7 @@ import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, AnalyticsIco
 import { safeInvoke } from "@/utils/supabase-utils";
 import { WhatsAppEmbeddedSignup } from "./settings/WhatsAppEmbeddedSignup";
 import { WebhookStatusBadge } from "./settings/WebhookStatusBadge";
+import { BrandsTab } from "./BrandsTab";
 
 const WEBHOOK_ENABLED_PLATFORMS = new Set(["telegram", "whatsapp", "facebook", "instagram", "tiktok", "linkedin"]);
 
@@ -1963,6 +1964,9 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
         <TabsContent value="system_dash">
           <SystemSettingsView />
+        </TabsContent>
+        <TabsContent value="brands">
+          <BrandsTab />
         </TabsContent>
         <TabsContent value="seo">
           <SEOTab />
