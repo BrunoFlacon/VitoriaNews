@@ -36,7 +36,7 @@ import { WhatsAppEmbeddedSignup } from "./settings/WhatsAppEmbeddedSignup";
 import { WebhookStatusBadge } from "./settings/WebhookStatusBadge";
 import { BrandsTab } from "./BrandsTab";
 
-const WEBHOOK_ENABLED_PLATFORMS = new Set(["telegram", "whatsapp", "facebook", "instagram", "tiktok", "linkedin"]);
+const WEBHOOK_ENABLED_PLATFORMS = new Set(["telegram", "whatsapp", "facebook", "instagram", "tiktok", "linkedin"] as string[]);
 
 
 interface SocialAccountStats {
