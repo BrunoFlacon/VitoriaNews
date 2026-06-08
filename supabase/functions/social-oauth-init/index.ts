@@ -184,13 +184,15 @@ serve(async (req: Request) => {
     const state = crypto.randomUUID().replace(/-/g, "");
 
     // Salva no banco com code_verifier atômico (PKCE via DB, não via state composto)
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min expiry
     await supabase.from("oauth_states").insert({ 
       user_id: user.id, 
       platform, 
       state,
       redirect_uri,
       callback_domain,
-      code_verifier: pkce?.verifier || null
+      code_verifier: pkce?.verifier || null,
+      expires_at: expiresAt
     });
 
     let authUrl = "";

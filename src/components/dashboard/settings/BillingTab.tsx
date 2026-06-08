@@ -1011,9 +1011,13 @@ const FinancialSection = () => {
   const pendingCount = subscribers.filter(s => getPaymentStatus(s) === "pendente").length;
 
   // Estimate MRR from price in metadata
+  const sanitizePrice = (val: string) => {
+    const cleaned = (val || "0").replace(/[^\d,.]/g, "").replace(",", ".");
+    return parseFloat(cleaned) || 0;
+  };
   const mrr = subscribers
     .filter(s => getPaymentStatus(s) === "em_dia")
-    .reduce((acc, s) => acc + parseFloat(s.metadata?.price || "0"), 0);
+    .reduce((acc, s) => acc + sanitizePrice(s.metadata?.price || "0"), 0);
 
   const sendWhatsAppAlert = (sub: Subscriber) => {
     const name = sub.full_name?.split(" ")[0] || "Assinante";
@@ -1022,7 +1026,7 @@ const FinancialSection = () => {
       `Olá, ${name}! 😊\n\nIdentificamos que a sua assinatura do *${plan}* está com pagamento pendente.\n\nPara continuar aproveitando todos os benefícios, clique no link abaixo para regularizar:\n\n[Link de pagamento aqui]\n\nQualquer dúvida, estamos à disposição! 🙏`
     );
     const phone = sub.phone?.replace(/\D/g, "");
-    window.open(`https://wa.me/55${phone}?text=${msg}`, "_blank");
+    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
     toast({ title: "WhatsApp aberto!", description: `Mensagem preparada para ${sub.full_name}` });
   };
 

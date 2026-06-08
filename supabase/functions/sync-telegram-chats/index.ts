@@ -280,17 +280,18 @@ serve(async (req: Request) => {
       .from("api_credentials")
       .select("credentials")
       .eq("user_id", userId)
-      .eq("platform", "telegram")
-      .maybeSingle();
+      .eq("platform", "telegram");
 
     if (credError)       return json({ error: "Database error", details: credError.message }, 500, req);
 
-    const creds = credData?.credentials || {};
-    let tokens: string[] = [];
-    if (typeof creds === "string") tokens = [creds];
-    else if (creds.bot_token) tokens = [creds.bot_token];
-    else if (Array.isArray(creds.tokens)) tokens = creds.tokens;
-    else if (creds.token) tokens = [creds.token];
+    const tokens: string[] = [];
+    for (const row of (credData || [])) {
+      const creds = row.credentials || {};
+      if (typeof creds === "string") tokens.push(creds);
+      else if (creds.bot_token) tokens.push(creds.bot_token);
+      else if (Array.isArray(creds.tokens)) tokens.push(...creds.tokens);
+      else if (creds.token) tokens.push(creds.token);
+    }
 
     if (tokens.length === 0) return json({ success: false, error: "No Telegram tokens found." }, 200, req);
 

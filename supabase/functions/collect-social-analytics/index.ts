@@ -12,6 +12,18 @@ const PLATFORM_PRIORITY: Record<string, number> = {
 };
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
+const FETCH_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const corsHeaders = (req) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-authorization',
@@ -117,6 +129,16 @@ serve(async (req: Request) => {
         .slice(0, 3);
       
       console.log(`[COLLECT] Found ${pendingTasks?.length || 0} pending, processing ${tasksToProcess.length} (smart batched).`);
+
+      // Claim tasks atomically to prevent race conditions between concurrent CRON executions
+      if (tasksToProcess.length > 0) {
+        const taskIds = tasksToProcess.map(t => t.id);
+        await adminClient
+          .from("social_sync_tasks")
+          .update({ status: "processing", next_sync_at: new Date().toISOString() })
+          .in("id", taskIds)
+          .eq("status", "pending");
+      }
     }
 
     // --- TARGET USERS (Manual Sync) ---
@@ -242,7 +264,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL");
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        const refreshRes = await fetch(`${supabaseUrl}/functions/v1/refresh-social-token`, {
+        const refreshRes = await fetchWithTimeout(`${supabaseUrl}/functions/v1/refresh-social-token`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -293,18 +315,18 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 let botInfo: any = null;
                 if (botToken) {
                   try {
-                    const meRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+                    const meRes = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/getMe`);
                     if (meRes.ok) {
                       const meData = await meRes.json();
                       if (meData.ok) {
                         botInfo = meData.result;
                         // Try to get photo
-                        const photoRes = await fetch(`https://api.telegram.org/bot${botToken}/getUserProfilePhotos?user_id=${botInfo.id}&limit=1`);
+                        const photoRes = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/getUserProfilePhotos?user_id=${botInfo.id}&limit=1`);
                         if (photoRes.ok) {
                           const photoData = await photoRes.json();
                           if (photoData.ok && photoData.result.total_count > 0) {
                             const fileId = photoData.result.photos[0][0].file_id;
-                            const fileRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
+                            const fileRes = await fetchWithTimeout(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
                             if (fileRes.ok) {
                               const fileData = await fileRes.json();
                               if (fileData.ok) {
@@ -350,10 +372,15 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 const pageId = conn.page_id || conn.platform_user_id;
                 if (!pageId) break;
                 
-                // If targetDate is set, we try to fetch posts from that specific day
+                // Try full request with insights first; fall back to basic fields
                 let url = `https://graph.facebook.com/v21.0/${pageId}?fields=name,followers_count,fan_count,picture.type(large),cover,posts.limit(20).summary(true).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true),insights.metric(post_impressions,post_reach))&access_token=${conn.access_token}`;
                 
-                const resp = await fetch(url);
+                let resp = await fetchWithTimeout(url);
+                if (!resp.ok) {
+                  // Retry without insights (missing pages_read_engagement permission)
+                  url = `https://graph.facebook.com/v21.0/${pageId}?fields=name,followers_count,fan_count,picture.type(large),cover,posts.limit(20).summary(true).fields(id,message,created_time,shares,comments.summary(true),likes.summary(true))&access_token=${conn.access_token}`;
+                  resp = await fetchWithTimeout(url);
+                }
                 if (resp.ok) {
                   const data = await resp.json();
                   const fbPosts = data.posts?.data || [];
@@ -364,8 +391,9 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                     : fbPosts;
 
                   filteredPosts.forEach((p: any) => {
-                    const impressions = p.insights?.data?.find((i: any) => i.name === "post_impressions")?.values?.[0]?.value || 0;
-                    const reach = p.insights?.data?.find((i: any) => i.name === "post_reach")?.values?.[0]?.value || 0;
+                    const insightsArr = p.insights?.data;
+                    const impressions = insightsArr?.find((i: any) => i.name === "post_impressions")?.values?.[0]?.value || 0;
+                    const reach = insightsArr?.find((i: any) => i.name === "post_reach")?.values?.[0]?.value || 0;
                     
                     fetchedPosts.push({
                       external_id: p.id,
@@ -396,7 +424,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 if (!igUserId) break;
 
                 const fields = "followers_count,media_count,username,profile_picture_url,media.limit(20).fields(id,caption,media_type,media_url,timestamp,like_count,comments_count,insights.metric(impressions,reach))";
-                const resp = await fetch(`https://graph.facebook.com/v21.0/${igUserId}?fields=${fields}&access_token=${conn.access_token}`);
+                const resp = await fetchWithTimeout(`https://graph.facebook.com/v21.0/${igUserId}?fields=${fields}&access_token=${conn.access_token}`);
                 if (resp.ok) {
                   const data = await resp.json();
                   const media = data.media?.data || [];
@@ -445,7 +473,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 // Passo 1: Buscar Perfil Básico (Threads API v1.0 só retorna id, username, name)
                 try {
                   const profileUrl = `https://graph.threads.net/v1.0/${node}?fields=id,username,name&access_token=${conn.access_token}`;
-                  const profileResp = await fetch(profileUrl);
+                  const profileResp = await fetchWithTimeout(profileUrl);
 
                   if (profileResp.ok) {
                     const profileData = await profileResp.json();
@@ -464,7 +492,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 // Busca foto separadamente (threads_profile_picture_url funciona como campo único)
                 try {
                   const photoUrl = `https://graph.threads.net/v1.0/${node}?fields=threads_profile_picture_url&access_token=${conn.access_token}`;
-                  const photoResp = await fetch(photoUrl);
+                  const photoResp = await fetchWithTimeout(photoUrl);
                   if (photoResp.ok) {
                     const photoData = await photoResp.json();
                     if (photoData.threads_profile_picture_url) {
@@ -478,7 +506,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 // A resposta tem formato: { data: [{ name, total_value: { value } }] }
                 try {
                   const insightsUrl = `https://graph.threads.net/v1.0/${node}/threads_insights?metric=followers_count&access_token=${conn.access_token}`;
-                  const insightsResp = await fetch(insightsUrl);
+                  const insightsResp = await fetchWithTimeout(insightsUrl);
                   
                   if (insightsResp.ok) {
                     const insightsData = await insightsResp.json();
@@ -509,7 +537,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   const MAX_PAGES = 10; // limite reduzido para evitar consumo excessivo (250 posts)
 
                   while (nextUrl && pageCount < MAX_PAGES) {
-                    const pageResp = await fetch(nextUrl);
+                    const pageResp = await fetchWithTimeout(nextUrl);
                     if (!pageResp.ok) {
                       console.warn(`[COLLECT] Threads page ${pageCount + 1} error: ${pageResp.status} - ${await pageResp.text()}`);
                       break;
@@ -578,7 +606,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   : `https://api.twitter.com/2/users/by/username/${handle}?user.fields=public_metrics,profile_image_url,name,username`;
                 
                 console.log(`[COLLECT] Fetching Twitter data for ${handle} via ${userUrl}`);
-                const userRes = await fetch(userUrl, { headers: { Authorization: `Bearer ${twTokenToUse}` } });
+                const userRes = await fetchWithTimeout(userUrl, { headers: { Authorization: `Bearer ${twTokenToUse}` } });
                 if (userRes.ok) {
                   const userData = await userRes.json();
                   const u = userData.data || {};
@@ -599,7 +627,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
               case "youtube": {
                 if (!conn.access_token) break;
                 const channelId = conn.platform_user_id || conn.page_id;
-                const resp = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}`, { headers: { Authorization: `Bearer ${conn.access_token}` } });
+                const resp = await fetchWithTimeout(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=${channelId}`, { headers: { Authorization: `Bearer ${conn.access_token}` } });
                 if (resp.ok) {
                   const data = await resp.json();
                   const ch = data.items?.[0];
@@ -625,7 +653,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   };
                   break;
                 }
-                const resp = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username,follower_count,video_count,likes_count", {
+                const resp = await fetchWithTimeout("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username,follower_count,video_count,likes_count", {
                   headers: { Authorization: `Bearer ${conn.access_token}` }
                 });
                 if (resp.ok) {
@@ -673,7 +701,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
 
                 if (token && conn.platform_user_id) {
                   try {
-                    const metaResp = await fetch(`https://graph.facebook.com/v21.0/${conn.platform_user_id}/whatsapp_business_profile?fields=profile_picture_url`, {
+                    const metaResp = await fetchWithTimeout(`https://graph.facebook.com/v21.0/${conn.platform_user_id}/whatsapp_business_profile?fields=profile_picture_url`, {
                       headers: { "Authorization": `Bearer ${token}` }
                     });
                     if (metaResp.ok) {
@@ -711,7 +739,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 };
 
                 // 1) Perfil via OIDC — retorna sub (userId), name, picture
-                const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", { headers: liHeaders });
+                const profileRes = await fetchWithTimeout("https://api.linkedin.com/v2/userinfo", { headers: liHeaders });
                 if (!profileRes.ok) {
                   console.warn(`[COLLECT] LinkedIn userinfo failed: ${profileRes.status}`);
                   break;
@@ -728,7 +756,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
 
                 // 2) Foto em alta resolução via projection (v2 ainda suporta)
                 try {
-                  const picRes = await fetch(
+                  const picRes = await fetchWithTimeout(
                     "https://api.linkedin.com/v2/me?projection=(id,profilePicture(displayImage~:playableStreams))",
                     { headers: liHeaders }
                   );
@@ -744,7 +772,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 // 3) Tamanho da rede (1º grau)
                 let liFollowers = conn.followers_count || 0;
                 try {
-                  const netRes = await fetch(
+                  const netRes = await fetchWithTimeout(
                     `https://api.linkedin.com/v2/networkSizes/${encodeURIComponent(authorUrn)}?edgeType=CompanyFollowedByMember`,
                     { headers: liHeaders }
                   );
@@ -757,7 +785,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 // 4) Total de posts + engagement dos 5 mais recentes
                 let liPostsCount = conn.posts_count || 0;
                 try {
-                  const postsRes = await fetch(
+                  const postsRes = await fetchWithTimeout(
                     `https://api.linkedin.com/rest/posts?author=${encodeURIComponent(authorUrn)}&q=author&count=5&sortBy=LAST_MODIFIED`,
                     { headers: liHeaders }
                   );
@@ -768,7 +796,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                     for (const post of (postsData?.elements ?? []) as any[]) {
                       let postLikes = 0, postComments = 0;
                       try {
-                        const actRes = await fetch(
+                        const actRes = await fetchWithTimeout(
                           `https://api.linkedin.com/rest/socialActions/${encodeURIComponent(post.id)}`,
                           { headers: liHeaders }
                         );
@@ -813,7 +841,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                   "Content-Type": "application/json",
                 };
 
-                const pinRes  = await fetch("https://api.pinterest.com/v5/user_account", { headers: pinHeaders });
+                const pinRes  = await fetchWithTimeout("https://api.pinterest.com/v5/user_account", { headers: pinHeaders });
                 if (!pinRes.ok) {
                   console.warn(`[COLLECT] Pinterest user_account failed: ${pinRes.status}`);
                   break;
@@ -826,7 +854,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 const pinStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
                 let   pinImpressions = 0, pinClicks = 0, pinOutbound = 0, pinSaves = 0;
                 try {
-                  const analyticsRes = await fetch(
+                  const analyticsRes = await fetchWithTimeout(
                     `https://api.pinterest.com/v5/user_account/analytics?start_date=${pinStartDate}&end_date=${pinEndDate}&metric_types=IMPRESSION,PIN_CLICK,OUTBOUND_CLICK,SAVE`,
                     { headers: pinHeaders }
                   );
@@ -884,7 +912,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 };
 
                 // 1) Usuário autenticado
-                const snapMeRes  = await fetch("https://adsapi.snapchat.com/v1/me", { headers: snapHeaders });
+                const snapMeRes  = await fetchWithTimeout("https://adsapi.snapchat.com/v1/me", { headers: snapHeaders });
                 if (!snapMeRes.ok) {
                   console.warn(`[COLLECT] Snapchat /me failed: ${snapMeRes.status}`);
                   break;
@@ -901,7 +929,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                     const snapEndTime   = new Date().toISOString();
                     const snapStartTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-                    const snapStatsRes = await fetch(
+                    const snapStatsRes = await fetchWithTimeout(
                       `https://adsapi.snapchat.com/v1/adaccounts/${snapAcctId}/stats`,
                       {
                         method: "POST",
@@ -953,12 +981,12 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 let redditKarma = 0;
                 let redditPosts = conn.posts_count || 0;
                 try {
-                  const meRes = await fetch("https://oauth.reddit.com/api/v1/me", { headers: redditHeaders });
+                  const meRes = await fetchWithTimeout("https://oauth.reddit.com/api/v1/me", { headers: redditHeaders });
                   if (meRes.ok) {
                     const me = await meRes.json();
                     redditKarma = (me.link_karma || 0) + (me.comment_karma || 0);
                   }
-                  const subRes = await fetch(`https://oauth.reddit.com/user/${conn.username}/submitted?limit=10`, { headers: redditHeaders });
+                  const subRes = await fetchWithTimeout(`https://oauth.reddit.com/user/${conn.username}/submitted?limit=10`, { headers: redditHeaders });
                   if (subRes.ok) {
                     const subData = await subRes.json();
                     redditPosts = subData.data?.dist || redditPosts;
@@ -987,12 +1015,12 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 let spotifyFollowers = conn.followers_count || 0;
                 let spotifyPlaylists = conn.posts_count || 0;
                 try {
-                  const meRes = await fetch("https://api.spotify.com/v1/me", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  const meRes = await fetchWithTimeout("https://api.spotify.com/v1/me", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
                   if (meRes.ok) {
                     const me = await meRes.json();
                     spotifyFollowers = me.followers?.total || spotifyFollowers;
                   }
-                  const plRes = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  const plRes = await fetchWithTimeout("https://api.spotify.com/v1/me/playlists?limit=50", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
                   if (plRes.ok) {
                     const plData = await plRes.json();
                     spotifyPlaylists = plData.total || spotifyPlaylists;
@@ -1022,13 +1050,13 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 let truthFollowers = conn.followers_count || 0;
                 let truthPosts = conn.posts_count || 0;
                 try {
-                  const meRes = await fetch("https://truthsocial.com/api/v1/accounts/verify_credentials", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  const meRes = await fetchWithTimeout("https://truthsocial.com/api/v1/accounts/verify_credentials", { headers: { "Authorization": `Bearer ${conn.access_token}` } });
                   if (meRes.ok) {
                     const me = await meRes.json();
                     truthFollowers = me.followers_count || truthFollowers;
                     truthPosts = me.statuses_count || truthPosts;
                   }
-                  const timelineRes = await fetch(`https://truthsocial.com/api/v1/accounts/${conn.platform_user_id}/statuses?limit=10`, { headers: { "Authorization": `Bearer ${conn.access_token}` } });
+                  const timelineRes = await fetchWithTimeout(`https://truthsocial.com/api/v1/accounts/${conn.platform_user_id}/statuses?limit=10`, { headers: { "Authorization": `Bearer ${conn.access_token}` } });
                   if (timelineRes.ok) {
                     const posts = await timelineRes.json();
                     fetchedPosts = posts.map((p: any) => ({
@@ -1056,7 +1084,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 let gettrFollowers = conn.followers_count || 0;
                 let gettrPosts = conn.posts_count || 0;
                 try {
-                  const res = await fetch(`https://api.gettr.com/u/user/${gettrUsername}/public`, { headers: { "x-app-auth": conn.access_token } });
+                  const res = await fetchWithTimeout(`https://api.gettr.com/u/user/${gettrUsername}/public`, { headers: { "x-app-auth": conn.access_token } });
                   if (res.ok) {
                     const data = await res.json();
                     const uinf = data.result?.aux?.uinf?.[gettrUsername];
@@ -1079,8 +1107,8 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 const rumbleUsername = conn.username || conn.page_name || "";
                 let rumbleVideos = conn.posts_count || 0;
                 try {
-                  const rssRes = await fetch(`https://rumble.com/c/${rumbleUsername}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
-                  const rssRes2 = rssRes.ok ? rssRes : await fetch(`https://rumble.com/user/${rumbleUsername}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+                  const rssRes = await fetchWithTimeout(`https://rumble.com/c/${rumbleUsername}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+                  const rssRes2 = rssRes.ok ? rssRes : await fetchWithTimeout(`https://rumble.com/user/${rumbleUsername}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
                   if (rssRes2.ok) {
                     const rssText = await rssRes2.text();
                     const items = rssText.match(/<item>/g) || [];
@@ -1105,8 +1133,10 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
               }
               case "giphy": {
                 let giphyCount = conn.posts_count || 0;
+                const giphyCreds = await getCredentials(adminClient, uid, "giphy");
+                const giphyApiKey = giphyCreds?.api_key || conn.access_token;
                 try {
-                  const res = await fetch(`https://api.giphy.com/v1/gifs/search?api_key=${conn.access_token}&q=*&limit=1`);
+                  const res = await fetchWithTimeout(`https://api.giphy.com/v1/gifs/search?api_key=${giphyApiKey}&q=*&limit=1`);
                   if (res.ok) {
                     const data = await res.json();
                     giphyCount = data.pagination?.total_count || giphyCount;
@@ -1127,7 +1157,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                 try {
                   const feedUrls = [`https://${domain}/feed`, `https://${domain}/rss`, `https://${domain}/rss.xml`, `https://${domain}/feed.xml`];
                   for (const feedUrl of feedUrls) {
-                    const rssRes = await fetch(feedUrl, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+                    const rssRes = await fetchWithTimeout(feedUrl, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
                     if (rssRes.ok) {
                       const rssText = await rssRes.text();
                       const items = rssText.match(/<item>|<entry>/gi) || [];
@@ -1207,39 +1237,39 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
               };
 
                const { data: account, error: upsertErr } = await adminClient.from("social_accounts").upsert(upsertPayload, { onConflict: "user_id,platform,platform_user_id" }).select("id").maybeSingle();
-              if (upsertErr) console.error(`[COLLECT] Account upsert fail:`, upsertErr.message);
+              if (upsertErr) {
+                console.error(`[COLLECT] Account upsert fail:`, upsertErr.message);
+                return { platform: conn.platform, status: "persist_failed" };
+              }
 
               // SYNC social_connections with new metrics
-              try {
-                await adminClient.from("social_connections").update({
-                  followers_count: upsertPayload.followers_count,
-                  posts_count: upsertPayload.posts_count,
-                  profile_image_url: upsertPayload.profile_picture,
-                  profile_picture: upsertPayload.profile_picture,
-                  ...((!conn.platform_user_id || conn.platform_user_id === "") ? { platform_user_id: upsertPayload.platform_user_id } : {}),
-                  updated_at: new Date().toISOString()
-                }).eq("id", conn.id);
-              } catch (connSyncErr: any) {
-                console.warn(`[COLLECT] social_connections sync failed:`, connSyncErr.message);
+              const { error: connSyncErr } = await adminClient.from("social_connections").update({
+                followers_count: upsertPayload.followers_count,
+                posts_count: upsertPayload.posts_count,
+                profile_image_url: upsertPayload.profile_picture,
+                profile_picture: upsertPayload.profile_picture,
+                ...((!conn.platform_user_id || conn.platform_user_id === "") ? { platform_user_id: upsertPayload.platform_user_id } : {}),
+                updated_at: new Date().toISOString()
+              }).eq("id", conn.id);
+              if (connSyncErr) {
+                console.error(`[COLLECT] social_connections sync failed:`, connSyncErr.message);
               }
 
               // Record point-in-time snapshot in account_metrics (used by growth/follower charts)
-              try {
-                await adminClient.from("account_metrics").insert({
-                  user_id: uid,
-                  social_account_id: account?.id || null,
-                  platform: conn.platform,
-                  followers: upsertPayload.followers_count,
-                  views: upsertPayload.views,
-                  likes: upsertPayload.likes,
-                  shares: upsertPayload.shares,
-                  comments: upsertPayload.comments,
-                  engagement_rate: upsertPayload.engagement_rate,
-                  collected_at: new Date().toISOString()
-                });
-                console.log(`[COLLECT] account_metrics snapshot recorded for ${conn.platform}`);
-              } catch (histErr: any) {
-                console.warn(`[COLLECT] account_metrics snapshot failed:`, histErr.message);
+              const { error: histErr } = await adminClient.from("account_metrics").insert({
+                user_id: uid,
+                social_account_id: account?.id || null,
+                platform: conn.platform,
+                followers: upsertPayload.followers_count,
+                views: upsertPayload.views,
+                likes: upsertPayload.likes,
+                shares: upsertPayload.shares,
+                comments: upsertPayload.comments,
+                engagement_rate: upsertPayload.engagement_rate,
+                collected_at: new Date().toISOString()
+              });
+              if (histErr) {
+                console.error(`[COLLECT] account_metrics snapshot failed:`, histErr.message);
               }
 
               if (account && fetchedPosts.length > 0) {
@@ -1254,7 +1284,7 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                     collected_at: new Date().toISOString()
                   }));
                   const { error: postMetricsErr } = await adminClient.from("post_metrics").upsert(postPayload, { onConflict: "user_id,platform,external_id" });
-                  if (postMetricsErr) console.warn(`[COLLECT] Post metrics fail:`, postMetricsErr.message);
+                  if (postMetricsErr) console.error(`[COLLECT] Post metrics fail:`, postMetricsErr.message);
                 }
               }
               return { platform: conn.platform, status: "ok" };

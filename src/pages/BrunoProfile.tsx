@@ -8,7 +8,7 @@ import {
   Phone, User, Send, AlertCircle
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { useSystem } from "@/contexts/SystemContext";
 import { useToast } from "@/hooks/use-toast";
 import { Reorder, motion, AnimatePresence } from "framer-motion";

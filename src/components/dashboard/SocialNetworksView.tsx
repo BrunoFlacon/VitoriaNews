@@ -11,7 +11,7 @@ import { cn, getProxyUrl } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { safeInvoke } from "@/utils/supabase-utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 // Only show social platforms (not dev tools like google, meta_ads, newsapi)
 const SOCIAL_PLATFORM_IDS = socialPlatforms

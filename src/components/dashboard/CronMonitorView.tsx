@@ -65,7 +65,7 @@ export const CronMonitorView = () => {
         return { jobs: [] as CronJob[], runs: [] as CronRun[] };
       }
     },
-    staleTime: Infinity,
+    staleTime: 1000 * 30, // 30s até marcar como stale
     refetchInterval: false, // ZERO background polling
     refetchOnWindowFocus: false, // Save resources when user is away
     refetchOnReconnect: false,
@@ -102,9 +102,12 @@ export const CronMonitorView = () => {
           .from("social_sync_tasks")
           .select("*, social_connections(platform, username, page_name)")
           .order("next_sync_at", { ascending: true });
-        // Silently return empty if table doesn't exist yet (404) or any other error
         if (error) {
-          console.info("[SyncTasks] Table not available yet:", error.message);
+          if (error.message?.includes('404') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+            console.info("[SyncTasks] Table not available yet:", error.message);
+          } else {
+            console.warn("[SyncTasks] Error fetching tasks:", error.message);
+          }
           return [] as SyncTask[];
         }
         return (data || []) as SyncTask[];

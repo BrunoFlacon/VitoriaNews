@@ -78,18 +78,12 @@ serve(async (req: Request) => {
     const { data: allCreds, error: credsError } = await supabase
       .from("api_credentials")
       .select("user_id, credentials")
-      .eq("platform", "telegram");
+      .eq("platform", "telegram")
+      .or(`credentials->>bot_token.eq.${botToken},credentials->>token.eq.${botToken},credentials->tokens.cs.{${botToken}}`);
 
     if (credsError) console.error("[TG-WEBHOOK] Creds Fetch Error:", credsError);
 
-    const creds = allCreds?.find((c: any) => {
-      const cred = c.credentials || {};
-      const tokens = Array.isArray(cred.tokens) ? cred.tokens : [];
-      return cred.bot_token === botToken ||
-        cred.token === botToken ||
-        cred.accessToken === botToken ||
-        tokens.includes(botToken);
-    });
+    const creds = allCreds?.[0];
 
     if (!creds) {
       console.warn(`[TG-WEBHOOK] No user found for bot token.`);

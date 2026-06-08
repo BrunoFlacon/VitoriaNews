@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "social-canvas-hub": {
+      "command": "npx",
+      "args": ["tsx", "scripts/mcp-social-canvas.ts"],
+      "env": {
+        "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_SERVICE_ROLE_KEY}",
+        "MCP_USER_ID": "${MCP_USER_ID}",
+        "VITE_SUPABASE_URL": "https://ghtkdkauseesambzqfrd.supabase.co"
+      }
+    }
+  }
+}

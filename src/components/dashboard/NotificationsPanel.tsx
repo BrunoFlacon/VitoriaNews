@@ -10,7 +10,8 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNotifications, Notification } from "@/contexts/NotificationContext";
+import { Notification } from "@/contexts/NotificationContext";
+import { useNotifications } from "@/hooks/useNotifications";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 

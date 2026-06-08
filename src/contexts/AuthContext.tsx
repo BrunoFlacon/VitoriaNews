@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 
@@ -31,7 +31,7 @@ export interface Profile {
   updated_at: string;
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
@@ -47,15 +47,7 @@ interface AuthContextType {
   onlineUsersMap: Record<string, any>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -73,7 +65,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
       if (!cached) return null;
       const { data, timestamp } = JSON.parse(cached);
-      const isExpired = Date.now() - timestamp > 30 * 60 * 1000; // 30 minutes TTL
+      const isExpired = Date.now() - timestamp > 60 * 60 * 1000; // 60 minutes TTL
       if (isExpired) {
         sessionStorage.removeItem(AUTH_CACHE_KEY);
         return null;
@@ -147,9 +139,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     };
 
-    // Executa a checagem imediatamente e depois a cada 15 segundos
+    // Executa a checagem imediatamente e depois a cada 60 segundos
     checkSessionExpiry();
-    const interval = setInterval(checkSessionExpiry, 15000);
+    const interval = setInterval(checkSessionExpiry, 60000);
 
     return () => clearInterval(interval);
   }, [session]);

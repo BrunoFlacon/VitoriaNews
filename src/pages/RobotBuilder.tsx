@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";

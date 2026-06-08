@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { useNotifications } from '@/contexts/NotificationContext';
+import { useNotifications } from '@/hooks/useNotifications';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export interface ScheduledPost {

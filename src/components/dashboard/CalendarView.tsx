@@ -34,10 +34,10 @@ import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
-import { useNotifications } from "@/contexts/NotificationContext";
+import { useNotifications } from "@/hooks/useNotifications";
 import { usePublisher } from "@/hooks/usePublisher";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useSocialStats } from "@/hooks/useSocialStats";
 

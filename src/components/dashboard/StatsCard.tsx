@@ -8,6 +8,7 @@ interface StatsCardProps {
   icon: LucideIcon;
   trend?: number;
   trendLabel?: string;
+  trendType?: 'growth' | 'ratio';
   color?: "primary" | "accent" | "success" | "warning";
   delay?: number;
 }
@@ -32,10 +33,10 @@ export const StatsCard = memo(({
   icon: Icon,
   trend,
   trendLabel,
+  trendType = 'growth',
   color = "primary",
   delay = 0,
 }: StatsCardProps) => {
-  // Handle neutral trend (0 or undefined) - no arrow, neutral color
   const isPositive = trend !== undefined && trend > 0;
   const isNegative = trend !== undefined && trend < 0;
   const showTrend = trend !== undefined;
@@ -52,7 +53,7 @@ export const StatsCard = memo(({
         <div>
           <p className="text-muted-foreground text-[10px] md:text-xs font-medium">{title}</p>
           <p className="text-lg md:text-2xl font-display font-bold mt-1">{value}</p>
-          {showTrend && (
+          {showTrend && trendType === 'growth' && (
             <div className="flex items-center gap-1 mt-1 md:mt-2">
               {isPositive ? (
                 <TrendingUp className="w-3 h-3 md:w-4 md:h-4 text-green-500" />
@@ -63,7 +64,19 @@ export const StatsCard = memo(({
                 "text-[10px] md:text-sm font-medium",
                 isPositive ? "text-green-500" : isNegative ? "text-red-500" : "text-muted-foreground"
               )}>
-                {isPositive ? "+" : isNegative ? "" : ""}{trend}%
+                {isPositive ? "+" : ""}{trend}%
+              </span>
+              {trendLabel && (
+                <span className="text-[10px] md:text-xs text-muted-foreground ml-1 truncate">
+                  {trendLabel}
+                </span>
+              )}
+            </div>
+          )}
+          {showTrend && trendType === 'ratio' && (
+            <div className="flex items-center gap-1 mt-1 md:mt-2">
+              <span className="text-[10px] md:text-sm font-medium text-muted-foreground">
+                {trend}
               </span>
               {trendLabel && (
                 <span className="text-[10px] md:text-xs text-muted-foreground ml-1 truncate">

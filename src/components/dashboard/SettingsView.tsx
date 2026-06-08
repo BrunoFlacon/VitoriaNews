@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialStats } from "@/hooks/useSocialStats";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
@@ -108,9 +108,10 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   useEffect(() => {
     if (defaultTab === 'profile_photo') {
       setActiveSettingsTab('profile');
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         fileInputRef.current?.click();
       }, 300);
+      return () => clearTimeout(timer);
     } else if (defaultTab) {
       setActiveSettingsTab(defaultTab);
     }
@@ -246,6 +247,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   };
 
   const hasSyncedRef = useRef(false);
+  const prevConnectionsLen = useRef(0);
 
   const handleSync = async (platformId?: string) => {
     if (!user?.id) return;
@@ -269,7 +271,10 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   };
 
   useEffect(() => {
-    if (!user?.id || connections.length === 0 || hasSyncedRef.current) return;
+    if (!user?.id || connections.length === 0) return;
+
+    if (connections.length === prevConnectionsLen.current && hasSyncedRef.current) return;
+    prevConnectionsLen.current = connections.length;
 
     const lastSync = localStorage.getItem(`last_auto_sync_${user.id}`);
     const now = Date.now();
@@ -1635,8 +1640,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
                                               </div>
                                               {pixelId && (
                                                 <div className="flex flex-col items-end gap-0.5">
-                                                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Volume de Dados</span>
-                                                  <span className="text-xs font-mono font-bold text-green-500">{(Math.floor(Math.random() * 5000 + 1200)).toLocaleString()} Hits</span>
+                                                  <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Status</span>
+                                                  <span className="text-xs font-mono text-green-500">Conectado</span>
                                                 </div>
                                               )}
                                             </div>

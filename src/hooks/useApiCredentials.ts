@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
 export interface PlatformCredentials {
@@ -137,7 +137,7 @@ export function useApiCredentials() {
       });
       setCredentials(map);
     } catch {
-      // Silent - credentials just won't load
+      toast({ title: "Erro ao carregar credenciais", description: "Não foi possível buscar as credenciais de API", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -200,31 +200,38 @@ export function useApiCredentials() {
       setCredentials(prev => ({ ...prev, [platform]: finalCreds }));
       toast({ title: "Credenciais salvas", description: `${platform} atualizado com sucesso.` });
 
-      // Auto-upsert social_connection for WhatsApp Business Uso Próprio
+      // Auto-upsert social_connection for WhatsApp Business Uso Próprio (only if no OAuth connection exists)
       if (platform === "whatsapp") {
         if (finalCreds.phone_number_id && (finalCreds.access_token || finalCreds.waba_id)) {
-          const wabaId = finalCreds.waba_id || finalCreds.phone_number_id;
-          const phoneName = finalCreds.phone_number || "WhatsApp Oficial";
-          await supabase.from("social_connections").upsert({
-            user_id: user.id,
-            platform: "whatsapp",
-            platform_user_id: finalCreds.phone_number_id,
-            page_id: wabaId,
-            username: phoneName,
-            page_name: phoneName,
-            access_token: finalCreds.access_token || null,
-            is_connected: true,
-            updated_at: new Date().toISOString()
-          }, { onConflict: "user_id,platform,platform_user_id" });
+          const { data: existing } = await supabase
+            .from("social_connections")
+            .select("id, metadata")
+            .eq("user_id", user.id)
+            .eq("platform", "whatsapp")
+            .eq("platform_user_id", finalCreds.phone_number_id)
+            .maybeSingle();
+          const isOAuth = existing?.metadata && typeof existing.metadata === 'object' && !('manual' in (existing.metadata as Record<string, unknown>));
+          if (!existing || isOAuth) {
+            const wabaId = finalCreds.waba_id || finalCreds.phone_number_id;
+            const phoneName = finalCreds.phone_number || "WhatsApp Oficial";
+            await supabase.from("social_connections").upsert({
+              user_id: user.id,
+              platform: "whatsapp",
+              platform_user_id: finalCreds.phone_number_id,
+              page_id: wabaId,
+              username: phoneName,
+              page_name: phoneName,
+              access_token: finalCreds.access_token || null,
+              is_connected: true,
+              updated_at: new Date().toISOString()
+            }, { onConflict: "user_id,platform,platform_user_id" });
+          }
         }
       }
 
       // Auto-sync Telegram after saving token
       if (platform === "telegram") {
         try {
-          // Small delay to ensure DB consistency
-          await new Promise(resolve => setTimeout(resolve, 1200));
-          
           const { data: sessionData } = await supabase.auth.getSession();
           const token = sessionData?.session?.access_token;
           

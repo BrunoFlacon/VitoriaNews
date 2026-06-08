@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
 import { Shield, Lock, Terminal, History, ChevronRight, Code, Eye, EyeOff, ArrowLeft, Heart } from "lucide-react";
 import { MatrixBackground } from "@/components/MatrixBackground";

@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { safeInvoke } from "@/utils/supabase-utils";
 import { useToast } from "@/hooks/use-toast";
-import { useNotifications } from "@/contexts/NotificationContext";
+import { useNotifications } from "@/hooks/useNotifications";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,

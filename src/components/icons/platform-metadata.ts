@@ -88,7 +88,7 @@ export const socialPlatforms = [
     color: "bg-[#25D366]",
     textColor: "text-[#25D366]",
     gradient: "from-[#25D366] to-[#128C7E]",
-    type: "social"
+    type: "messaging"
   },
   {
     id: "telegram",
@@ -98,7 +98,7 @@ export const socialPlatforms = [
     textColor: "text-[#24A1DE]",
     gradient: "from-[#2AABEE] to-[#229ED9]",
     shadow: "shadow-[#24A1DE]/40",
-    type: "social"
+    type: "messaging"
   },
   {
     id: "pinterest",

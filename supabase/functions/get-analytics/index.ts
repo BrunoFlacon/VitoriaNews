@@ -330,10 +330,10 @@ serve(async (req: Request) => {
       }
 
       const label = isHourly
-        ? bucketEnd.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-        : isYearly 
-          ? bucketEnd.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" })
-          : bucketEnd.toLocaleDateString("pt-BR", { day: "numeric", month: "short" });
+        ? bucketEnd.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+        : isYearly
+          ? bucketEnd.toLocaleDateString(undefined, { month: "short", year: "2-digit" })
+          : bucketEnd.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 
       const bucketPosts = filteredMetrics.filter(m => {
         const d = m.published_at ? new Date(m.published_at) : new Date(m.collected_at);

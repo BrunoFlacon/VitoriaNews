@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useTrends, TrendItem } from "@/hooks/useTrends";
 import type { Article } from "@/lib/social-sdk/types";
@@ -35,6 +35,8 @@ export const NewsPortal = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activePlatform, setActivePlatform] = useState("googlenews");
   const { trends, syncTrends, isSyncing } = useTrends();
+  const PAGE_SIZE = 10;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const fetchArticles = async () => {
     if (!user) {
@@ -187,7 +189,7 @@ export const NewsPortal = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {articles.map((article, i) => (
+              {articles.slice(0, visibleCount).map((article, i) => (
                 <motion.div
                   key={article.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -223,6 +225,13 @@ export const NewsPortal = () => {
                   </div>
                 </motion.div>
               ))}
+            </div>
+          )}
+          {visibleCount < articles.length && (
+            <div className="text-center mt-4">
+              <Button variant="outline" size="sm" onClick={() => setVisibleCount(c => c + PAGE_SIZE)}>
+                Carregar mais
+              </Button>
             </div>
           )}
         </TabsContent>

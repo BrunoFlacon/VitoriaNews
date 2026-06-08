@@ -63,7 +63,7 @@ serve(async (req) => {
       // Format number (remove non-digits, ensure standard format)
       const cleanPhone = record.phone.replace(/\D/g, '')
       
-      const res = await fetch(`https://graph.facebook.com/v18.0/${settings.whatsapp_meta_phone_number_id}/messages`, {
+      const res = await fetch(`https://graph.facebook.com/v21.0/${settings.whatsapp_meta_phone_number_id}/messages`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${settings.whatsapp_meta_api_token}`,

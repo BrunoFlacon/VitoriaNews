@@ -189,57 +189,32 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
   
   if (uniqueTrends.length > 0) {
     try {
-      // Fetch existing keywords to avoid duplicates manually if constraint is missing
-      const { data: existing } = await supabaseClient
+      const rows = uniqueTrends.map(trend => ({
+        user_id: targetUserId,
+        keyword: trend.keyword,
+        source: trend.source,
+        sub_source: trend.sub_source || null,
+        category: trend.category,
+        score: trend.score || 0,
+        url: trend.url || null,
+        thumbnail_url: trend.thumbnail_url || null,
+        description: trend.description || null,
+        metadata: trend.metadata || {},
+        detected_at: new Date().toISOString(),
+      }));
+
+      const { error: upsertErr } = await supabaseClient
         .from('trends')
-        .select('keyword')
-        .in('keyword', uniqueTrends.map(t => t.keyword));
-      
-      const existingKeywords = new Set((existing || []).map((e: any) => e.keyword));
-      
-      const trendsToInsert = uniqueTrends
-        .filter(t => !existingKeywords.has(t.keyword))
-        .map(trend => ({
-          user_id: targetUserId,
-          keyword: trend.keyword,
-          source: trend.source,
-          sub_source: trend.sub_source || null,
-          category: trend.category,
-          score: trend.score || 0,
-          url: trend.url || null,
-          thumbnail_url: trend.thumbnail_url || null,
-          description: trend.description || null,
-          metadata: trend.metadata || {},
-          detected_at: new Date().toISOString(),
-        }));
+        .upsert(rows, { onConflict: 'keyword', ignoreDuplicates: false });
 
-      const trendsToUpdate = uniqueTrends
-        .filter(t => existingKeywords.has(t.keyword))
-        .map(trend => ({
-          keyword: trend.keyword,
-          score: trend.score || 0,
-          url: trend.url || null,
-          thumbnail_url: trend.thumbnail_url || null,
-          description: trend.description || null,
-          metadata: trend.metadata || {},
-          detected_at: new Date().toISOString(),
-        }));
-
-      if (trendsToInsert.length > 0) {
-        const { error: insErr } = await supabaseClient.from('trends').insert(trendsToInsert);
-        if (insErr) console.error('[discoverTrends] Insert error:', insErr.message);
+      if (upsertErr) {
+        console.error('[discoverTrends] Upsert error:', upsertErr.message);
+      } else {
+        trendsCount = uniqueTrends.length;
       }
-
-      // Update existing ones individually (batch update by keyword is hard in Supabase without ID)
-      for (const t of trendsToUpdate) {
-        await supabaseClient.from('trends').update(t).eq('keyword', t.keyword);
-      }
-
-      trendsCount = uniqueTrends.length;
     } catch (e: any) {
-      console.error('[discoverTrends] Manual Upsert error:', e.message);
+      console.error('[discoverTrends] Upsert error:', e.message);
     }
-
   }
 
   console.log(`[discoverTrends] Concluído. Processados: ${trendsCount}/${uniqueTrends.length}`);

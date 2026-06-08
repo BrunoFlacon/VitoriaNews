@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { SocialPlatformId, getSocialPlatform } from "@/components/icons/platform-metadata";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useApiCredentials } from "@/hooks/useApiCredentials";
 import { Slider } from "@/components/ui/slider";
@@ -176,10 +176,25 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
            toast({ title: "Token Meta Faltando", description: "Configure o Access Token da Meta em Configurações > API Sociais", variant: "destructive" });
            return;
         }
-        const resp = await fetch(`https://graph.facebook.com/v18.0/ig_hashtag_search?user_id=${user?.id}&q=${query}`, {
+        const { data: igConnection } = await supabase
+          .from("social_connections")
+          .select("platform_user_id")
+          .eq("user_id", user?.id)
+          .eq("platform", "instagram")
+          .maybeSingle();
+        const igUserId = igConnection?.platform_user_id || credentials?.meta_ads?.instagram_business_id;
+        if (!igUserId) {
+          toast({ title: "Conta Instagram não encontrada", description: "Conecte uma conta Instagram primeiro", variant: "destructive" });
+          return;
+        }
+        const resp = await fetch(`https://graph.facebook.com/v21.0/${igUserId}/hashtag_search?q=${query}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         const json = await resp.json();
+        if (json.error) {
+          toast({ title: "Erro na busca de hashtags", description: json.error.message, variant: "destructive" });
+          return;
+        }
         setSearchResults((json.data || []).map((h: any) => ({ ...h, type: 'hashtag' })));
       } else if (type === "music") {
         const clientId = credentials?.spotify?.client_id;
@@ -188,9 +203,33 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
           toast({ title: "Chaves de Música Faltando", description: "Configure as bibliotecas de músicas da Meta, Google ou Spotify em Configurações > API Sociais", variant: "destructive" });
           return;
         }
-        // Note: Real Spotify search requires a token. In a real app this would call an edge function.
-        // For now we use the configured keys to show where it would happen.
-        toast({ title: "Spotify API", description: "Integrando busca oficial via Client Credentials..." });
+        const tokenResp = await fetch("https://accounts.spotify.com/api/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `grant_type=client_credentials&client_id=${clientId}&client_secret=${clientSecret}`
+        });
+        const tokenJson = await tokenResp.json();
+        if (!tokenJson.access_token) {
+          toast({ title: "Erro Spotify", description: "Token de acesso não obtido — verifique as credenciais", variant: "destructive" });
+          return;
+        }
+        const searchResp = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=10`, {
+          headers: { "Authorization": `Bearer ${tokenJson.access_token}` }
+        });
+        const searchJson = await searchResp.json();
+        if (searchJson.error) {
+          toast({ title: "Erro na busca de música", description: searchJson.error.message, variant: "destructive" });
+          return;
+        }
+        setSearchResults((searchJson.tracks?.items || []).map((t: any) => ({
+          id: t.id,
+          type: "music",
+          label: `${t.name} — ${t.artists?.map((a: any) => a.name).join(", ")}`,
+          url: t.preview_url || t.external_urls?.spotify,
+          duration: t.duration_ms / 1000,
+          artist: t.artists?.map((a: any) => a.name).join(", "),
+          album: t.album?.name
+        })));
       } else if (type === "location") {
         const apiKey = credentials?.google_cloud?.api_key;
         if (!apiKey) {
@@ -207,7 +246,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
         })));
       }
     } catch (e) {
-      // Search error handled silently
+      toast({ title: "Erro na busca", description: e instanceof Error ? e.message : "Ocorreu um erro inesperado", variant: "destructive" });
     } finally {
       setIsSearching(false);
     }

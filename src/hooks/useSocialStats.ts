@@ -1,6 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 export interface SocialAccountStat {
@@ -39,6 +39,14 @@ export interface AudienceBreakdown {
   totalMembers: number;
   totalOnline: number;
   channels: MessagingChannelStat[];
+}
+
+export interface AudienceDemographicEntry {
+  ageGroups: { range: string; value: number }[];
+  gender: { label: string; value: number; pct: number }[];
+  devices: { label: string; value: number; pct: number }[];
+  topCities: { name: string; value: number }[];
+  topCountries: { name: string; value: number; pct: number }[];
 }
 
 export interface MessageDeliveryStats {
@@ -88,7 +96,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         catch (e) { return { data: null, error: e }; }
       };
 
-      const [statsResult, credsResult, channelsResult, messagesResult, scheduledResult] = await Promise.all([
+      const [statsResult, credsResult, channelsResult, messagesResult, scheduledResult, demographicsResult] = await Promise.all([
         run(supabase
           .from('social_accounts')
           .select('id, platform, platform_user_id, username, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, engagement_rate, updated_at, chat_id, metadata')
@@ -113,6 +121,12 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           .select('platforms, status')
           .eq('user_id', user.id)
           .limit(500)),
+        run(supabase
+          .from('audience_demographics')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('collected_at', { ascending: false })
+          .limit(1)),
       ]);
 
       const statsRes = statsResult;
@@ -120,6 +134,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       const channelsRes = channelsResult;
       const messagesRes = messagesResult;
       const scheduledRes = scheduledResult;
+      const demographicsRes = demographicsResult;
 
       let botActiveStatus: boolean | null = null;
       try {
@@ -194,7 +209,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       const seenPlatformIds = new Set<string>();
       (statsRes.data || []).forEach((acc: any) => {
         const platformKey = acc.platform;
-        const puid = acc.platform_user_id || acc.username || acc.id;
+        const puid = acc.platform_user_id || acc.username || `__no_puid__${platformKey}`;
         const dedupKey = `${platformKey}-${puid}`;
         if (seenPlatformIds.has(dedupKey)) {
           return;
@@ -215,7 +230,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           platform_user_id: acc.platform_user_id,
           username: acc.username,
           profile_picture: acc.profile_picture,
-          followers_count: Math.max(rawFollowers, channelMembersFromMeta),
+          followers_count: rawFollowers > 0 ? rawFollowers : channelMembersFromMeta,
           posts_count: effectivePosts,
           views_count: Number(acc.views ?? 0),
           likes_count: Number(acc.likes ?? 0),
@@ -233,9 +248,35 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         });
       });
 
+      // Secondary dedup: merge accounts on same platform with identical username
+      // (e.g. Instagram linked via both IG Business API and Facebook Pages API)
+      const mergedByUsername: any[] = [];
+      const userKeyMap = new Map<string, number>();
+      dedupedAccounts.forEach(acc => {
+        if (!acc.username) { mergedByUsername.push(acc); return; }
+        const ukey = `${acc.platform}-${acc.username}`;
+        const existingIdx = userKeyMap.get(ukey);
+        if (existingIdx !== undefined) {
+          const existing = mergedByUsername[existingIdx];
+          existing.followers_count = Math.max(existing.followers_count, acc.followers_count);
+          existing.posts_count = Math.max(existing.posts_count, acc.posts_count);
+          existing.views_count = Math.max(existing.views_count, acc.views_count);
+          existing.likes_count = Math.max(existing.likes_count, acc.likes_count);
+          existing.comments_count = Math.max(existing.comments_count, acc.comments_count);
+          existing.shares_count = Math.max(existing.shares_count, acc.shares_count);
+          existing.engagement_rate = Math.max(existing.engagement_rate, acc.engagement_rate);
+          if (!existing.profile_picture && acc.profile_picture) existing.profile_picture = acc.profile_picture;
+          if (!existing.platform_user_id && acc.platform_user_id) existing.platform_user_id = acc.platform_user_id;
+          existing.metadata = { ...existing.metadata, ...acc.metadata };
+        } else {
+          userKeyMap.set(ukey, mergedByUsername.length);
+          mergedByUsername.push({ ...acc });
+        }
+      });
+
       // Build profile_picture fallback map from social accounts
       const socialAccountPics: Record<string, string> = {};
-      dedupedAccounts.forEach(acc => {
+      mergedByUsername.forEach(acc => {
         if (acc.profile_picture && !socialAccountPics[acc.platform]) {
           socialAccountPics[acc.platform] = acc.profile_picture;
         }
@@ -254,7 +295,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
 
       // TELEGRAM DEDUP: Only filter out channels/groups (negative chat_id or @username).
       // The bot has a numeric positive chat_id and should be kept.
-      const filteredNormalized = dedupedAccounts.filter(acc => {
+      const filteredNormalized = mergedByUsername.filter(acc => {
         if (acc.platform === 'telegram' && acc.chat_id &&
           (String(acc.chat_id).startsWith('@') || Number(acc.chat_id) < 0)) return false;
         return true;
@@ -298,6 +339,15 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       const maxUpdatedAt = finalStats.reduce((latest: string | null, s) => {
         return s.updated_at && (!latest || s.updated_at > latest) ? s.updated_at : latest;
       }, null);
+
+      const latestDemo = (demographicsRes.data || [])[0] || null;
+      const demographics: AudienceDemographicEntry | null = latestDemo ? {
+        ageGroups: latestDemo.age_groups || [],
+        gender: latestDemo.gender || [],
+        devices: latestDemo.devices || [],
+        topCities: latestDemo.top_cities || [],
+        topCountries: latestDemo.top_countries || [],
+      } : null;
 
       const result = {
         stats: finalStats,
@@ -343,7 +393,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           draft: draftCount,
           scheduled: scheduledCount,
           failed: failedCount,
-        }
+        },
+        demographics,
       };
 
       try { localStorage.setItem(CACHE_KEY, JSON.stringify({ data: result, timestamp: Date.now() })); } catch {}
@@ -419,9 +470,20 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     return () => clearInterval(interval);
   }, [user, queryClient, options.enabled, realtimeError]);
 
+  const MESSAGING_PLATFORMS = new Set(['whatsapp', 'telegram']);
+
   const stats = data?.stats || [];
   const messagingChannels = data?.messagingChannels || [];
   const apiConnections = data?.apiConnections || [];
+
+  const socialStats = useMemo(() =>
+    stats.filter(s => !MESSAGING_PLATFORMS.has(s.platform)),
+    [stats]
+  );
+  const messagingStats = useMemo(() =>
+    stats.filter(s => MESSAGING_PLATFORMS.has(s.platform)),
+    [stats]
+  );
 
   const byPlatform: SocialStatsByPlatform = useMemo(() => stats.reduce((acc, s) => {
     if (!acc[s.platform]) acc[s.platform] = [];
@@ -430,6 +492,12 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
   }, {} as SocialStatsByPlatform), [stats]);
 
   const totalFollowers = useMemo(() => stats.reduce((sum, s) => sum + s.followers_count, 0), [stats]);
+  const totalSocialFollowers = useMemo(() => socialStats.reduce((sum, s) => sum + s.followers_count, 0), [socialStats]);
+  const totalMessagingMembers = useMemo(() => {
+    const fromStats = messagingStats.reduce((sum, s) => sum + (s.followers_count || 0), 0);
+    const fromChannels = messagingChannels.reduce((sum, c) => sum + c.members_count, 0);
+    return fromStats || fromChannels;
+  }, [messagingStats, messagingChannels]);
   const totalPosts = useMemo(() => stats.reduce((sum, s) => sum + s.posts_count, 0), [stats]);
 
   const getPlatformStats = (platform: string): SocialAccountStat | null => {
@@ -437,13 +505,14 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     if (!accounts || accounts.length === 0) return null;
     const channels = messagingChannels.filter(c => c.platform === platform);
     const totalMembers = channels.reduce((sum, ch) => sum + ch.members_count, 0);
+    const isMessaging = MESSAGING_PLATFORMS.has(platform);
 
     return {
       id: accounts[0].id,
       platform,
       username: accounts[0].username,
       profile_picture: accounts[0].profile_picture,
-      followers_count: accounts.reduce((sum, a) => sum + a.followers_count, 0) || totalMembers,
+      followers_count: isMessaging ? totalMembers : accounts.reduce((sum, a) => sum + a.followers_count, 0) || totalMembers,
       posts_count: accounts.reduce((sum, a) => sum + a.posts_count, 0),
       views_count: accounts.reduce((sum, a) => sum + a.views_count, 0),
       likes_count: accounts.reduce((sum, a) => sum + a.likes_count, 0),
@@ -489,6 +558,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
 
   return {
     stats,
+    socialStats,
+    messagingStats,
     byPlatform,
     messagingChannels,
     audienceBreakdown,
@@ -497,6 +568,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     messageStats: data?.messageStats || { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] },
     lastUpdated: data?.lastUpdated || null,
     totalFollowers,
+    totalSocialFollowers,
+    totalMessagingMembers,
     totalPosts,
     connectedPlatforms,
     getPlatformStats,
@@ -504,6 +577,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     refresh: refetch,
     messageDeliveryStats: data?.messageDeliveryStats || { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] },
     postStatusCounts: data?.postStatusCounts || { published: 0, draft: 0, scheduled: 0, failed: 0 },
+    demographics: data?.demographics || null,
   };
 }
 

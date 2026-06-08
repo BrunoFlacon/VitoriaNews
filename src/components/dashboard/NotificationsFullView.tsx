@@ -2,7 +2,8 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Bell, CheckCheck, Trash2, AlertCircle, CheckCircle, Info, AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useNotifications, Notification } from "@/contexts/NotificationContext";
+import { Notification } from "@/contexts/NotificationContext";
+import { useNotifications } from "@/hooks/useNotifications";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 

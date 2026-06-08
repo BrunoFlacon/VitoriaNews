@@ -1,8 +1,8 @@
 import { memo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Search, ChevronDown, User, Shield, Camera, Key, Settings, LogOut, X } from "lucide-react";
-import { useNotifications } from "@/contexts/NotificationContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useAuth } from "@/hooks/useAuth";
 import { useSystem } from "@/contexts/SystemContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { cn, getProxyUrl } from "@/lib/utils";

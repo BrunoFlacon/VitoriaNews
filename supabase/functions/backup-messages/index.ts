@@ -33,8 +33,8 @@ async function encryptMessageData(text: string, keyString: string): Promise<{ en
   const encryptedArray = Array.from(new Uint8Array(encryptedBuffer));
   const ivArray = Array.from(iv);
   
-  const encryptedBase64 = btoa(String.fromCharCode.apply(null, encryptedArray));
-  const ivBase64 = btoa(String.fromCharCode.apply(null, ivArray));
+  const encryptedBase64 = btoa(Array.from(encryptedArray, (b) => String.fromCharCode(b)).join(""));
+  const ivBase64 = btoa(Array.from(ivArray, (b) => String.fromCharCode(b)).join(""));
   
   return { encryptedBase64, ivBase64 };
 }
@@ -44,7 +44,14 @@ serve(async (req: Request) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const backupSecretKey = Deno.env.get("MESSAGE_BACKUP_KEY") || "vitoria-net-secret-backup-key-2026-secure-vault";
+  const backupSecretKey = Deno.env.get("MESSAGE_BACKUP_KEY");
+  if (!backupSecretKey) {
+    console.error("[BACKUP] MESSAGE_BACKUP_KEY env var not set");
+    return new Response(JSON.stringify({ error: "Server configuration error: backup key not set" }), {
+      status: 500,
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+    });
+  }
 
   try {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);

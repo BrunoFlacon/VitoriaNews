@@ -13,12 +13,49 @@ interface AnalyticsChartProps {
   data?: any[];
   periodDays?: number;
   onPeriodChange?: (p: string) => void;
+  loading?: boolean;
 }
 
-export const AnalyticsChart = ({ data: chartData = [], periodDays, onPeriodChange }: AnalyticsChartProps) => {
+const ChartSkeleton = () => (
+  <div className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col animate-pulse">
+    <div className="mb-3">
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="h-6 w-32 bg-muted/50 rounded" />
+          <div className="h-4 w-48 bg-muted/30 rounded" />
+        </div>
+      </div>
+      <div className="flex items-center gap-4 mt-4">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-muted/50" />
+          <div className="h-3 w-20 bg-muted/30 rounded" />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-muted/50" />
+          <div className="h-3 w-20 bg-muted/30 rounded" />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-muted/50" />
+          <div className="h-3 w-20 bg-muted/30 rounded" />
+        </div>
+      </div>
+    </div>
+    <div className="flex-1 w-full flex items-end gap-2 px-2 pb-2">
+      {Array.from({ length: 20 }).map((_, i) => (
+        <div key={i} className="flex-1 bg-muted/20 rounded-t" style={{ height: `${30 + Math.random() * 70}%` }} />
+      ))}
+    </div>
+  </div>
+);
+
+export const AnalyticsChart = ({ data: chartData = [], periodDays, onPeriodChange, loading }: AnalyticsChartProps) => {
+  if (loading) {
+    return <ChartSkeleton />;
+  }
+
   if (chartData.length === 0) {
     return (
-      <div className="glass-card rounded-2xl border border-border p-6 h-[420px] flex flex-col justify-center items-center">
+      <div className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col justify-center items-center">
         <Eye className="w-12 h-12 text-muted-foreground/30 mb-4" />
         <p className="text-muted-foreground font-medium">Nenhum dado disponível para o gráfico</p>
         <p className="text-xs text-muted-foreground/50 mt-1">Conecte suas redes para visualizar métricas</p>
@@ -31,7 +68,7 @@ export const AnalyticsChart = ({ data: chartData = [], periodDays, onPeriodChang
       className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col animate-fade-in"
       style={{ animationDelay: '100ms', animationFillMode: 'backwards' }}
     >
-      <div className="mb-4 md:mb-6">
+      <div className="mb-3">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="font-display font-bold text-lg md:text-xl text-white">Visão Geral</h2>
@@ -72,7 +109,7 @@ export const AnalyticsChart = ({ data: chartData = [], periodDays, onPeriodChang
         </div>
       </div>
 
-      <div className="h-[300px] w-full">
+      <div className="flex-1 w-full min-h-[200px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>

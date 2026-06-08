@@ -898,7 +898,7 @@ serve(async (req: Request) => {
         }, { onConflict: "user_id,platform,platform_user_id" });
       }
 
-      return new Response(JSON.stringify({ success: true, pageName }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: true, pageName }), { headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
     }
 
     if (!code || !incomingState || !platform) return oauthError(platform || "unknown", "callback", "code, state, and platform are required", req);

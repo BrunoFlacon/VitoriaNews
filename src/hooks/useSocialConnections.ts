@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { safeInvoke } from '@/utils/supabase-utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -591,12 +591,13 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       let coopBlocked = false;
       const pollInterval = setInterval(async () => {
-        if (coopBlocked) return;
+        if (coopBlocked) { clearInterval(pollInterval); return; }
         let isClosed = false;
         try {
           isClosed = popup ? popup.closed : true;
         } catch {
           coopBlocked = true;
+          clearInterval(pollInterval);
           return;
         }
         if (isClosed) { clearInterval(pollInterval); await finalize(); }

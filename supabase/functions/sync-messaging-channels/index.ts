@@ -129,7 +129,7 @@ serve(async (req: Request) => {
           profile_picture: profilePicture,
           members_count: membersCount,
           cover_photo: (channel as any).cover_photo || null,
-          online_count: Math.floor(membersCount * (0.05 + Math.random() * 0.1)),
+          online_count: null,
         } as any).eq("id", channel.id);
         results.push({ id: channel.id, success: true });
       } else {

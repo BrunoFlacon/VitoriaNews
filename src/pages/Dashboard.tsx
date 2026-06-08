@@ -3,7 +3,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWebPushNotifications } from "@/hooks/useWebPushNotifications";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -66,17 +66,16 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const [isMobilePlatformMenuOpen, setIsMobilePlatformMenuOpen] = useState(false);
-  const [dashboardPeriod, setDashboardPeriod] = useState<string>('7d');
   // TAB INTELLIGENCE: Only fetch data for active tabs
   const isDashboardTab = activeTab === 'dashboard';
   const isAnalyticsTab = activeTab === 'analytics' || isDashboardTab;
   const isCalendarTab = activeTab === 'calendar' || activeTab === 'create' || isDashboardTab;
   
-  const { stats: localStats, loading: statsLoading } = useSocialStats({ enabled: isDashboardTab });
+  const { stats: localStats, socialStats: localSocialStats, messagingStats: localMessagingStats, messagingChannels, audienceBreakdown, totalSocialFollowers, totalMessagingMembers, loading: statsLoading } = useSocialStats({ enabled: isDashboardTab });
   const { data: analyticsData, loading: analyticsLoading, isSyncing: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform, period: analyticsPeriod, setPeriod: setAnalyticsPeriod } = useAnalytics({ enabled: isAnalyticsTab });
 
   // Query account_metrics for real time-series chart data when Edge Function has none
-  const { data: accountMetricsData } = useQuery({
+  const { data: accountMetricsData, isLoading: metricsLoading } = useQuery({
     queryKey: ['account_metrics', user?.id, 'v3'],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -189,94 +188,163 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   }, [connections]);
 
   const localTotalPosts = useMemo(() => 
-    localStats?.reduce((acc, curr) => acc + curr.posts_count, 0) || 0,
-    [localStats]
+    localSocialStats?.reduce((acc, curr) => acc + curr.posts_count, 0) || 0,
+    [localSocialStats]
   );
 
   const localEngagement = useMemo(() => 
-    localStats?.reduce((acc, curr) => acc + curr.likes_count + curr.comments_count + curr.shares_count, 0) || 0,
-    [localStats]
+    localSocialStats?.reduce((acc, curr) => acc + curr.likes_count + curr.comments_count + curr.shares_count, 0) || 0,
+    [localSocialStats]
   );
 
   const localFollowers = useMemo(() => 
-    localStats?.reduce((acc, curr) => acc + (curr.followers_count || 0), 0) || 0,
-    [localStats]
+    localSocialStats?.reduce((acc, curr) => acc + (curr.followers_count || 0), 0) || 0,
+    [localSocialStats]
   );
 
-  const dashboardChartData = useMemo(() => {
-    // Priority 1: Use Edge Function per-period chart data when available
-    const rawChartData = analyticsData?.chartData || [];
-    if (rawChartData.length > 0) return rawChartData;
+  const localMessagingMembersCount = useMemo(() =>
+    localMessagingStats?.reduce((acc, curr) => acc + (curr.followers_count || 0), 0) || totalMessagingMembers || 0,
+    [localMessagingStats, totalMessagingMembers]
+  );
 
-    // Priority 2: Build time-series chart from account_metrics with day-over-day deltas
+  // Per-metric growth: compare recent half vs older half of account_metrics
+  const metricGrowth = useMemo(() => {
     const metrics = (accountMetricsData ?? []) as any[];
-    if (metrics.length === 0) return [];
+    if (metrics.length < 3) return null;
+    const sorted = [...metrics].sort((a, b) =>
+      new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime()
+    );
+    const mid = Math.floor(sorted.length / 2);
+    const older = sorted.slice(0, mid);
+    const newer = sorted.slice(mid);
+
+    const calcGrowth = (key: string): string | undefined => {
+      const avg = (arr: any[], k: string) => {
+        if (k === 'engagement') {
+          return arr.reduce((s: number, r: any) => s + Number(r.likes || 0) + Number(r.comments || 0) + Number(r.shares || 0), 0) / arr.length;
+        }
+        return arr.reduce((s: number, r: any) => s + Number(r[k] || 0), 0) / arr.length;
+      };
+      const oldVal = avg(older, key);
+      const newVal = avg(newer, key);
+      if (oldVal === 0) return undefined;
+      const pct = ((newVal - oldVal) / oldVal) * 100;
+      if (Math.abs(pct) < 1) return "0";
+      return pct.toFixed(1);
+    };
+
+    return {
+      views: calcGrowth('views'),
+      engagement: calcGrowth('engagement'),
+      followers: calcGrowth('followers'),
+    };
+  }, [accountMetricsData]);
+
+  // Pre-process raw metrics into daily snapshots per account (recomputes only when metrics change)
+  const accountDailySnapshots = useMemo(() => {
+    const metrics = (accountMetricsData ?? []) as any[];
+    if (metrics.length === 0) return null;
 
     const filtered = platformState !== 'all'
       ? metrics.filter((m: any) => normalizePlatform(m.platform) === platformState)
       : metrics;
 
-    // Group by (platform, platform_user_id, date) and take last snapshot per day per account
-    const grouped: Record<string, any> = {};
-    filtered.forEach((m: any) => {
+    if (filtered.length === 0) return null;
+
+    // Single-pass: group by (account + date), keep latest snapshot per day per account
+    const grouped = new Map<string, any>();
+    for (let i = 0; i < filtered.length; i++) {
+      const m = filtered[i];
       const d = new Date(m.collected_at);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const y = d.getFullYear();
+      const mo = d.getMonth() + 1;
+      const dd = d.getDate();
+      const dateKey = `${y}-${mo < 10 ? '0' + mo : mo}-${dd < 10 ? '0' + dd : dd}`;
       const accountKey = `${m.platform}-${m.platform_user_id || m.id}`;
       const dedupKey = `${accountKey}-${dateKey}`;
-      if (!grouped[dedupKey] || new Date(m.collected_at) > new Date(grouped[dedupKey].collected_at)) {
-        grouped[dedupKey] = { ...m, _dateKey: dateKey, _accountKey: accountKey };
+      const existing = grouped.get(dedupKey);
+      if (!existing || new Date(m.collected_at) > new Date(existing.collected_at)) {
+        grouped.set(dedupKey, {
+          views: Number(m.views || 0),
+          likes: Number(m.likes || 0),
+          comments: Number(m.comments || 0),
+          shares: Number(m.shares || 0),
+          engagement: Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0),
+          reach: Math.round(Number(m.views || 0) * 0.35),
+          dateKey,
+          accountKey,
+          collected_at: m.collected_at,
+        });
       }
-    });
+    }
 
-    // For each account, sort by date and compute day-over-day deltas
-    type SnapRow = { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number; _dateKey: string; collected_at: string };
-    const accountGroups: Record<string, SnapRow[]> = {};
-    Object.values(grouped).forEach((m: any) => {
-      if (!accountGroups[m._accountKey]) accountGroups[m._accountKey] = [];
-      accountGroups[m._accountKey].push({
-        views: Number(m.views || 0),
-        likes: Number(m.likes || 0),
-        comments: Number(m.comments || 0),
-        shares: Number(m.shares || 0),
-        engagement: Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0),
-        reach: Math.round(Number(m.views || 0) * 0.35),
-        _dateKey: m._dateKey,
-        collected_at: m.collected_at,
-      });
-    });
+    // Group snapshots by account, sorted by time
+    const accountGroups = new Map<string, any[]>();
+    for (const snap of grouped.values()) {
+      const key = snap.accountKey;
+      if (!accountGroups.has(key)) accountGroups.set(key, []);
+      accountGroups.get(key)!.push(snap);
+    }
+    for (const snaps of accountGroups.values()) {
+      snaps.sort((a: any, b: any) => new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime());
+    }
 
-    // Compute per-day deltas by summing deltas across accounts
-    const dateDeltas: Record<string, { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number }> = {};
-    Object.values(accountGroups).forEach((snaps) => {
-      snaps.sort((a, b) => new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime());
-      snaps.forEach((snap, idx) => {
-        const prev = idx > 0 ? snaps[idx - 1] : null;
-        if (!dateDeltas[snap._dateKey]) dateDeltas[snap._dateKey] = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0 };
-        dateDeltas[snap._dateKey].views += snap.views - (prev?.views || 0);
-        dateDeltas[snap._dateKey].likes += snap.likes - (prev?.likes || 0);
-        dateDeltas[snap._dateKey].comments += snap.comments - (prev?.comments || 0);
-        dateDeltas[snap._dateKey].shares += snap.shares - (prev?.shares || 0);
-        dateDeltas[snap._dateKey].engagement += snap.engagement - (prev?.engagement || 0);
-        dateDeltas[snap._dateKey].reach += snap.reach - (prev?.reach || 0);
-      });
-    });
+    return accountGroups;
+  }, [accountMetricsData, platformState]);
+
+  // Build final chart array from pre-computed snapshots for the selected period
+  const dashboardChartData = useMemo(() => {
+    // Priority 1: Edge Function chart data
+    const rawChartData = analyticsData?.chartData || [];
+    if (rawChartData.length > 0) return rawChartData;
+
+    // Priority 2: Build from account_metrics snapshots
+    if (!accountDailySnapshots) return [];
 
     const periodDays = analyticsPeriod === '15d' ? 15 : analyticsPeriod === '30d' ? 30 : analyticsPeriod === '45d' ? 45 : analyticsPeriod === '60d' ? 60 : analyticsPeriod === '90d' ? 90 : 7;
+
+    // Compute day-over-day deltas across all accounts for the period
+    const dateDeltas = new Map<string, { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number }>();
+    for (const snaps of accountDailySnapshots.values()) {
+      for (let idx = 0; idx < snaps.length; idx++) {
+        const snap = snaps[idx];
+        const prev = idx > 0 ? snaps[idx - 1] : null;
+        let entry = dateDeltas.get(snap.dateKey);
+        if (!entry) {
+          entry = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0 };
+          dateDeltas.set(snap.dateKey, entry);
+        }
+        entry.views += snap.views - (prev?.views || 0);
+        entry.likes += snap.likes - (prev?.likes || 0);
+        entry.comments += snap.comments - (prev?.comments || 0);
+        entry.shares += snap.shares - (prev?.shares || 0);
+        entry.engagement += snap.engagement - (prev?.engagement || 0);
+        entry.reach += snap.reach - (prev?.reach || 0);
+      }
+    }
+
     const months = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
-    const result: any[] = [];
-    for (let i = periodDays; i >= 0; i--) {
-      const dt = new Date(); dt.setDate(dt.getDate() - i);
-      const isoKey = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-      const delta = dateDeltas[isoKey];
-      result.push({
-        name: `${parseInt(String(dt.getDate()))} de ${months[dt.getMonth()]}`,
+    const result: any[] = new Array(periodDays + 1);
+    const now = new Date();
+    let idx = 0;
+    for (let i = periodDays; i >= 0; i--, idx++) {
+      const dt = new Date(now); dt.setDate(dt.getDate() - i);
+      const y = dt.getFullYear();
+      const mo = dt.getMonth();
+      const dd = dt.getDate();
+      const isoKey = `${y}-${mo + 1 < 10 ? '0' + (mo + 1) : mo + 1}-${dd < 10 ? '0' + dd : dd}`;
+      const delta = dateDeltas.get(isoKey);
+      result[idx] = {
+        name: `${dd} de ${months[mo]}`,
         views: delta?.views ?? 0,
         engagement: delta?.engagement ?? 0,
         reach: delta?.reach ?? 0,
-      });
+      };
     }
     return result;
-  }, [analyticsData, accountMetricsData, platformState, dashboardPeriod]);
+  }, [analyticsData, accountDailySnapshots, analyticsPeriod]);
+
+  const chartLoading = analyticsLoading && !dashboardChartData.length && !accountMetricsData?.length;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -299,13 +367,15 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
                localTotalPosts={localTotalPosts}
                localEngagement={localEngagement}
                localFollowers={localFollowers}
-                dashboardChartData={dashboardChartData}
-                dashboardPeriod={analyticsPeriod}
-                setDashboardPeriod={setAnalyticsPeriod}
+                 dashboardChartData={dashboardChartData}
+                 chartLoading={chartLoading}
+                 dashboardPeriod={analyticsPeriod}
+                 setDashboardPeriod={setAnalyticsPeriod}
                isConnected={isConnected}
                setActiveTab={handleTabChange}
                setEditingPost={setEditingPost}
-           /></ErrorBoundary>
+                metricGrowth={metricGrowth}
+            /></ErrorBoundary>
           </div>
         );
       case "create":

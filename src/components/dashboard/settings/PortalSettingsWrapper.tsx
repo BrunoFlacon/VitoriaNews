@@ -7,7 +7,7 @@ import { BillingTab } from "./BillingTab";
 import { motion } from "framer-motion";
 import { Palette, Layout, Footprints, DollarSign } from "lucide-react";
 import { useSystem } from "@/contexts/SystemContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 
 const BILLING_ROLES = ["dev_master", "admin_master", "admin", "dev", "contador"];
 

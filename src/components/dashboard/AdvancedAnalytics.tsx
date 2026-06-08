@@ -73,7 +73,10 @@ import {
   Sparkles,
   Award,
   Users2,
-  FileDown
+  FileDown,
+  FileSpreadsheet,
+  FileText,
+  UsersRound,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,7 +95,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import {
@@ -102,9 +105,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TrendsView } from "./TrendsView";
+import { PlatformDetailTab } from "./analytics/platform-detail/PlatformDetailTab";
 import { DateRangePicker } from "./DateRangePicker";
 import { useSocialStats } from "@/hooks/useSocialStats";
 import { usePlatformMetrics, FormatRecommendation } from "@/hooks/usePlatformMetrics";
+import { exportToCSV, exportToCSVOnly, type ExportData } from "@/utils/exportAnalytics";
 import { VideoRetentionChart } from "./VideoRetentionChart";
 import { useQuery } from "@tanstack/react-query";
 import { SafeImage } from "@/components/ui/SafeImage";
@@ -137,6 +142,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
+  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 
 
@@ -232,11 +238,10 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     syncAnalytics, refetch 
   } = useAnalytics();
   const { user, logout } = useAuth();
-  const { stats, byPlatform, totalFollowers: localTotalFollowers, totalPosts: localTotalPosts, messagingChannels, audienceBreakdown, lastUpdated, loading: statsLoading, refresh: refreshStats, messageDeliveryStats: hookMessageStats, postStatusCounts } = useSocialStats();
+  const { stats, byPlatform, totalFollowers: localTotalFollowers, totalPosts: localTotalPosts, messagingChannels, audienceBreakdown, lastUpdated, loading: statsLoading, refresh: refreshStats, messageDeliveryStats: hookMessageStats, postStatusCounts, demographics: dbDemographics } = useSocialStats();
   const [platformMetricsReady, setPlatformMetricsReady] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setPlatformMetricsReady(true), 500);
-    return () => clearTimeout(t);
+    setPlatformMetricsReady(true);
   }, []);
   const deferredPlatform = useDeferredValue(platform);
   const { retention, topContent: pmTopContent, bestTimes: pmBestTimes, formatRecs, isLoading: pmLoading } = usePlatformMetrics(
@@ -247,7 +252,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
 
-  const [activeView, setActiveView] = useState<'analytics' | 'trends'>('analytics');
+  const [activeView, setActiveView] = useState<'analytics' | 'trends' | 'platform-detail'>('analytics');
   const [isExporting, setIsExporting] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
   const audienceScrollRef = useRef<HTMLDivElement>(null);
@@ -790,11 +795,38 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         return (((newFollowers - oldFollowers) / oldFollowers) * 100).toFixed(2);
       })();
 
+      // Per-metric growth: compare recent half vs older half of account_metrics
+      const computeMetricGrowth = (metric: string): string | undefined => {
+        if (!accountMetrics || (accountMetrics as any[]).length < 3) return undefined;
+        const sorted = [...(accountMetrics as any[])].sort((a, b) =>
+          new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime()
+        );
+        const mid = Math.floor(sorted.length / 2);
+        const older = sorted.slice(0, mid);
+        const newer = sorted.slice(mid);
+        const avg = (arr: any[], key: string) => {
+          if (key === 'engagement') {
+            return arr.reduce((s, r) => s + Number(r.likes || 0) + Number(r.comments || 0) + Number(r.shares || 0), 0) / arr.length;
+          }
+          return arr.reduce((s, r) => s + Number(r[key] || 0), 0) / arr.length;
+        };
+        const oldVal = avg(older, metric);
+        const newVal = avg(newer, metric);
+        if (oldVal === 0) return undefined;
+        const pct = ((newVal - oldVal) / oldVal) * 100;
+        if (Math.abs(pct) < 1) return "0";
+        return pct.toFixed(1);
+      };
+
       const engagement = {
         views: totalViews, likes: totalLikes, comments: totalComments,
         shares: totalShares, reach: Math.round(totalViews * 0.35),
         engagementRate: totalViews > 0 ? ((totalEng / totalViews) * 100).toFixed(2) : "0",
         growth: computedGrowth ?? "0",
+        growthViews: computeMetricGrowth('views'),
+        growthEngagement: computeMetricGrowth('engagement'),
+        growthReach: accountMetrics && (accountMetrics as any[]).length >= 3 ? computeMetricGrowth('views') : undefined,
+        growthShares: computeMetricGrowth('shares'),
       };
 
       return {
@@ -1111,6 +1143,62 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     };
   }, [data, stats, accountMetrics, messagingChannels, period, deferredPlatform, hookMessageStats, pmTopContent, pmBestTimes]);
 
+  const buildExportData = useCallback((): ExportData => ({
+    overview,
+    engagement,
+    chartData,
+    platformBreakdown,
+    topContent,
+    bestTimes,
+    adsStats,
+    youtubeStats,
+    gaStats,
+    messageStats,
+    followerData,
+    period,
+    platform,
+  }), [overview, engagement, chartData, platformBreakdown, topContent, bestTimes, adsStats, youtubeStats, gaStats, messageStats, followerData, period, platform]);
+
+  const handleExportCSV = useCallback(() => {
+    try {
+      const exportData = buildExportData();
+      const periodLabel = PERIOD_OPTIONS.find(p => p.value === period)?.label || period;
+      const filename = `SocialHub_${platform}_${periodLabel}_${new Date().toISOString().slice(0, 10)}`;
+      exportToCSVOnly(exportData, filename);
+      toast({
+        title: "Sucesso!",
+        description: "Relatório CSV exportado com sucesso.",
+      });
+    } catch (err) {
+      console.error("CSV Export failed:", err);
+      toast({
+        title: "Erro na exportação",
+        description: "Houve um problema ao gerar o CSV.",
+        variant: "destructive",
+      });
+    }
+  }, [buildExportData, period, platform, toast]);
+
+  const handleExportExcel = useCallback(() => {
+    try {
+      const exportData = buildExportData();
+      const periodLabel = PERIOD_OPTIONS.find(p => p.value === period)?.label || period;
+      const filename = `SocialHub_${platform}_${periodLabel}_${new Date().toISOString().slice(0, 10)}`;
+      exportToCSV(exportData, filename);
+      toast({
+        title: "Sucesso!",
+        description: "Relatório Excel exportado com sucesso.",
+      });
+    } catch (err) {
+      console.error("Excel Export failed:", err);
+      toast({
+        title: "Erro na exportação",
+        description: "Houve um problema ao gerar o Excel.",
+        variant: "destructive",
+      });
+    }
+  }, [buildExportData, period, platform, toast]);
+
   // Aggregating Follower Data to prevent duplicates
   const groupedFollowers = useMemo(() => {
     // 1. First deduplicate the raw followerData by platform_user_id
@@ -1335,6 +1423,9 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   }, [chartData, messageStats.successRate]);
 
   const demographicData = useMemo(() => {
+    if (deferredPlatform === 'all' && dbDemographics) {
+      return dbDemographics;
+    }
     const filteredStats = deferredPlatform === 'all'
       ? stats
       : stats.filter(s => normalizePlatform(s.platform) === deferredPlatform);
@@ -1398,7 +1489,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         { name: 'Outros', value: Math.round(total * 0.06), pct: 6 },
       ],
     };
-  }, [deferredPlatform, stats]);
+  }, [deferredPlatform, stats, dbDemographics]);
 
   return (
     <div className="space-y-8 pb-12 w-full animate-fade-in">
@@ -1463,6 +1554,15 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
               )}
             >
               <TrendingUp className="w-4 h-4" /> Trends & Viral
+            </button>
+            <button 
+              onClick={() => setActiveView('platform-detail')}
+              className={cn(
+                "px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2", 
+                activeView === 'platform-detail' ? "bg-background shadow-sm text-primary border border-border/50" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Activity className="w-4 h-4" /> Detalhamento por Plataforma
             </button>
           </div>
         </div>
@@ -1548,24 +1648,49 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button 
-            variant="default" 
-            size="sm" 
-            onClick={handleExportPDF}
-            disabled={isExporting}
-            className="h-9 gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-md transition-all shrink-0 ml-auto"
-          >
-            {isExporting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <FileDown className="w-4 h-4" />
-            )}
-            <span className="text-xs font-bold hidden sm:inline">Exportar Relatório</span>
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="default" 
+                size="sm" 
+                disabled={isExporting}
+                className="h-9 gap-2 rounded-xl bg-primary hover:bg-primary/90 shadow-md transition-all shrink-0 ml-auto"
+              >
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4" />
+                )}
+                <span className="text-xs font-bold hidden sm:inline">Exportar</span>
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[180px] p-1">
+              <DropdownMenuItem onClick={handleExportPDF} className="text-xs gap-2">
+                <FileDown className="w-4 h-4 text-primary" />
+                PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportCSV} className="text-xs gap-2">
+                <FileText className="w-4 h-4 text-green-500" />
+                CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportExcel} className="text-xs gap-2">
+                <FileSpreadsheet className="w-4 h-4 text-emerald-500" />
+                Excel (.xlsx)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
 
-      {activeView === 'trends' ? (
+      {activeView === 'platform-detail' ? (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <PlatformDetailTab
+            dateRange={dateRange}
+            onBack={() => setActiveView('analytics')}
+          />
+        </div>
+      ) : activeView === 'trends' ? (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           <TrendsView onProduce={(trend, mode) => {
             if (onNavigate) {
@@ -1604,10 +1729,10 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           {/* TOP WIDGETS */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" style={{ contain: "layout style" }}>
         {[
-          { label: "Total de Visualizações", value: engagement.views, icon: Eye, color: "text-blue-500", bg: "bg-blue-500/10" },
-          { label: "Engajamento Total", value: (engagement.likes || 0) + (engagement.comments || 0) + (engagement.shares || 0), icon: Heart, color: "text-purple-500", bg: "bg-purple-500/10" },
-          { label: "Alcance Estimado", value: engagement.reach, icon: Users, color: "text-green-500", bg: "bg-green-500/10" },
-          { label: "Compartilhamentos", value: engagement.shares, icon: Share2, color: "text-orange-500", bg: "bg-orange-500/10" },
+          { label: "Total de Visualizações", value: engagement.views, growth: engagement.growthViews, icon: Eye, color: "text-blue-500", bg: "bg-blue-500/10" },
+          { label: "Engajamento Total", value: (engagement.likes || 0) + (engagement.comments || 0) + (engagement.shares || 0), growth: engagement.growthEngagement, icon: Heart, color: "text-purple-500", bg: "bg-purple-500/10" },
+          { label: "Alcance Estimado", value: engagement.reach, growth: engagement.growthReach, icon: Users, color: "text-green-500", bg: "bg-green-500/10" },
+          { label: "Compartilhamentos", value: engagement.shares, growth: engagement.growthShares, icon: Share2, color: "text-orange-500", bg: "bg-orange-500/10" },
         ].map((stat, i) => (
           <div
             key={stat.label}
@@ -1618,7 +1743,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             <div className={`p-3 rounded-xl ${stat.bg}`}>
               <stat.icon className={`w-5 h-5 ${stat.color}`} />
             </div>
-            {renderTrend(engagement.growth)}
+            {renderTrend(stat.growth)}
           </div>
           <div>
             <h3 className="text-3xl font-bold font-display tracking-tight text-card-foreground">
@@ -2138,14 +2263,14 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                    {(() => {
                      const rtStats = platform === 'all' ? hookMessageStats : { platformStats: { [platform]: hookMessageStats.platformStats?.[platform] } };
                      const platformData = rtStats?.platformStats || {};
-                     const totalMsgs = Object.values(platformData).reduce((sum: any, p: any) => sum + (p?.sent || 0) + (p?.received || 0), 0);
+                     const totalMsgs = Object.values(platformData).reduce((sum: any, p: any) => sum + (p?.sent || 0) + (p?.received || 0), 0) as number;
                      return totalMsgs > 0 ? '~30m' : 'N/A';
                    })()}
                  </p>
                  <Badge variant="outline" className="text-[10px] bg-indigo-500/10 text-indigo-600">
                    {(() => {
                      const platformData = hookMessageStats?.platformStats || {};
-                     const totalMsgs = Object.values(platformData).reduce((sum: any, p: any) => sum + (p?.sent || 0) + (p?.received || 0), 0);
+                     const totalMsgs = Object.values(platformData).reduce((sum: any, p: any) => sum + (p?.sent || 0) + (p?.received || 0), 0) as number;
                      return totalMsgs > 0 ? `${totalMsgs} msgs` : 'N/A';
                    })()}
                  </Badge>
@@ -2710,6 +2835,22 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           <MessageCircle className="w-5 h-5 text-blue-500" />
           Relatórios de Entrega de Mensagens
         </h3>
+
+        {audienceBreakdown && audienceBreakdown.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+            {audienceBreakdown.map((group) => (
+              <div key={group.type} className="bg-muted/30 rounded-xl p-3 border border-border/50">
+                <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground mb-1">
+                  <UsersRound className="w-3 h-3" />
+                  {group.label}
+                </div>
+                <p className="text-lg font-bold">{group.count}</p>
+                <p className="text-[10px] text-muted-foreground">{group.totalMembers.toLocaleString()} membros{group.totalOnline > 0 && ` · ${group.totalOnline} online`}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="space-y-6">
             <div className="p-6 rounded-2xl bg-muted/20 border border-border/50 flex items-center justify-between">

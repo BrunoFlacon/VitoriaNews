@@ -7,7 +7,7 @@ import {
   Settings, 
   Activity, 
   RefreshCw, 
-  Check 
+  Check
 } from "lucide-react";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { cn, normalizePlatform } from "@/lib/utils";
@@ -45,11 +45,13 @@ interface DashboardHomeViewProps {
   localEngagement: number;
   localFollowers: number;
   dashboardChartData: any[];
+  chartLoading?: boolean;
   dashboardPeriod: string;
   setDashboardPeriod: (p: string) => void;
   isConnected: (p: string) => boolean;
   setActiveTab: (t: string) => void;
   setEditingPost: (p: ScheduledPost) => void;
+  metricGrowth: { views?: string; engagement?: string; followers?: string } | null;
 }
 
 export const DashboardHomeView = memo(({
@@ -69,11 +71,13 @@ export const DashboardHomeView = memo(({
   localEngagement,
   localFollowers,
   dashboardChartData,
+  chartLoading,
   dashboardPeriod,
   setDashboardPeriod,
   isConnected,
   setActiveTab,
-  setEditingPost
+  setEditingPost,
+  metricGrowth,
 }: DashboardHomeViewProps) => {
   // Compute filtered stats for the selected platform
   const filteredStats = useMemo(() => {
@@ -250,10 +254,11 @@ export const DashboardHomeView = memo(({
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
 <StatsCard 
               title="Total de Posts" 
-              value={platformTotalPosts.toString()} 
+              value={platformTotalPosts.toLocaleString()} 
               icon={TrendingUp} 
-              trend={computeEngagementPerPost()} 
-              trendLabel="por post" 
+              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : computeEngagementPerPost()} 
+              trendLabel={metricGrowth?.engagement ? "cresc." : "por post"} 
+              trendType="growth"
               color="primary" 
               delay={0} 
             />
@@ -261,8 +266,9 @@ export const DashboardHomeView = memo(({
               title="Visualizações" 
               value={platformViews.toLocaleString()} 
               icon={Eye} 
-              trend={computeViewsPerFollower()} 
-              trendLabel="por seguidor" 
+              trend={metricGrowth?.views ? Number(metricGrowth.views) : computeViewsPerFollower()} 
+              trendLabel={metricGrowth?.views ? "cresc." : "por seguidor"} 
+              trendType="growth"
               color="accent" 
               delay={0.1} 
             />
@@ -270,8 +276,9 @@ export const DashboardHomeView = memo(({
               title="Engajamento" 
               value={platformEngagement.toLocaleString()} 
               icon={Heart} 
-              trend={computeEngagementRate()} 
-              trendLabel="taxa" 
+              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : computeEngagementRate()} 
+              trendLabel={metricGrowth?.engagement ? "cresc." : "taxa"} 
+              trendType="growth"
               color="success" 
               delay={0.1} 
             />
@@ -279,8 +286,9 @@ export const DashboardHomeView = memo(({
               title="Seguidores" 
               value={platformFollowers.toLocaleString()} 
               icon={Users} 
-              trend={platformFollowers > 0 && platformEngagement > 0 ? Number(((platformEngagement / platformFollowers) * 100).toFixed(2)) : 0} 
-              trendLabel="por seguidor" 
+              trend={metricGrowth?.followers ? Number(metricGrowth.followers) : (platformFollowers > 0 && platformEngagement > 0 ? Number(((platformEngagement / platformFollowers) * 100).toFixed(2)) : 0)} 
+              trendLabel={metricGrowth?.followers ? "cresc." : "por seguidor"} 
+              trendType="growth"
               color="warning" 
               delay={0.1} 
             />
@@ -293,11 +301,12 @@ export const DashboardHomeView = memo(({
             data={dashboardChartData}
             periodDays={dashboardPeriod === '15d' ? 15 : dashboardPeriod === '30d' ? 30 : dashboardPeriod === '45d' ? 45 : dashboardPeriod === '60d' ? 60 : dashboardPeriod === '90d' ? 90 : 7}
             onPeriodChange={setDashboardPeriod}
+            loading={chartLoading}
           />
         </div>
         <div className="h-full">
           <div
-            className="glass-card rounded-2xl border border-border p-6 h-full flex flex-col justify-between animate-fade-in"
+            className="glass-card rounded-2xl border border-border p-4 md:p-5 h-full flex flex-col justify-between animate-fade-in"
             style={{ animationDelay: '400ms', animationFillMode: 'backwards' }}
           >
             <h3 className="font-display font-bold text-lg mb-4">Redes Conectadas</h3>
@@ -308,7 +317,7 @@ export const DashboardHomeView = memo(({
                 return (
                   <div
                     key={platform.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
+                    className="flex items-center justify-between p-2.5 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", platform.color)}>

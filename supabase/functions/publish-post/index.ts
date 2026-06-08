@@ -22,7 +22,10 @@ serve(async (req: Request) => {
 
     const authHeader = req.headers.get('Authorization');
     const { data: { user } } = await supabase.auth.getUser(authHeader?.replace('Bearer ', '') || '');
-    const userId = user?.id;
+    if (!user?.id) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders(req) });
+    }
+    const userId = user.id;
 
     const { 
       postId, 

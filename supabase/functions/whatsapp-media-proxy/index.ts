@@ -23,7 +23,7 @@ serve(async (req: Request) => {
       userId = body.userId;
     }
 
-    if (!mediaId) return new Response("Media ID required", { status: 400 });
+    if (!mediaId || !/^\d+$/.test(mediaId)) return new Response("Invalid Media ID", { status: 400 });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -70,7 +70,16 @@ serve(async (req: Request) => {
       return new Response("Failed to fetch binary data from Meta CDN", { status: binaryResp.status });
     }
 
+    const contentLength = binaryResp.headers.get("content-length");
+    const MAX_SIZE = 20 * 1024 * 1024; // 20MB
+    if (contentLength && parseInt(contentLength) > MAX_SIZE) {
+      return new Response("Media too large", { status: 413 });
+    }
+
     const blob = await binaryResp.blob();
+    if (blob.size > MAX_SIZE) {
+      return new Response("Media too large", { status: 413 });
+    }
     return new Response(blob, {
       headers: {
         ...corsHeaders(req),

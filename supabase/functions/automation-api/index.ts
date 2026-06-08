@@ -108,6 +108,17 @@ serve(async (req: Request) => {
         break;
       }
 
+      case 'process_queue': {
+        try {
+          const { runScheduler } = await import('../_shared/automation/scheduler.ts');
+          data = await runScheduler(supabaseClient, 'process_queue');
+        } catch (importErr: any) {
+          console.warn('[automation-api] process_queue failed:', importErr.message);
+          data = { error: importErr.message };
+        }
+        break;
+      }
+
       case 'detect-attacks': {
         try {
           const { detectCoordinatedAttack } = await import('../_shared/radar/attack-detector.ts');

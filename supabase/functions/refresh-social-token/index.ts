@@ -131,10 +131,18 @@ serve(async (req: Request) => {
           );
         }
 
-        const exchangeUrl = `https://graph.facebook.com/v21.0/oauth/access_token?` +
-          `grant_type=fb_exchange_token&client_id=${metaAppId}&client_secret=${metaAppSecret}&fb_exchange_token=${currentToken}`;
+        const exchangeUrl = `https://graph.facebook.com/v21.0/oauth/access_token`;
         
-        const res = await fetch(exchangeUrl);
+        const res = await fetch(exchangeUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            grant_type: "fb_exchange_token",
+            client_id: metaAppId,
+            client_secret: metaAppSecret,
+            fb_exchange_token: currentToken,
+          }),
+        });
         const data = await res.json();
 
         if (data.error) {

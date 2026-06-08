@@ -41,7 +41,6 @@ export const WebhookStatusBadge = React.memo(({
   const [error, setError] = useState<string | null>(null);
 
   const webhookInfo = WEBHOOK_PLATFORMS[platform];
-  if (!webhookInfo) return null;
 
   const checkHealth = useCallback(async () => {
     setLoading(true);
@@ -72,6 +71,8 @@ export const WebhookStatusBadge = React.memo(({
   useEffect(() => {
     checkHealth();
   }, [checkHealth]);
+
+  if (!webhookInfo) return null;
 
   const getBadgeVariant = () => {
     if (!status || error) return "outline";

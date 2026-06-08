@@ -70,7 +70,7 @@ export async function getSmartResponse(config: BotEngineConfig) {
       .eq('platform', platform)
       .eq('recipient_phone', chatId)
       .eq('status', 'sent')
-      .or('metadata->>bot_reply.eq.false,metadata->bot_reply.is.null')
+      .or('metadata->>bot_reply.eq.false|metadata->bot_reply.is.null')
       .gt('sent_at', new Date(Date.now() - SILENCE_MS).toISOString())
       .order('sent_at', { ascending: false })
       .limit(1)
@@ -116,7 +116,7 @@ export async function getSmartResponse(config: BotEngineConfig) {
         break;
       case 'google':
         apiKey = settings.gemini_api_key || Deno.env.get("GEMINI_API_KEY") || '';
-        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`;
+        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent`;
         break;
     }
 
@@ -140,7 +140,7 @@ export async function getSmartResponse(config: BotEngineConfig) {
         const payload = { contents: [{ parts: [{ text: `${systemPrompt}\n\nUsuário: ${message}` }] }] };
         const response = await fetch(apiUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "X-Goog-Api-Key": apiKey },
           body: JSON.stringify(payload),
         });
         

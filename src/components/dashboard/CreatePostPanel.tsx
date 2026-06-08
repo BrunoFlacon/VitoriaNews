@@ -35,7 +35,7 @@ import { BulkUploadDialog } from "@/components/dashboard/BulkUploadDialog";
 import { GiphySearch } from "@/components/dashboard/GiphySearch";
 import { SpotifySearch } from "@/components/dashboard/SpotifySearch";
 import { ScheduledPost, CreatePostInput } from "@/hooks/useScheduledPosts";
-import { useNotifications } from "@/contexts/NotificationContext";
+import { useNotifications } from "@/hooks/useNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { useAIContent } from "@/hooks/useAIContent";
 import { usePublisher } from "@/hooks/usePublisher";

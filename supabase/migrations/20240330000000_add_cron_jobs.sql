@@ -8,11 +8,12 @@ SELECT cron.schedule(
     $$
     SELECT
       net.http_post(
-          url:='http://127.0.0.1:54321/functions/v1/automation-api/process_queue',
-          headers:='{"Content-Type": "application/json", "Authorization": "Bearer SERVICE_ROLE_KEY"}'::jsonb,
+          url:=(SELECT value FROM settings WHERE key = 'supabase_url') || '/functions/v1/automation-api/process_queue',
+          headers:=jsonb_build_object(
+            'Content-Type', 'application/json',
+            'Authorization', 'Bearer ' || (SELECT value FROM settings WHERE key = 'supabase_service_role_key')
+          ),
           body:='{}'::jsonb
       ) as request_id;
     $$
 );
-
--- Note: Replace SERVICE_ROLE_KEY and URL with actual values in production.

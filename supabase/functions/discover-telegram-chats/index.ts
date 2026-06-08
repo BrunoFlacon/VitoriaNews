@@ -210,7 +210,7 @@ serve(async (req: Request) => {
             type: chat.type === 'supergroup' || chat.type === 'group' ? 'group' : 'channel',
             members: membersCount,
             photo,
-            isOnline: Math.random() > 0.7,
+            isOnline: null,
             details: chat.description || chat.bio || "",
             admins,
             registered: isRegistered
@@ -260,7 +260,7 @@ serve(async (req: Request) => {
             name: name,
             type: "individual",
             photo: null,
-            isOnline: Math.random() > 0.5,
+            isOnline: null,
             verified,
             members: 0
           });

@@ -1,7 +1,7 @@
 // v2 - CORS fix: removed Cache-Control/Pragma headers
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { safeInvoke } from '@/utils/supabase-utils';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
@@ -180,16 +180,18 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     }
 
     setAnalyticsErrorInfo(null);
-    
-    // Use safeInvoke with a short timeout — fails fast when functions aren't deployed
+
     const { data: aData, error: aErr } = await safeInvoke('get-analytics', {
       body: { period, platform, type: postType, source, start_date: dateRange.start, end_date: dateRange.end },
       timeoutMs: 15000
     });
 
     if (aErr) {
-      const isExpected = `${aErr}`.includes('not found') || `${aErr}`.includes('404') || `${aErr}`.includes('CORS');
-      setAnalyticsErrorInfo(isExpected ? null : `Erro: ${aErr}`);
+      const isExpected = `${aErr}`.includes('not found') || `${aErr}`.includes('404') || `${aErr}`.includes('CORS') || `${aErr}`.includes('Network error') || `${aErr}`.includes('Failed to fetch');
+      if (!isExpected) {
+        setAnalyticsErrorInfo(`Erro: ${aErr}`);
+        console.warn('[Analytics] fetch error:', aErr);
+      }
       return {
         overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, lastSyncedAt: null },
         engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: "0", growth: "0" },
@@ -217,10 +219,10 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
 
   // Display toast once on unhandled fetching errors (skip 404/not-deployed)
   useEffect(() => {
-    if (isError && !analyticsErrorInfo?.includes('not found')) {
+    if (isError && analyticsErrorInfo) {
       toast({
         title: "Erro ao carregar analytics",
-        description: "Não foi possível carregar os dados. Verifique a conexão.",
+        description: analyticsErrorInfo,
         variant: "destructive",
       });
     }
