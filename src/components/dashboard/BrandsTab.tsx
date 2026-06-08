@@ -46,7 +46,7 @@ export const BrandsTab = () => {
     if (!user) return;
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("brands")
         .select("*")
         .order("created_at", { ascending: false });
@@ -68,7 +68,7 @@ export const BrandsTab = () => {
     if (!user || !newBrand.name) return;
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("brands")
         .insert([{ ...newBrand, user_id: user.id }]);
       
@@ -87,7 +87,7 @@ export const BrandsTab = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.from("brands").delete().eq("id", id);
+      const { error } = await (supabase as any).from("brands").delete().eq("id", id);
       if (error) throw error;
       setBrands(brands.filter(b => b.id !== id));
       toast({ title: "Marca Removida" });
@@ -200,7 +200,7 @@ export const BrandsTab = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex gap-2">
-                      <div className="flex-1 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: brand.primary_color, color: '#fff', MixBlendMode: 'difference' }}>{brand.primary_color}</div>
+                      <div className="flex-1 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: brand.primary_color, color: '#fff', mixBlendMode: 'difference' }}>{brand.primary_color}</div>
                       <div className="flex-1 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold" style={{ backgroundColor: brand.secondary_color, color: '#fff' }}>{brand.secondary_color}</div>
                     </div>
                     {brand.default_hashtags && brand.default_hashtags.length > 0 && (
