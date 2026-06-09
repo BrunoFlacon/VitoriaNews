@@ -1,5 +1,5 @@
 // v2 - CORS fix: removed Cache-Control/Pragma headers
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { safeInvoke } from '@/utils/supabase-utils';
