@@ -236,7 +236,7 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     queryKey: ['analytics', user?.id, period, platform, postType, source, dateRange.start, dateRange.end],
     queryFn: fetchAnalyticsData,
     enabled: !!user && (options.enabled !== false),
-    staleTime: 0,                // sempre rebuscar ao montar (dados frescos)
+    staleTime: 2 * 60 * 1000,    // 2 min — evitar refetch repetido do edge function pesado
     gcTime: 10 * 60 * 1000,      // manter em cache por 10 minutos
     retry: 0,
     refetchOnWindowFocus: false,

@@ -486,6 +486,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
   const autoSyncState = useRef({ synced: false, chartSynced: false });
   useEffect(() => {
+    if (autoSyncState.current.synced && autoSyncState.current.chartSynced) return;
     if (loading || isSyncing || metricsLoading) return;
     const d = data as any;
     if (!autoSyncState.current.synced) {
@@ -496,6 +497,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         syncAnalytics();
         return;
       }
+      autoSyncState.current.synced = true;
     }
     if (!autoSyncState.current.chartSynced) {
       const hasApiEngagement = d && (d.engagement?.views > 0 || d.engagement?.likes > 0);
@@ -504,7 +506,9 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       if (hasApiEngagement && !hasChartData && !hasAccountMetrics) {
         autoSyncState.current.chartSynced = true;
         syncAnalytics();
+        return;
       }
+      autoSyncState.current.chartSynced = true;
     }
   }, [data, loading, isSyncing, stats, syncAnalytics, accountMetricsData, metricsLoading]);
 
@@ -655,7 +659,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         // reach is estimated from views (35%), NOT same as followers
         dateMap[isoKey].reach += Math.round(Number(m.views || 0) * 0.35);
         dateMap[isoKey].followers += Number(m.followers || 0);
-        dateMap[isoKey].posts += Number(m.posts || 0);
+        dateMap[isoKey].posts += Number(m.posts_count || 0);
       });
 
       const dateKeysWithData = Object.keys(dateMap);
@@ -915,12 +919,13 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       filteredMetrics.forEach((m: any) => {
         const d = new Date(m.collected_at);
         const isoKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        if (!dateMap[isoKey]) dateMap[isoKey] = { views: 0, likes: 0, comments: 0, shares: 0, followers: 0 };
+        if (!dateMap[isoKey]) dateMap[isoKey] = { views: 0, likes: 0, comments: 0, shares: 0, followers: 0, posts: 0 };
         dateMap[isoKey].views += Number(m.views || 0);
         dateMap[isoKey].likes += Number(m.likes || 0);
         dateMap[isoKey].comments += Number(m.comments || 0);
         dateMap[isoKey].shares += Number(m.shares || 0);
         dateMap[isoKey].followers += Number(m.followers || 0);
+        dateMap[isoKey].posts += Number(m.posts_count || 0);
       });
       // Merge: for each date point, fill zero likes/comments/shares/followers from accountMetrics
       if (Object.keys(dateMap).length > 0) {
@@ -940,9 +945,25 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             comments: point.comments || am.comments || 0,
             shares: point.shares || am.shares || 0,
             followers: point.followers || am.followers || 0,
+            posts: point.posts || am.posts || 0,
             engagement: (point.likes || am.likes || 0) + (point.comments || am.comments || 0) + (point.shares || am.shares || 0),
           };
         });
+      }
+    }
+
+    // Post-processing: fill posts from accountMetrics when chart shows zero
+    if (finalChartData.length > 0 && !finalChartData.some((p: any) => p.posts > 0) && accountMetrics && (accountMetrics as any[]).length > 0) {
+      const filteredMetrics = platform !== 'all'
+        ? (accountMetrics as any[]).filter((m: any) => normalizePlatform(m.platform) === platform)
+        : (accountMetrics as any[]);
+      const totalPostsFromMetrics = filteredMetrics.reduce((s, m) => s + Number(m.posts_count || 0), 0);
+      if (totalPostsFromMetrics > 0) {
+        const perDay = Math.round(totalPostsFromMetrics / finalChartData.length);
+        finalChartData = finalChartData.map((p: any) => ({
+          ...p,
+          posts: Math.max(p.posts || 0, perDay),
+        }));
       }
     }
 
@@ -964,7 +985,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         dateMap[isoKey].engagement += Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0);
         dateMap[isoKey].reach += Math.round(Number(m.views || 0) * 0.35);
         dateMap[isoKey].followers += Number(m.followers || 0);
-        dateMap[isoKey].posts += Number(m.posts || 0);
+        dateMap[isoKey].posts += Number(m.posts_count || 0);
       });
       const hasTimeSeries = Object.keys(dateMap).length > 0;
       const pDays = period === '24h' ? 1 : period === '3d' ? 3 : period === '7d' ? 7 : period === '15d' ? 15 : period === '30d' ? 30 : period === '60d' ? 60 : period === '90d' ? 90 : period === '120d' ? 120 : period === '365d' ? 365 : period === '730d' ? 730 : period === '1095d' ? 1095 : period === '1460d' ? 1460 : period === '1825d' ? 1825 : 7;
@@ -1132,7 +1153,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           })),
       bestTimes: (d.bestTimes && d.bestTimes.length > 0) ? d.bestTimes : pmBestTimes,
       adsStats: d.adsStats || { impressions: 0, reach: 0, clicks: 0, spend: 0 },
-      youtubeStats: (d.youtubeStats?.views ? d.youtubeStats : youtubeStats) || { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 },
+      youtubeStats: d.youtubeStats || { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 },
       gaStats: d.gaStats || { views: 0 },
       viralData: d.viralData || [],
       trendsData: d.trendsData || [],
