@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageUrl, fileName, cloudName, apiKey, apiSecret } = await req.json()
+    const { imageUrl, fileName, cloudName, apiKey, apiSecret, upload_preset } = await req.json()
 
     if (!imageUrl || !cloudName || !apiKey || !apiSecret) {
       throw new Error('Parâmetros obrigatórios ausentes (imageUrl, cloudName, apiKey, apiSecret)')
@@ -41,7 +41,7 @@ serve(async (req) => {
     // ou forneceremos uma estrutura de assinatura opcional
     
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
-    formData.append('upload_preset', 'social_canvas_hub') // Requer que o usuário crie este preset no Cloudinary
+    formData.append('upload_preset', upload_preset || 'social_canvas_hub')
 
     const uploadResponse = await fetch(cloudinaryUrl, {
       method: 'POST',

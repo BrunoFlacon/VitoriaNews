@@ -4,7 +4,7 @@ import {
   User, Bell, Key, Shield, Globe, Save, Camera, Check, AlertCircle, Loader2, Unplug, Info,
   Eye, EyeOff, ChevronDown, ChevronUp, Trash2, Users, RefreshCw, Heart, Share2, TrendingUp, Plus, X,
   Phone, MessageSquare, Calendar, Mail, Image as ImageIcon, Link2, LogOut, Pencil, Laptop, Clock,
-  UserCircle2, FileText, Target, Search
+  UserCircle2, FileText, Target, Search, Palette
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -753,7 +753,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
            <TabsTrigger value="notifications" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Bell className="w-4 h-4 mr-2" />Notificações</TabsTrigger>
            <TabsTrigger value="api" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Key className="w-4 h-4 mr-2" />APIs Sociais & Dev</TabsTrigger>
            <TabsTrigger value="security" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Shield className="w-4 h-4 mr-2" />Segurança</TabsTrigger>
-           {can('system.access') && (
+           <TabsTrigger value="brands" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Palette className="w-4 h-4 mr-2" />Marcas</TabsTrigger>
+            {can('system.access') && (
              <>
                <TabsTrigger value="system_dash" className="rounded-lg data-[state=active]:bg-background border-l border-primary/20 ml-2 py-2 px-4 shadow-[0_0_10px_rgba(139,92,246,0.1)] transition-all">
                  <Laptop className="w-4 h-4 mr-2 text-primary" />

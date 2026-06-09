@@ -59,7 +59,7 @@ async function mirrorMediaToCloudinary(supabase: any, userId: string, mediaUrls:
           cloudName: cloud_name, 
           apiKey: api_key, 
           apiSecret: api_secret,
-          uploadPreset: upload_preset || 'social_canvas_hub'
+          upload_preset: upload_preset || 'social_canvas_hub'
         }
       });
 
