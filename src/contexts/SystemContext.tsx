@@ -126,18 +126,17 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
   }, [applyThemeStyles]);
 
   useEffect(() => {
-    // Initial fetch of system settings
     fetchSettings();
 
-    // Listen for auth state changes to automatically reload/retry settings
-    // with the proper credentials once session is restored or refreshed.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-        fetchSettings();
-      }
-    });
+    try {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
+          fetchSettings();
+        }
+      });
 
-    return () => subscription.unsubscribe();
+      return () => subscription.unsubscribe();
+    } catch {}
   }, [fetchSettings]);
 
   const refreshSettings = async () => {

@@ -93,7 +93,7 @@
 
 @layer components {
   .glass-card {
-    @apply bg-slate-900/40 backdrop-blur-xl border border-white/5 shadow-2xl transition-all duration-300;
+    @apply bg-slate-900/70 border border-white/5 shadow-2xl transition-all duration-300;
   }
 
   .gradient-text {

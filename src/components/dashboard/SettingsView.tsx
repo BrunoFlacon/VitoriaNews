@@ -69,7 +69,7 @@ const renderApiAsset = (src: string, isActive: boolean, className: string) => {
 const PLATFORM_CONFIGS: any[] = [
   ...socialPlatforms.filter(p => p.id !== 'google').map(p => ({
     ...p,
-    oauthSupported: p.type === 'social' && p.id !== 'site' && p.id !== 'telegram'
+    oauthSupported: p.type === 'social' && p.id !== 'site'
   })),
   {
     id: 'google_cloud',
@@ -324,18 +324,22 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     return formatted;
   };
 
+  const phoneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const formatted = formatPhone(e.target.value);
     setProfileData({ ...profileData, phone: formatted });
+
+    if (phoneTimerRef.current) clearTimeout(phoneTimerRef.current);
 
     const digits = formatted.replace(/\D/g, '');
     if (digits.length === 10 || digits.length === 11) {
       setIsWhatsAppValid(null);
       setIsValidatingWhatsApp(true);
-      // Simulate API WhatsApp check
-      setTimeout(() => {
+      phoneTimerRef.current = setTimeout(() => {
         setIsValidatingWhatsApp(false);
-        setIsWhatsAppValid(true); // Always valid in simulation for now
+        setIsWhatsAppValid(true);
+        phoneTimerRef.current = null;
       }, 1500);
     } else {
       setIsWhatsAppValid(null);

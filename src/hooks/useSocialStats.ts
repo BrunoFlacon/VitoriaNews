@@ -99,7 +99,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       const [statsResult, credsResult, channelsResult, messagesResult, scheduledResult, demographicsResult] = await Promise.all([
         run(supabase
           .from('social_accounts')
-          .select('id, platform, platform_user_id, username, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, engagement_rate, updated_at, chat_id, metadata')
+          .select('id, platform, platform_user_id, username, page_name, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, engagement_rate, updated_at, chat_id, metadata')
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false })),
         run(supabase
@@ -416,13 +416,17 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     const channelId = Math.random().toString(36).substring(7);
     const channelName = `social-stats-realtime-${channelId}`;
     
-    // Debounce rapid invalidation calls from burst events
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let invalidating = false;
     const debouncedInvalidate = () => {
+      if (invalidating) return;
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
-      }, 500);
+        invalidating = true;
+        queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] }).finally(() => {
+          invalidating = false;
+        });
+      }, 2000);
     };
 
     const channel = supabase
@@ -461,16 +465,23 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     };
   }, [user, queryClient, options.enabled]);
 
-  // Polling fallback when Realtime is unavailable (15s, focused on online members)
   useEffect(() => {
     if (!user || options.enabled === false || !realtimeError) return;
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
-    }, 15000);
+    let isRunning = false;
+    const interval = setInterval(async () => {
+      if (isRunning || !navigator.onLine) return;
+      isRunning = true;
+      try {
+        await queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
+      } finally {
+        isRunning = false;
+      }
+    }, 120000);
     return () => clearInterval(interval);
   }, [user, queryClient, options.enabled, realtimeError]);
 
   const MESSAGING_PLATFORMS = new Set(['whatsapp', 'telegram']);
+  const emptyMessageStats = { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] };
 
   const stats = data?.stats || [];
   const messagingChannels = data?.messagingChannels || [];
@@ -500,7 +511,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
   }, [messagingStats, messagingChannels]);
   const totalPosts = useMemo(() => stats.reduce((sum, s) => sum + s.posts_count, 0), [stats]);
 
-  const getPlatformStats = (platform: string): SocialAccountStat | null => {
+  const getPlatformStats = useCallback((platform: string): SocialAccountStat | null => {
     const accounts = byPlatform[platform];
     if (!accounts || accounts.length === 0) return null;
     const channels = messagingChannels.filter(c => c.platform === platform);
@@ -522,11 +533,11 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       updated_at: accounts[0].updated_at,
       chat_id: accounts[0].chat_id,
     };
-  };
+  }, [byPlatform, messagingChannels]);
 
-  const isConnected = (platform: string): boolean => {
+  const isConnected = useCallback((platform: string): boolean => {
     return ((byPlatform[platform]?.length ?? 0) > 0) || apiConnections.includes(platform);
-  };
+  }, [byPlatform, apiConnections]);
 
   const connectedPlatforms = Array.from(new Set([...Object.keys(byPlatform), ...apiConnections]));
 
@@ -556,7 +567,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       }));
   }, [messagingChannels]);
 
-  return {
+  return useMemo(() => ({
     stats,
     socialStats,
     messagingStats,
@@ -564,8 +575,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     messagingChannels,
     audienceBreakdown,
     loading: isLoading || manualLoading,
-    setStatsLoading: (loading: boolean) => setManualLoading(loading),
-    messageStats: data?.messageStats || { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] },
+    setStatsLoading: setManualLoading,
+    messageStats: data?.messageStats || emptyMessageStats,
     lastUpdated: data?.lastUpdated || null,
     totalFollowers,
     totalSocialFollowers,
@@ -575,9 +586,9 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     getPlatformStats,
     isConnected,
     refresh: refetch,
-    messageDeliveryStats: data?.messageDeliveryStats || { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] },
+    messageDeliveryStats: data?.messageDeliveryStats || emptyMessageStats,
     postStatusCounts: data?.postStatusCounts || { published: 0, draft: 0, scheduled: 0, failed: 0 },
     demographics: data?.demographics || null,
-  };
+  }), [stats, socialStats, messagingStats, byPlatform, messagingChannels, audienceBreakdown, isLoading, manualLoading, data, totalFollowers, totalSocialFollowers, totalMessagingMembers, totalPosts, connectedPlatforms, getPlatformStats, isConnected, refetch]);
 }
 

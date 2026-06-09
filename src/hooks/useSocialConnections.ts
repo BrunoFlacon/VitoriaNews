@@ -263,8 +263,15 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
   // Polling fallback when Realtime is unavailable
   useEffect(() => {
     if (!user || options.enabled === false || !realtimeError) return;
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] });
+    let isRunning = false;
+    const interval = setInterval(async () => {
+      if (isRunning || !navigator.onLine) return;
+      isRunning = true;
+      try {
+        await queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] });
+      } finally {
+        isRunning = false;
+      }
     }, 30000);
     return () => clearInterval(interval);
   }, [user, queryClient, options.enabled, realtimeError]);

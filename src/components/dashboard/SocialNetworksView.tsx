@@ -13,9 +13,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { safeInvoke } from "@/utils/supabase-utils";
 import { useAuth } from "@/hooks/useAuth";
 
-// Only show social platforms (not dev tools like google, meta_ads, newsapi)
+// Show social & messaging platforms (not dev tools like google, meta_ads, newsapi)
 const SOCIAL_PLATFORM_IDS = socialPlatforms
-  .filter((p) => p.type === "social")
+  .filter((p) => p.type === "social" || p.type === "messaging")
   .map((p) => p.id);
 
 export const SocialNetworksView = memo(() => {

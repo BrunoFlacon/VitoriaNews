@@ -174,9 +174,14 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     startTransition(() => {
       setActiveTab(tab);
       if (tab !== 'settings') setSettingsSubTab(undefined);
-      // Remove setSearchParams to hide the tab name from the URL after /dashboard
     });
   }, []);
+
+  const handleNotificationsClick = useCallback(() => setShowNotifications(true), []);
+  const handleHeaderNavigate = useCallback((tab: string, subTab?: string) => {
+    handleTabChange(tab);
+    if (subTab) setSettingsSubTab(subTab);
+  }, [handleTabChange]);
 
   const connectedPlatforms = useMemo(() => 
     socialPlatforms.filter(p => connections?.some(c => c.platform === p.id)),
@@ -344,7 +349,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     return result;
   }, [analyticsData, accountDailySnapshots, analyticsPeriod]);
 
-  const chartLoading = analyticsLoading && !dashboardChartData.length && !accountMetricsData?.length;
+  const chartLoading = (analyticsLoading || metricsLoading) && !dashboardChartData.length;
 
   const renderContent = () => {
     switch (activeTab) {
@@ -508,11 +513,8 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         isMobile ? "pl-0 pb-20" : (isSidebarCollapsed ? "md:pl-20" : "md:pl-64")
       )}>
         <Header 
-          onNotificationsClick={() => setShowNotifications(true)} 
-          onNavigate={(tab, subTab) => {
-            handleTabChange(tab);
-            if (subTab) setSettingsSubTab(subTab);
-          }}
+          onNotificationsClick={handleNotificationsClick}
+          onNavigate={handleHeaderNavigate}
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
         />

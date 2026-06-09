@@ -179,15 +179,18 @@ interface AdvancedAnalyticsProps {
 }
 
 const SparklineCard = React.memo(({ data, color, height = 36, width = 80, onHover, onLeave }: { data: number[]; color: string; height?: number; width?: number; onHover?: (d: { value: number; x: number; y: number }) => void; onLeave?: () => void }) => {
-  const [localHover, setLocalHover] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const circleRef = useRef<SVGCircleElement | null>(null);
   const rectRef = useRef<DOMRect | null>(null);
-  const hoverRef = useRef<number | null>(null);
+  const hoverIdxRef = useRef<number | null>(null);
   useEffect(() => {
-    const updateRect = () => { if (svgRef.current) rectRef.current = svgRef.current.getBoundingClientRect(); };
-    updateRect();
-    window.addEventListener('resize', updateRect);
-    return () => window.removeEventListener('resize', updateRect);
+    if (!svgRef.current) return;
+    const ro = new ResizeObserver(([entry]) => {
+      rectRef.current = entry.contentRect;
+    });
+    ro.observe(svgRef.current);
+    rectRef.current = svgRef.current.getBoundingClientRect();
+    return () => ro.disconnect();
   }, []);
   if (!data || data.length < 2) return null;
   const max = Math.max(...data);
@@ -195,33 +198,46 @@ const SparklineCard = React.memo(({ data, color, height = 36, width = 80, onHove
   const range = max - min || 1;
   const w = width;
   const h = height;
-  const points = data.map((v, i) => {
+  const getPoint = (i: number) => {
     const x = (i / (data.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    return `${x},${y}`;
+    const y = h - ((data[i] - min) / range) * (h - 4) - 2;
+    return { x, y };
+  };
+  const points = data.map((_, i) => {
+    const p = getPoint(i);
+    return `${p.x},${p.y}`;
   }).join(' ');
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!svgRef.current) svgRef.current = e.currentTarget;
-    const rect = rectRef.current ?? e.currentTarget.getBoundingClientRect();
+    const rect = rectRef.current;
+    if (!rect) return;
     const x = e.clientX - rect.left;
     const idx = Math.round((x / w) * (data.length - 1));
     const clamped = Math.max(0, Math.min(data.length - 1, idx));
-    if (hoverRef.current !== clamped) {
-      hoverRef.current = clamped;
-      setLocalHover(clamped);
+    if (hoverIdxRef.current !== clamped) {
+      hoverIdxRef.current = clamped;
+      const p = getPoint(clamped);
+      const circle = circleRef.current;
+      if (circle) {
+        circle.setAttribute('cx', String(p.x));
+        circle.setAttribute('cy', String(p.y));
+        circle.setAttribute('visibility', 'visible');
+      }
       onHover?.({ value: data[clamped], x: e.clientX, y: e.clientY });
     }
   };
-  const handleLeave = () => { hoverRef.current = null; setLocalHover(null); onLeave?.(); };
+  const handleLeave = () => {
+    hoverIdxRef.current = null;
+    const circle = circleRef.current;
+    if (circle) circle.setAttribute('visibility', 'hidden');
+    onLeave?.();
+  };
   return (
     <div className="relative shrink-0" style={{ contain: 'layout' }}>
       <svg ref={svgRef} width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0 cursor-pointer" style={{ contain: 'strict' }}
         onMouseMove={handleMove} onMouseLeave={handleLeave}
       >
         <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
-        {localHover !== null && (
-          <circle cx={(localHover / (data.length - 1)) * w} cy={h - ((data[localHover] - min) / range) * (h - 4) - 2} r={3} fill={color} stroke="#0f172a" strokeWidth="2" />
-        )}
+        <circle ref={circleRef} cx="0" cy="0" r={3} fill={color} stroke="#0f172a" strokeWidth="2" visibility="hidden" />
       </svg>
     </div>
   );
@@ -468,36 +484,29 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     gcTime: 10 * 60 * 1000,
   });
 
-  // Auto-sync conditions
-  const hasAutoSynced = useRef(false);
-  const hasAutoSyncedChart = useRef(false);
+  const autoSyncState = useRef({ synced: false, chartSynced: false });
   useEffect(() => {
-    if (hasAutoSynced.current) return;
-    if (loading) return;
-    if (isSyncing) return;
+    if (loading || isSyncing || metricsLoading) return;
     const d = data as any;
-    const hasApiEngagement = d && (d.engagement?.views > 0 || d.engagement?.likes > 0);
-    const hasLocalStats = stats.some(s => s.followers_count > 0 || s.posts_count > 0);
-    if (!hasApiEngagement && !hasLocalStats) {
-      hasAutoSynced.current = true;
-      syncAnalytics();
+    if (!autoSyncState.current.synced) {
+      const hasApiEngagement = d && (d.engagement?.views > 0 || d.engagement?.likes > 0);
+      const hasLocalStats = stats.some(s => s.followers_count > 0 || s.posts_count > 0);
+      if (!hasApiEngagement && !hasLocalStats) {
+        autoSyncState.current.synced = true;
+        syncAnalytics();
+        return;
+      }
     }
-  }, [data, loading, isSyncing, stats, syncAnalytics]);
-  // Auto-sync when Edge Function has aggregate data but no chartData (missing account_metrics)
-  useEffect(() => {
-    if (hasAutoSyncedChart.current) return;
-    if (loading) return;
-    if (isSyncing) return;
-    if (metricsLoading) return;
-    const d = data as any;
-    const hasApiEngagement = d && (d.engagement?.views > 0 || d.engagement?.likes > 0);
-    const hasChartData = d?.chartData?.length > 0;
-    const hasAccountMetrics = (accountMetricsData ?? []).length > 0;
-    if (hasApiEngagement && !hasChartData && !hasAccountMetrics) {
-      hasAutoSyncedChart.current = true;
-      syncAnalytics();
+    if (!autoSyncState.current.chartSynced) {
+      const hasApiEngagement = d && (d.engagement?.views > 0 || d.engagement?.likes > 0);
+      const hasChartData = d?.chartData?.length > 0;
+      const hasAccountMetrics = (accountMetricsData ?? []).length > 0;
+      if (hasApiEngagement && !hasChartData && !hasAccountMetrics) {
+        autoSyncState.current.chartSynced = true;
+        syncAnalytics();
+      }
     }
-  }, [data, loading, isSyncing, accountMetricsData, metricsLoading, syncAnalytics]);
+  }, [data, loading, isSyncing, stats, syncAnalytics, accountMetricsData, metricsLoading]);
 
   // Extract and normalize all analytics data fields with safe defaults
   const { 
@@ -548,6 +557,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           fd.push({
             platform: normalizePlatform(a.platform),
             username: a.username,
+            page_name: a.page_name || null,
             currentFollowers: a.followers_count,
             postsCount: a.posts_count,
             growth: 0,
@@ -1122,7 +1132,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           })),
       bestTimes: (d.bestTimes && d.bestTimes.length > 0) ? d.bestTimes : pmBestTimes,
       adsStats: d.adsStats || { impressions: 0, reach: 0, clicks: 0, spend: 0 },
-      youtubeStats: d.youtubeStats || { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 },
+      youtubeStats: (d.youtubeStats?.views ? d.youtubeStats : youtubeStats) || { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 },
       gaStats: d.gaStats || { views: 0 },
       viralData: d.viralData || [],
       trendsData: d.trendsData || [],
@@ -1261,6 +1271,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           profiles: telegramStats.map((s: any) => ({
             platform: 'telegram',
             username: s.username || null,
+            page_name: s.page_name || null,
             currentFollowers: s.followers_count || 0,
             postsCount: s.posts_count || 0,
             growth: 0,
@@ -1571,13 +1582,13 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         <div className="flex flex-wrap items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl border-border/50 bg-card hover:bg-accent transition-all" style={{ willChange: 'transform' }}>
+              <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl border-border/50 bg-card hover:bg-accent transition-all">
                 <Calendar className="w-4 h-4 text-primary" />
                 <span className="text-xs font-bold">{PERIOD_OPTIONS.find(p => p.value === period)?.label}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-[180px] p-1">
-              <DropdownMenuRadioGroup value={period} onValueChange={setPeriod}>
+              <DropdownMenuRadioGroup value={period} onValueChange={(val) => { startTransition(() => setPeriod(val)); }}>
                 {PERIOD_OPTIONS.map((option) => (
                   <DropdownMenuRadioItem key={option.value} value={option.value} className="text-xs">
                     {option.label}
@@ -1600,7 +1611,6 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
               onClick={() => syncAnalytics()}
               disabled={isSyncing}
               className="h-9 gap-2 rounded-xl border-border/50 bg-card hover:bg-accent transition-all"
-              style={{ willChange: 'transform' }}
             >
               <RefreshCw className={cn("w-4 h-4 text-primary", isSyncing && "animate-spin")} />
               <span className="text-xs font-bold hidden sm:inline">{isSyncing ? "Sincronizando..." : "Sincronizar APIs"}</span>
@@ -1608,7 +1618,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl border-border/50 bg-card hover:bg-accent transition-all" style={{ willChange: 'transform' }}>
+              <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl border-border/50 bg-card hover:bg-accent transition-all">
                 <div className="flex items-center gap-2">
                   {platform === 'all' ? (
                     <Activity className="w-4 h-4 text-primary" />
@@ -2025,7 +2035,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             </div>
           </div>
           
-          <div className="h-[400px] w-full min-h-[400px]" style={{ contain: 'layout style paint', willChange: 'transform' }}>
+          <div className="h-[400px] w-full min-h-[400px]" style={{ contain: 'layout style paint' }}>
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={400}>
               <AreaChart key={`chart-${platform}-${chartData.length}`} data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                 <defs>
@@ -2088,7 +2098,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
             return (
               <div>
-                <div className="h-[260px] w-full relative" style={{ contain: 'layout style paint', willChange: 'transform' }}>
+                <div className="h-[260px] w-full relative" style={{ contain: 'layout style paint' }}>
                   <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
                     <PieChart key={`pie-${pieMetric}-${pieData.length}`}>
                         <Pie
@@ -2568,7 +2578,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                             const pId = `${prof.platform}-${prof.username || prof.platform_user_id}`;
                             return (
                               <SelectItem key={pIdx} value={pId}>
-                                @{prof.username || 'Perfil'} ({prof.currentFollowers?.toLocaleString()})
+                                {prof.page_name ? prof.page_name : `@${prof.username || 'Perfil'}`} ({prof.currentFollowers?.toLocaleString()})
                               </SelectItem>
                             );
                           })}
@@ -2581,7 +2591,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                         ) : (
                           <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center">?</div>
                        )}
-                       <span className="truncate">@{group.profiles[0]?.username || 'Perfil único'}</span>
+                       <span className="truncate">{group.profiles[0]?.page_name ? group.profiles[0].page_name : `@${group.profiles[0]?.username || 'Perfil único'}`}</span>
                      </div>
                    )}
                  </div>

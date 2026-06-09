@@ -52,10 +52,8 @@ export const Header = memo(({
 
   return (
     <div className="sticky top-0 z-40 w-full flex flex-col">
-      <motion.header
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between px-4 md:px-8 py-3 border-b border-border bg-background/80 backdrop-blur-xl relative z-50"
+      <header
+        className="flex items-center justify-between px-4 md:px-8 py-3 border-b border-border bg-background/95 relative z-50"
       >
         <div className="flex items-center gap-4 flex-1">
           {/* Logo and Name for Mobile */}
@@ -178,10 +176,10 @@ export const Header = memo(({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </motion.header>
+      </header>
       
       {/* Status Bar / Weather Row */}
-      <div className="px-4 md:px-8 py-0 bg-background/80 backdrop-blur-xl border-b border-border/50">
+      <div className="px-4 md:px-8 py-0 bg-background/95 border-b border-border/50">
         <DateTimeWeather />
       </div>
     </div>

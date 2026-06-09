@@ -636,7 +636,8 @@ async function processSyncTask(adminClient: any, conn: any, task: any = null) {
                       followers: parseInt(ch.statistics?.subscriberCount || "0"),
                       posts_count: parseInt(ch.statistics?.videoCount || "0"),
                       views: parseInt(ch.statistics?.viewCount || "0"),
-                      profile_picture: ch.snippet?.thumbnails?.high?.url
+                      profile_picture: ch.snippet?.thumbnails?.high?.url,
+                      username: ch.snippet?.title || conn.page_name || conn.username
                     };
                   }
                 }

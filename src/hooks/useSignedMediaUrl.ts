@@ -16,13 +16,11 @@ export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 
       return;
     }
 
-    // Only re-sign URLs that are from supabase storage (private bucket)
     if (!input.includes('supabase.co/storage/')) {
       setUrl(input);
       return;
     }
 
-    // Extract path from a previously signed URL if needed
     let path = input;
     const marker = "/object/sign/media/";
     if (input.includes(marker)) {
@@ -32,17 +30,39 @@ export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 
       path = decodeURIComponent(input.split("/object/public/media/")[1] ?? "");
     }
 
-    supabase.storage
-      .from("media")
-      .createSignedUrl(path, expiresIn)
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error || !data) {
-          setUrl(input); // fall back to original
-        } else {
-          setUrl(data.signedUrl);
-        }
-      });
+    if (!path) {
+      setUrl(null);
+      return;
+    }
+
+    const checkAndSign = async () => {
+      const { data: fileList, error: listError } = await supabase.storage
+        .from('media')
+        .list(path.split('/').slice(0, -1).join('/'), {
+          search: path.split('/').pop(),
+          limit: 1,
+        });
+
+      if (cancelled) return;
+
+      if (listError || !fileList?.length) {
+        setUrl(null);
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from('media')
+        .createSignedUrl(path, expiresIn);
+
+      if (cancelled) return;
+      if (error || !data) {
+        setUrl(null);
+      } else {
+        setUrl(data.signedUrl);
+      }
+    };
+
+    checkAndSign();
 
     return () => {
       cancelled = true;

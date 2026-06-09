@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, lazy, Suspense } from "react";
 import { 
   Eye, 
   Heart, 
@@ -25,8 +25,10 @@ import {
 } from "@/components/ui/popover";
 import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { StatsCard } from "@/components/dashboard/StatsCard";
-import { RecentPosts } from "@/components/dashboard/RecentPosts";
+
 import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
+
+const RecentPosts = lazy(() => import("@/components/dashboard/RecentPosts"));
 
 interface DashboardHomeViewProps {
   platform: string;
@@ -341,10 +343,12 @@ export const DashboardHomeView = memo(({
       </div>
 
       <div className="mt-6">
-        <RecentPosts onEditPost={(post: ScheduledPost) => {
-          setEditingPost(post);
-          setActiveTab("create");
-        }} />
+        <Suspense fallback={null}>
+          <RecentPosts onEditPost={(post: ScheduledPost) => {
+            setEditingPost(post);
+            setActiveTab("create");
+          }} />
+        </Suspense>
       </div>
     </>
   );

@@ -115,6 +115,27 @@ export interface AnalyticsData {
   dataSource: 'real' | 'seeded';
 }
 
+const ANALYTICS_CACHE_PREFIX = 'analytics_cache_';
+
+function getCachedAnalytics(key: string): AnalyticsData | undefined {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return undefined;
+    const { data, timestamp } = JSON.parse(raw);
+    if (Date.now() - timestamp > 10 * 60 * 1000) {
+      localStorage.removeItem(key);
+      return undefined;
+    }
+    return data as AnalyticsData;
+  } catch { return undefined; }
+}
+
+function setCachedAnalytics(key: string, data: AnalyticsData): void {
+  try {
+    localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
+  } catch {}
+}
+
 export function useAnalytics(options: { enabled?: boolean } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -181,9 +202,11 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
 
     setAnalyticsErrorInfo(null);
 
+    const cacheKey = `${ANALYTICS_CACHE_PREFIX}${user?.id}_${period}_${platform}_${postType}_${source}`;
+
     const { data: aData, error: aErr } = await safeInvoke('get-analytics', {
       body: { period, platform, type: postType, source, start_date: dateRange.start, end_date: dateRange.end },
-      timeoutMs: 15000
+      timeoutMs: 8000
     });
 
     if (aErr) {
@@ -203,18 +226,21 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       } as unknown as AnalyticsData;
     }
     
+    setCachedAnalytics(cacheKey, aData as AnalyticsData);
     return aData as AnalyticsData;
   };
+
+  const analyticsCacheKey = `${ANALYTICS_CACHE_PREFIX}${user?.id}_${period}_${platform}_${postType}_${source}`;
 
   const { data, isLoading, refetch, isError } = useQuery<AnalyticsData, Error>({
     queryKey: ['analytics', user?.id, period, platform, postType, source, dateRange.start, dateRange.end],
     queryFn: fetchAnalyticsData,
     enabled: !!user && (options.enabled !== false),
-    staleTime: 5 * 60 * 1000,    // considerar fresco por 5 minutos
+    staleTime: 0,                // sempre rebuscar ao montar (dados frescos)
     gcTime: 10 * 60 * 1000,      // manter em cache por 10 minutos
     retry: 0,
-    refetchOnWindowFocus: false,  // não rebuscar ao focar a janela
-    placeholderData: (prev) => prev, // keep showing previous data while refetching
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev ?? getCachedAnalytics(analyticsCacheKey),
   });
 
   // Display toast once on unhandled fetching errors (skip 404/not-deployed)
@@ -233,13 +259,14 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       if (!user) throw new Error("No user");
       
       // Parallel sync for main social platforms
-      const [resSocial, resTwitter, resTelegram] = await Promise.allSettled([
-        safeInvoke('collect-social-analytics', { timeoutMs: 60000 }),
-        safeInvoke('sync-twitter', { timeoutMs: 30000 }),
-        safeInvoke('sync-telegram-chats', { body: { platform: "telegram" }, timeoutMs: 30000 })
+      const [resSocial, resYouTube, resTwitter, resTelegram] = await Promise.allSettled([
+        safeInvoke('collect-social-analytics', { timeoutMs: 20000 }),
+        safeInvoke('collect-youtube-analytics', { timeoutMs: 20000 }),
+        safeInvoke('sync-twitter', { timeoutMs: 15000 }),
+        safeInvoke('sync-telegram-chats', { body: { platform: "telegram" }, timeoutMs: 15000 })
       ]);
 
-      return { resSocial, resTwitter, resTelegram };
+      return { resSocial, resYouTube, resTwitter, resTelegram };
     },
     onSuccess: () => {
       toast({
@@ -247,10 +274,6 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
         description: "Os dados das suas redes sociais foram atualizados com sucesso.",
       });
       queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['social_connections', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['account_metrics', user?.id, 'v3'] });
-      queryClient.invalidateQueries({ queryKey: ['messaging_channels', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['social_stats_all', user?.id] });
     },
     onError: () => {
@@ -396,7 +419,14 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
 
   const isSyncing = syncMutation.isPending;
 
-  return {
+  const syncAnalytics = useCallback(() => syncMutation.mutate(), [syncMutation]);
+  const syncMetaAdsFn = useCallback(() => syncMetaAds.mutate(), [syncMetaAds]);
+  const syncGoogleAnalyticsFn = useCallback(() => syncGoogleAnalytics.mutate(), [syncGoogleAnalytics]);
+  const syncYouTubeAnalyticsFn = useCallback(() => syncYouTubeAnalytics.mutate(), [syncYouTubeAnalytics]);
+  const syncTelegramChatsFn = useCallback(() => syncTelegramChats.mutate(), [syncTelegramChats]);
+  const syncTwitterFn = useCallback(() => syncTwitter.mutate(), [syncTwitter]);
+
+  return useMemo(() => ({
     data: data || null,
     loading: isLoading && !data,
     isSyncing,
@@ -412,11 +442,11 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
     dateRange,
     setDateRange,
     refetch,
-    syncAnalytics: () => syncMutation.mutate(),
-    syncMetaAds: () => syncMetaAds.mutate(),
-    syncGoogleAnalytics: () => syncGoogleAnalytics.mutate(),
-    syncYouTubeAnalytics: () => syncYouTubeAnalytics.mutate(),
-    syncTelegramChats: () => syncTelegramChats.mutate(),
-    syncTwitter: () => syncTwitter.mutate(),
-  };
+    syncAnalytics: syncAnalytics,
+    syncMetaAds: syncMetaAdsFn,
+    syncGoogleAnalytics: syncGoogleAnalyticsFn,
+    syncYouTubeAnalytics: syncYouTubeAnalyticsFn,
+    syncTelegramChats: syncTelegramChatsFn,
+    syncTwitter: syncTwitterFn,
+  }), [data, isLoading, isSyncing, analyticsErrorInfo, period, setPeriod, platform, setPlatform, postType, setPostType, source, setSource, dateRange, setDateRange, refetch, syncAnalytics, syncMetaAdsFn, syncGoogleAnalyticsFn, syncYouTubeAnalyticsFn, syncTelegramChatsFn, syncTwitterFn]);
 }

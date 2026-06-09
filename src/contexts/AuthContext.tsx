@@ -147,11 +147,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [session]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
         if (session?.user) {
           fetchProfile(session.user.id);
         } else {
@@ -160,11 +161,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       }
     );
 
-    // Initial check - FAST PATH com validação robusta de JWT expirado
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
+      if (cancelled) return;
       const now = Math.floor(Date.now() / 1000);
       if (initialSession && initialSession.expires_at && initialSession.expires_at < now) {
-        console.warn("[AuthContext] Sessão inicial detectada como expirada. Tentando renovação...");
         try {
           const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
           if (!error && refreshedSession) {
@@ -172,13 +172,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
             setUser(refreshedSession.user);
             fetchProfile(refreshedSession.user.id);
           } else {
-            console.error("[AuthContext] Falha na renovação da sessão expirada. Efetuando logout limpo...");
             await supabase.auth.signOut();
             setSession(null);
             setUser(null);
             setProfile(null);
           }
-        } catch (e) {
+        } catch {
           setSession(null);
           setUser(null);
         }
@@ -194,7 +193,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // ── Realtime Presence: marca usuário como online quando logado ──

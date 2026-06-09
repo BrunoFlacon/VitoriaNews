@@ -467,7 +467,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
   const platformConnectionData = useMemo(() => {
     return socialPlatforms
-      .filter(p => p.type === 'social')
+      .filter(p => p.type === 'social' || p.type === 'messaging')
       .map(platform => {
         const platformConnections = connections.filter(c => c.platform === platform.id && c.is_connected);
         const hasConnections = platformConnections.length > 0;

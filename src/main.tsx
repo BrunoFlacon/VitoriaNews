@@ -4,16 +4,19 @@ import "./index.css";
 
 window.addEventListener('unhandledrejection', (event) => {
   const msg = event.reason?.message || event.reason || '';
+  const msgStr = typeof msg === 'string' ? msg : '';
   if (
-    typeof msg === 'string' && (
-      msg.includes('dynamically imported module') ||
-      msg.includes('Loading chunk') ||
-      msg.includes('ChunkLoadError') ||
-      msg.includes('Failed to fetch')
-    )
+    msgStr.includes('dynamically imported module') ||
+    msgStr.includes('Loading chunk') ||
+    msgStr.includes('ChunkLoadError') ||
+    msgStr.includes('Failed to fetch') ||
+    msgStr.includes('signal is aborted') ||
+    msgStr.includes('AuthRetryableFetchError')
   ) {
     event.preventDefault();
-    window.location.reload();
+    if (msgStr.includes('dynamically imported module') || msgStr.includes('Loading chunk') || msgStr.includes('ChunkLoadError')) {
+      window.location.reload();
+    }
     return;
   }
   console.error('Unhandled rejection:', event.reason);

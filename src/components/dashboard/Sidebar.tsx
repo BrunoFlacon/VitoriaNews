@@ -152,7 +152,7 @@ export const Sidebar = memo(({
           width: isMobile ? 256 : (isCollapsed ? 80 : 256),
           x: isMobile ? (isCollapsed ? -256 : 0) : 0
         }}
-        transition={{ type: "spring", stiffness: 280, damping: 32, mass: 0.9 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
         className={cn(
           "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col items-center",
           (!isMobile && isCollapsed) ? "py-4 md:py-6" : ""
