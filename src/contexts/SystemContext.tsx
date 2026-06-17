@@ -9,6 +9,7 @@ interface NavSetting {
   id?: string;
   key: string;
   value: string;
+  label?: string;
   active: boolean;
   order_index: number;
   allowed_roles?: string[];
@@ -54,38 +55,22 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchSettings = useCallback(async () => {
     try {
-      // Timeout de 2s: se o banco estiver sobrecarregado, não trava o sistema
-      const queryPromise = (supabase as any)
+      // PERFORMANCE: Consolidando em uma única chamada ao banco
+      // select("*") é resiliente pois traz o que existir, sem dar erro 400 por colunas específicas
+      const { data: allData, error } = await (supabase as any)
         .from("system_settings")
         .select("*");
 
-      const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: new Error('system_settings timeout') }), 2000)
-      );
-
-      const { data: allData, error } = await Promise.race([queryPromise, timeoutPromise]);
-
       if (error) {
-        // Ignora erros de rede no console para evitar poluição (já tratado visualmente via loading=false)
-        const isNetworkError = error.message?.includes('fetch') || error.message?.includes('timeout') || error.message?.includes('CORS');
-        if (!isNetworkError) {
-          console.warn("[SystemContext] Erro ao carregar configurações:", error.message);
-        }
-        setLoading(false);
-        return;
+        console.error("Error fetching system settings:", error);
+        // Mesmo com erro, mantemos o loading false para mostrar fallbacks locais
       }
 
       const rows = (allData || []) as any[];
-      if (rows.length === 0) {
-        setLoading(false);
-        return;
-      }
-
-      // OTIMIZAÇÃO: Processamento em um único loop para evitar múltiplos .filter()
-      let generalData: SystemSettings | null = null;
+      const uniqueNavKeys = new Set();
       const navItems: NavSetting[] = [];
       const permsMap: Record<string, string[]> = {};
-      const uniqueNavKeys = new Set();
+      let generalData: any = null;
 
       for (const row of rows) {
         if (row.group === 'general' || row.key === 'platform_name') {
@@ -97,6 +82,7 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
               id: row.id,
               key: row.key,
               value: row.value,
+              label: row.value,
               active: row.active !== false,
               order_index: row.order_index || 0,
               allowed_roles: row.allowed_roles || ['admin_master', 'dev_master', 'editor', 'user']
@@ -113,13 +99,13 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
       }
       
       if (navItems.length > 0) {
-        setNavSettings(navItems.sort((a, b) => a.order_index - b.order_index));
+        setNavSettings(navItems.sort((a, b) => (a.order_index || 0) - (b.order_index || 0)));
       }
 
       setSectionPermissions(permsMap);
 
     } catch (e) {
-      console.warn("[SystemContext] Erro ignorado, usando padrões:", e);
+      console.error("SystemContext Critical Error:", e);
     } finally {
       setLoading(false);
     }
@@ -127,16 +113,6 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     fetchSettings();
-
-    try {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-        if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED') {
-          fetchSettings();
-        }
-      });
-
-      return () => subscription.unsubscribe();
-    } catch {}
   }, [fetchSettings]);
 
   const refreshSettings = async () => {
@@ -171,6 +147,7 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
     </SystemContext.Provider>
   );
 };
+
 
 export const useSystem = () => {
   const context = useContext(SystemContext);

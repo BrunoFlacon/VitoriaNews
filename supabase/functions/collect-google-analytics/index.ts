@@ -8,6 +8,7 @@ const corsHeaders = (req) => ({
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 });
 
+
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
   try {
     const { data } = await supabase
@@ -31,7 +32,7 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const authHeader = req.headers.get("Authorization");
+    const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Authorization required" }), {
         status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
@@ -48,53 +49,17 @@ serve(async (req: Request) => {
 
     const userId = user.id;
     const creds = await getCredentials(supabase, userId, "google_cloud");
-    const analyticsId = creds?.analytics_id || creds?.analyticsId || creds?.ga4_property_id;
-    const siteUrl = creds?.site_url || creds?.search_console_id;
+    const analyticsId = creds?.analytics_id || creds?.ga4_property_id || creds?.analyticsId;
 
     if (!analyticsId) {
-      return new Response(JSON.stringify({ error: "Google Analytics Property ID not configured" }), {
-        status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+      return new Response(JSON.stringify({ status: "skipped", message: "Google Analytics Property ID not configured" }), {
+        status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
-    // Normalize property ID
     const propertyId = analyticsId.replace("properties/", "");
     const results: any[] = [];
 
-    // GA4 requires OAuth2 service account token
-    // For now, we'll use a simpler approach with the API key if available
-    // In production, you'd need to set up a service account and exchange for access token
-
-    // Define common metrics to fetch
-    const metricSets = [
-      {
-        name: "overview",
-        metrics: ["activeUsers", "sessions", "screenPageViews", "userEngagementDuration", "bounceRate"],
-        dimensions: ["date"]
-      },
-      {
-        name: "traffic_sources",
-        metrics: ["activeUsers", "sessions", "screenPageViews"],
-        dimensions: ["sessionDefaultChannelGrouping", "date"]
-      },
-      {
-        name: "top_pages",
-        metrics: ["screenPageViews", "activeUsers", "averageSessionDuration"],
-        dimensions: ["pagePath", "pageTitle"]
-      },
-      {
-        name: "geography",
-        metrics: ["activeUsers", "sessions"],
-        dimensions: ["country", "city"]
-      },
-      {
-        name: "devices",
-        metrics: ["activeUsers", "sessions"],
-        dimensions: ["deviceCategory", "browser"]
-      }
-    ];
-
-    // Try to get access token from service account or use existing OAuth token
     const { data: gaToken } = await supabase
       .from("social_connections")
       .select("access_token")
@@ -126,24 +91,30 @@ serve(async (req: Request) => {
         hint: "Go to Settings > APIs > Google > Connect with OAuth"
       }), {
         headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+=======
+      return new Response(JSON.stringify({ status: "skipped", message: "Google OAuth connection missing" }), {
+        status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
-    // Fetch data from GA4 Reporting API
+    // Capture historical data since creation (or as far back as GA4 allows, usually 2 years)
+    const metricSets = [
+      { name: "overview", metrics: ["activeUsers", "sessions", "screenPageViews"], dimensions: ["date"] }
+    ];
+
     const now = new Date();
-    const twoYearsAgo = new Date(now.getTime() - 2 * 365 * 24 * 60 * 60 * 1000); // GA4 data retention is usually 14 months or 2 years
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const startDate = "2020-01-01"; // Fetch from a safe "creation" point
+    const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
 
     for (const metricSet of metricSets) {
-      try {
-        const requestBody = {
-          dateRanges: [{ startDate: twoYearsAgo.toISOString().split("T")[0], endDate: yesterday.toISOString().split("T")[0] }],
-          metrics: metricSet.metrics.map(m => ({ name: m })),
-          dimensions: metricSet.dimensions.map(d => ({ name: d })),
-          limit: 100,
-          orderBys: [{ metric: { metricName: metricSet.metrics[0] }, desc: true }]
-        };
+      const requestBody = {
+        dateRanges: [{ startDate, endDate: yesterday }],
+        metrics: metricSet.metrics.map(m => ({ name: m })),
+        dimensions: metricSet.dimensions.map(d => ({ name: d })),
+        limit: 100000 // High limit for historical data
+      };
 
+      try {
         const res = await fetch(
           `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
           {
@@ -156,52 +127,47 @@ serve(async (req: Request) => {
           }
         );
 
-        const data = await res.json();
-
-        if (data.error) {
-          results.push({ name: metricSet.name, status: "error", error: data.error.message });
+        if (!res.ok) {
+          const errText = await res.text();
+          console.warn(`[GA Collect] API error for ${metricSet.name}: ${res.status} ${errText}`);
+          results.push({ name: metricSet.name, status: "error", error: errText });
           continue;
         }
 
+        const data = await res.json();
         const rows = data.rows || [];
-        let totalUsers = 0;
-        let totalSessions = 0;
-        let totalPageViews = 0;
+        const insertData = [];
 
         for (const row of rows) {
-          const dimensionValues = row.dimensionValues?.map((d: any) => d.value) || [];
-          const metricValues = row.metricValues?.map((m: any) => parseFloat(m.value || "0")) || [];
-
-          // Save each row
+          const dateStr = row.dimensionValues[0].value;
+          const formattedDate = `${dateStr.substring(0,4)}-${dateStr.substring(4,6)}-${dateStr.substring(6,8)}`;
+          
           for (let i = 0; i < metricSet.metrics.length; i++) {
-            await supabase.from("google_analytics_data").upsert({
+            insertData.push({
               user_id: userId,
               property_id: propertyId,
               metric_name: metricSet.metrics[i],
-              metric_value: metricValues[i] || 0,
-              dimension_name: metricSet.dimensions.join(","),
-              dimension_value: dimensionValues.join(" | "),
-              date: dimensionValues[0] ? new Date(dimensionValues[0]).toISOString().split("T")[0] : null,
-              metadata: { metric_set: metricSet.name, dimensions: dimensionValues },
+              metric_value: parseFloat(row.metricValues[i].value),
+              dimension: "date",
+              dimension_value: formattedDate,
+              date: formattedDate,
               created_at: new Date().toISOString()
-            }, { onConflict: "user_id,property_id,metric_name,date,dimension_name,dimension_value" });
+            });
           }
-
-          totalUsers += metricValues[0] || 0;
-          totalSessions += metricValues[1] || 0;
-          totalPageViews += metricValues[2] || 0;
         }
 
-        results.push({
-          name: metricSet.name,
-          status: "synced",
-          rows: rows.length,
-          total_users: totalUsers,
-          total_sessions: totalSessions,
-          total_page_views: totalPageViews
-        });
-      } catch (err: any) {
-        results.push({ name: metricSet.name, status: "error", error: err.message });
+        if (insertData.length > 0) {
+          // Use UPSERT to avoid duplicates
+          const { error } = await supabase.from("google_analytics_data").upsert(insertData, {
+             onConflict: "user_id,property_id,metric_name,date"
+          });
+          if (error) console.error("[GA Collect] Upsert error:", error);
+        }
+
+        results.push({ name: metricSet.name, status: "synced", count: insertData.length });
+      } catch (fetchErr: any) {
+        console.warn(`[GA Collect] Fetch failed for ${metricSet.name}:`, fetchErr?.message);
+        results.push({ name: metricSet.name, status: "error", error: fetchErr?.message || "fetch failed" });
       }
     }
 
@@ -243,6 +209,21 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ error: error?.message || "Unknown error" }), {
       status: 500,
       headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+=======
+    return new Response(JSON.stringify({
+      success: true,
+      property_id: propertyId,
+      synced: results.length,
+      results,
+      aggregated
+    }), {
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+    });
+
+  } catch (error: any) {
+    console.error("[GA Collect] Fatal error:", error);
+    return new Response(JSON.stringify({ status: "skipped", message: error?.message || "Unknown error" }), {
+      status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   }
 });

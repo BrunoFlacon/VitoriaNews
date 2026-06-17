@@ -1,5 +1,7 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, startTransition } from "react";
+
 import { motion, AnimatePresence } from "framer-motion";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { 
   Image as ImageIcon, 
   Video, 
@@ -22,7 +24,18 @@ import {
   ShieldCheck,
   ShieldX,
   Music,
-  User
+  User,
+  Layers,
+  Smile,
+  PenSquare,
+  Newspaper,
+  Globe,
+  Share2,
+  Plus,
+  Eye,
+  Lock,
+  Star
+
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,14 +47,23 @@ import { useMediaUpload, type UploadedMedia } from "@/hooks/useMediaUpload";
 import { BulkUploadDialog } from "@/components/dashboard/BulkUploadDialog";
 import { GiphySearch } from "@/components/dashboard/GiphySearch";
 import { SpotifySearch } from "@/components/dashboard/SpotifySearch";
+import { 
+  PostPreview, 
+  InstagramCard, 
+  FacebookCard, 
+  XLikeCard, 
+  LinkedInCard
+} from "@/components/dashboard/PostPreview";
+import { getMediaUrl } from "@/utils/mediaUtils";
+import { PostsFeedView } from "@/components/dashboard/PostsFeedView";
 import { ScheduledPost, CreatePostInput } from "@/hooks/useScheduledPosts";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useNotifications } from "@/contexts/NotificationContext";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAIContent } from "@/hooks/useAIContent";
 import { usePublisher } from "@/hooks/usePublisher";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { useUserRole } from "@/hooks/useUserRole";
-import { SafeImage } from "@/components/ui/SafeImage";
 import {
   Dialog,
   DialogContent,
@@ -55,15 +77,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type MediaType = "image" | "video" | "document" | "story" | "live";
 
 const mediaTypes: { id: MediaType; icon: typeof ImageIcon; label: string; accept: string }[] = [
   { id: "image", icon: ImageIcon, label: "Imagem", accept: "image/*" },
-  { id: "video", icon: Video, label: "Vídeo", accept: "video/*" },
-  { id: "document", icon: FileText, label: "Documento", accept: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" },
-  { id: "story", icon: Smartphone, label: "Story", accept: "image/*,video/*" },
-  { id: "live", icon: Monitor, label: "Live", accept: "video/*" },
+  { id: "video", icon: Video, label: "Vídeo / Áudio", accept: "video/*,audio/*" },
 ];
 
 // Best posting times per platform (based on general research)
@@ -121,9 +146,43 @@ const bestPostingTimes: Partial<Record<SocialPlatformId, { day: string; time: st
     { day: "Terça", time: "11:00", engagement: "Alto" },
     { day: "Quinta", time: "09:00", engagement: "Alto" },
   ],
+  truthsocial: [
+    { day: "Segunda", time: "10:00", engagement: "Alto" },
+    { day: "Quarta", time: "12:00", engagement: "Alto" },
+    { day: "Sexta", time: "15:00", engagement: "Muito Alto" },
+  ],
+  gettr: [
+    { day: "Terça", time: "11:00", engagement: "Alto" },
+    { day: "Quinta", time: "13:00", engagement: "Alto" },
+  ],
   site: [
     { day: "Terça", time: "10:00", engagement: "Alto" },
     { day: "Quinta", time: "14:00", engagement: "Alto" },
+  ],
+  kwai: [
+    { day: "Segunda", time: "12:00", engagement: "Alto" },
+    { day: "Quarta", time: "18:00", engagement: "Muito Alto" },
+    { day: "Sábado", time: "20:00", engagement: "Alto" },
+  ],
+  rumble: [
+    { day: "Terça", time: "11:00", engagement: "Alto" },
+    { day: "Quinta", time: "13:00", engagement: "Muito Alto" },
+    { day: "Domingo", time: "18:00", engagement: "Alto" },
+  ],
+  medium: [
+    { day: "Terça", time: "09:00", engagement: "Muito Alto" },
+    { day: "Quarta", time: "10:00", engagement: "Alto" },
+    { day: "Sábado", time: "08:00", engagement: "Alto" },
+  ],
+  substack: [
+    { day: "Terça", time: "07:00", engagement: "Muito Alto" },
+    { day: "Quinta", time: "08:00", engagement: "Alto" },
+    { day: "Domingo", time: "10:00", engagement: "Alto" },
+  ],
+  resend: [
+    { day: "Terça", time: "10:00", engagement: "Muito Alto" },
+    { day: "Quarta", time: "10:00", engagement: "Alto" },
+    { day: "Quinta", time: "10:00", engagement: "Alto" },
   ],
 };
 
@@ -148,6 +207,7 @@ interface CreatePostPanelProps {
   editingPost?: ScheduledPost | null;
   onPostSaved?: () => void;
   onBackToCalendar?: () => void;
+  onEditPost?: (post: ScheduledPost) => void;
   createPost: (input: CreatePostInput) => Promise<ScheduledPost | null>;
   updatePost: (postId: string, updates: Partial<CreatePostInput>) => Promise<boolean>;
   submitForApproval: (postId: string) => Promise<boolean>;
@@ -155,23 +215,29 @@ interface CreatePostPanelProps {
   rejectPost?: (postId: string, reason: string) => Promise<boolean>;
 }
 
-export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackToCalendar, createPost, updatePost, submitForApproval, approvePost, rejectPost }: CreatePostPanelProps) => {
+export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackToCalendar, onEditPost, createPost, updatePost, submitForApproval, approvePost, rejectPost }: CreatePostPanelProps) => {
   const [content, setContent] = useState(editingPost?.content || "");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(() => {
-    if (editingPost?.platforms) return editingPost.platforms as SocialPlatformId[];
+    if (editingPost?.platforms) return editingPost.platforms as string[];
     
     // Pre-select based on dashboard choices
     try {
       const saved = localStorage.getItem('dashboard_selected_accounts');
       if (saved) {
         const selected = JSON.parse(saved) as Record<string, string>;
-        return Object.entries(selected).map(([platform, accountId]) => 
-          `${platform}|${accountId}` as SocialPlatformId
-        );
+        // Filter out platforms that don't have a valid account ID saved
+        return Object.entries(selected)
+          .filter(([_, accountId]) => accountId && accountId !== 'all')
+          .map(([platform, accountId]) => 
+            `${platform}|${accountId}`
+          );
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Error parsing saved accounts", e);
+    }
     return [];
   });
+
   const [selectedMedia, setSelectedMedia] = useState<MediaType | null>(
     (editingPost?.media_type as MediaType) || null
   );
@@ -190,18 +256,49 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   const [showAIDialog, setShowAIDialog] = useState(false);
   const [aiTopic, setAiTopic] = useState("");
   const [aiTone, setAiTone] = useState("profissional");
+  const [imagePrompt, setImagePrompt] = useState("");
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"criar" | "visualizar" | "preview">("criar");
+  const [videoTitle, setVideoTitle] = useState("");
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [thumbnailAspect, setThumbnailAspect] = useState<"16:9" | "9:16" | "1:1">("16:9");
+  
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [visibility, setVisibility] = useState<"public" | "private" | "subscribers">("public");
+  const [showImageDialog, setShowImageDialog] = useState(false);
+  const [showAudioDialog, setShowAudioDialog] = useState(false);
+  
+  // AI Generation States
+  const [aiMode, setAiMode] = useState<'post' | 'caption' | 'article' | 'translate' | 'social_adapt'>('post');
+  const [aiModel, setAiModel] = useState('google/gemini-2.0-flash-001');
+  const [aiLanguage, setAiLanguage] = useState('pt-BR');
+  const [aiInputText, setAiInputText] = useState("");
+  const [aiTargetLanguage, setAiTargetLanguage] = useState('en-US');
+  const [includeAttentionHooks, setIncludeAttentionHooks] = useState(true);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { uploadMedia, uploading, progress: uploadProgress } = useMediaUpload();
   
   const { addNotification } = useNotifications();
   const { toast } = useToast();
-  const { generateContent, generating } = useAIContent();
+  const { 
+    generateContent, generateImage, generateAudio, transcribeMedia,
+    generating, transcribing, OPENROUTER_MODELS, TRANSLATE_LANGUAGES, TTS_VOICES 
+  } = useAIContent();
   const { publishNow, publishing } = usePublisher();
   const { connections } = useSocialConnections();
   const { isEditor } = useUserRole();
+
+  const [debouncedContent, setDebouncedContent] = useState(content);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedContent(content);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [content]);
 
   const isPlatformConnected = (platformId: string) =>
     connections.some(c => c.platform === platformId && c.is_connected);
@@ -220,25 +317,29 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           ? new Date(editingPost.scheduled_at).toISOString().slice(0, 16)
           : ""
       );
-      setUploadedFiles([]);
+      if (editingPost.media_ids && editingPost.media_ids.length > 0) {
+        (supabase as any)
+          .from("media")
+          .select("id, file_url, name, file_type, file_size")
+          .in("id", editingPost.media_ids)
+          .then(({ data }: any) => {
+            if (data) {
+              setUploadedFiles(data.map((m: any) => ({
+                id: m.id,
+                file_url: m.file_url,
+                name: m.name,
+                file_type: m.file_type,
+                file_size: m.file_size
+              })));
+            }
+          });
+      } else {
+        setUploadedFiles([]);
+      }
+      setActiveTab("criar");
     } else {
       setContent("");
-      
-      // Default to saved selections if creating new
-      try {
-        const saved = localStorage.getItem('dashboard_selected_accounts');
-        if (saved) {
-          const selected = JSON.parse(saved) as Record<string, string>;
-          setSelectedPlatforms(Object.entries(selected).map(([platform, accountId]) => 
-            `${platform}|${accountId}`
-          ));
-        } else {
-          setSelectedPlatforms([]);
-        }
-      } catch (e) {
-        setSelectedPlatforms([]);
-      }
-
+      setSelectedPlatforms([]);
       setSelectedMedia(null);
       setOrientation("horizontal");
       setScheduledDate(initialDate || "");
@@ -246,30 +347,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     }
   }, [editingPost, initialDate]);
 
-  // Telegram Bot Prioritization: Replace any selected Telegram group account with the official bot account
-  useEffect(() => {
-    if (isEditing || connections.length === 0) return;
-    
-    const telegramBot = connections.find(c => 
-      c.platform === 'telegram' && 
-      c.is_connected && 
-      (c.page_name?.toLowerCase().includes('newsbot') || c.username?.toLowerCase().includes('newsbot')) && 
-      Number(c.platform_user_id || 0) > 0
-    );
-
-    if (telegramBot) {
-      const botKey = `telegram|${telegramBot.id}`;
-      setSelectedPlatforms(prev => {
-        const hasOtherTelegram = prev.some(p => p.startsWith('telegram|') && p !== botKey);
-        if (hasOtherTelegram) {
-          return [...prev.filter(p => !p.startsWith('telegram|')), botKey];
-        }
-        return prev;
-      });
-    }
-  }, [connections, isEditing]);
-
-  const togglePlatform = (id: string) => {
+  const togglePlatform = (id: SocialPlatformId) => {
     setSelectedPlatforms(prev =>
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
@@ -279,17 +357,20 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    const media = await uploadMedia(file);
-    
-    if (media) {
-      setUploadedFiles(prev => [...prev, media]);
-      toast({
-        title: "Arquivo enviado!",
-        description: `${file.name} foi carregado com sucesso.`,
-      });
+    // Upload all selected files in order
+    const fileArray = Array.from(files);
+    const results = await Promise.all(fileArray.map(f => uploadMedia(f)));
+    const uploaded = results.filter(Boolean) as UploadedMedia[];
+
+    if (uploaded.length > 0) {
+      setUploadedFiles(prev => [...prev, ...uploaded]);
+      if (uploaded.length === 1) {
+        toast({ title: "Arquivo enviado!", description: `${fileArray[0].name} carregado com sucesso.` });
+      } else {
+        toast({ title: `${uploaded.length} arquivos enviados!`, description: "Os arquivos serão exibidos como carrossel na prévia." });
+      }
     }
-    
+
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -301,15 +382,17 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     const files = e.dataTransfer.files;
     if (!files || files.length === 0) return;
 
-    const file = files[0];
-    const media = await uploadMedia(file);
-    
-    if (media) {
-      setUploadedFiles(prev => [...prev, media]);
-      toast({
-        title: "Arquivo enviado!",
-        description: `${file.name} foi carregado com sucesso.`,
-      });
+    const fileArray = Array.from(files);
+    const results = await Promise.all(fileArray.map(f => uploadMedia(f)));
+    const uploaded = results.filter(Boolean) as UploadedMedia[];
+
+    if (uploaded.length > 0) {
+      setUploadedFiles(prev => [...prev, ...uploaded]);
+      if (uploaded.length === 1) {
+        toast({ title: "Arquivo enviado!", description: `${fileArray[0].name} carregado com sucesso.` });
+      } else {
+        toast({ title: `${uploaded.length} arquivos enviados!`, description: "Os arquivos serão exibidos como carrossel na prévia." });
+      }
     }
   }, [uploadMedia, toast]);
 
@@ -370,6 +453,51 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     });
   };
 
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) return;
+    setIsGeneratingImage(true);
+    try {
+      const result = await generateImage({ prompt: imagePrompt });
+      if (result) {
+        setUploadedFiles(prev => [...prev, {
+          id: result.mediaId,
+          file_url: result.imageUrl,
+          name: `IA: ${imagePrompt.slice(0, 20)}`,
+          file_type: "image/png",
+          file_size: 0
+        }]);
+        setShowImageDialog(false);
+        setImagePrompt("");
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  const handleGenerateAudio = async () => {
+    if (!content.trim()) return;
+    setIsGeneratingAudio(true);
+    try {
+      const result = await generateAudio({ text: content });
+      if (result) {
+        setUploadedFiles(prev => [...prev, {
+          id: `audio-${Date.now()}`,
+          file_url: result.audioUrl,
+          name: "IA Áudio",
+          file_type: "audio/mpeg",
+          file_size: 0
+        }]);
+        setShowAudioDialog(false);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsGeneratingAudio(false);
+    }
+  };
+
   const handleSubmit = async (asDraft = false) => {
     if (!content.trim()) {
       toast({ title: "Conteúdo obrigatório", description: "Digite o texto do seu post.", variant: "destructive" });
@@ -405,8 +533,8 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
         if (success) {
           addNotification({
             type: "success",
-            title: "Post atualizado",
-            message: "As alterações foram salvas com sucesso.",
+            title: "🌟 Excelente trabalho!",
+            message: "Sua publicação foi atualizada e as melhorias foram salvas com sucesso.",
             platform: selectedPlatforms[0],
           });
           onPostSaved?.();
@@ -423,14 +551,17 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
         });
 
         if (post) {
+          const successTitle = asDraft ? "📝 Rascunho salvo!" : scheduledAt ? "🚀 Agendado com sucesso!" : "✅ Publicado com sucesso!";
+          const successMsg = asDraft
+            ? "Seu rascunho foi guardado. Ótimo começo!"
+            : scheduledAt
+              ? `Parabéns pelo trabalho! Sua publicação será postada em ${scheduledAt.toLocaleDateString('pt-BR')} às ${scheduledAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}.`
+              : "Parabéns! Sua publicação já está no ar e brilhando nas redes.";
+
           addNotification({
             type: "success",
-            title: asDraft ? "Rascunho salvo" : scheduledAt ? "Post agendado" : "Post criado",
-            message: asDraft
-              ? "Seu rascunho foi salvo com sucesso."
-              : scheduledAt
-                ? `Seu post será publicado em ${scheduledAt.toLocaleDateString('pt-BR')} às ${scheduledAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-                : "Seu post foi criado com sucesso.",
+            title: successTitle,
+            message: successMsg,
             platform: selectedPlatforms[0],
           });
 
@@ -453,21 +584,68 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     }
   };
 
+  const handleGenerateHashtags = async () => {
+    const result = await generateContent({
+      inputText: content,
+      platforms: selectedPlatforms,
+      mode: "hashtags",
+      model: aiModel
+    });
+    if (result && result.hashtags) {
+      setContent(prev => {
+        const text = prev.trim();
+        return text ? `${text}\n\n${result.hashtags}` : result.hashtags;
+      });
+      setShowHashtags(false);
+    }
+  };
+
+  const handleTranscribeAndSummarize = async (file: UploadedMedia, mode: "summary" | "report") => {
+    // 1. Transcribe the audio/video
+    const transcribeResult = await transcribeMedia({
+      mediaUrl: getMediaUrl(file.file_url)
+    });
+    
+    if (transcribeResult?.text) {
+      // 2. Send transcription to AI to generate content
+      const result = await generateContent({
+        inputText: transcribeResult.text,
+        platforms: selectedPlatforms,
+        mode: mode,
+        model: aiModel
+      });
+      
+      if (result) {
+        let finalContent = result.post;
+        if (result.title) finalContent = `**${result.title}**\n\n${finalContent}`;
+        if (result.hashtags) finalContent += `\n\n${result.hashtags}`;
+        if (result.cta) finalContent += `\n\n${result.cta}`;
+        
+        setContent(finalContent);
+      }
+    }
+  };
+
   const characterCount = content.length;
   const maxCharacters = 5000;
 
-  const selectedHashtags: string[] = selectedPlatforms.length > 0
-    ? Array.from(new Set(selectedPlatforms.flatMap(p => popularHashtags[p]?.slice(0, 5) || [])))
+  // Extract unique platform IDs from 'platformId|accountId' format
+  const selectedPlatformIds = Array.from(new Set(
+    selectedPlatforms.map(p => p.split('|')[0])
+  )) as SocialPlatformId[];
+
+  const selectedHashtags: string[] = selectedPlatformIds.length > 0
+    ? Array.from(new Set(selectedPlatformIds.flatMap(p => popularHashtags[p]?.slice(0, 5) || [])))
     : [];
 
-  const selectedBestTimes = selectedPlatforms.map(p => ({
+  const selectedBestTimes = selectedPlatformIds.map(p => ({
     platform: socialPlatforms.find(sp => sp.id === p),
     times: bestPostingTimes[p] || [],
   })).filter(item => item.times.length > 0);
 
   const platformConnectionData = useMemo(() => {
     return socialPlatforms
-      .filter(p => p.type === 'social' || p.type === 'messaging')
+      .filter(p => p.type === 'social')
       .map(platform => {
         const platformConnections = connections.filter(c => c.platform === platform.id && c.is_connected);
         const hasConnections = platformConnections.length > 0;
@@ -495,7 +673,16 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           primaryAccount
         };
       });
-  }, [connections, selectedPlatforms]);
+  }, [socialPlatforms, connections, selectedPlatforms]);
+
+  const previewData = useMemo(() => {
+    const firstSelected = platformConnectionData.find(p => p.isSelected);
+    return {
+      authorName: firstSelected?.primaryAccount?.page_name || firstSelected?.primaryAccount?.username || "Vitória News",
+      authorAvatar: firstSelected?.primaryAccount?.profile_picture || firstSelected?.primaryAccount?.profile_image_url || undefined,
+    };
+  }, [platformConnectionData]);
+
 
   return (
     <motion.div
@@ -503,18 +690,19 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
       animate={{ opacity: 1, y: 0 }}
       className="glass-card rounded-2xl border border-border overflow-hidden"
     >
-      {/* Hidden file input */}
+      {/* Hidden file input - multiple files allowed */}
       <input
         ref={fileInputRef}
         type="file"
         accept={getAcceptedTypes()}
         onChange={handleFileSelect}
+        multiple
         className="hidden"
       />
 
       {/* Header */}
-      <div className="p-6 border-b border-border">
-        <div className="flex items-center justify-between">
+      <div className="p-4 md:p-6 border-b border-border">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {onBackToCalendar && (
               <button
@@ -524,23 +712,23 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                 <ChevronLeft className="w-5 h-5" />
               </button>
             )}
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shrink-0">
               <Sparkles className="w-5 h-5 text-primary-foreground" />
             </div>
-            <div>
-              <h2 className="font-display font-bold text-xl">
+            <div className="min-w-0">
+              <h2 className="font-display font-bold text-lg md:text-xl truncate">
                 {isEditing ? "Editar Publicação" : "Criar Publicação"}
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground hidden md:block">
                 {isEditing
                   ? "Edite o conteúdo e republique ou reagende"
                   : "Publique em múltiplas redes simultaneamente"}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {isEditing && (
-              <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent font-medium">
+              <span className="text-xs px-2 py-1 rounded-full bg-accent/10 text-accent font-medium hidden md:inline">
                 Editando pauta
               </span>
             )}
@@ -552,82 +740,165 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             </span>
           </div>
         </div>
+
+        {/* Tabs */}
+        <TooltipProvider>
+          <div className="flex gap-1 mt-4 bg-muted/50 rounded-xl p-1">
+            {(["criar", "preview", "visualizar"] as const).map(tab => (
+              <Tooltip key={tab}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => startTransition(() => setActiveTab(tab))}
+                    className={cn(
+                      "flex-1 py-2.5 px-2 rounded-lg text-[10px] md:text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5",
+                      activeTab === tab
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {tab === "criar" && <PenSquare className="w-4 h-4" />}
+                    {tab === "preview" && <Smartphone className="w-4 h-4" />}
+                    {tab === "visualizar" && <Eye className="w-4 h-4" />}
+                    <span className="hidden md:inline">{tab === "criar" ? "Criar" : tab === "preview" ? "Preview" : "Posts"}</span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {tab === "criar" ? "Criar Post" : tab === "preview" ? "Preview do Post" : "Gerenciar Posts"}
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </TooltipProvider>
       </div>
 
-      <div className="p-6 space-y-6">
+      {activeTab === "visualizar" ? (
+        <div className="p-4 md:p-6">
+          <PostsFeedView
+            onEditPost={(post) => {
+              setActiveTab("criar");
+              if (onEditPost) onEditPost(post);
+            }}
+          />
+        </div>
+      ) : activeTab === "preview" ? (
+        <div className="p-4 md:p-6">
+          <PostPreview
+            content={debouncedContent}
+            selectedPlatforms={selectedPlatforms}
+            uploadedFiles={uploadedFiles}
+            videoTitle={videoTitle}
+            thumbnailUrl={thumbnailUrl || undefined}
+            mediaType={selectedMedia}
+            authorName={previewData.authorName}
+            authorAvatar={previewData.authorAvatar}
+            platformId={selectedPlatforms[0]?.split('|')[0]}
+            realMetrics={platformConnectionData.find(p => p.isSelected)?.primaryAccount}
+            visibility={visibility}
+          />
+        </div>
+      ) : (
+      <div className="p-4 md:p-6 space-y-6">
         {/* Platform Selection */}
         <div>
           <label className="text-sm font-medium mb-3 block">
             Selecionar Redes Sociais
           </label>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2 md:gap-3">
             {platformConnectionData.map(({ platform, connections: platformConnections, hasConnections, isSelected, selectedInPlatform, primaryAccount }) => {
+
               const Icon = platform.icon;
               
+
               return (
                 <div 
-                  key={platform.id}
+                  key={`platform-container-${platform.id}`}
                   className="relative group"
-                  onMouseEnter={() => setHoveredPlatform(platform.id)}
-                  onMouseLeave={() => setHoveredPlatform(null)}
+                  onMouseEnter={() => { if (window.innerWidth >= 768) setHoveredPlatform(platform.id); }}
+                  onMouseLeave={() => { if (window.innerWidth >= 768) setHoveredPlatform(null); }}
                 >
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => {
+                      // On mobile, first click shows the menu if there are connections
+                      if (window.innerWidth < 768 && hasConnections) {
+                        setHoveredPlatform(prev => prev === platform.id ? null : platform.id);
+                        return;
+                      }
+
                       if (!hasConnections) {
-                        togglePlatform(platform.id);
+                        togglePlatform(platform.id as SocialPlatformId);
                       } else if (platformConnections.length === 1) {
                         togglePlatform(`${platform.id}|${platformConnections[0].id}`);
+                      } else {
+                        // On desktop, if it has many connections, maybe toggle the first or just let hover work
+                        setHoveredPlatform(hoveredPlatform === platform.id ? null : platform.id);
+
                       }
                     }}
                     className={cn(
-                      "flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border transition-all relative outline-none",
+                      "flex items-center justify-center md:justify-start gap-2.5 p-2 md:px-3.5 md:py-2.5 rounded-xl md:rounded-xl border transition-all relative outline-none w-12 h-12 md:w-auto md:h-auto shrink-0",
                       isSelected
-                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                        ? "border-primary border-[1.5px] bg-primary/10 text-primary shadow-sm shadow-primary/20"
                         : "border-border hover:border-primary/50 text-muted-foreground bg-background",
                       !hasConnections && "opacity-60"
                     )}
                   >
-                    <div className="relative shrink-0">
+                    <div className="relative shrink-0 flex items-center justify-center">
                       <PlatformIconBadge
                         platform={platform}
-                        size="xs"
+                        size="sm"
                         muted={!hasConnections}
                       />
                       {hasConnections && (
-                        <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-green-500" />
+                        <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background bg-green-500" />
                       )}
                       {!hasConnections && (
-                        <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background bg-muted-foreground" />
+                        <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background bg-muted-foreground" />
                       )}
                     </div>
                     
-                    <span className="text-sm font-semibold max-w-[150px] truncate" title={platform.name}>
-                      {selectedInPlatform.length > 0 
-                        ? selectedInPlatform.length === 1 
-                          ? (selectedInPlatform[0].page_name || platform.name)
-                          : `${selectedInPlatform.length} Contas Selecionadas`
-                        : platformConnections.length === 1 
-                          ? (platformConnections[0].page_name || platform.name)
-                          : platform.name}
+                    {/* Label shown only on hover/touch or on desktop */}
+                    <AnimatePresence>
+                      {hoveredPlatform === platform.id && (
+                        <motion.span 
+                          key={`label-${platform.id}`}
+                          initial={{ opacity: 0, x: -5 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -5 }}
+                          className="absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground text-[10px] font-bold rounded shadow-lg z-[60] whitespace-nowrap pointer-events-none md:static md:opacity-100 md:ml-0 md:bg-transparent md:p-0 md:text-sm md:shadow-none md:flex-1 md:truncate"
+                        >
+                          {platform.name}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                    <span className="hidden md:inline text-sm font-semibold truncate ml-1">
+                      {isSelected && primaryAccount ? (
+                        <span className="flex flex-col items-start leading-tight">
+                          <span className="text-[10px] opacity-70 uppercase font-bold tracking-tighter">{platform.name}</span>
+                          <span className="truncate max-w-[120px] text-xs font-black">{primaryAccount.page_name || primaryAccount.username}</span>
+                        </span>
+                      ) : (
+                        <span className="font-bold">{platform.name}</span>
+                      )}
                     </span>
                     
                     {isSelected && (
                       <X 
-                        className="w-3.5 h-3.5 shrink-0 opacity-70 hover:opacity-100 transition-opacity ml-1" 
+                        className="hidden md:block w-3.5 h-3.5 shrink-0 opacity-70 hover:opacity-100 transition-opacity ml-1" 
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!hasConnections) togglePlatform(platform.id);
-                          else selectedInPlatform.forEach(c => togglePlatform(`${platform.id}|${c.id}`));
+                          if (!hasConnections) togglePlatform(platform.id as SocialPlatformId);
+                          else selectedInPlatform.forEach(c => togglePlatform(`${platform.id}|${c.id}` as SocialPlatformId));
                         }} 
                       />
                     )}
                   </motion.button>
 
                   <AnimatePresence>
-                    {hoveredPlatform === platform.id && hasConnections && platformConnections.length > 1 && (
+                    {hoveredPlatform === platform.id && hasConnections && (
                       <motion.div
+                        key={`menu-${platform.id}`}
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -640,7 +911,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                         </div>
                         <div className="max-h-[300px] overflow-y-auto p-1.5 flex flex-col gap-1 custom-scrollbar">
                           {platformConnections.map(conn => {
-                            const connKey = `${platform.id}|${conn.id}`;
+                            const connKey = `${platform.id}|${conn.id}` as SocialPlatformId;
                             const isConnSelected = selectedPlatforms.includes(connKey);
                             return (
                               <button
@@ -653,15 +924,13 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                                     : "text-foreground hover:bg-muted"
                                 )}
                               >
-                                {conn.profile_image_url ? (
-                                  <div className="w-6 h-6 rounded-md overflow-hidden border border-border/50 shrink-0">
-                                    <SafeImage src={conn.profile_image_url} alt="" className="w-full h-full object-cover" />
-                                  </div>
-                                ) : (
-                                  <div className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0", platform.color)}>
-                                    <User className="w-3 h-3 text-white" />
-                                  </div>
-                                )}
+                                <div className={cn("w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors z-10", 
+                                  isConnSelected 
+                                    ? "bg-primary border-primary text-primary-foreground" 
+                                    : "border-muted-foreground/30 group-hover/btn:border-muted-foreground/50 bg-background"
+                                )}>
+                                  {isConnSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
+                                </div>
                                 <span className="truncate flex-1 font-medium z-10">{conn.page_name || `Conta de ${platform.name}`}</span>
                               </button>
                             );
@@ -743,6 +1012,101 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           )}
         </AnimatePresence>
 
+        {/* Video Title + Thumbnail — shown only for video */}
+        <AnimatePresence mode="wait">
+          {selectedMedia === "video" && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="space-y-4"
+            >
+              {/* Title */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">
+                  Título do Vídeo <span className="text-muted-foreground text-xs">(YouTube, Reels, TikTok)</span>
+                </label>
+                <Input
+                  value={videoTitle}
+                  onChange={(e) => setVideoTitle(e.target.value)}
+                  placeholder="Ex: Confira as notícias de hoje em Tupã..."
+                  className="bg-muted/50 border-border focus:border-primary"
+                  maxLength={100}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1 text-right">{videoTitle.length}/100</p>
+              </div>
+
+              {/* Thumbnail / Capa */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Capa do Vídeo (Thumbnail)</label>
+                {/* Aspect ratio selector */}
+                <div className="flex gap-2 mb-3">
+                  {(["16:9", "9:16", "1:1"] as const).map((ratio) => (
+                    <button
+                      key={ratio}
+                      type="button"
+                      onClick={() => setThumbnailAspect(ratio)}
+                      className={cn(
+                        "flex flex-col items-center gap-1 px-3 py-2 rounded-xl border text-xs font-bold transition-all",
+                        thumbnailAspect === ratio
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      )}
+                    >
+                      <div
+                        className="border-2 border-current rounded"
+                        style={{
+                          width: ratio === "9:16" ? "12px" : ratio === "1:1" ? "16px" : "24px",
+                          height: ratio === "16:9" ? "14px" : ratio === "1:1" ? "16px" : "22px",
+                        }}
+                      />
+                      {ratio}
+                    </button>
+                  ))}
+                  <p className="self-center text-[10px] text-muted-foreground ml-1">
+                    {thumbnailAspect === "16:9" ? "Horizontal • Feed YouTube" : thumbnailAspect === "9:16" ? "Vertical • Reels/Shorts" : "Quadrado • Instagram"}
+                  </p>
+                </div>
+
+                {/* Thumbnail upload */}
+                {thumbnailUrl ? (
+                  <div className="relative rounded-xl overflow-hidden border border-border bg-black/5">
+                    <img
+                      src={thumbnailUrl}
+                      alt="capa"
+                      className={cn("w-full object-contain", thumbnailAspect === "9:16" ? "aspect-[9/16] max-h-48 object-center" : thumbnailAspect === "1:1" ? "aspect-square max-h-48" : "aspect-video max-h-36")}
+                    />
+                    <button
+                      onClick={() => setThumbnailUrl(null)}
+                      className="absolute top-2 right-2 w-6 h-6 bg-black/60 rounded-full flex items-center justify-center text-white hover:bg-black/80 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-border rounded-xl p-5 flex flex-col items-center justify-center cursor-pointer hover:border-primary/50 transition-colors group">
+                    <Upload className="w-7 h-7 text-muted-foreground group-hover:text-primary mb-2 transition-colors" />
+                    <p className="text-xs font-medium text-muted-foreground group-hover:text-foreground transition-colors">Clique para adicionar capa</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">JPG, PNG, WebP</p>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const url = URL.createObjectURL(file);
+                          setThumbnailUrl(url);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Upload Area */}
         <AnimatePresence mode="wait">
           {selectedMedia && (
@@ -750,38 +1114,41 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
+              className="space-y-4"
             >
-              <div 
-                className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer group"
-                onClick={handleUploadClick}
-                onDrop={handleDrop}
-                onDragOver={(e) => e.preventDefault()}
-              >
-                {uploading ? (
-                  <div className="space-y-3">
-                    <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
-                    <p className="font-medium">Enviando arquivo...</p>
-                    <div className="w-48 mx-auto bg-muted rounded-full h-2">
-                      <div 
-                        className="bg-primary h-2 rounded-full transition-all"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
+              {(uploadedFiles.length === 0 || uploading) && (
+                <div 
+                  className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer group"
+                  onClick={handleUploadClick}
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                >
+                  {uploading ? (
+                    <div className="space-y-3">
+                      <Loader2 className="w-12 h-12 mx-auto text-primary animate-spin" />
+                      <p className="font-medium">Enviando arquivo...</p>
+                      <div className="w-48 mx-auto bg-muted rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="w-16 h-16 rounded-2xl bg-muted mx-auto mb-4 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
-                      <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
-                    </div>
-                    <p className="font-medium mb-1">
-                      Arraste e solte ou clique para fazer upload
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Suporta: JPG, PNG, GIF, MP4, PDF, DOCX
-                    </p>
-                  </>
-                )}
-              </div>
+                  ) : (
+                    <>
+                      <div className="w-16 h-16 rounded-2xl bg-muted mx-auto mb-4 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+                        <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
+                      <p className="font-medium mb-1">
+                        Arraste e solte ou clique para fazer upload
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedMedia === "video" ? "Suporta: MP4, MOV, AVI, MP3, WAV, OGG" : "Suporta: JPG, PNG, GIF, WebP"}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Uploaded Files Preview */}
               {uploadedFiles.length > 0 && (
@@ -789,33 +1156,99 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                   {uploadedFiles.map((file) => (
                     <div 
                       key={file.id}
-                      className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl"
+                      className="flex flex-col gap-3 p-4 bg-muted/30 rounded-xl relative"
                     >
+                      <button
+                        onClick={() => removeFile(file.id)}
+                        className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-destructive/80 rounded-full transition-colors z-10"
+                      >
+                        <X className="w-4 h-4 text-white" />
+                      </button>
+
                       {file.file_type.startsWith("image/") ? (
                         <SafeImage 
-                          src={file.file_url} 
+                          src={getMediaUrl(file.file_url)} 
+
                           alt={file.name}
-                          className="w-12 h-12 object-cover rounded-lg"
+                          className="w-full max-h-[300px] object-contain rounded-lg bg-black/5"
+                        />
+                      ) : file.file_type.startsWith("video/") ? (
+                        <video 
+                          src={getMediaUrl(file.file_url)} 
+                          controls
+                          className="w-full max-h-[300px] object-contain rounded-lg bg-black/5"
                         />
                       ) : (
-                        <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center">
-                          <FileText className="w-6 h-6 text-muted-foreground" />
+                        <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center self-center">
+                          <FileText className="w-8 h-8 text-muted-foreground" />
                         </div>
                       )}
+                      
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{file.name}</p>
                         <p className="text-xs text-muted-foreground">
                           {file.file_size ? `${(file.file_size / 1024 / 1024).toFixed(2)} MB` : "Tamanho desconhecido"}
                         </p>
+                        {(file.file_type.startsWith("video/") || file.file_type.startsWith("audio/")) && (
+                          <div className="flex gap-2 mt-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-7 text-[10px] md:text-xs"
+                              disabled={transcribing}
+                              onClick={() => handleTranscribeAndSummarize(file, "report")}
+                            >
+                              <Sparkles className="w-3 h-3 mr-1" /> Criar Reportagem
+                            </Button>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-7 text-[10px] md:text-xs"
+                              disabled={transcribing}
+                              onClick={() => handleTranscribeAndSummarize(file, "summary")}
+                            >
+                              <Wand2 className="w-3 h-3 mr-1" /> Resumo Viral
+                            </Button>
+                          </div>
+                        )}
+                        {file.file_type.startsWith("image/") && (
+                          <div className="flex gap-2 mt-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="h-7 text-[10px] md:text-xs"
+                              disabled={generating}
+                              onClick={async () => {
+                                const result = await generateContent({
+                                  inputText: "Analise esta imagem e crie uma legenda atraente.",
+                                  platforms: selectedPlatforms,
+                                  mode: "caption",
+                                  model: aiModel,
+                                  mediaUrls: [getMediaUrl(file.file_url)]
+                                });
+                                if (result?.post) {
+                                  setContent(prev => prev.trim() ? `${prev}\n\n${result.post}` : result.post);
+                                }
+                              }}
+                            >
+                              <Sparkles className="w-3 h-3 mr-1" /> Criar Legenda (Visão)
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <button
-                        onClick={() => removeFile(file.id)}
-                        className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
                     </div>
                   ))}
+                  
+                  <div className="flex justify-center pt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleUploadClick}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> Adicionar mais mídias
+                    </Button>
+                  </div>
                 </div>
               )}
             </motion.div>
@@ -824,26 +1257,25 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
         {/* Content Textarea */}
         <div>
-          <label htmlFor="post-content" className="text-sm font-medium mb-3 block">
+          <label className="text-sm font-medium mb-3 block">
             Conteúdo da Publicação
           </label>
           <Textarea
-            id="post-content"
-            name="content"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Escreva sua mensagem aqui... Use #hashtags para maior alcance"
-            className="min-h-[150px] bg-muted/50 border-border focus:border-primary resize-none"
+            className="min-h-[150px] md:min-h-[200px] bg-muted/50 border-border focus:border-primary resize-none text-base md:text-xl font-medium p-4"
           />
           <div className="flex items-center gap-2 mt-3">
             <Popover open={showHashtags} onOpenChange={setShowHashtags}>
               <PopoverTrigger asChild>
                 <button 
                   disabled={selectedPlatforms.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-[10px] md:text-sm font-bold text-muted-foreground hover:text-foreground transition-all active:scale-95 shrink-0"
+                  title="Hashtags"
                 >
-                  <Hash className="w-4 h-4" />
-                  Hashtags
+                  <Hash className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Hashtags</span>
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-80 p-4" align="start">
@@ -870,6 +1302,20 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                   >
                     Inserir Top 5 Hashtags
                   </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleGenerateHashtags}
+                    disabled={generating || content.length < 10}
+                    className="w-full border-primary/20 text-primary hover:bg-primary/10"
+                  >
+                    {generating ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4 mr-2 text-primary" />
+                    )}
+                    Gerar Hashtags Inteligentes
+                  </Button>
                 </div>
               </PopoverContent>
             </Popover>
@@ -877,10 +1323,11 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             <Popover>
               <PopoverTrigger asChild>
                 <button 
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted hover:bg-muted/80 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-[10px] md:text-sm font-bold text-muted-foreground hover:text-foreground transition-all active:scale-95 shrink-0"
+                  title="GIF"
                 >
-                  <ImageIcon className="w-4 h-4" />
-                  GIPHY
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">GIF</span>
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-[350px] p-0 border-none bg-transparent shadow-none" align="start">
@@ -890,8 +1337,8 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                       id: `giphy-${Date.now()}`,
                       file_url: url,
                       file_type: "image/gif",
-                      name: "GIPHY GIF",
-                      file_size: 0
+                      name: "giphy.gif",
+                      file_size: 0,
                     };
                     setUploadedFiles(prev => [...prev, newMedia]);
                     if (!selectedMedia) setSelectedMedia("image");
@@ -900,18 +1347,46 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                       description: "GIF selecionado do Giphy.",
                     });
                   }}
-                  onClose={() => document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}))}
+                  onClose={() => {}}
                 />
               </PopoverContent>
             </Popover>
+
+              <button
+                onClick={async () => {
+                  if (!content.trim()) {
+                    toast({ title: "Digite um tema", description: "Escreva algo no campo de conteúdo para usar como base do carrossel." });
+                    return;
+                  }
+                  const result = await generateContent({
+                    inputText: `Transforme a seguinte ideia/texto em um roteiro detalhado para um CARROSSEL (sequência de imagens) nas redes sociais. Especifique o que deve ter na imagem de cada slide (Slide 1, Slide 2...) e o texto que vai na legenda final do post. Seja criativo, persuasivo e use gatilhos de curiosidade para fazer o usuário arrastar para o lado. Texto base: ${content}`,
+                    platforms: selectedPlatforms,
+                    mode: "caption",
+                    model: aiModel
+                  });
+                  if (result?.post) {
+                    setContent(result.post);
+                  }
+                }}
+                disabled={generating}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10px] md:text-sm font-bold transition-all active:scale-95 shrink-0 ml-auto"
+                title="Criar Carrossel (IA)"
+              >
+                {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />}
+                <span className="hidden md:inline">Criar Carrossel (IA)</span>
+              </button>
             
             <Popover>
               <PopoverTrigger asChild>
                 <button 
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-sm text-foreground transition-colors border border-[#1DB954]/20"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#1DB954]/10 hover:bg-[#1DB954]/20 text-[10px] md:text-sm font-bold text-foreground transition-all active:scale-95 border border-[#1DB954]/20 shrink-0"
+                  title="Spotify"
                 >
-                  <Music className="w-4 h-4 text-[#1DB954]" />
-                  Spotify
+                  {/* Official Spotify SVG Logo */}
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" fill="#1DB954"/>
+                  </svg>
+                  <span className="hidden md:inline">Spotify</span>
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-[350px] p-0 border-none bg-transparent shadow-none" align="start">
@@ -930,73 +1405,183 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
             <button 
               onClick={() => setShowAIDialog(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-primary/20 to-accent/20 hover:from-primary/30 hover:to-accent/30 text-sm text-foreground transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-primary/20 to-accent/20 hover:from-primary/30 hover:to-accent/30 text-[10px] md:text-sm font-bold text-foreground transition-all active:scale-95 shrink-0"
+              title="IA"
             >
-              <Wand2 className="w-4 h-4 text-primary" />
-              Gerar com IA
+              <Wand2 className="w-3.5 h-3.5 text-primary" />
+              <span className="hidden md:inline">IA</span>
             </button>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <button 
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-[10px] md:text-sm font-bold text-muted-foreground hover:text-foreground transition-all active:scale-95 shrink-0"
+                  title="Emoji"
+                >
+                  <Smile className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Emoji</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="start">
+                <div className="grid grid-cols-8 gap-1">
+                  {["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "💩", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🤲", "👐", "🙌", "👏", "🤝", "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘", "👌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐", "🖖", "👋", "🤙", "💪", "🦾", "🖕", "✍️", "🙏", "👣", "👄", "🦷", "👅", "👂", "🦻", "👃", "🧠", "👤", "👥", "🗣"].map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => setContent(prev => prev + emoji)}
+                      className="text-xl p-1 hover:bg-muted rounded transition-colors"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
         {/* AI Generation Dialog */}
         <Dialog open={showAIDialog} onOpenChange={setShowAIDialog}>
-          <DialogContent className="sm:max-w-[500px]" aria-describedby={undefined}>
+          <DialogContent className="sm:max-w-[600px] max-h-[90dvh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Wand2 className="w-5 h-5 text-primary" />
-                Gerar Conteúdo com IA
+                Assistente de Conteúdo IA
               </DialogTitle>
               <DialogDescription>
-                Descreva o tema do seu post e a IA irá criar o conteúdo para você
+                Use modelos avançados via OpenRouter para criar, traduzir ou adaptar conteúdo.
               </DialogDescription>
             </DialogHeader>
             
-            <div className="space-y-4 py-4">
-              <div>
-                <label htmlFor="ai-topic" className="text-sm font-medium mb-2 block">Tema do Post</label>
-                <Textarea
-                  id="ai-topic"
-                  name="ai_topic"
-                  value={aiTopic}
-                  onChange={(e) => setAiTopic(e.target.value)}
-                  placeholder="Ex: Lançamento de novo produto de skincare para pele oleosa..."
-                  className="min-h-[100px]"
-                />
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-2 block">Tom da Mensagem</label>
-                <div className="flex flex-wrap gap-2">
-                  {["profissional", "descontraído", "inspiracional", "informativo", "promocional"].map((tone) => (
-                    <button
-                      key={tone}
-                      onClick={() => setAiTone(tone)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-sm transition-colors capitalize",
-                        aiTone === tone
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted hover:bg-muted/80"
-                      )}
-                    >
-                      {tone}
-                    </button>
-                  ))}
-                </div>
+            <div className="space-y-6 py-4">
+              {/* Mode Selection */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {[
+                  { id: 'post', label: 'Novo Post', icon: PenSquare },
+                  { id: 'article', label: 'Matéria de Vídeo', icon: Newspaper },
+                  { id: 'caption', label: 'Legenda Vídeo', icon: Video },
+                  { id: 'translate', label: 'Tradução', icon: Globe },
+                  { id: 'social_adapt', label: 'Adaptar P/ Redes', icon: Share2 },
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setAiMode(mode.id as any)}
+                    className={cn(
+                      "flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all gap-2",
+                      aiMode === mode.id 
+                        ? "border-primary bg-primary/5 text-primary" 
+                        : "border-border hover:border-primary/30 text-muted-foreground"
+                    )}
+                  >
+                    <mode.icon className="w-5 h-5" />
+                    <span className="text-xs font-bold">{mode.label}</span>
+                  </button>
+                ))}
               </div>
 
-              {selectedPlatforms.length > 0 && (
-                <div className="text-sm text-muted-foreground">
-                  Otimizado para: {selectedPlatforms.map(p => 
-                    socialPlatforms.find(sp => sp.id === p)?.name
-                  ).join(", ")}
+              {/* Dynamic Inputs based on Mode */}
+              <div className="space-y-4">
+                {aiMode === 'post' ? (
+                  <div>
+                    <label className="text-sm font-bold mb-2 block">Tema ou Assunto</label>
+                    <Textarea
+                      value={aiTopic}
+                      onChange={(e) => setAiTopic(e.target.value)}
+                      placeholder="Sobre o que você quer falar?"
+                      className="min-h-[80px] rounded-xl"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="text-sm font-bold mb-2 block">Conteúdo Base</label>
+                    <Textarea
+                      value={aiInputText}
+                      onChange={(e) => setAiInputText(e.target.value)}
+                      placeholder="Cole o texto, transcrição ou link para processar..."
+                      className="min-h-[120px] rounded-xl"
+                    />
+                    {uploadedFiles.length > 0 && aiMode !== 'translate' && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="mt-2 text-xs h-7"
+                        onClick={async () => {
+                          const file = uploadedFiles[0];
+                          if (file.file_type.includes('video') || file.file_type.includes('audio')) {
+                            const result = await transcribeMedia({ mediaUrl: file.file_url });
+                            if (result?.text) setAiInputText(result.text);
+                          }
+                        }}
+                        disabled={transcribing}
+                      >
+                        {transcribing ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Video className="w-3 h-3 mr-2" />}
+                        Extrair Texto da Mídia Selecionada
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {aiMode === 'translate' && (
+                  <div>
+                    <label className="text-sm font-bold mb-2 block">Idioma de Destino</label>
+                    <select 
+                      value={aiTargetLanguage}
+                      onChange={(e) => setAiTargetLanguage(e.target.value)}
+                      className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      {TRANSLATE_LANGUAGES.map(lang => (
+                        <option key={lang.id} value={lang.id}>{lang.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-bold mb-2 block">Modelo IA</label>
+                    <select 
+                      value={aiModel}
+                      onChange={(e) => setAiModel(e.target.value)}
+                      className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      {OPENROUTER_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-bold mb-2 block">Tom de Voz</label>
+                    <select 
+                      value={aiTone}
+                      onChange={(e) => setAiTone(e.target.value)}
+                      className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    >
+                      {["profissional", "informativo", "descontraído", "inspiracional", "promocional", "político", "jornalístico"].map(t => (
+                        <option key={t} value={t} className="capitalize">{t}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              )}
+
+                <div className="flex items-center gap-2 pt-2">
+                  <input 
+                    type="checkbox" 
+                    id="hooks" 
+                    checked={includeAttentionHooks}
+                    onChange={(e) => setIncludeAttentionHooks(e.target.checked)}
+                    className="rounded border-border text-primary focus:ring-primary"
+                  />
+                  <label htmlFor="hooks" className="text-sm font-medium cursor-pointer">
+                    Usar técnicas de atenção (Hooks & CTA)
+                  </label>
+                </div>
+              </div>
             </div>
             
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => setShowAIDialog(false)}
+                className="rounded-xl"
               >
                 Cancelar
               </Button>
@@ -1004,28 +1589,39 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                 onClick={async () => {
                   const result = await generateContent({
                     topic: aiTopic,
+                    inputText: aiInputText,
+                    mode: aiMode,
                     platforms: selectedPlatforms,
                     tone: aiTone,
+                    targetLanguage: aiTargetLanguage,
+                    attentionTechniques: includeAttentionHooks,
+                    model: aiModel, // Pass the selected model
                   });
                   
                   if (result) {
-                    setContent(result.post + "\n\n" + result.hashtags);
+                    let finalContent = result.post;
+                    if (result.title) finalContent = `**${result.title}**\n\n${finalContent}`;
+                    if (result.hashtags) finalContent += `\n\n${result.hashtags}`;
+                    if (result.cta) finalContent += `\n\n${result.cta}`;
+                    
+                    setContent(finalContent);
                     setShowAIDialog(false);
                     setAiTopic("");
+                    setAiInputText("");
                   }
                 }}
-                disabled={generating || !aiTopic.trim()}
-                className="bg-gradient-to-r from-primary to-accent"
+                disabled={generating || transcribing || (!aiTopic.trim() && !aiInputText.trim())}
+                className="bg-gradient-to-r from-primary to-accent rounded-xl px-8"
               >
                 {generating ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Gerando...
+                    Processando...
                   </>
                 ) : (
                   <>
                     <Wand2 className="w-4 h-4 mr-2" />
-                    Gerar Conteúdo
+                    Gerar Agora
                   </>
                 )}
               </Button>
@@ -1038,28 +1634,25 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           <label className="text-sm font-medium mb-3 block">
             Agendamento
           </label>
-          <div className="flex gap-3">
+          <div className="flex gap-2 md:gap-3">
             <div className="flex-1 relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <label htmlFor="scheduled-at" className="sr-only">Data de Agendamento</label>
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10 pointer-events-none hidden md:block" />
               <input
-                id="scheduled-at"
-                name="scheduled_at"
                 type="datetime-local"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
                 min={new Date().toISOString().slice(0, 16)}
-                className="w-full bg-muted/50 border border-border rounded-xl px-10 py-2.5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="w-full bg-muted/50 border border-border rounded-xl px-3 md:px-10 py-2.5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 dark:[color-scheme:dark] relative z-0"
               />
             </div>
             <Popover open={showBestTimes} onOpenChange={setShowBestTimes}>
               <PopoverTrigger asChild>
                 <button 
                   disabled={selectedPlatforms.length === 0}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-2 px-3 md:px-4 py-2.5 rounded-xl border border-border hover:border-primary/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                 >
                   <Clock className="w-4 h-4" />
-                  Melhor Horário
+                  <span className="hidden md:inline">Melhor Horário</span>
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-96 p-4" align="end">
@@ -1127,43 +1720,88 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             </p>
           )}
         </div>
-      </div>
 
-      {/* Actions */}
-      <div className="p-6 border-t border-border bg-muted/30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-muted-foreground">
+        {/* Visibility Selector */}
+        <div className="pt-4 border-t border-border">
+          <label className="text-sm font-medium mb-3 block">Visibilidade do Post</label>
+          <TooltipProvider>
+            <div className="flex gap-2">
+              {(["public", "private", "subscribers"] as const).map((v) => (
+                <Tooltip key={v}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setVisibility(v)}
+                      className={cn(
+                        "flex-1 py-2 px-3 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all",
+                        visibility === v
+                          ? "border-primary bg-primary/10 text-primary shadow-sm"
+                          : "border-border text-muted-foreground hover:border-primary/50"
+                      )}
+                    >
+                      {v === "public" ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Globe className="w-4 h-4" />
+                          <span className="hidden md:inline">Público</span>
+                        </div>
+                      ) : v === "private" ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Lock className="w-4 h-4" />
+                          <span className="hidden md:inline">Privado</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Star className="w-4 h-4" />
+                          <span className="hidden md:inline">Assinantes</span>
+                        </div>
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {v === "public" ? "Público para todos" : v === "private" ? "Somente eu" : "Apenas assinantes"}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          </TooltipProvider>
+        </div>
+      </div>
+      )}
+
+      {/* Actions - only in criar tab */}
+      {activeTab === "criar" && (
+      <div className="p-4 md:p-6 border-t border-border bg-muted/30">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex w-full md:w-auto items-center justify-between gap-3">
+            <p className="text-[10px] md:text-sm text-muted-foreground font-bold uppercase tracking-wider">
               {selectedPlatforms.length} redes selecionadas
-              {uploadedFiles.length > 0 && ` • ${uploadedFiles.length} arquivo(s)`}
+              {uploadedFiles.length > 0 && <span className="hidden md:inline">{` • ${uploadedFiles.length} arquivo(s)`}</span>}
             </p>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowBulkUpload(true)}
-              className="gap-1.5"
+              className="gap-1.5 rounded-xl h-9 text-[10px] font-black uppercase"
             >
-              <Upload className="w-3.5 h-3.5" />
-              Importar CSV
+              <Upload className="w-3 h-3" />
+              CSV
             </Button>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 md:gap-3 w-full md:w-auto">
             <Button 
               variant="outline" 
-              className="border-border"
+              className="border-border rounded-xl text-[10px] md:text-sm h-12 md:h-auto font-black uppercase"
               onClick={() => handleSubmit(true)}
               disabled={isSubmitting || publishing || !content.trim()}
             >
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-              Salvar Rascunho
+              {isSubmitting ? <Loader2 className="w-3 h-3 animate-spin md:mr-2" /> : null}
+              Rascunho
             </Button>
-            {/* Submit for approval - for drafts or when editing */}
+            
             <Button
               variant="outline"
-              className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10"
+              className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10 rounded-xl text-[10px] md:text-sm h-12 md:h-auto font-black uppercase"
               disabled={isSubmitting || publishing || !content.trim() || selectedPlatforms.length === 0}
               onClick={async () => {
-                // If editing, update first then submit for approval
                 if (isEditing && editingPost) {
                   const success = await updatePost(editingPost.id, {
                     content: content.trim(),
@@ -1178,7 +1816,6 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     onPostSaved?.();
                   }
                 } else {
-                  // Create as draft first, then submit
                   const post = await createPost({
                     content: content.trim(),
                     media_ids: uploadedFiles.map(f => f.id),
@@ -1198,19 +1835,17 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                 }
               }}
             >
-              <Send className="w-4 h-4 mr-1" />
-              Enviar para Aprovação
+              Aprovação
             </Button>
+
             {!scheduledDate && (
               <Button 
                 variant="secondary"
                 disabled={isSubmitting || publishing || !content.trim() || selectedPlatforms.length === 0}
                 onClick={async () => {
                   if (!content.trim() || selectedPlatforms.length === 0) return;
-                  
                   const mediaUrls = uploadedFiles.map(f => f.file_url);
                   const result = await publishNow(content.trim(), selectedPlatforms, mediaUrls);
-                  
                   if (result) {
                     setContent("");
                     setSelectedPlatforms([]);
@@ -1219,68 +1854,96 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     setUploadedFiles([]);
                   }
                 }}
-                className="gap-2"
+                className="rounded-xl text-[10px] md:text-sm h-12 md:h-auto font-black uppercase col-span-1"
               >
-                {publishing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-                Publicar Agora (API)
+                {publishing ? <Loader2 className="w-3 h-3 animate-spin" /> : "Publicar"}
               </Button>
             )}
             
-            {/* Aprovar / Rejeitar buttons for Editors when editing a pending_approval post */}
-            {isEditing && editingPost?.status === 'pending_approval' && isEditor && (
-              <>
-                <Button 
-                  disabled={isSubmitting || publishing}
-                  onClick={async () => {
-                    const success = approvePost && await approvePost(editingPost.id);
-                    if (success) onPostSaved?.();
-                  }}
-                  className="bg-green-600 hover:bg-green-700 text-white gap-2"
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  Aprovar
-                </Button>
-                <Button 
-                  variant="destructive"
-                  disabled={isSubmitting || publishing}
-                  onClick={async () => {
-                    // For simplicity, we just reject with a default reason, 
-                    // or ideally show the same dialog. Since dialog is in CalendarView, we do a basic prompt.
-                    const reason = window.prompt("Motivo da rejeição:");
-                    if (reason && reason.trim()) {
-                      const success = rejectPost && await rejectPost(editingPost.id, reason.trim());
-                      if (success) onPostSaved?.();
-                    }
-                  }}
-                  className="gap-2"
-                >
-                  <ShieldX className="w-4 h-4" />
-                  Rejeitar
-                </Button>
-              </>
-            )}
-
             <Button 
               disabled={isSubmitting || publishing || !content.trim() || selectedPlatforms.length === 0}
               onClick={() => handleSubmit(false)}
-              className="bg-gradient-to-r from-primary to-accent hover:opacity-90 text-primary-foreground gap-2"
+              className="bg-gradient-to-r from-primary to-accent hover:opacity-90 text-primary-foreground gap-1.5 md:gap-2 rounded-xl text-[10px] md:text-sm h-12 md:h-auto col-span-1 font-black uppercase shadow-lg shadow-primary/20"
             >
               {isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-3 h-3 animate-spin" />
               ) : (
-                <Send className="w-4 h-4" />
+                <Send className="w-3 h-3" />
               )}
-              {isEditing ? "Atualizar Post" : scheduledDate ? "Agendar" : "Salvar Post"}
+              {isEditing ? "Atualizar" : scheduledDate ? "Agendar" : "Salvar"}
             </Button>
           </div>
         </div>
       </div>
+      )}
 
       {/* Bulk Upload Dialog */}
+      {/* Image Generation Dialog */}
+      <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
+        <DialogContent className="sm:max-w-[500px]" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ImageIcon className="w-5 h-5 text-cyan-400" />
+              Gerar Imagem com IA
+            </DialogTitle>
+            <DialogDescription>
+              Descreva a imagem que deseja criar para seu post
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Prompt da Imagem</label>
+              <Textarea
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                placeholder="Ex: Uma paisagem futurista com robôs e cores vibrantes, estilo digital art..."
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImageDialog(false)}>Cancelar</Button>
+            <Button 
+              onClick={handleGenerateImage}
+              disabled={isGeneratingImage || !imagePrompt.trim()}
+              className="bg-gradient-to-r from-cyan-500 to-blue-500 text-white"
+            >
+              {isGeneratingImage ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-2" /> Gerar Imagem</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Audio Generation Dialog */}
+      <Dialog open={showAudioDialog} onOpenChange={setShowAudioDialog}>
+        <DialogContent className="sm:max-w-[500px]" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Music className="w-5 h-5 text-amber-400" />
+              Converter Texto em Áudio
+            </DialogTitle>
+            <DialogDescription>
+              A IA irá narrar o conteúdo do seu post
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground bg-muted/50 p-4 rounded-xl border border-border">
+              {content || "Escreva algo no post primeiro para converter em áudio."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAudioDialog(false)}>Cancelar</Button>
+            <Button 
+              onClick={handleGenerateAudio}
+              disabled={isGeneratingAudio || !content.trim()}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 text-white"
+            >
+              {isGeneratingAudio ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Gerando...</> : <><Sparkles className="w-4 h-4 mr-2" /> Gerar Áudio</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <BulkUploadDialog
         open={showBulkUpload}
         onOpenChange={setShowBulkUpload}

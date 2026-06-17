@@ -27,8 +27,8 @@ interface HeaderProps {
   setIsSidebarCollapsed?: (collapsed: boolean) => void;
 }
 
-export const Header = memo(({ 
-  onNotificationsClick, 
+export const Header = memo(({
+  onNotificationsClick,
   onNavigate,
   isSidebarCollapsed,
   setIsSidebarCollapsed
@@ -40,7 +40,6 @@ export const Header = memo(({
 
   const displayName = profile?.name || user?.email?.split('@')[0] || "Usuário";
   const initials = displayName.charAt(0).toUpperCase();
-  // Mapeamento de roles técnicos para labels legíveis
   const ROLE_LABELS: Record<string, string> = {
     admin_master: 'Admin Master',
     dev_master: 'Dev Master',
@@ -57,7 +56,7 @@ export const Header = memo(({
       >
         <div className="flex items-center gap-4 flex-1">
           {/* Logo and Name for Mobile */}
-          <div 
+          <div
             className="flex md:hidden items-center gap-2 cursor-pointer active:scale-95 transition-transform"
             onClick={() => setIsSidebarCollapsed?.(!isSidebarCollapsed)}
           >
@@ -80,7 +79,7 @@ export const Header = memo(({
           <div className="relative flex-1 md:max-w-md flex justify-end md:justify-start">
             <AnimatePresence>
               {(isSearchExpanded || !window.innerWidth || window.innerWidth > 768) ? (
-                <motion.div 
+                <motion.div
                   initial={{ width: 0, opacity: 0 }}
                   animate={{ width: "100%", opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
@@ -89,13 +88,13 @@ export const Header = memo(({
                     isSearchExpanded ? "fixed inset-x-0 top-0 h-16 px-4 bg-background z-50 md:relative md:inset-auto md:h-auto md:px-0 md:bg-transparent" : "hidden md:flex"
                   )}
                 >
-                  <OmniSearch 
-                    isExpanded={isSearchExpanded} 
-                    setIsExpanded={setIsSearchExpanded} 
+                  <OmniSearch
+                    isExpanded={isSearchExpanded}
+                    setIsExpanded={setIsSearchExpanded}
                   />
                 </motion.div>
               ) : (
-                <button 
+                <button
                   onClick={() => setIsSearchExpanded(true)}
                   className="md:hidden p-2 text-muted-foreground transition-colors"
                 >
@@ -107,7 +106,7 @@ export const Header = memo(({
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={onNotificationsClick}
             className="relative p-2 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
           >
@@ -116,7 +115,6 @@ export const Header = memo(({
               <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-destructive rounded-full" />
             )}
           </button>
-
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -130,11 +128,11 @@ export const Header = memo(({
                       {initials}
                     </AvatarFallback>
                   </Avatar>
-                  <span 
+                  <span
                     className={cn(
-                      "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background shadow-sm transition-all duration-300", 
+                      "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background shadow-sm transition-all duration-300",
                       isOnline ? "bg-green-500" : "bg-transparent border border-muted-foreground/40"
-                    )} 
+                    )}
                   />
                 </div>
                 <div className="hidden md:block text-left">
@@ -177,7 +175,7 @@ export const Header = memo(({
           </DropdownMenu>
         </div>
       </header>
-      
+
       {/* Status Bar / Weather Row */}
       <div className="px-4 md:px-8 py-0 bg-background/95 border-b border-border/50">
         <DateTimeWeather />

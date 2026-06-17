@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Image, 
@@ -54,6 +54,14 @@ export const MediaGalleryView = () => {
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const handleGlobalSearch = (e: any) => {
+      setSearchQuery(e.detail);
+    };
+    window.addEventListener('system-search', handleGlobalSearch);
+    return () => window.removeEventListener('system-search', handleGlobalSearch);
+  }, []);
 
   const filteredMedia = media.filter(item => {
     const matchesFilter = filter === "all" || item.type === filter;
@@ -164,7 +172,7 @@ export const MediaGalleryView = () => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
         className={cn(
-          "mb-6 border-2 border-dashed rounded-2xl p-8 text-center transition-all",
+          "mb-6 border-2 border-dashed rounded-2xl p-4 md:p-8 text-center transition-all",
           isDragging 
             ? "border-primary bg-primary/10" 
             : "border-border hover:border-primary/50"

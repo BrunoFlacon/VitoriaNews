@@ -450,7 +450,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       if (status === 'CHANNEL_ERROR') {
         const now = Date.now();
         if (now - lastErrorTime > 30000) {
-          console.warn('Realtime subscription error (will retry):', channelName);
+          console.debug('Realtime unavailable, using polling:', channelName);
         }
         lastErrorTime = now;
         setRealtimeError(true);
@@ -458,6 +458,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         setRealtimeError(false);
       }
     });
+    // Trigger a cache refetch on mount so data loads immediately
+    queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
 
     return () => { 
       if (debounceTimer) clearTimeout(debounceTimer);
@@ -591,4 +593,3 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     demographics: data?.demographics || null,
   }), [stats, socialStats, messagingStats, byPlatform, messagingChannels, audienceBreakdown, isLoading, manualLoading, data, totalFollowers, totalSocialFollowers, totalMessagingMembers, totalPosts, connectedPlatforms, getPlatformStats, isConnected, refetch]);
 }
-

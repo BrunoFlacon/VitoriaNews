@@ -137,7 +137,7 @@ export function usePlatformDetail(
       const { data } = await query;
       return (data || []) as AccountMetric[];
     },
-    enabled: !!user && !!platformId && !!resolvedAccountId,
+    enabled: !!user && !!platformId,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -159,7 +159,7 @@ export function usePlatformDetail(
       const { data } = await query;
       return (data || []) as PostMetric[];
     },
-    enabled: !!user && !!platformId && !!resolvedAccountId,
+    enabled: !!user && !!platformId,
     staleTime: 5 * 60 * 1000,
   });
 

@@ -74,6 +74,10 @@ function parsePlatforms(raw: string | string[] | null): string[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw;
   let cleaned = raw.trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {}
   if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
     cleaned = cleaned.slice(1, -1);
   }
@@ -84,7 +88,8 @@ function parsePlatforms(raw: string | string[] | null): string[] {
 export function usePlatformMetrics(platform: string, period: string = '30d', enabled: boolean = true) {
   const { user } = useAuth();
 
-  const periodDays = period === '24h' ? 1 : period === '3d' ? 3 : period === '7d' ? 7 : period === '15d' ? 15 : period === '30d' ? 30 : period === '60d' ? 60 : period === '90d' ? 90 : 30;
+  const PERIOD_MAP: Record<string, number> = { '24h': 1, '3d': 3, '7d': 7, '15d': 15, '30d': 30, '60d': 60, '90d': 90, '120d': 120, '365d': 365, '730d': 730, '1825d': 1825, 'all': 36500 };
+  const periodDays = PERIOD_MAP[period] ?? 30;
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - periodDays);
   const sinceStr = sinceDate.toISOString().split('T')[0];
@@ -137,6 +142,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
             content: p.content || '',
             platform: platforms[0] || '',
             allPlatforms: [],
+            platforms: [] as string[],
             media_type: p.media_type || null,
             likes: 0,
             comments: 0,
@@ -149,6 +155,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
         for (const plat of platforms) {
           if (!merged[key].allPlatforms.includes(plat)) {
             merged[key].allPlatforms.push(plat);
+            merged[key].platforms.push(plat);
           }
         }
       }
@@ -167,7 +174,8 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
       let query = supabase
         .from('scheduled_posts')
         .select('id, platforms, scheduled_at, published_at, status')
-        .in('status', ['published', 'scheduled']);
+        .in('status', ['published', 'scheduled'])
+        .or(`scheduled_at.gte.${sinceStr},published_at.gte.${sinceStr}`);
 
       const { data, error } = await query;
       if (error || !data) return [];
@@ -221,7 +229,8 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
         .from('scheduled_posts')
         .select('id, platforms, media_type, scheduled_at, published_at, status')
         .in('status', ['published', 'scheduled'])
-        .not('media_type', 'is', null);
+        .not('media_type', 'is', null)
+        .or(`scheduled_at.gte.${sinceStr},published_at.gte.${sinceStr}`);
 
       const { data, error } = await query;
       if (error || !data) return [];

@@ -7,6 +7,13 @@ const corsHeaders = (req) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 });
+=======
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-authorization",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 
 async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
   try {

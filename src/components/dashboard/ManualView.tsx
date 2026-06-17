@@ -15,7 +15,7 @@ import {
   MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSystem } from "@/contexts/SystemContext";
+import { useSystem } from "@/hooks/useSystem";
 import { supabase } from "@/integrations/supabase/client";
 
 const SECTIONS = [

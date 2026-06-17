@@ -48,7 +48,7 @@ export const SecurityTab = memo(({ profile, profileData, setProfileData }: Secur
               <p className="text-sm text-muted-foreground">Mantenha sua conta segura alterando sua senha periodicamente</p>
             </div>
           </div>
-          <form className="space-y-4 pl-14" autoComplete="on">
+          <div className="space-y-4 pl-14">
             <input type="text" name="username" value={profileData.email || ""} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
             <div className="space-y-1.5">
               <Input id="security-current-password" name="current_password" type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
@@ -59,7 +59,7 @@ export const SecurityTab = memo(({ profile, profileData, setProfileData }: Secur
             <Button type="button" variant="secondary" onClick={() => toast({ title: 'Recurso Indisponível', description: 'Por favor, recupere sua senha na tela de login caso precise alterá-la no momento.', variant: 'destructive' })}>
               Atualizar Senha
             </Button>
-          </form>
+          </div>
         </div>
 
         <div className="border border-border rounded-xl p-5 bg-background/50 mb-6">

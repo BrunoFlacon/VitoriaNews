@@ -5,8 +5,8 @@ import { UsersTab } from "./UsersTab";
 import { NavigationTab } from "./NavigationTab";
 import { PermissionsTab } from "./PermissionsTab";
 import { motion } from "framer-motion";
-import { useSystem } from "@/contexts/SystemContext";
-import { useAuth } from "@/hooks/useAuth";
+import { useSystem } from "@/hooks/useSystem";
+import { useAuth } from "@/contexts/AuthContext";
 import { Shield, Users, Laptop, GripVertical, Lock } from "lucide-react";
 
 export const SystemSettingsView = () => {

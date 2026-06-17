@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { SubscriberModal } from "./subscribers/SubscriberModal";
 import { useAuth } from "@/hooks/useAuth";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { useToast } from "@/hooks/use-toast";
+
 
 export interface Subscriber {
   id: string;
@@ -91,19 +93,28 @@ export const SubscribersView = () => {
 
   const userRole = profile?.role || 'user';
   const isAuthorized = ALLOWED_ROLES.includes(userRole);
+  const { toast } = useToast();
+
 
   const fetchSubscribers = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from('portal_subscribers' as any)
+        .from('portal_subscribers')
         .select('*')
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        if (error.code === 'PGRST205') {
+          console.warn("Table 'portal_subscribers' missing. Please run migrations.");
+          setSubscribers([]);
+          return;
+        }
+        throw error;
+      }
       setSubscribers((data as any) || []);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("[Subscribers] Fetch error:", e);
     } finally {
       setLoading(false);
     }
@@ -120,7 +131,7 @@ export const SubscribersView = () => {
       s.email?.toLowerCase().includes(search.toLowerCase())
     ),
     [subscribers, search]
-  );
+  )
 
   const translateDuration = (dur?: string) => {
     if (!dur) return 'MENSAL';

@@ -89,7 +89,7 @@ export const CronMonitorView = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel).catch(() => {});
     };
   }, [refetch]);
 
@@ -157,7 +157,7 @@ export const CronMonitorView = () => {
   };
 
   return (
-    <div className="space-y-6">
+        <div className="space-y-6 min-h-[600px]">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display font-bold text-3xl mb-2">Monitoramento de Agendamentos</h1>
@@ -275,7 +275,7 @@ export const CronMonitorView = () => {
       )}
 
       {/* Jobs List */}
-      <Card className="glass-card border-border overflow-hidden">
+      <Card className="glass-card border-border overflow-hidden min-h-[200px]">
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold text-lg">Jobs Agendados</h2>
         </div>
@@ -341,7 +341,7 @@ export const CronMonitorView = () => {
       </Card>
 
       {/* Recent Runs */}
-      <Card className="glass-card border-border overflow-hidden">
+      <Card className="glass-card border-border overflow-hidden min-h-[200px]">
         <div className="p-4 border-b border-border">
           <h2 className="font-semibold text-lg">Últimos Runs</h2>
         </div>
@@ -397,7 +397,7 @@ export const CronMonitorView = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 gap-4 min-h-[200px]">
         {syncTasks?.map((task) => (
           <Card key={task.id} className="glass-card p-4 border-border flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4 flex-1">

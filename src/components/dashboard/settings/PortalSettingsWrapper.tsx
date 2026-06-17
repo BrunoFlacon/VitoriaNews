@@ -6,8 +6,8 @@ import { PortalSettingsView } from "./PortalSettingsView";
 import { BillingTab } from "./BillingTab";
 import { motion } from "framer-motion";
 import { Palette, Layout, Footprints, DollarSign } from "lucide-react";
-import { useSystem } from "@/contexts/SystemContext";
-import { useAuth } from "@/hooks/useAuth";
+import { useSystem } from "@/hooks/useSystem";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BILLING_ROLES = ["dev_master", "admin_master", "admin", "dev", "contador"];
 
@@ -16,7 +16,6 @@ export const PortalSettingsWrapper = () => {
   const { canAccessSection } = useSystem();
   const { profile } = useAuth();
   const userRole = profile?.role || 'user';
-
   const canSeeBilling = BILLING_ROLES.includes(userRole);
 
   const sections = [
@@ -30,7 +29,7 @@ export const PortalSettingsWrapper = () => {
       <div className="flex items-center justify-between pb-4 border-b border-border/20">
         <div>
           <h2 className="font-display font-bold text-2xl text-primary">Portal & CMS Público</h2>
-          <p className="text-muted-foreground text-sm mt-1">Personalização visual, conteúdo, rodapé e faturamento do portal externo</p>
+          <p className="text-muted-foreground text-sm mt-1">Personalização visual, conteúdo e rodapé do portal externo</p>
         </div>
       </div>
 

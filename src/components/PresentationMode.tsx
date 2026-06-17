@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Play, Pause, ChevronLeft, ChevronRight, MonitorPlay, Share2 } from 'lucide-react';
-import { useSystem } from '@/contexts/SystemContext';
+import { useSystem } from '@/hooks/useSystem';
 
 interface Milestone {
   id: string;

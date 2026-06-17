@@ -1,0 +1,28 @@
+WARNING: Functions using fallback import map: publish-post
+Please use recommended per function dependency declaration  https://supabase.com/docs/guides/functions/import-maps
+WARNING: Docker is not running
+Uploading asset (publish-post): supabase/functions/import_map.json
+Uploading asset (publish-post): supabase/functions/publish-post/index.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/dispatcher.ts
+Uploading asset (publish-post): supabase/functions/_shared/credentials.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/googlenews.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/gettr.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/truthsocial.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/rumble.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/kwai.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/site.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/youtube.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/snapchat.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/pinterest.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/linkedin.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/tiktok.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/threads.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/instagram.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/facebook.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/x.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/whatsapp.ts
+Uploading asset (publish-post): supabase/functions/_shared/platforms/telegram.ts
+Deployed Functions on project ghtkdkauseesambzqfrd: publish-post
+You can inspect your deployment in the Dashboard: https://supabase.com/dashboard/project/ghtkdkauseesambzqfrd/functions
+A new version of Supabase CLI is available: v2.84.2 (currently installed v2.82.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli

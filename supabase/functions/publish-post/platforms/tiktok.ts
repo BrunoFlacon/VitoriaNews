@@ -2,8 +2,8 @@ import { ENV } from "../config/env.ts"
 
 export async function publishTikTok(
     content: string,
-    media: string[],
-    connection: { access_token: string },
+    media: any[],
+    connection: any,
     options: { postType?: string; mediaType?: string } = {}
 ) {
     const postType = options.postType?.toLowerCase() || 'post';

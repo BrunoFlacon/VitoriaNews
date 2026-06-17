@@ -72,7 +72,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const isCalendarTab = activeTab === 'calendar' || activeTab === 'create' || isDashboardTab;
   
   const { stats: localStats, socialStats: localSocialStats, messagingStats: localMessagingStats, messagingChannels, audienceBreakdown, totalSocialFollowers, totalMessagingMembers, loading: statsLoading } = useSocialStats({ enabled: isDashboardTab });
-  const { data: analyticsData, loading: analyticsLoading, isSyncing: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform, period: analyticsPeriod, setPeriod: setAnalyticsPeriod } = useAnalytics({ enabled: isAnalyticsTab });
+  const { data: analyticsData, loading: analyticsLoading, isSyncingAll: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform, period: analyticsPeriod, setPeriod: setAnalyticsPeriod } = useAnalytics({ enabled: isAnalyticsTab });
 
   // Query account_metrics for real time-series chart data when Edge Function has none
   const { data: accountMetricsData, isLoading: metricsLoading } = useQuery({
@@ -90,6 +90,8 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     enabled: isDashboardTab && !!user?.id,
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
+    retry: 1,
+    retryDelay: 3000,
   });
   // Auto-sync when data is missing from both Edge Function and local DB
   const hasAutoSynced = useRef(false);
@@ -135,17 +137,24 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     refetch: refetchScheduledPosts 
   } = useScheduledPosts({ enabled: isCalendarTab });
 
-  // Sync activeTab with URL params (initial load only)
+  // Sync activeTab with URL params
   useEffect(() => {
     const tabFromUrl = searchParams.get("tab");
+    const subTabFromUrl = searchParams.get("subtab");
     if (tabFromUrl && tabFromUrl !== activeTab) {
-      setActiveTab(tabFromUrl);
+      startTransition(() => setActiveTab(tabFromUrl));
     }
-    // Deep security: Hide the tab parameter from the address bar immediately
-    if (window.location.search) {
-      window.history.replaceState(null, '', window.location.pathname);
+    if (subTabFromUrl) {
+      setSettingsSubTab(subTabFromUrl);
     }
-  }, []); // Only run once on mount
+  }, [searchParams]);
+
+  // Listen for navigate-to-kanban event from CarrosselView (Rascunho action)
+  useEffect(() => {
+    const handler = () => setActiveTab("calendar");
+    window.addEventListener("navigate-to-kanban", handler);
+    return () => window.removeEventListener("navigate-to-kanban", handler);
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -412,6 +421,10 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
             approvePost={approvePost}
             rejectPost={rejectPost}
             refetch={async () => { await refetchScheduledPosts(); }}
+            onCreatePost={(date) => {
+              setPreSelectedDate(date || null);
+              setActiveTab("create");
+            }}
             onEditPost={(post) => {
               setEditingPost(post);
               setActiveTab("create");
@@ -509,7 +522,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         setIsCollapsed={setIsSidebarCollapsed}
       />
       <div className={cn(
-        "flex-1 transition-all duration-300 min-w-0 flex flex-col min-h-screen",
+        "flex-1 transition-[padding-left] duration-200 min-w-0 flex flex-col min-h-screen",
         isMobile ? "pl-0 pb-20" : (isSidebarCollapsed ? "md:pl-20" : "md:pl-64")
       )}>
         <Header 
@@ -524,15 +537,17 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
             {renderContent()}
           </div>
         </main>
-        <Suspense fallback={null}>
+        <Suspense fallback={<div className="h-20" />}>
           <ErrorBoundary><SystemFooter /></ErrorBoundary>
         </Suspense>
       </div>
-      <ErrorBoundary><NotificationsPanel
-        isOpen={showNotifications}
-        onClose={() => setShowNotifications(false)}
-        onViewAll={() => handleTabChange("notifications")}
-      /></ErrorBoundary>
+      <Suspense fallback={null}>
+        <ErrorBoundary><NotificationsPanel
+          isOpen={showNotifications}
+          onClose={() => setShowNotifications(false)}
+          onViewAll={() => handleTabChange("notifications")}
+        /></ErrorBoundary>
+      </Suspense>
       <Suspense fallback={null}>
         <ErrorBoundary><FloatingWhatsApp onOpenMessaging={() => handleTabChange("messaging")} /></ErrorBoundary>
       </Suspense>

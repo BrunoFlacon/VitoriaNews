@@ -9,8 +9,7 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useAuth } from "@/hooks/useAuth";
-import { cn, getProxyUrl } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
@@ -79,7 +78,7 @@ const UserAvatar = ({ user, size = "sm", isDevMaster = false, isOnlineFromPresen
     <div className="relative flex-shrink-0">
       <div className={`${dim} rounded-full bg-muted/50 border-2 border-border/30 flex items-center justify-center overflow-hidden font-bold text-muted-foreground transition-all duration-300`}>
         {user.avatar_url
-          ? <img src={getProxyUrl(user.avatar_url)} alt={user.name} className="w-full h-full object-cover" />
+          ? <img src={user.avatar_url} alt={user.name} className="w-full h-full object-cover" />
           : user.name?.charAt(0)?.toUpperCase() || "U"}
       </div>
       {showGreen ? (
@@ -185,7 +184,7 @@ export const UsersTab = () => {
   const handleResetPassword = async (email: string) => {
     if (!email) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/auth/v1/recover`, {
+      const res = await fetch(`https://ghtkdkauseesambzqfrd.supabase.co/auth/v1/recover`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -377,14 +376,9 @@ export const UsersTab = () => {
       {/* Filters */}
       <div className="glass-card rounded-xl border border-border/20 p-4 flex flex-wrap gap-3 items-end">
         <div className="space-y-1">
-          <label htmlFor="user-role-filter" className="text-xs text-muted-foreground font-medium cursor-pointer">Role</label>
-          <select 
-            id="user-role-filter"
-            name="role_filter"
-            value={filterRole} 
-            onChange={(e) => setFilterRole(e.target.value)}
-            className="h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          >
+          <label className="text-xs text-muted-foreground font-medium">Role</label>
+          <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)}
+            className="h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring">
             <option value="all">Todas</option>
             {Object.entries(ROLE_LABELS).map(([key, { label }]) => (
               <option key={key} value={key}>{label}</option>
@@ -392,14 +386,9 @@ export const UsersTab = () => {
           </select>
         </div>
         <div className="space-y-1">
-          <label htmlFor="user-status-filter" className="text-xs text-muted-foreground font-medium cursor-pointer">Status</label>
-          <select 
-            id="user-status-filter"
-            name="status_filter"
-            value={filterStatus} 
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          >
+          <label className="text-xs text-muted-foreground font-medium">Status</label>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
+            className="h-9 px-3 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-1 focus:ring-ring">
             <option value="all">Todos</option>
             <option value="ativo">Ativo</option>
             <option value="inativo">Inativo</option>
@@ -410,14 +399,8 @@ export const UsersTab = () => {
           <label className="text-xs text-muted-foreground font-medium">Buscar</label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              id="user-search"
-              name="user_search"
-              value={searchTerm} 
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Nome ou email..." className="pl-9 h-9 bg-muted/20" 
-              autoComplete="off"
-            />
+            <Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Nome ou email..." className="pl-9 h-9 bg-muted/20" />
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={() => { setSearchTerm(""); setFilterRole("all"); setFilterStatus("all"); }} className="h-9 gap-2">
@@ -629,7 +612,7 @@ export const UsersTab = () => {
                   onClick={() => avatarInputRef.current?.click()}
                 >
                   {editForm.avatar_url
-                    ? <img src={getProxyUrl(editForm.avatar_url)} alt="avatar" className="w-full h-full object-cover" />
+                    ? <img src={editForm.avatar_url} alt="avatar" className="w-full h-full object-cover" />
                     : <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-muted-foreground">
                         {editForm.name?.charAt(0)?.toUpperCase() || "U"}
                       </div>}
@@ -646,16 +629,8 @@ export const UsersTab = () => {
 
               {/* Nome completo */}
               <div className="space-y-1.5">
-                <label htmlFor="edit-user-name" className="text-xs font-semibold text-muted-foreground flex items-center gap-1 cursor-pointer">👤 Nome Completo *</label>
-                <Input 
-                  id="edit-user-name"
-                  name="name"
-                  value={editForm.name} 
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} 
-                  placeholder="Nome completo" 
-                  className="bg-muted/20" 
-                  autoComplete="name"
-                />
+                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">👤 Nome Completo *</label>
+                <Input value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nome completo" className="bg-muted/20" />
               </div>
 
               {/* Email — editável com aviso */}
@@ -663,14 +638,11 @@ export const UsersTab = () => {
                 <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">✉️ Email</label>
                 <div className="flex gap-2 items-center">
                   <Input
-                    id="edit-user-email"
-                    name="email"
                     value={editForm.email}
                     onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
                     placeholder="email@exemplo.com"
                     type="email"
                     className="bg-muted/20 flex-1"
-                    autoComplete="email"
                   />
                   <Button
                     type="button"
@@ -689,10 +661,8 @@ export const UsersTab = () => {
               {/* Role + Status */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label htmlFor="edit-user-role" className="text-xs font-semibold text-muted-foreground cursor-pointer">🛡 Cargo (Role)</label>
+                  <label className="text-xs font-semibold text-muted-foreground">🛡 Cargo (Role)</label>
                   <select
-                    id="edit-user-role"
-                    name="role"
                     value={editForm.role}
                     onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                     disabled={editUser.role === "dev_master"}
@@ -709,10 +679,8 @@ export const UsersTab = () => {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <label htmlFor="edit-user-status" className="text-xs font-semibold text-muted-foreground cursor-pointer">⚙ Status</label>
+                  <label className="text-xs font-semibold text-muted-foreground">⚙ Status</label>
                   <select
-                    id="edit-user-status"
-                    name="status"
                     value={editForm.status}
                     onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                     disabled={editUser.role === "dev_master"}
@@ -727,30 +695,15 @@ export const UsersTab = () => {
 
               {/* Telefone */}
               <div className="space-y-1.5">
-                <label htmlFor="edit-user-phone" className="text-xs font-semibold text-muted-foreground flex items-center gap-1 cursor-pointer">📞 Telefone</label>
-                <Input 
-                  id="edit-user-phone"
-                  name="phone"
-                  value={editForm.phone} 
-                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} 
-                  placeholder="+55 (00) 00000-0000" 
-                  className="bg-muted/20" 
-                  autoComplete="tel"
-                />
+                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">📞 Telefone</label>
+                <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="+55 (00) 00000-0000" className="bg-muted/20" />
               </div>
 
-              {/* Email corporativo (campo adicional) */}
+              {/* Email */}
               <div className="space-y-1.5 pt-2">
-                <label htmlFor="edit-user-corp-email" className="text-xs font-semibold text-muted-foreground flex items-center gap-1 cursor-pointer">✉️ Email Corporativo</label>
+                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">✉️ Email Corporativo</label>
                 <div className="flex items-center gap-2">
-                  <Input 
-                    id="edit-user-corp-email"
-                    name="corp_email"
-                    value={editForm.email} 
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} 
-                    className="bg-muted/20" 
-                    autoComplete="email"
-                  />
+                  <Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="bg-muted/20" />
                   {editForm.email !== editUser?.email && (
                     <Button type="button" size="sm" variant="secondary" onClick={handleChangeEmail} disabled={changingEmail}>
                       {changingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : "Atualizar Email"}
@@ -761,16 +714,8 @@ export const UsersTab = () => {
 
               {/* Website / Localização */}
               <div className="space-y-1.5 pt-2">
-                <label htmlFor="edit-user-website" className="text-xs font-semibold text-muted-foreground flex items-center gap-1 cursor-pointer">🌐 Website / Localização</label>
-                <Input 
-                  id="edit-user-website"
-                  name="website"
-                  value={editForm.website} 
-                  onChange={(e) => setEditForm({ ...editForm, website: e.target.value })} 
-                  placeholder="https://... ou Cidade, Estado" 
-                  className="bg-muted/20" 
-                  autoComplete="url"
-                />
+                <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">🌐 Website / Localização</label>
+                <Input value={editForm.website} onChange={(e) => setEditForm({ ...editForm, website: e.target.value })} placeholder="https://... ou Cidade, Estado" className="bg-muted/20" />
               </div>
 
               {/* Bio */}
@@ -815,39 +760,17 @@ export const UsersTab = () => {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
-              <label htmlFor="invite-user-name" className="text-sm font-medium cursor-pointer">Nome (opcional)</label>
-              <Input 
-                id="invite-user-name"
-                name="name"
-                value={inviteName} 
-                onChange={(e) => setInviteName(e.target.value)} 
-                placeholder="João Silva" 
-                className="bg-muted/20" 
-                autoComplete="name"
-              />
+              <label className="text-sm font-medium">Nome (opcional)</label>
+              <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="João Silva" className="bg-muted/20" />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="invite-user-email" className="text-sm font-medium cursor-pointer">E-mail *</label>
-              <Input 
-                id="invite-user-email"
-                name="email"
-                value={inviteEmail} 
-                onChange={(e) => setInviteEmail(e.target.value)} 
-                type="email" 
-                placeholder="email@exemplo.com" 
-                className="bg-muted/20" 
-                autoComplete="email"
-              />
+              <label className="text-sm font-medium">E-mail *</label>
+              <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} type="email" placeholder="email@exemplo.com" className="bg-muted/20" />
             </div>
             <div className="space-y-1.5">
-              <label htmlFor="invite-user-role" className="text-sm font-medium cursor-pointer">Nível de Acesso</label>
-              <select 
-                id="invite-user-role"
-                name="role"
-                value={inviteRole} 
-                onChange={(e) => setInviteRole(e.target.value)}
-                className="w-full h-10 px-3 rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-              >
+              <label className="text-sm font-medium">Nível de Acesso</label>
+              <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}
+                className="w-full h-10 px-3 rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring">
                 <option value="visualizador">Visualizador</option>
                 <option value="estagiario">Estagiário</option>
                 <option value="reporter">Repórter</option>

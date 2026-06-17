@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { 
   Cloud, CloudDrizzle, CloudRain, CloudSun, Sun, Moon, 
   Clock, Calendar, Thermometer, Wind, Droplets, 
@@ -99,14 +99,33 @@ export const DateTimeWeather = () => {
     return undefined;
   };
 
+  const weatherAttempted = useRef(false);
+
   useEffect(() => {
-    let retryCount = 0;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let weatherIntervalTimer: ReturnType<typeof setInterval> | null = null;
     let cancelled = false;
+    const unavailKey = 'weather_api_unavailable';
+
+    const setFallback = () => {
+      if (!weather) {
+        setWeather({
+          temp: 24,
+          condition: "Céu Limpo",
+          icon: Sun,
+          humidity: 60,
+          windSpeed: 10,
+          rainChance: 5,
+          forecast: [
+            { day: "Amanhã", temp: 26, icon: Sun },
+            { day: "Quarta", temp: 25, icon: CloudSun },
+            { day: "Quinta", temp: 23, icon: Cloud }
+          ]
+        });
+      }
+    };
 
     const fetchWeather = async () => {
-      if (!location || cancelled) return;
+      if (!location || cancelled || weatherAttempted.current) return;
+      weatherAttempted.current = true;
 
       try {
         const { data, error } = await safeInvoke('get-weather', {
@@ -116,7 +135,6 @@ export const DateTimeWeather = () => {
 
         if (error) throw error;
         if (cancelled) return;
-        retryCount = 0; // reset on success
 
         if (data.current) {
           const code = data.current.weather_code;
@@ -148,51 +166,16 @@ export const DateTimeWeather = () => {
             }))
           });
         }
-      } catch (e: any) {
-        // Suppress CORS/network warnings in dev — only log genuine API failures
-        const msg = e.message || '';
-        const isCors = /cors|failed to fetch|network/i.test(msg);
-        if (!isCors) {
-          console.warn("Falha ao buscar clima oficial:", msg);
-        }
-        if (cancelled) return;
-        // Se falhar e não houver dados, vamos setar um estado padrão para não quebrar a UI
-        if (!weather) {
-          setWeather({
-            temp: 24,
-            condition: "Céu Limpo (Cache)",
-            icon: Sun,
-            humidity: 60,
-            windSpeed: 10,
-            rainChance: 5,
-            forecast: [
-              { day: "Amanhã", temp: 26, icon: Sun },
-              { day: "Quarta", temp: 25, icon: CloudSun },
-              { day: "Quinta", temp: 23, icon: Cloud }
-            ]
-          });
-        }
-
-        retryCount++;
-        if (retryCount <= 3) {
-          const delay = 30000 * retryCount;
-          retryTimer = setTimeout(fetchWeather, delay);
-        }
+      } catch {
+        if (!cancelled) setFallback();
       }
     };
 
+    setFallback();
     fetchWeather();
-    weatherIntervalTimer = setInterval(() => {
-      retryCount = 0;
-      fetchWeather();
-    }, 900000);
 
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (weatherIntervalTimer) clearInterval(weatherIntervalTimer);
-    };
-  }, [location, provider]);
+    return () => { cancelled = true; };
+  }, [location]);
 
   const dayName = new Intl.DateTimeFormat("pt-BR", { weekday: "long" }).format(time);
   const formattedDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(time);

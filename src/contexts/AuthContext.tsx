@@ -1,4 +1,4 @@
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 
@@ -49,154 +49,78 @@ export interface AuthContextType {
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
 interface AuthProviderProps {
   children: ReactNode;
 }
 
-const AUTH_CACHE_KEY = 'auth_cached_profile';
-
 export const AuthProvider = ({ children }: AuthProviderProps) => {
+  // Check if there's a cached Supabase session in localStorage
+  // This avoids showing the loading screen on return visits
+  const hasCachedSession = Object.keys(localStorage).some(
+    k => k.includes('auth-token') || k.includes('supabase.auth.token')
+  );
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-
-  // ── Optimistic Cache: load profile from sessionStorage synchronously with TTL ──
-  const [profile, setProfile] = useState<Profile | null>(() => {
-    try {
-      const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
-      if (!cached) return null;
-      const { data, timestamp } = JSON.parse(cached);
-      const isExpired = Date.now() - timestamp > 60 * 60 * 1000; // 60 minutes TTL
-      if (isExpired) {
-        sessionStorage.removeItem(AUTH_CACHE_KEY);
-        return null;
-      }
-      return data as Profile;
-    } catch {
-      return null;
-    }
-  });
-
-  const [isLoading, setIsLoading] = useState(true);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [isLoading, setIsLoading] = useState(!hasCachedSession ? true : false);
   const [isOnline, setIsOnline] = useState(false);
   const [onlineUsersMap, setOnlineUsersMap] = useState<Record<string, any>>({});
   const presenceChannelRef = React.useRef<any>(null);
 
   const fetchProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (!error && data) {
+      setProfile(data as unknown as Profile);
+      // Mark as online whenever the profile is loaded (user is authenticated)
+      await supabase
         .from('profiles')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (!error && data) {
-        setProfile(data);
-        // ── Persist to sessionStorage cache with TTL for instant next load ──
-        try { 
-          sessionStorage.setItem(
-            AUTH_CACHE_KEY, 
-            JSON.stringify({ data, timestamp: Date.now() })
-          ); 
-        } catch {}
-        Promise.resolve(
-          supabase
-            .from('profiles')
-            .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })
-            .eq('user_id', userId)
-        ).catch(() => {});
-      }
-    } catch (e) {
-      // Fail silently, don't log errors for transient network issues
+        .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })
+        .eq('user_id', userId);
     }
   };
 
-  // ── Session Expiry & Auto-Refresh Monitor ──
   useEffect(() => {
-    if (!session) return;
-
-    const checkSessionExpiry = async () => {
-      const now = Math.floor(Date.now() / 1000);
-      // Se faltar menos de 30 segundos para expirar ou já tiver expirado
-      if (session.expires_at && session.expires_at - now < 30) {
-        console.warn("[AuthContext] JWT está prestes a expirar. Tentando renovação automática...");
-        try {
-          const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
-          if (error || !refreshedSession) {
-            console.error("[AuthContext] Falha ao renovar sessão (JWT expirado). Deslogando...");
-            await logout();
-            const publicPaths = ['/', '/login', '/register'];
-            if (!publicPaths.includes(window.location.pathname)) {
-              window.location.href = '/login';
-            }
-          } else {
-            console.log("[AuthContext] Sessão renovada com sucesso!");
-            setSession(refreshedSession);
-            setUser(refreshedSession.user);
-          }
-        } catch (e) {
-          console.error("[AuthContext] Erro ao tentar renovar sessão:", e);
-        }
-      }
-    };
-
-    // Executa a checagem imediatamente e depois a cada 60 segundos
-    checkSessionExpiry();
-    const interval = setInterval(checkSessionExpiry, 60000);
-
-    return () => clearInterval(interval);
-  }, [session]);
-
-  useEffect(() => {
-    let cancelled = false;
-
+    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
+        
         if (session?.user) {
-          fetchProfile(session.user.id);
+          // Defer profile fetch with setTimeout to avoid deadlock
+          setTimeout(() => {
+            fetchProfile(session.user.id);
+          }, 0);
         } else {
           setProfile(null);
         }
       }
     );
 
-    supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
-      if (cancelled) return;
-      const now = Math.floor(Date.now() / 1000);
-      if (initialSession && initialSession.expires_at && initialSession.expires_at < now) {
-        try {
-          const { data: { session: refreshedSession }, error } = await supabase.auth.refreshSession();
-          if (!error && refreshedSession) {
-            setSession(refreshedSession);
-            setUser(refreshedSession.user);
-            fetchProfile(refreshedSession.user.id);
-          } else {
-            await supabase.auth.signOut();
-            setSession(null);
-            setUser(null);
-            setProfile(null);
-          }
-        } catch {
-          setSession(null);
-          setUser(null);
-        }
-      } else {
-        setSession(initialSession);
-        setUser(initialSession?.user ?? null);
-        if (initialSession?.user) {
-          fetchProfile(initialSession.user.id);
-        }
+    // THEN check for existing session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchProfile(session.user.id);
       }
-      setIsLoading(false);
-    }).catch(() => {
       setIsLoading(false);
     });
 
-    return () => {
-      cancelled = true;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   // ── Realtime Presence: marca usuário como online quando logado ──
@@ -204,7 +128,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     if (!user) {
       // Sair do canal de presença se houver
       if (presenceChannelRef.current) {
-        supabase.removeChannel(presenceChannelRef.current);
+        supabase.removeChannel(presenceChannelRef.current).catch(() => {});
         presenceChannelRef.current = null;
       }
       return;
@@ -226,16 +150,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         });
         setOnlineUsersMap(onlineIds);
       })
-      .subscribe(async (status) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: user.id, online_at: new Date().toISOString() });
+          channel.track({ user_id: user.id, online_at: new Date().toISOString() }).catch(() => {});
         }
       });
 
     presenceChannelRef.current = channel;
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel).catch(() => {});
       presenceChannelRef.current = null;
     };
   }, [user]);
@@ -253,28 +177,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [profile, user, isLoading]);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (error) {
-        // Detecta falha de rede vs credenciais incorretas
-        const isNetworkErr = error.message?.toLowerCase().includes('fetch') || error.status === 0;
-        return {
-          success: false,
-          error: isNetworkErr
-            ? 'Servidor inacessível. Verifique sua conexão.'
-            : 'Email ou senha incorretos.'
-        };
-      }
-
-      return { success: true };
-    } catch (networkErr: any) {
-      // TypeError: Failed to fetch — servidor Supabase inacessível (522/CORS)
-      return { success: false, error: 'Servidor inacessível. Verifique sua conexão.' };
+    if (error) {
+      return { success: false, error: 'Email ou senha incorretos.' };
     }
+
+    return { success: true };
   };
 
   const register = async (email: string, password: string, name: string): Promise<{ success: boolean; error?: string }> => {
@@ -300,24 +212,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const logout = async () => {
-    try {
-      if (user) {
-        // Tenta marcar como offline, mas se o JWT estiver expirado ou a rede falhar, ignoramos silenciosamente
-        await supabase
-          .from('profiles')
-          .update({ is_online: false, online_status: 'offline', updated_at: new Date().toISOString() })
-          .eq('user_id', user.id);
-      }
-    } catch (e) {
-      // Ignora erro no update ao fazer logout com JWT expirado ou rede offline
+    // Set offline BEFORE signing out so we still have auth context to write
+    if (user) {
+      await supabase
+        .from('profiles')
+        .update({ is_online: false, online_status: 'offline', updated_at: new Date().toISOString() })
+        .eq('user_id', user.id);
     }
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      // Ignora erro no signOut
-    }
-    // ── Limpar cache de perfil ao fazer logout ──
-    try { sessionStorage.removeItem(AUTH_CACHE_KEY); } catch {}
+    await supabase.auth.signOut();
     setUser(null);
     setSession(null);
     setProfile(null);

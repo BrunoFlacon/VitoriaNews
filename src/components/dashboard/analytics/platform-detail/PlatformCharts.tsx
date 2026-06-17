@@ -11,8 +11,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { getPlatformDetails } from "./platformConfigs";
+import { getPlatformDetails } from "@/components/icons/platform-metadata";
 import type { AccountMetric } from "./usePlatformDetail";
 
 interface PlatformChartsProps {
@@ -25,8 +24,12 @@ const months = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "
 
 export const PlatformCharts = memo(({ platformId, metrics, loading }: PlatformChartsProps) => {
   const platform = getPlatformDetails(platformId);
-  const colorVar = platform?.textColor?.replace("text-", "") || "#3b82f6";
-  const chartColor = `var(--${colorVar})` || "#3b82f6";
+  const colorMap: Record<string, string> = {
+    facebook: '#1877F2', instagram: '#E4405F', youtube: '#FF0000',
+    tiktok: '#69C9D0', twitter: '#1DA1F2', linkedin: '#0A66C2',
+    whatsapp: '#25D366', telegram: '#2CA5E0', threads: '#6366f1',
+  };
+  const chartColor = colorMap[platformId] || '#3b82f6';
 
   const chartData = useMemo(() => {
     if (metrics.length < 2) return [];

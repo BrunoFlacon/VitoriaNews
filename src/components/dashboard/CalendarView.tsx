@@ -23,7 +23,8 @@ import {
   Scissors,
   Search,
   Calendar as CalendarIcon,
-  ShieldX
+  ShieldX,
+  FolderKanban
 } from "lucide-react";
 import {
   HoverCard,
@@ -58,6 +59,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProjectsView } from "./ProjectsView";
 
 const daysOfWeek = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const months = [
@@ -423,11 +426,22 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="mb-6">
-        <h1 className="font-display font-bold text-3xl mb-2">Calendário Editorial</h1>
-        <p className="text-muted-foreground">Visualize e gerencie suas publicações agendadas</p>
-      </div>
+    <Tabs defaultValue="calendar" className="w-full">
+      <TabsList className="mb-6">
+        <TabsTrigger value="calendar" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all">
+          <CalendarIcon className="w-4 h-4 mr-2" />Calendário
+        </TabsTrigger>
+        <TabsTrigger value="projects" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all">
+          <FolderKanban className="w-4 h-4 mr-2" />Projetos
+        </TabsTrigger>
+      </TabsList>
+
+      <TabsContent value="calendar">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <div className="mb-6">
+            <h1 className="font-display font-bold text-3xl mb-2">Calendário Editorial</h1>
+            <p className="text-muted-foreground">Visualize e gerencie suas publicações agendadas</p>
+          </div>
 
       {/* Monthly Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
@@ -841,6 +855,12 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </motion.div>
+        </motion.div>
+      </TabsContent>
+
+      <TabsContent value="projects">
+        <ProjectsView />
+      </TabsContent>
+    </Tabs>
   );
 };

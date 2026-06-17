@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { 
   Search, 
@@ -33,12 +33,31 @@ import { TrendDetailDrawer } from "./TrendDetailDrawer";
 
 const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
-export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode: 'full' | 'summary') => void }) => {
+export const TrendsView = () => {
   const { trends, loading, syncTrends } = useTrends();
   const [searchTerm, setSearchTerm] = useState("");
   const [activePlatform, setActivePlatform] = useState("googlenews");
   const [selectedTrend, setSelectedTrend] = useState<TrendItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Auto-select platform if current is empty
+  useEffect(() => {
+    if (!loading && trends.length > 0) {
+      const platforms = [...new Set(trends.map(t => (t.source || "Other").toLowerCase().replace(/\s+/g, '')))];
+      if (platforms.length > 0 && !platforms.includes(activePlatform)) {
+        setActivePlatform(platforms[0]);
+      }
+    }
+  }, [trends, loading]);
+
+  useEffect(() => {
+    const handleGlobalSearch = (e: any) => {
+      const query = e.detail?.query || "";
+      setSearchTerm(query);
+    };
+    window.addEventListener('system-search', handleGlobalSearch);
+    return () => window.removeEventListener('system-search', handleGlobalSearch);
+  }, []);
 
   const filteredTrends = useMemo(() => {
     let combined = [...trends];
@@ -70,14 +89,11 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
   }, [filteredTrends]);
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col md:flex-row gap-4 bg-card/50 p-4 rounded-3xl border border-border/50 backdrop-blur-sm">
+    <div className="space-y-4 md:space-y-6 animate-fade-in">
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 bg-card/50 p-3 md:p-4 rounded-2xl md:rounded-3xl border border-border/50 backdrop-blur-sm">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input 
-            id="trends-search"
-            name="trends-search"
-            autoComplete="off"
             placeholder="Pesquisar tendências..." 
             className="pl-10 bg-background/50 border-border/50 rounded-2xl"
             value={searchTerm}
@@ -98,18 +114,19 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
       </div>
 
       {!loading && topTrendsChartData.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="p-6 lg:col-span-2 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[300px] rounded-[32px]" style={{ contain: "content" }}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+          <Card className="p-4 md:p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[250px] md:h-[300px] rounded-xl md:rounded-[32px]" style={{ contain: "content" }}>
+
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="font-black text-lg flex items-center gap-2 uppercase tracking-tight">
-                  <TrendingUp className="w-5 h-5 text-primary" />
+                <h3 className="font-black text-sm md:text-lg flex items-center gap-2 uppercase tracking-tight">
+                  <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                   Top Impulso Digital
                 </h3>
               </div>
             </div>
             <div className="flex-1 w-full">
-              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+              <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topTrendsChartData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#333" />
                   <XAxis type="number" hide />
@@ -137,13 +154,14 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
             </div>
           </Card>
 
-          <Card className="p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[300px] rounded-[32px]" style={{ contain: "content" }}>
-            <h3 className="font-black text-lg mb-4 flex items-center gap-2 uppercase tracking-tight">
-              <Zap className="w-5 h-5 text-yellow-500" />
+          <Card className="p-4 md:p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[250px] md:h-[300px] rounded-2xl md:rounded-[32px]" style={{ contain: "content" }}>
+            <h3 className="font-black text-base md:text-lg mb-3 md:mb-4 flex items-center gap-2 uppercase tracking-tight">
+              <Zap className="w-4 h-4 md:w-5 md:h-5 text-yellow-500" />
+
               Volume AI
             </h3>
             <div className="flex-1 w-full flex items-center justify-center relative">
-               <ResponsiveContainer width="100%" height="100%" minWidth={0}>
+               <ResponsiveContainer width="100%" height="100%">
                  <AreaChart data={topTrendsChartData}>
                     <defs>
                       <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
@@ -154,9 +172,9 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
                     <Area type="monotone" dataKey="score" stroke="#3b82f6" fillOpacity={1} fill="url(#colorScore)" />
                  </AreaChart>
                </ResponsiveContainer>
-               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-10 text-center">
-                  <p className="text-4xl font-black text-primary/10 tracking-tighter">AI LIVE</p>
-                  <p className="text-[10px] text-primary/40 font-black uppercase tracking-[0.2em] mt-2">{filteredTrends.length} Ativos</p>
+               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-6 md:p-10 text-center">
+                  <p className="text-2xl md:text-4xl font-black text-primary/10 tracking-tighter">AI LIVE</p>
+                  <p className="text-[9px] md:text-[10px] text-primary/40 font-black uppercase tracking-[0.2em] mt-1 md:mt-2">{filteredTrends.length} Ativos</p>
                </div>
             </div>
           </Card>
@@ -206,7 +224,7 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
             return acc;
           }, { 'googlenews': [] })
         ).map(([id, platformTrends]: [string, any]) => (
-          <TabsContent key={id} value={id} className="mt-0 focus-visible:outline-none" style={{ contain: "layout style" }}>
+          <TabsContent key={id} value={id} className="mt-0 focus-visible:outline-none">
             <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-xl backdrop-blur-xl">
               <div className="divide-y divide-white/5">
                 {(platformTrends as TrendItem[]).length > 0 ? (
@@ -218,16 +236,14 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
                       key={item.id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ duration: 0.2 }}
-                      style={{ contain: "layout style" }}
                       onClick={() => {
                         setSelectedTrend(item);
                         setIsDrawerOpen(true);
                       }}
-                      className="group relative flex items-center justify-between p-5 px-8 hover:bg-white/[0.04] transition-all cursor-pointer border-l-4 border-transparent hover:border-primary"
+                      className="group relative flex items-center justify-between p-3 md:p-5 px-4 md:px-8 hover:bg-white/[0.04] transition-all cursor-pointer border-l-4 border-transparent hover:border-primary"
                     >
-                      <div className="relative z-10 flex items-start gap-5 flex-1 pr-4 min-w-0">
-                        <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 border border-white/10 bg-white/5 shadow-xl">
+                      <div className="relative z-10 flex items-start gap-3 md:gap-5 flex-1 pr-4 min-w-0">
+                        <div className="w-10 h-10 md:w-14 md:h-14 rounded-lg md:rounded-xl overflow-hidden flex-shrink-0 border border-white/10 bg-white/5 shadow-xl">
                           <img 
                             src={item.thumbnail_url || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 200 200'%3E%3Crect width='100%25' height='100%25' fill='%231a1a1a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='32' font-weight='bold' fill='%234a4a4a'%3ECapa%3C/text%3E%3C/svg%3E`} 
                             alt="" 
@@ -291,11 +307,9 @@ export const TrendsView = ({ onProduce }: { onProduce?: (trend: TrendItem, mode:
         trend={selectedTrend}
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        onProduce={(trend, mode) => {
+        onProduce={(trend) => {
           setIsDrawerOpen(false);
-          if (onProduce) {
-            onProduce(trend, mode);
-          }
+          // Redirecionamento de produção aqui se necessário
         }}
       />
     </div>

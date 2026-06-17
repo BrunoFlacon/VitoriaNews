@@ -3,25 +3,23 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
-import { useAuth } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SystemProvider } from "@/contexts/SystemContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
-import { lazy, Suspense } from "react";
+import { TrackingProvider } from "./components/analytics/TrackingProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { lazy, Suspense } from "react";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallback";
 import { ThemeEngine } from "./components/ThemeEngine";
-import BrunoProfile from "./pages/BrunoProfile";
-
-import TermsPage from "./pages/TermsPage";
-import PrivacyPage from "./pages/PrivacyPage";
-import ManualPage from "./pages/ManualPage";
-import PortalLanding from "./pages/PortalLanding";
-
+const BrunoProfile = lazy(() => import("./pages/BrunoProfile"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const ManualPage = lazy(() => import("./pages/ManualPage"));
+const PortalLanding = lazy(() => import("./pages/PortalLanding"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const News = lazy(() => import("./pages/News"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
@@ -39,27 +37,31 @@ const queryClient = new QueryClient({
   },
 });
 
+// Instant skeleton screen matching the dashboard layout - no spinner
 const LoadingFallback = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center">
-    <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+  <div className="min-h-screen bg-[hsl(222,47%,6%)] flex items-center justify-center">
+    <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
   </div>
 );
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
   
-  if (isLoading) {
+  // Check localStorage cache to prevent flash of loading screen on return visits
+  const hasCachedSession = Object.keys(localStorage).some(
+    k => k.includes('auth-token') || k.includes('supabase.auth.token')
+  );
+
+  if (isLoading && !hasCachedSession) {
     return <LoadingFallback />;
   }
-  
-  if (!user) {
+
+  if (!user && !isLoading) {
     return <Navigate to="/login" replace />;
   }
-  
+
   return <>{children}</>;
 };
-
-import { TrackingProvider } from "./components/analytics/TrackingProvider";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -90,12 +92,13 @@ const App = () => (
                     <Route path="/system-history" element={<ProtectedRoute><SystemEvolutionPage /></ProtectedRoute>} />
                     <Route path="/radar2" element={<ProtectedRoute><Radar2 /></ProtectedRoute>} />
                     <Route path="/radarnews" element={<ProtectedRoute><RadarNews /></ProtectedRoute>} />
-                    <Route path="*" element={<NotFound />} />
+                    <Route path="*" element={<Navigate to="/profile/bruno-flacon" replace />} />
                   </Routes>
                 </Suspense>
               </BrowserRouter>
               </ErrorBoundary>
             </TrackingProvider>
+
           </TooltipProvider>
         </NotificationProvider>
       </AuthProvider>

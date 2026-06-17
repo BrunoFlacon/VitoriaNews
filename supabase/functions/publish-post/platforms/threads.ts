@@ -1,12 +1,4 @@
-export async function publishThreads(
-content: string,
-media: string[] | undefined,
-connection: {
-    access_token: string;
-    platform_user_id: string;
-},
-options: { postType?: string; mediaType?: string } = {}
-) {
+export async function publishThreads(content: string, media: any, connection: any, options: { postType?: string; mediaType?: string } = {}) {
     try {
         const postType = options.postType?.toLowerCase() || 'post';
         const mediaType = options.mediaType?.toLowerCase() || 'image';
@@ -36,12 +28,7 @@ options: { postType?: string; mediaType?: string } = {}
         const userId = connection.platform_user_id;
 
         // 1. CRIAR CONTAINER
-        const containerBody: {
-            text: string;
-            media_type?: 'VIDEO' | 'IMAGE';
-            video_url?: string;
-            image_url?: string;
-        } = {
+        let containerBody: any = {
             text: content.trim()
         };
 
@@ -123,13 +110,13 @@ options: { postType?: string; mediaType?: string } = {}
             postId: publishData.id
         };
 
-    } catch (err: unknown) {
+    } catch (err: any) {
         console.error("THREADS ERROR:", err);
 
         return {
             success: false,
             error: "Erro inesperado no Threads",
-            details: err instanceof Error ? err.message : String(err)
+            details: err.message || err
         };
     }
 }   

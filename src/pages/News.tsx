@@ -1,31 +1,29 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Newspaper, Clock, ArrowRight, Search, Sparkles, Bell } from "lucide-react";
+import { Newspaper, Clock, ArrowRight, Search, TrendingUp, Menu, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import type { Article } from "@/lib/social-sdk/types";
+import { SystemFooter } from "@/components/SystemFooter";
+import { useSystem } from "@/hooks/useSystem";
 import { PortalFooter } from "@/components/portal/PortalFooter";
 import { SubscriberCapture } from "@/components/portal/SubscriberCapture";
-import { useSystem } from "@/contexts/SystemContext";
 import { cn } from "@/lib/utils";
 
-// Componente principal de Notícias do Portal
+
 const News = () => {
-  const { settings } = useSystem();
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [pageTier, setPageTier] = useState<string>('public');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { settings } = useSystem();
+
+  const platformName = settings?.platform_name || "SocialHub";
+  const logoUrl = settings?.logo_url;
 
   useEffect(() => {
-    const fetchPageSettings = async () => {
-      const { data } = await supabase.from('news_pages' as any).select('visibility_tier').eq('slug', '/news').maybeSingle() as any;
-      if (data) setPageTier(data.visibility_tier || 'public');
-    };
-    fetchPageSettings();
-
     const fetchArticles = async () => {
       try {
         const { data, error } = await supabase
@@ -33,16 +31,17 @@ const News = () => {
           .select("*")
           .eq("status", "published")
           .order("published_at", { ascending: false });
-        
+
         if (error) {
-          if (error.code === 'PGRST116' || error.message?.includes('not found')) {
+          if (error.code === "PGRST116" || error.message?.includes("not found")) {
+            console.warn("Articles table not found.");
             setArticles([]);
           }
         } else if (data) {
           setArticles((data as Article[]) || []);
         }
       } catch (e) {
-        // fail silently
+        // Silent fail
       } finally {
         setLoading(false);
       }
@@ -56,107 +55,102 @@ const News = () => {
     }
   }, [settings]);
 
+  useEffect(() => {
+    const handleGlobalSearch = (e: any) => {
+      setSearch(e.detail);
+    };
+    window.addEventListener('system-search', handleGlobalSearch);
+    return () => window.removeEventListener('system-search', handleGlobalSearch);
+  }, []);
+
+
   const filtered = articles.filter(
     (a) =>
       a.title.toLowerCase().includes(search.toLowerCase()) ||
       a.content.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (settings && settings.public_news_active === false) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
-        <Newspaper className="w-16 h-16 text-muted-foreground/20 mb-6" />
-        <h1 className="text-3xl font-display font-bold mb-2">Página em Manutenção</h1>
-        <p className="text-muted-foreground max-w-md">Esta seção do portal está temporariamente desativada pelo administrador. Por favor, volte mais tarde.</p>
-        <Link to="/" className="mt-8 text-primary font-bold hover:underline">Voltar ao Início</Link>
-      </div>
-    );
-  }
+  const hero = filtered[0];
+  const rest = filtered.slice(1);
+  const trending = articles.slice(0, 6);
+
+  const categories = [...new Set(articles.map((a) => "Artigo"))]; // Placeholder
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {settings?.portal_header_visible !== false && (
-        <header className="border-b border-white/5 bg-[#0A0F1E]/80 backdrop-blur-md sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-8">
-            <Link to="/" className="flex items-center gap-4 group shrink-0">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform">
-                {(settings?.portal_logo_url || settings?.logo_url) ? (
-                  <img src={settings.portal_logo_url || settings.logo_url} alt="Logo" className="w-7 h-7 object-contain" />
-                ) : (
-                  <Newspaper className="w-6 h-6 text-white" />
-                )}
+      {/* Header */}
+      <header className="sticky top-0 z-50">
+        <div className="bg-card border-b border-border">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+            <Link to="/news" className="flex items-center gap-2">
+              {logoUrl ? (
+                <img src={logoUrl} alt={platformName} className="h-9 w-auto object-contain" />
+              ) : (
+                <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+                  <Newspaper className="w-5 h-5 text-primary-foreground" />
+                </div>
+              )}
+              <div>
+                <h1 className="font-serif font-bold text-lg leading-tight text-foreground">
+                  {platformName} News
+                </h1>
+                <p className="text-xs text-muted-foreground hidden sm:block">
+                  Notícias • Informação • Conteúdo
+                </p>
               </div>
-              <h1 className="font-display font-black text-xl text-white tracking-tight hidden sm:block">
-                Web Rádio Vitória
-              </h1>
             </Link>
 
-            <div className="flex items-center gap-4">
-              <div className="relative w-72 hidden md:block">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 transition-colors" />
+            <div className="hidden md:flex items-center gap-4">
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Buscar artigos..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full bg-white/5 border-white/10 h-12 pl-12 rounded-xl focus-visible:ring-primary/20 focus-visible:border-primary/50 text-white placeholder:text-slate-600"
+                  className="pl-9 h-9"
                 />
               </div>
+              <span className="text-sm text-muted-foreground">
+                {new Date().toLocaleDateString("pt-BR", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </span>
+            </div>
 
-              <SubscriberCapture 
-                planType="free"
-                showTrigger={true}
-                triggerLabel=""
-                triggerClassName="p-0 bg-transparent hover:bg-transparent shadow-none border-none scale-100 hover:scale-100"
-                showFloating={false}
-              >
-                <div className="relative group cursor-pointer">
-                  <motion.div 
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:bg-primary/20 group-hover:border-primary/40 transition-all shadow-[0_0_20px_rgba(var(--primary),0.1)]"
-                  >
-                    <Bell className="w-6 h-6 text-primary fill-primary/10" />
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 rounded-full border-2 border-[#0A0F1E] flex items-center justify-center text-[10px] font-black text-white shadow-lg animate-pulse">
-                      1
-                    </span>
-                  </motion.div>
-                </div>
-              </SubscriberCapture>
-            </div>
-          </div>
-        </header>
-      )}
-
-      {/* Banner de Área Exclusiva */}
-      {pageTier !== 'public' && (
-        <div className="relative overflow-hidden bg-[#020617] border-b border-white/5 py-32 px-6">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.08),transparent_70%)]" />
-          <div className="relative z-10 max-w-4xl mx-auto text-center space-y-10">
-            <div className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-white/5 border border-white/10 text-yellow-400 text-[10px] font-black uppercase tracking-[0.3em]">
-              <Sparkles className="w-3.5 h-3.5" /> Área Exclusiva para Assinantes
-            </div>
-            <div className="space-y-6">
-              <h2 className="text-5xl md:text-7xl font-display font-black text-white uppercase tracking-tighter leading-[0.9]">
-                Conteúdo Exclusivo <span className="text-yellow-400 block sm:inline">VIP</span>
-              </h2>
-              <p className="text-slate-400 text-lg md:text-xl max-w-2xl mx-auto font-medium leading-relaxed">
-                Escolha seu plano e tenha acesso ilimitado as análises de notícias, Breaking News, Podcasts, Reportagens Exclusivas.
-              </p>
-            </div>
-            <div className="pt-6">
-              <SubscriberCapture 
-                planType={pageTier === 'paid_sub' ? 'paid' : 'free'} 
-                showTrigger={true}
-                triggerLabel="Assine Já!"
-                triggerClassName="text-lg px-12 py-5 shadow-[0_0_50px_rgba(250,204,21,0.2)]"
-                showFloating={false}
-              />
-            </div>
+            <button
+              className="md:hidden p-2 text-foreground"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Menu"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
         </div>
-      )}
 
-      <main className={cn("flex-1 max-w-6xl w-full mx-auto px-6 py-8", pageTier !== 'public' && "opacity-50 pointer-events-none blur-[2px]")}>
+        {/* Mobile search */}
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="md:hidden bg-card border-b border-border px-4 py-3"
+          >
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar artigos..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </motion.div>
+        )}
+      </header>
+
+      <main className="flex-1">
         {loading ? (
           <div className="text-center py-20 text-muted-foreground">Carregando artigos...</div>
         ) : filtered.length === 0 ? (
@@ -166,52 +160,172 @@ const News = () => {
             <p className="text-muted-foreground">Os artigos publicados aparecerão aqui.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((article, i) => (
-              <motion.div
-                key={article.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <Link to={`/news/${article.slug}`} className="block group">
-                  <div className="rounded-2xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow">
-                    {article.cover_image && (
-                      <img src={article.cover_image} alt={article.title} className="w-full h-48 object-cover" loading="lazy" />
+          <>
+            {/* Hero Article */}
+            {hero && (
+              <section className="max-w-7xl mx-auto px-4 py-6">
+                <Link to={`/news/${hero.slug}`} className="group block">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative rounded-xl overflow-hidden aspect-[21/9] md:aspect-[3/1]"
+                  >
+                    {hero.cover_image ? (
+                      <img
+                        src={hero.cover_image}
+                        alt={hero.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20" />
                     )}
-                    <div className="p-5">
-                      <Badge variant="secondary" className="mb-2">Notícia</Badge>
-                      <h3 className="font-display font-bold text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2">
-                        {article.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground line-clamp-3 mb-3">
-                        {article.content.replace(/<[^>]+>/g, "").slice(0, 150)}...
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
+                      <Badge className="mb-3 bg-primary text-primary-foreground">Destaque</Badge>
+                      <h2 className="font-serif font-bold text-2xl md:text-4xl leading-tight text-white max-w-3xl">
+                        {hero.title}
+                      </h2>
+                      <p className="text-white/80 mt-2 max-w-2xl text-sm md:text-base line-clamp-2">
+                        {hero.content.replace(/<[^>]+>/g, "").slice(0, 200)}
                       </p>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {article.published_at ? new Date(article.published_at).toLocaleDateString("pt-BR") : ""}
-                        </span>
-                        <span className="flex items-center gap-1 text-primary group-hover:underline">
-                          Ler mais <ArrowRight className="w-3 h-3" />
+                      <div className="flex items-center gap-2 mt-4 text-xs text-white/60">
+                        <Clock size={14} />
+                        <span>
+                          {hero.published_at
+                            ? new Date(hero.published_at).toLocaleDateString("pt-BR")
+                            : ""}
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 </Link>
-              </motion.div>
-            ))}
-          </div>
+              </section>
+            )}
+
+            {/* Content Grid + Sidebar */}
+            <section className="max-w-7xl mx-auto px-4 pb-12">
+              <div className="flex flex-col lg:flex-row gap-8">
+                {/* Articles Grid */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-1 h-6 bg-primary rounded-full" />
+                    <h2 className="font-serif font-bold text-xl">Últimas Notícias</h2>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {rest.map((article, i) => (
+                      <motion.div
+                        key={article.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                      >
+                        <Link to={`/news/${article.slug}`} className="block group">
+                          <article className="rounded-xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow">
+                            {article.cover_image && (
+                              <div className="aspect-video overflow-hidden">
+                                <img
+                                  src={article.cover_image}
+                                  alt={article.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  loading="lazy"
+                                />
+                              </div>
+                            )}
+                            <div className="p-4">
+                              <Badge variant="secondary" className="mb-2 text-xs">
+                                Artigo
+                              </Badge>
+                              <h3 className="font-serif font-bold text-foreground mt-1 mb-2 leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                                {article.title}
+                              </h3>
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {article.content.replace(/<[^>]+>/g, "").slice(0, 150)}
+                              </p>
+                              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {article.published_at
+                                    ? new Date(article.published_at).toLocaleDateString("pt-BR")
+                                    : ""}
+                                </span>
+                                <span className="flex items-center gap-1 text-primary group-hover:underline">
+                                  Ler mais <ArrowRight className="w-3 h-3" />
+                                </span>
+                              </div>
+                            </div>
+                          </article>
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sidebar */}
+                <aside className="lg:w-72 shrink-0 space-y-6">
+                  {/* Trending */}
+                  {trending.length > 0 && (
+                    <div className="bg-card rounded-xl border border-border p-5">
+                      <h3 className="font-serif font-bold text-lg mb-3 flex items-center gap-2">
+                        <TrendingUp className="w-5 h-5 text-primary" />
+                        Em Alta
+                      </h3>
+                      <ul className="space-y-3">
+                        {trending.map((a, i) => (
+                          <li key={a.id} className="flex items-start gap-3">
+                            <span className="text-primary font-bold text-lg leading-none mt-0.5">
+                              {String(i + 1).padStart(2, "0")}
+                            </span>
+                            <div>
+                              <Link
+                                to={`/news/${a.slug}`}
+                                className="text-sm text-foreground hover:text-primary transition-colors font-medium leading-snug block line-clamp-2"
+                              >
+                                {a.title}
+                              </Link>
+                              <span className="text-xs text-muted-foreground">
+                                {a.published_at
+                                  ? new Date(a.published_at).toLocaleDateString("pt-BR")
+                                  : ""}
+                              </span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Recent */}
+                  <div className="bg-card rounded-xl border border-border p-5">
+                    <h3 className="font-serif font-bold text-lg mb-3 flex items-center gap-2">
+                      <div className="w-1 h-5 bg-primary rounded-full" />
+                      Recentes
+                    </h3>
+                    <ul className="space-y-3">
+                      {articles.slice(0, 4).map((a) => (
+                        <li key={a.id}>
+                          <Link
+                            to={`/news/${a.slug}`}
+                            className="text-sm text-foreground hover:text-primary transition-colors font-medium leading-snug block line-clamp-2"
+                          >
+                            {a.title}
+                          </Link>
+                          <span className="text-xs text-muted-foreground">
+                            {a.published_at
+                              ? new Date(a.published_at).toLocaleDateString("pt-BR")
+                              : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </aside>
+              </div>
+            </section>
+          </>
         )}
       </main>
 
-      <SubscriberCapture 
-        planType={pageTier === 'paid_sub' ? 'paid' : 'free'} 
-        showFloating={true}
-        triggerLabel="Assinar Agora"
-        triggerClassName="fixed bottom-12 right-12 z-50 shadow-[0_0_40px_rgba(250,204,21,0.2)]"
-      />
-      {settings?.portal_footer_visible !== false && <PortalFooter variant={pageTier === 'public' ? 'public' : 'private'} />}
+      <SystemFooter />
     </div>
   );
 };

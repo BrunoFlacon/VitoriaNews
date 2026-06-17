@@ -81,14 +81,15 @@ function MediaPreview({ mediaIds, mediaType }: MediaPreviewProps) {
         <div className="grid grid-cols-3 gap-1.5">
           {mediaUrls.slice(0, expanded ? undefined : 3).map((m) =>
             m.type.startsWith("image/") ? (
-              <img
-                key={m.id}
-                src={m.url}
-                alt="mídia"
-                className="w-full aspect-square object-cover rounded-lg"
-                referrerPolicy="no-referrer"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
+              <div key={m.id} className="w-full aspect-square rounded-lg overflow-hidden bg-muted">
+                <img
+                  src={m.url}
+                  alt="mídia"
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+              </div>
             ) : m.type.startsWith("video/") || m.type.startsWith("audio/") ? (
               <video
                 key={m.id}

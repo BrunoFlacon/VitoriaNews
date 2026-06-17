@@ -1,9 +1,28 @@
+export function getThreadsOAuthUrl() {
+  const clientId = import.meta.env.VITE_META_APP_ID;
+
+  if (!clientId) {
+    throw new Error("META_APP_ID não configurado");
+  }
+
+  const redirectUri = `${window.location.origin}/oauth/callback/threads`;
+
+  const url = new URL("https://www.facebook.com/v21.0/dialog/oauth");
+
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("scope", "threads_basic");
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("state", crypto.randomUUID());
+
+  return url.toString();
+}
+
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { getThreadsOAuthUrl } from "@/utils/oauth";
 
 const OAuthCallback = () => {
   const [searchParams] = useSearchParams();
@@ -33,32 +52,33 @@ const OAuthCallback = () => {
         return;
       }
 
-      // Em popup, repassamos a URL para o opener (que tem sessão) fazer o exchange
-      if (isPopup) {
-        window.opener?.postMessage({ type: "oauth-callback", url: window.location.href }, "*");
-        setStatus("Autorização recebida, aguarde...");
-        setTimeout(() => window.close(), 2000);
-        return;
-      }
-
       try {
         setStatus("Trocando código por token...");
 
-        const { data: session } = await supabase.auth.getSession();
-        if (!session?.session?.access_token) {
+        // Session may not be ready yet in a popup window — retry a few times
+        let session = (await supabase.auth.getSession()).data.session;
+        
+        if (!session?.access_token) {
+          // Wait and retry — Supabase Auth needs time to restore from localStorage in popup
+          for (let attempt = 0; attempt < 3 && !session?.access_token; attempt++) {
+            await new Promise(r => setTimeout(r, 1000));
+            session = (await supabase.auth.getSession()).data.session;
+          }
+        }
+
+        if (!session?.access_token) {
           throw new Error("Sessão expirada. Faça login novamente.");
         }
 
-        const baseUrl = import.meta.env.VITE_SUPABASE_URL;
         const response = await fetch(
-          `${baseUrl}/functions/v1/social-oauth-callback`,
+`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-oauth-callback`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${session.session.access_token}`,
+              Authorization: `Bearer ${session.access_token}`,
             },
-            body: JSON.stringify({ code, state, platform }),
+            body: JSON.stringify({ code, state, platform, redirect_uri: `${window.location.origin}/oauth/callback/${platform}` }),
           }
         );
 
@@ -81,11 +101,8 @@ const OAuthCallback = () => {
         // If opened as popup, notify parent and close
         if (isPopup) {
           try {
-            // Send to parent with specific origin for security
-            const targetOrigin = window.location.origin.startsWith('http://localhost') || window.location.origin.startsWith('http://127.0.0.1')
-              ? window.location.origin
-              : 'https://webradiovitoria.com.br';
-            window.opener?.postMessage({ type: "oauth-complete", platform }, targetOrigin);
+            // Send to parent. We use "*" to support localhost/127.0.0.1 origin mismatch common in Twitter OAuth
+            window.opener?.postMessage({ type: "oauth-complete", platform }, "*");
           } catch (e) {
             // Error handling window postMessage
           }
@@ -130,7 +147,7 @@ const OAuthCallback = () => {
         <p className="text-lg font-medium">{status}</p>
         <p className="text-sm text-muted-foreground">
           {isPopup
-            ? done ? "Esta janela será fechada automaticamente..." : error ? "Feche esta janela e tente novamente." : "Aguarder..."
+            ? done ? "Esta janela será fechada automaticamente..." : error ? "Feche esta janela e tente novamente." : "Aguarde..."
             : "Redirecionando para o dashboard..."}
         </p>
         {isPopup && (error || done) && (

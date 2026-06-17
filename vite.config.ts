@@ -1,8 +1,7 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
-import basicSsl from "@vitejs/plugin-basic-ssl";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -12,33 +11,43 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     hmr: {
       overlay: false,
-    }
+    },
   },
-  plugins: [
-    mode === "development" ? basicSsl() : null,
-    react(),
-    mode === "development" && componentTagger()
-  ].filter(Boolean),
+  optimizeDeps: {
+    include: [
+      "lucide-react",
+      "@radix-ui/react-progress",
+      "@radix-ui/react-dialog",
+      "@radix-ui/react-popover",
+      "@radix-ui/react-tooltip",
+      "framer-motion",
+      "clsx",
+      "tailwind-merge"
+    ],
+  },
+  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
   build: {
-    target: "es2020",
-    chunkSizeWarningLimit: 500,
-    sourcemap: false, // Hide original source code
+    // Improve chunk splitting for faster loads
     rollupOptions: {
       output: {
-        // Use non-descriptive names for build files
-        entryFileNames: `assets/v-[hash].js`,
-        chunkFileNames: `assets/c-[hash].js`,
-        assetFileNames: `assets/a-[hash].[ext]`,
-        manualChunks: {
-          "react-core": ["react", "react-dom", "react-router-dom"],
-          "vendor-libs": ["framer-motion", "lucide-react", "@tanstack/react-query", "@supabase/supabase-js", "zustand"]
-        }
-      }
-    }
-  }
+        manualChunks(id: string) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/') || id.includes('node_modules/react-router')) return 'vendor-react';
+          if (id.includes('node_modules/@radix-ui/')) return 'vendor-ui';
+          if (id.includes('node_modules/framer-motion')) return 'vendor-motion';
+          if (id.includes('node_modules/@supabase/')) return 'vendor-supabase';
+          if (id.includes('node_modules/recharts')) return 'vendor-charts';
+        },
+      },
+    },
+    // Reduce bundle sizes
+    chunkSizeWarningLimit: 600,
+    cssCodeSplit: true,
+    sourcemap: false,
+  },
 }));
+

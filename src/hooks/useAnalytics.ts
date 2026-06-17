@@ -1,10 +1,8 @@
-// v2 - CORS fix: removed Cache-Control/Pragma headers
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
-import { safeInvoke } from '@/utils/supabase-utils';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation, keepPreviousData } from '@tanstack/react-query';
 
 interface EngagementData {
   views: number;
@@ -12,8 +10,8 @@ interface EngagementData {
   comments: number;
   shares: number;
   reach: number;
-  engagementRate: string;
-  growth: string;
+  engagementRate: number;
+  growth: number;
 }
 
 interface ChartDataPoint {
@@ -21,6 +19,10 @@ interface ChartDataPoint {
   views: number;
   engagement: number;
   reach: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  posts?: number;
 }
 
 interface TopContent {
@@ -36,7 +38,6 @@ interface BestTime {
   day: string;
   time: string;
   engagement: number;
-  platform?: string;
 }
 
 interface MessageStats {
@@ -44,44 +45,14 @@ interface MessageStats {
   totalFailed: number;
   successRate: number;
   platformStats: Record<string, { sent: number, failed: number }>;
-  recentMessages?: Array<{
-    id: string;
-    platform: string;
-    content: string;
-    recipient: string;
-    status: string;
-    created_at: string;
-  }>;
 }
 
 export interface FollowerData {
   platform: string;
   username: string | null;
   currentFollowers: number;
-  postsCount: number;
   growth: number;
   profileImage: string | null;
-  is_connected: boolean;
-  last_synced_at?: string | null;
-}
-
-export interface AdsStatsData {
-  impressions: number;
-  reach: number;
-  clicks: number;
-  spend: number;
-}
-
-export interface YoutubeStatsData {
-  views: number;
-  likes: number;
-  comments: number;
-  subscribers_gained?: number;
-  watch_time_minutes?: number;
-}
-
-export interface GaStatsData {
-  views: number;
 }
 
 export interface AnalyticsData {
@@ -93,360 +64,151 @@ export interface AnalyticsData {
     draftPosts: number;
     publishRate: string | number;
     totalFollowers?: number;
-    followersGrowth?: string | number;
-    lastSyncedAt?: string | null;
+    followersGrowth?: number;
+    lastSyncedAt?: string;
+    responseTime?: string;
   };
   engagement: EngagementData;
   chartData: ChartDataPoint[];
-  platformBreakdown: Record<string, { posts: number; engagement: number }>;
+  platformBreakdown: Record<string, { posts: number; engagement: number; views: number; likes: number; comments: number; shares: number }>;
   topContent: TopContent[];
   bestTimes: BestTime[];
   followerData: FollowerData[];
   messageStats?: MessageStats;
-  adsStats?: AdsStatsData;
-  youtubeStats?: YoutubeStatsData;
-  gaStats?: GaStatsData;
-  viralData?: any[];
-  trendsData?: any[];
-  attacksData?: any[];
-  messagingChannels?: any[];
+  adsStats?: { impressions: number; reach: number; clicks: number; spend: number };
+  youtubeStats?: { views: number; likes: number; comments: number; subscribersGained?: number; watchTimeMinutes?: number; subscribers?: number };
+  gaStats?: { views: number };
   period: string;
   generatedAt: string;
-  dataSource: 'real' | 'seeded';
-}
-
-const ANALYTICS_CACHE_PREFIX = 'analytics_cache_';
-
-function getCachedAnalytics(key: string): AnalyticsData | undefined {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return undefined;
-    const { data, timestamp } = JSON.parse(raw);
-    if (Date.now() - timestamp > 10 * 60 * 1000) {
-      localStorage.removeItem(key);
-      return undefined;
-    }
-    return data as AnalyticsData;
-  } catch { return undefined; }
-}
-
-function setCachedAnalytics(key: string, data: AnalyticsData): void {
-  try {
-    localStorage.setItem(key, JSON.stringify({ data, timestamp: Date.now() }));
-  } catch {}
+  dataSource: 'real' | 'seeded' | 'demo';
 }
 
 export function useAnalytics(options: { enabled?: boolean } = {}) {
   const { user } = useAuth();
+  const [period, setPeriodState] = useState<string>(() => {
+    if (user?.user_metadata?.analytics_period) return user.user_metadata.analytics_period;
+    return localStorage.getItem('analytics_period') || '7d';
+  });
+  const [periodInitialized, setPeriodInitialized] = useState(!!user);
+  const [platform, setPlatform] = useState<string>('all');
+  const [postType, setPostType] = useState<string>('all');
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [period, setPeriodState] = useState<string>('7d');
-  const [platform, setPlatformState] = useState<string>('all');
-  const [postType, setPostType] = useState<string>('all');
-  const [source, setSource] = useState<string>('all');
-  const [dateRange, setDateRangeState] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
-  const [analyticsErrorInfo, setAnalyticsErrorInfo] = useState<string | null>(null);
-  
-  // Initialize period and platform from user metadata or localStorage when user changes
+  const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
+
   useEffect(() => {
     if (!user) return;
-
-    if (user.user_metadata?.analytics_period) {
-      setPeriodState(user.user_metadata.analytics_period);
-    } else {
-      const savedPeriod = localStorage.getItem('analytics_period');
-      if (savedPeriod && ['24h', '3d', '7d', '15d', '30d', '60d', '90d', '120d', '365d', '730d', '1095d', '1460d', '1825d'].includes(savedPeriod)) {
-        setPeriodState(savedPeriod);
-      }
+    const metaPeriod = user?.user_metadata?.analytics_period;
+    if (metaPeriod) {
+      setPeriodState(metaPeriod);
     }
-
-    const savedPlatform = localStorage.getItem('analytics_platform');
-    if (savedPlatform) {
-      setPlatformState(savedPlatform);
-    }
+    setPeriodInitialized(true);
   }, [user]);
 
-  // Wrapper for setPlatform to also persist it
-  const setPlatform = (newPlatform: string) => {
-    setPlatformState(newPlatform);
-    setAnalyticsErrorInfo(null);
-    try { localStorage.setItem('analytics_platform', newPlatform); } catch {}
-  };
-
-  // Wrapper for setPeriod to also persist it
   const setPeriod = async (newPeriod: string) => {
     setPeriodState(newPeriod);
-    setAnalyticsErrorInfo(null);
     localStorage.setItem('analytics_period', newPeriod);
-    
-    // Save to database asynchronously
     if (user) {
-      const { error } = await supabase.auth.updateUser({
-        data: { analytics_period: newPeriod }
-      });
-      if (error) {
-        console.error("Failed to save analytics period to user preferences:", error);
-      }
+      await supabase.auth.updateUser({ data: { analytics_period: newPeriod } });
     }
-  };
-
-  const setDateRange = (range: { start: string | null; end: string | null }) => {
-    setDateRangeState(range);
-    setAnalyticsErrorInfo(null);
   };
 
   const fetchAnalyticsData = async (): Promise<AnalyticsData> => {
-    if (!user) {
-      throw new Error("No user available for query");
-    }
+    if (!user) throw new Error("No user available");
+    
+    try {
+      setFetchError(null);
+      const body: Record<string, any> = { period, platform, type: postType, source: 'all' };
+      if (dateRange.start) body.start_date = dateRange.start.toISOString();
+      if (dateRange.end) body.end_date = dateRange.end.toISOString();
+      const { data: aData, error: aErr } = await supabase.functions.invoke('get-analytics', {
+        body,
+      });
 
-    setAnalyticsErrorInfo(null);
-
-    const cacheKey = `${ANALYTICS_CACHE_PREFIX}${user?.id}_${period}_${platform}_${postType}_${source}`;
-
-    const { data: aData, error: aErr } = await safeInvoke('get-analytics', {
-      body: { period, platform, type: postType, source, start_date: dateRange.start, end_date: dateRange.end },
-      timeoutMs: 8000
-    });
-
-    if (aErr) {
-      const isExpected = `${aErr}`.includes('not found') || `${aErr}`.includes('404') || `${aErr}`.includes('CORS') || `${aErr}`.includes('Network error') || `${aErr}`.includes('Failed to fetch');
-      if (!isExpected) {
-        setAnalyticsErrorInfo(`Erro: ${aErr}`);
-        console.warn('[Analytics] fetch error:', aErr);
+      if (aErr) {
+        console.error('[Analytics] Edge Function error:', aErr.message, 'context:', aErr.context, 'body:', body);
+        throw aErr;
+      }
+      const result = aData as AnalyticsData;
+      const key = ['analytics', user?.id, period, platform, postType];
+      const cached = queryClient.getQueryData<AnalyticsData>(key);
+      if (cached && result.chartData?.length && !result.chartData.some(d => d.views > 0 || d.engagement > 0 || d.likes > 0)) {
+        const cachedHasData = cached.chartData?.some(d => d.views > 0 || d.engagement > 0);
+        if (cachedHasData) {
+          console.log('[Analytics] Edge Function returned all zeros, keeping cached data');
+          return cached;
+        }
+      }
+      return result;
+    } catch (err: any) {
+      const underlying = err?.context?.message || err?.context || '';
+      const errMsg = err?.message || String(err);
+      setFetchError(`${errMsg}${underlying ? ' | ' + underlying : ''}`);
+      console.error('[Analytics] Fetch failed:', errMsg, '| underlying:', underlying);
+      const key = ['analytics', user?.id, period, platform, postType];
+      const cached = queryClient.getQueryData<AnalyticsData>(key);
+      if (cached) {
+        return cached;
       }
       return {
-        overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, lastSyncedAt: null },
-        engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: "0", growth: "0" },
-        chartData: [], platformBreakdown: {}, topContent: [], bestTimes: [],
-        followerData: [], adsStats: { impressions: 0, reach: 0, clicks: 0, spend: 0 },
-        youtubeStats: { views: 0, likes: 0, comments: 0, subscribers_gained: 0, watch_time_minutes: 0 }, gaStats: { views: 0 },
-        viralData: [], trendsData: [], attacksData: [], messageStats: { totalSent: 0, totalFailed: 0, successRate: 0, platformStats: {} },
-        messagingChannels: [], period, generatedAt: new Date().toISOString(), dataSource: 'fallback',
-      } as unknown as AnalyticsData;
+        overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, followersGrowth: 0 },
+        engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: 0, growth: 0 },
+        chartData: [],
+        platformBreakdown: {},
+        topContent: [],
+        bestTimes: [],
+        followerData: [],
+        period,
+        generatedAt: new Date().toISOString(),
+        dataSource: 'demo'
+      } as AnalyticsData;
     }
-    
-    setCachedAnalytics(cacheKey, aData as AnalyticsData);
-    return aData as AnalyticsData;
   };
 
-  const analyticsCacheKey = `${ANALYTICS_CACHE_PREFIX}${user?.id}_${period}_${platform}_${postType}_${source}`;
-
-  const { data, isLoading, refetch, isError } = useQuery<AnalyticsData, Error>({
-    queryKey: ['analytics', user?.id, period, platform, postType, source, dateRange.start, dateRange.end],
-    queryFn: fetchAnalyticsData,
-    enabled: !!user && (options.enabled !== false),
-    staleTime: 2 * 60 * 1000,    // 2 min — evitar refetch repetido do edge function pesado
-    gcTime: 10 * 60 * 1000,      // manter em cache por 10 minutos
-    retry: 0,
+  const { data, isLoading, refetch } = useQuery<AnalyticsData, Error>({
+    queryKey: ['analytics', user?.id, period, platform, postType],
+    queryFn: () => fetchAnalyticsData(),
+    enabled: !!user && periodInitialized && options.enabled !== false,
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    placeholderData: (prev) => prev ?? getCachedAnalytics(analyticsCacheKey),
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    placeholderData: keepPreviousData,
+    retry: 0,
   });
-
-  // Display toast once on unhandled fetching errors (skip 404/not-deployed)
-  useEffect(() => {
-    if (isError && analyticsErrorInfo) {
-      toast({
-        title: "Erro ao carregar analytics",
-        description: analyticsErrorInfo,
-        variant: "destructive",
-      });
-    }
-  }, [isError, toast, analyticsErrorInfo]);
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      if (!user) throw new Error("No user");
-      
-      // Parallel sync for main social platforms
-      const [resSocial, resYouTube, resTwitter, resTelegram] = await Promise.allSettled([
-        safeInvoke('collect-social-analytics', { timeoutMs: 20000 }),
-        safeInvoke('collect-youtube-analytics', { timeoutMs: 20000 }),
-        safeInvoke('sync-twitter', { timeoutMs: 15000 }),
-        safeInvoke('sync-telegram-chats', { body: { platform: "telegram" }, timeoutMs: 15000 })
-      ]);
-
-      return { resSocial, resYouTube, resTwitter, resTelegram };
+      const { data, error } = await supabase.functions.invoke('collect-social-analytics', {
+        body: { period, platform, postType }
+      });
+      if (error) throw error;
+      return data;
     },
     onSuccess: () => {
-      toast({
-        title: "Sincronização concluída",
-        description: "Os dados das suas redes sociais foram atualizados com sucesso.",
-      });
+      toast({ title: "Sincronização concluída", description: "Os dados foram atualizados." });
       queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['social_stats_all', user?.id] });
     },
     onError: () => {
-      toast({
-        title: "Erro na sincronização",
-        description: "Não foi possível buscar dados novos agora. Tente novamente em instantes.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro na sincronização", variant: "destructive" });
     }
   });
 
-  const syncMetaAds = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("No user");
-      const { data, error } = await safeInvoke('collect-meta-ads-analytics', {
-        timeoutMs: 30000
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Meta Ads sincronizado",
-        description: `${data.total_campaigns || 0} campanhas atualizadas.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Erro Meta Ads",
-        description: e.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  const syncGoogleAnalytics = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("No user");
-      const { data, error } = await safeInvoke('collect-google-analytics', {
-        timeoutMs: 30000
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Google Analytics sincronizado",
-        description: "Dados de tráfego do site atualizados.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Erro Google Analytics",
-        description: e.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  const syncYouTubeAnalytics = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("No user");
-      const { data, error } = await safeInvoke('collect-youtube-analytics', {
-        timeoutMs: 30000
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      toast({
-        title: "YouTube Analytics sincronizado",
-        description: "Dados de vídeos e canal atualizados.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Erro YouTube Analytics",
-        description: e.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  const syncTelegramChats = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("No user");
-      const { data, error } = await safeInvoke("sync-telegram-chats", {
-        body: { platform: "telegram" },
-        timeoutMs: 30000
-      });
-      if (error) throw error;
-      if (data && data.success === false) throw new Error(data.error || "Telegram sync failed");
-      return data;
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Telegram sincronizado",
-        description: `${data.accountsSynced || 0} chats atualizados.`,
-      });
-      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['messaging_channels', user?.id] });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Erro Telegram",
-        description: e.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  const syncTwitter = useMutation({
-    mutationFn: async () => {
-      if (!user) throw new Error("No user");
-      const { data, error } = await safeInvoke('sync-twitter', {
-        timeoutMs: 30000
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      toast({
-        title: "Twitter sincronizado",
-        description: "Dados do perfil e métricas atualizados.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['analytics', user?.id] });
-      queryClient.invalidateQueries({ queryKey: ['social_accounts', user?.id] });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Erro Twitter",
-        description: e.message,
-        variant: "destructive",
-      });
-    }
-  });
-
-  const isSyncing = syncMutation.isPending;
-
-  const syncAnalytics = useCallback(() => syncMutation.mutate(), [syncMutation]);
-  const syncMetaAdsFn = useCallback(() => syncMetaAds.mutate(), [syncMetaAds]);
-  const syncGoogleAnalyticsFn = useCallback(() => syncGoogleAnalytics.mutate(), [syncGoogleAnalytics]);
-  const syncYouTubeAnalyticsFn = useCallback(() => syncYouTubeAnalytics.mutate(), [syncYouTubeAnalytics]);
-  const syncTelegramChatsFn = useCallback(() => syncTelegramChats.mutate(), [syncTelegramChats]);
-  const syncTwitterFn = useCallback(() => syncTwitter.mutate(), [syncTwitter]);
-
-  return useMemo(() => ({
+  return {
     data: data || null,
-    loading: isLoading && !data,
-    isSyncing,
-    error: analyticsErrorInfo,
+    loading: isLoading,
+    error: fetchError,
+    isSyncingAll: syncMutation.isPending,
     period,
     setPeriod,
     platform,
     setPlatform,
     postType,
     setPostType,
-    source,
-    setSource,
-    dateRange,
-    setDateRange,
     refetch,
-    syncAnalytics: syncAnalytics,
-    syncMetaAds: syncMetaAdsFn,
-    syncGoogleAnalytics: syncGoogleAnalyticsFn,
-    syncYouTubeAnalytics: syncYouTubeAnalyticsFn,
-    syncTelegramChats: syncTelegramChatsFn,
-    syncTwitter: syncTwitterFn,
-  }), [data, isLoading, isSyncing, analyticsErrorInfo, period, setPeriod, platform, setPlatform, postType, setPostType, source, setSource, dateRange, setDateRange, refetch, syncAnalytics, syncMetaAdsFn, syncGoogleAnalyticsFn, syncYouTubeAnalyticsFn, syncTelegramChatsFn, syncTwitterFn]);
+    syncAnalytics: () => syncMutation.mutate(),
+    dateRange,
+    setDateRange
+  };
 }

@@ -2,26 +2,25 @@
 // @ts-nocheck
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { resolveCorsOrigin } from "../_shared/cors.ts";
 
 declare const Deno: any;
 
-const corsHeaders = (req) => ({
-  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-});
+};
 
-const jsonResponse = (body: any, status = 200, req?: Request) =>
+const jsonResponse = (body: any, status = 200) =>
   new Response(JSON.stringify(body), {
-    headers: { ...corsHeaders(req ?? { headers: { get: () => null } as Headers }), 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     status,
   });
 
 serve(async (req: Request) => {
   // Always handle CORS preflight first
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders(req), status: 200 });
+    return new Response('ok', { headers: corsHeaders, status: 200 });
   }
 
   try {
@@ -44,27 +43,14 @@ serve(async (req: Request) => {
     let error: any = null;
 
     switch (path) {
-      case 'intelligence':
-      case 'trends': {
-        const [trendsRes, politicalRes] = await Promise.all([
-          supabaseClient.from('trends').select('*').order('detected_at', { ascending: false }).limit(30),
-          supabaseClient.from('political_trends').select('*').order('detected_at', { ascending: false }).limit(20)
-        ]);
-        
-        // Unifica os dados para o frontend
-        const unified = [
-          ...(trendsRes.data || []),
-          ...(politicalRes.data || []).map(pt => ({
-            ...pt,
-            source: pt.source || 'Radar Político',
-            category: pt.category || 'Política'
-          }))
-        ].sort((a, b) => new Date(b.detected_at).getTime() - new Date(a.detected_at).getTime());
-
-        data = unified;
-        error = trendsRes.error || politicalRes.error;
+      case 'trends':
+      case 'automation-api':
+        ({ data, error } = await supabaseClient
+          .from('trends')
+          .select('*')
+          .order('detected_at', { ascending: false })
+          .limit(20));
         break;
-      }
 
       case 'analytics':
         ({ data, error } = await supabaseClient
@@ -108,17 +94,6 @@ serve(async (req: Request) => {
         break;
       }
 
-      case 'process_queue': {
-        try {
-          const { runScheduler } = await import('../_shared/automation/scheduler.ts');
-          data = await runScheduler(supabaseClient, 'process_queue');
-        } catch (importErr: any) {
-          console.warn('[automation-api] process_queue failed:', importErr.message);
-          data = { error: importErr.message };
-        }
-        break;
-      }
-
       case 'detect-attacks': {
         try {
           const { detectCoordinatedAttack } = await import('../_shared/radar/attack-detector.ts');
@@ -133,15 +108,14 @@ serve(async (req: Request) => {
       }
 
       default:
-        return jsonResponse({ error: `Endpoint '${path}' not found` }, 404, req);
+        return jsonResponse({ error: `Endpoint '${path}' not found` }, 404);
     }
 
     if (error) throw error;
 
-    return jsonResponse({ success: true, data }, req);
+    return jsonResponse({ success: true, data });
   } catch (err: any) {
     console.error('[automation-api] error:', err.message);
     return jsonResponse({ error: err.message }, 500);
   }
 });
-

@@ -241,19 +241,21 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, () =>
         queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }));
     
-    let lastErrorTime = 0;
+    let hasReportedError = false;
     connectionsChannel.subscribe((status) => {
       if (status === 'CHANNEL_ERROR') {
-        const now = Date.now();
-        if (now - lastErrorTime > 30000) {
-          console.warn('Realtime connections error (will retry):', channelName);
+        if (!hasReportedError) {
+          console.debug('Realtime unavailable (falling back to polling):', channelName);
         }
-        lastErrorTime = now;
+        hasReportedError = true;
         setRealtimeError(true);
       } else if (status === 'SUBSCRIBED') {
+        hasReportedError = false;
         setRealtimeError(false);
       }
     });
+    // Trigger a cache refetch on mount so data loads immediately
+    queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] });
 
     return () => { 
       supabase.removeChannel(connectionsChannel).catch(() => {}); 
@@ -262,7 +264,8 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
   // Polling fallback when Realtime is unavailable
   useEffect(() => {
-    if (!user || options.enabled === false || !realtimeError) return;
+    if (!user || options.enabled === false) return;
+    if (!realtimeError) return;
     let isRunning = false;
     const interval = setInterval(async () => {
       if (isRunning || !navigator.onLine) return;
@@ -353,43 +356,21 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const left   = window.screenX + (window.outerWidth  - width)  / 2;
       const top    = window.screenY + (window.outerHeight - height) / 2;
 
+      const safePlatform = escapeHtml(platform);
+
+      // Abre popup IMEDIATAMENTE (síncrono com o clique do usuário) p/ evitar bloqueio
+      const LOADING_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;background:#f5f5f5"><p>Aguardando autoriza&ccedil;&atilde;o...</p></body></html>';
       let popup: Window | null = null;
       try {
-        popup = window.open(
-          "about:blank",
-          `oauth_${platform}`,
-          `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`
-        );
+        popup = window.open('about:blank', `oauth_${platform}`, `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`);
       } catch (e) {
-        console.warn("[OAuth] Popup open failed, retrying without name:", e);
-        try {
-          popup = window.open(
-            "about:blank",
-            "_blank",
-            `width=${width},height=${height},left=${left},top=${top}`
-          );
-        } catch (e2) {
-          console.error("[OAuth] Popup open failed entirely:", e2);
-        }
+        console.warn("[OAuth] Popup open failed:", e);
       }
-
       if (!popup) {
         toast({ title: "Popup bloqueado", description: "Permita popups para este site e tente novamente.", variant: "destructive" });
         return;
       }
-
-      const safePlatform = escapeHtml(platform);
-      popup.document.write(
-        `<html><head><title>Conectando ${safePlatform}...</title>` +
-        `<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;` +
-        `height:100vh;margin:0;background:#0f172a;color:white;text-align:center;}` +
-        `.loader{border:4px solid #1e293b;border-top:4px solid #3b82f6;border-radius:50%;` +
-        `width:40px;height:40px;animation:spin 1s linear infinite;margin:0 auto 20px;}` +
-        `@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}` +
-        `h1{font-size:18px;margin:0;}</style></head>` +
-        `<body><div><div class="loader"></div><h1>Conectando ao ${safePlatform}...</h1>` +
-        `<p>Iniciando autenticação segura...</p></div></body></html>`
-      );
+      writeToPopupSafely(popup, LOADING_HTML);
 
       try {
         const META_PLATFORMS = ['threads', 'facebook', 'instagram', 'whatsapp'];
@@ -399,7 +380,6 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           const { appId, appSecret, source } = await fetchMetaAppId(platform);
 
           if (!appId) {
-            popup.close();
             toast({
               title: "App ID do Threads não configurado",
               description:
@@ -409,12 +389,12 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
               variant: "destructive",
             });
             console.error("[THREADS] Erro: Threads App ID ausente. Guia: https://developers.facebook.com/docs/threads/getting-started");
+            popup.close();
             return;
           }
 
           extraBody = { client_id: appId, client_secret: appSecret };
         } else if (platform === 'tiktok') {
-          // TikTok usa "client_key" — buscamos do banco antes de chamar a Edge Function
           let tikTokCreds = null;
           try {
             const { data } = await supabase
@@ -431,18 +411,18 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           const clientSecret = tikTokCreds?.client_secret?.trim();
 
           if (!clientKey) {
-            popup.close();
             toast({
               title: "TikTok Client Key não configurado",
               description: "Vá em Configurações → APIs → TikTok e salve o 'TikTok Client Key' antes de conectar.",
               variant: "destructive",
             });
+            popup.close();
             return;
           }
 
           extraBody = {
             client_key: clientKey,
-            client_id: clientKey,     // fallback compat
+            client_id: clientKey,
             client_secret: clientSecret,
           };
         }
@@ -453,23 +433,19 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         });
 
         if (aErr) {
-          const safePlatform = escapeHtml(platform);
           const safeMessage = escapeHtml(aErr.message || 'Verifique se as credenciais estão salvas nas Configurações de API.');
-          writeToPopupSafely(
-            popup,
-            `<html><head><title>Erro - ${safePlatform}</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="color:#ef4444;font-size:48px;margin-bottom:16px;">⚠️</div><h1>Erro ao conectar ${safePlatform}</h1><p>${safeMessage}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
-          );
           toast({
             title: "Configuração pendente",
             description: aErr.message || "Verifique se as APIs estão configuradas corretamente.",
             variant: "destructive",
           });
+          popup.close();
           return;
         }
 
         if (!data?.authUrl) {
-          popup.close();
           toast({ title: "Erro", description: "URL de autenticação não recebida.", variant: "destructive" });
+          popup.close();
           return;
         }
 
@@ -480,14 +456,23 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           finalUrl = finalUrl.replace('threads.com', 'www.threads.net');
         }
 
-        popup.location.href = finalUrl;
+        // Navega popup para URL de autorização (about:blank → x.com é permitido)
+        try {
+          if (!popup.closed) {
+            popup.location.href = finalUrl;
+          } else {
+            popup = window.open(finalUrl, `oauth_${platform}`, `width=${width},height=${height},left=${left},top=${top}`);
+            if (!popup) {
+              window.open(finalUrl, '_blank');
+            }
+          }
+        } catch (navErr) {
+          console.warn("[OAuth] Popup navigation failed, reopening:", navErr);
+          popup = window.open(finalUrl, '_blank', `width=${width},height=${height},left=${left},top=${top}`);
+        }
 
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
-        writeToPopupSafely(
-          popup,
-          `<html><head><title>Falha de Conexão</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:white;text-align:center;padding:20px;box-sizing:border-box;}h1{font-size:20px;margin:0 0 10px;}p{color:#94a3b8;margin:10px 0 20px;font-size:14px;}button{background:#3b82f6;color:white;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-weight:bold;}</style></head><body><div><div style="font-size:48px;margin-bottom:16px;">🌐</div><h1>Falha de Conexão</h1><p>${escapeHtml(errorMessage)}</p><button onclick="window.close()">Fechar Janela</button></div></body></html>`
-        );
         toast({ title: "Erro de rede", description: errorMessage, variant: "destructive" });
         return;
       }

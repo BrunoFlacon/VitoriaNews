@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
 export interface UploadedMedia {
@@ -78,13 +78,10 @@ export function useMediaUpload() {
 
       setProgress(50);
 
-      // Generate signed URL (bucket is private; valid for 7 days)
-      const { data: signedData, error: signedError } = await supabase.storage
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
         .from('media')
-        .createSignedUrl(fileName, 60 * 60 * 24 * 7);
-
-      if (signedError) throw signedError;
-      const publicUrl = signedData.signedUrl;
+        .getPublicUrl(fileName);
 
       // Get image/video dimensions
       let width: number | undefined;
@@ -110,7 +107,7 @@ export function useMediaUpload() {
         .insert({
           user_id: user.id,
           name: file.name,
-          file_url: publicUrl,
+          file_url: fileName, // Agora salvamos o path relativo
           file_type: file.type,
           file_size: file.size,
           width,

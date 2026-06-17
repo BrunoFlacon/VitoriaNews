@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 export interface PlatformCredentials {
@@ -12,29 +12,22 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   facebook: [
     { label: "App ID (Meta for Developers)", key: "app_id", placeholder: "Ex: 123456789012345" },
     { label: "App Secret", key: "app_secret", masked: true, placeholder: "Seu App Secret da Meta" },
-    { label: "Meta Pixel ID (Tracking)", key: "pixel_id", placeholder: "Ex: 1234567890" },
   ],
   instagram: [
-    { label: "Instagram User ID", key: "platform_user_id", placeholder: "Ex: 17841400000000" },
-    { label: "Access Token (Long Lived)", key: "access_token", masked: true },
+    { label: "App ID (Meta Business App)", key: "app_id", placeholder: "Ex: 123456789012345" },
+    { label: "App Secret", key: "app_secret", masked: true },
   ],
   threads: [
-    { label: "Threads App ID", key: "app_id", placeholder: "ID numérico" },
-    { label: "Threads App Secret", key: "app_secret", masked: true, placeholder: "Seu Secret da Threads API" },
-    { label: "Threads User ID (Opcional)", key: "platform_user_id", placeholder: "ID numérico do usuário" },
+    { label: "Threads App ID (Meta)", key: "app_id", placeholder: "Ex: 123456789012345" },
+    { label: "Threads App Secret", key: "app_secret", masked: true },
   ],
   whatsapp: [
-    { label: "System User Token (Meta Uso Próprio)", key: "access_token", masked: true, placeholder: "EAAG..." },
-    { label: "WhatsApp Business Account ID (WABA ID)", key: "waba_id", placeholder: "Ex: 1234567890" },
-    { label: "Phone Number ID (ID do Número)", key: "phone_number_id", placeholder: "Ex: 9876543210" },
-    { label: "Número do WhatsApp (com DDD)", key: "phone_number", placeholder: "Ex: 5511999999999" },
-    { label: "App ID (Meta for Developers)", key: "app_id", placeholder: "Ex: 123456789012345" },
-    { label: "Tech Provider Config ID", key: "client_key", placeholder: "Ex: 123456789..." },
-    { label: "Setup PIN (Embedded Signup)", key: "setup_pin", masked: true, placeholder: "PIN de 6 dígitos (deixe vazio para auto-geração)" },
+    { label: "WhatsApp App ID (Meta)", key: "app_id", placeholder: "Ex: 123456789012345" },
+    { label: "App Secret", key: "app_secret", masked: true },
   ],
   twitter: [
-    { label: "Twitter Username/Handle (sem @)", key: "platform_user_id", placeholder: "ex: lovable_dev" },
-    { label: "Bearer Token (App Only) ou User Oauth", key: "access_token", masked: true, placeholder: "Cole seu Bearer Token" },
+    { label: "Client ID (OAuth 2.0)", key: "client_id", placeholder: "ID Alfanumérico longo — ex: V0VfM3Bvamd..." },
+    { label: "Client Secret (opcional para App Nativo)", key: "client_secret", masked: true, placeholder: "Deixe vazio se usar App Nativo" },
   ],
   youtube: [
     { label: "Google Client ID", key: "client_id", placeholder: "Ex: ...apps.googleusercontent.com" },
@@ -64,7 +57,7 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Snapchat Client Secret", key: "client_secret", masked: true },
   ],
   site: [
-    { label: "URL do Site", key: "site_url_key", masked: true, placeholder: "https://seusite.com" },
+    { label: "URL do Site", key: "site_url", placeholder: "https://seusite.com" },
   ],
   meta_ads: [
     { label: "System User Token", key: "access_token", masked: true },
@@ -72,13 +65,11 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   ],
   google_cloud: [
     { label: "Google Maps API Key", key: "maps_api_key", masked: true },
-    { label: "Google News Discovery API Key", key: "news_api_key", masked: true },
+    { label: "Google News API Key", key: "news_api_key", masked: true },
     { label: "YouTube API Key", key: "youtube_api_key", masked: true },
-    { label: "Google Ads ID", key: "ads_id", masked: true },
-    { label: "Google Analytics ID", key: "analytics_id", masked: true },
-    { label: "Search Console ID", key: "search_console_id",  masked: true },
-    { label: "Google Analytics Pixel ID (G-TAG)", key: "pixel_id", placeholder: "Ex: G-XXXXXXXXXX" },
-    { label: "Google People API Key (Contatos)", key: "people_api_key", masked: true },
+    { label: "Google Ads ID", key: "ads_id", placeholder: "Ex: 123-456-7890" },
+    { label: "Google Analytics ID", key: "analytics_id", placeholder: "Ex: G-XXXXXXXXXX" },
+    { label: "Search Console ID", key: "search_console_id" },
   ],
   spotify: [
     { label: "Spotify Client ID", key: "client_id" },
@@ -95,10 +86,6 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Rumble Channel ID", key: "channel_id" },
     { label: "Rumble API Key", key: "api_key", masked: true },
   ],
-  reddit: [
-    { label: "Reddit Client ID", key: "client_id", placeholder: "Ex: _p98pqg..." },
-    { label: "Reddit Client Secret", key: "client_secret", masked: true },
-  ],
   truthsocial: [
     { label: "Truth Social Client ID", key: "client_id" },
     { label: "Truth Social Client Secret", key: "client_secret", masked: true },
@@ -106,20 +93,29 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   gettr: [
     { label: "Gettr API Key", key: "api_key", masked: true },
   ],
+  googlenews: [
+    { label: "Google News API Key", key: "api_key", masked: true },
+  ],
+  newsapi: [
+  ],
   resend: [
     { label: "Resend API Key (Email)", key: "api_key", masked: true, placeholder: "re_..." },
     { label: "Sender Domain/Address", key: "from_email", placeholder: "Ex: Portal <contato@seusite.com>" },
   ],
-  newsapi: [
-    { label: "NewsAPI.org API Key", key: "api_key", masked: true, placeholder: "Cole sua API Key do NewsAPI.org" },
-  ],
-  cloudinary: [
-    { label: "Cloud Name", key: "cloud_name", placeholder: "Ex: dxxxxxxxx" },
-    { label: "API Key", key: "api_key", placeholder: "15 dígitos" },
-    { label: "API Secret", key: "api_secret", masked: true },
-    { label: "Upload Preset", key: "upload_preset", placeholder: "Ex: social_canvas_hub" },
+  ai_config: [
+    { label: "Provedor de IA (openrouter, openai, google, anthropic, lovable)", key: "provider", placeholder: "Ex: openrouter" },
+    { label: "API Key Principal (OpenAI / Lovable / Anthropic)", key: "api_key", masked: true, placeholder: "Cole sua chave de API" },
+    { label: "OpenRouter API Key (recomendado)", key: "openrouter_api_key", masked: true, placeholder: "sk-or-v1-..." },
+    { label: "Modelo OpenRouter (texto)", key: "openrouter_model", placeholder: "Ex: google/gemini-2.0-flash-001" },
+    { label: "Modelo de Texto (legado)", key: "text_model", placeholder: "Ex: gpt-4o-mini" },
+    { label: "Modelo de Imagem (DALL-E)", key: "image_model", placeholder: "Ex: dall-e-3" },
+    { label: "ElevenLabs API Key (Texto-para-Áudio)", key: "audio_api_key", masked: true },
+    { label: "Base URL Customizada (Opcional)", key: "base_url", placeholder: "https://openrouter.ai/api/v1" },
+
   ]
 };
+
+import { sanitizeHtml } from "@/lib/utils";
 
 export function useApiCredentials() {
   const { user } = useAuth();
@@ -133,17 +129,17 @@ export function useApiCredentials() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from("api_credentials")
+        .from("api_credentials" as any)
         .select("platform, credentials")
         .eq("user_id", user.id);
       if (error) throw error;
       const map: Record<string, Record<string, string>> = {};
-      (data as { platform: string; credentials: Record<string, string> }[])?.forEach((row) => {
+      (data as any[])?.forEach((row: any) => {
         map[row.platform] = row.credentials || {};
       });
       setCredentials(map);
-    } catch {
-      toast({ title: "Erro ao carregar credenciais", description: "Não foi possível buscar as credenciais de API", variant: "destructive" });
+    } catch (e: any) {
+      // Error handled by loading state
     } finally {
       setLoading(false);
     }
@@ -156,8 +152,17 @@ export function useApiCredentials() {
   const saveCredentials = async (platform: string, creds: Record<string, string>) => {
     if (!user) return false;
     setSaving(platform);
+    
+    // IMPORTANT: Do NOT use sanitizeHtml on API keys — it can corrupt them by
+    // matching patterns like on\w+= or javascript: inside token strings.
+    // Only trim whitespace safely.
+    const sanitizedCreds: Record<string, string> = {};
+    Object.entries(creds).forEach(([key, val]) => {
+      sanitizedCreds[key] = typeof val === 'string' ? val.trim() : val;
+    });
+
     try {
-      let finalCreds = creds;
+      let finalCreds = sanitizedCreds;
       
       // Multi-token support for Telegram
       if (platform === "telegram") {
@@ -193,88 +198,100 @@ export function useApiCredentials() {
         finalCreds = {
           bot_token: tokens[0] || '',
           tokens,
-        } as unknown as Record<string, string>;
+        } as any;
+      } else if (platform === "ai_config") {
+        // Ensure api_key is populated from openrouter_api_key for backward compatibility 
+        // with the current live Edge Function that only checks 'api_key'
+        if (!sanitizedCreds.api_key && sanitizedCreds.openrouter_api_key) {
+          sanitizedCreds.api_key = sanitizedCreds.openrouter_api_key;
+        }
+        
+        // Auto-fix: If provider is openrouter and base_url is missing, set it correctly
+        // This prevents the legacy Edge Function from sending OpenRouter keys to OpenAI endpoint
+        if (sanitizedCreds.provider === 'openrouter' && !sanitizedCreds.base_url) {
+          sanitizedCreds.base_url = 'https://openrouter.ai/api/v1';
+        }
+        
+        // Ensure provider is set if openrouter_api_key is present
+        if (!sanitizedCreds.provider && sanitizedCreds.openrouter_api_key) {
+          sanitizedCreds.provider = 'openrouter';
+        }
+
+        // Ensure a default model is set for OpenRouter to avoid legacy function fallbacks
+        if (sanitizedCreds.provider === 'openrouter' && !sanitizedCreds.openrouter_model) {
+          sanitizedCreds.openrouter_model = 'google/gemini-2.0-flash-001';
+          sanitizedCreds.text_model = 'google/gemini-2.0-flash-001';
+        }
+        
+        finalCreds = sanitizedCreds;
       }
 
+
       const { error } = await supabase
-        .from("api_credentials")
+        .from("api_credentials" as any)
         .upsert(
-          { user_id: user.id, platform, credentials: finalCreds } as { user_id: string; platform: string; credentials: Record<string, string> },
+          { user_id: user.id, platform, credentials: finalCreds } as any,
           { onConflict: "user_id,platform" }
         );
       if (error) throw error;
       setCredentials(prev => ({ ...prev, [platform]: finalCreds }));
       toast({ title: "Credenciais salvas", description: `${platform} atualizado com sucesso.` });
 
-      // Auto-upsert social_connection for WhatsApp Business Uso Próprio (only if no OAuth connection exists)
-      if (platform === "whatsapp") {
-        if (finalCreds.phone_number_id && (finalCreds.access_token || finalCreds.waba_id)) {
-          const { data: existing } = await supabase
-            .from("social_connections")
-            .select("id, metadata")
-            .eq("user_id", user.id)
-            .eq("platform", "whatsapp")
-            .eq("platform_user_id", finalCreds.phone_number_id)
-            .maybeSingle();
-          const isOAuth = existing?.metadata && typeof existing.metadata === 'object' && !('manual' in (existing.metadata as Record<string, unknown>));
-          if (!existing || isOAuth) {
-            const wabaId = finalCreds.waba_id || finalCreds.phone_number_id;
-            const phoneName = finalCreds.phone_number || "WhatsApp Oficial";
-            await supabase.from("social_connections").upsert({
-              user_id: user.id,
-              platform: "whatsapp",
-              platform_user_id: finalCreds.phone_number_id,
-              page_id: wabaId,
-              username: phoneName,
-              page_name: phoneName,
-              access_token: finalCreds.access_token || null,
-              is_connected: true,
-              updated_at: new Date().toISOString()
-            }, { onConflict: "user_id,platform,platform_user_id" });
-          }
-        }
-      }
-
-      // Auto-sync Telegram after saving token
+      // Trigger sync for special platforms
       if (platform === "telegram") {
         try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const token = sessionData?.session?.access_token;
-          
-          if (!token) throw new Error("Sessão expirada");
+          const session = (await supabase.auth.getSession()).data.session;
+          const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+          const baseUrl = (supabase as any).functionsUrl || import.meta.env.VITE_SUPABASE_URL + '/functions/v1';
 
-          const baseUrl = import.meta.env.VITE_SUPABASE_URL;
-          const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
-          
-          const response = await fetch(`${baseUrl}/functions/v1/sync-telegram-chats`, {
-            method: 'POST',
-            headers: {
+          const doFetch = async (useAuth: boolean) => {
+            const headers: Record<string, string> = {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-              'X-Authorization': `Bearer ${token}`,
-              'apikey': anonKey,
-            },
-            body: JSON.stringify({ platform: "telegram", userId: sessionData?.session?.user?.id })
-          });
+              'apikey': anonKey
+            };
+            if (useAuth && session?.access_token) {
+              headers['Authorization'] = `Bearer ${session.access_token}`;
+            }
+            return await fetch(`${baseUrl}/sync-telegram-info`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ platform: "telegram", token: creds.bot_token, userId: session?.user?.id || user.id })
+            });
+          };
 
-          const syncResult = await response.json().catch(() => ({}));
-
-          if (!response.ok || syncResult.success === false) {
-            throw new Error(syncResult.error || `Erro HTTP: ${response.status}`);
+          let response = await doFetch(true);
+          
+          if (response.status === 401) {
+            response = await doFetch(false);
           }
-
-          // Auto-sync succeeded silently
-        } catch (syncErr: unknown) {
-          toast({
-            title: "Atenção: Sincronização Pendente",
-            description: `Credenciais salvas! Para exibir os dados, clique em "Sincronizar" na aba Telegram.`,
-          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            if (result?.success) {
+              await fetchCredentials();
+              window.dispatchEvent(new Event("social-connections-updated"));
+              window.dispatchEvent(new Event("messaging-channels-updated"));
+              const data = result.data;
+              const chatCount = data?.discovered_chats?.length || 0;
+              const totalMembers = data?.total_members || 0;
+              if (chatCount > 0) {
+                toast({
+                  title: "✅ Telegram conectado!",
+                  description: `${chatCount} grupo(s)/canal(is) encontrado(s) · ${totalMembers.toLocaleString('pt-BR')} membro(s) no total.`,
+                });
+              }
+            } else {
+              toast({ title: "Aviso do Telegram", description: result?.error || "Bot não sincronizado. Verifique se o Bot Token está totalmente correto e se ele pertence ao seu Bot no @BotFather.", variant: "destructive" });
+            }
+          }
+        } catch (syncErr: any) {
+          console.log("[Telegram] Sync skip.");
         }
       }
 
       return true;
-    } catch (e: unknown) {
-      toast({ title: "Erro ao salvar", description: (e as Error).message || "Erro desconhecido", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Erro ao salvar", description: e.message, variant: "destructive" });
       return false;
     } finally {
       setSaving(null);
@@ -286,7 +303,7 @@ export function useApiCredentials() {
     setSaving(platform);
     try {
       const { error } = await supabase
-        .from("api_credentials")
+        .from("api_credentials" as any)
         .delete()
         .eq("user_id", user.id)
         .eq("platform", platform);
@@ -298,8 +315,8 @@ export function useApiCredentials() {
       });
       toast({ title: "Credenciais removidas", description: `${platform} removido.` });
       return true;
-    } catch (e: unknown) {
-      toast({ title: "Erro ao remover", description: (e as Error).message || "Erro desconhecido", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Erro ao remover", description: e.message, variant: "destructive" });
       return false;
     } finally {
       setSaving(null);
@@ -309,14 +326,7 @@ export function useApiCredentials() {
   const hasCredentials = (platform: string) => {
     const creds = credentials[platform];
     if (!creds) return false;
-    
-    // Safely check if at least one value in the credentials object is truthy and non-empty
-    return Object.values(creds as Record<string, unknown>).some((v: unknown) => {
-      if (typeof v === 'string') return v.trim() !== "";
-      if (Array.isArray(v)) return (v as unknown[]).length > 0;
-      if (v && typeof v === 'object') return Object.keys(v as object).length > 0;
-      return !!v;
-    });
+    return Object.values(creds).some(v => v && v.trim() !== "");
   };
 
   return { credentials, loading, saving, saveCredentials, deleteCredentials, hasCredentials, refetch: fetchCredentials };

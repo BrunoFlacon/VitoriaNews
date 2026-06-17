@@ -1,19 +1,18 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  MessageCircle, Plus, Trash2, Send, SendHorizontal, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw, Megaphone, Info, BarChart3, Copy, UserPlus, Link2, MapPin, ArrowLeft
-, Smile, Play, Download, Music, Globe } from "lucide-react";
+  MessageCircle, Plus, Trash2, Send, SendHorizontal, Users, Radio as BroadcastIcon, Hash, User, Loader2, Clock, CheckCircle2, AlertCircle, Phone, Search, Filter, Calendar, Paperclip, Image, Video, Mic, FileText, X, Edit, MoreHorizontal, RefreshCw, Megaphone, Info, BarChart3, Copy, UserPlus, MapPin, Smile, Download
+} from "lucide-react";
 import { cn, getProxyUrl } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { safeInvoke } from "@/utils/supabase-utils";
 import { useToast } from "@/hooks/use-toast";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useNotifications } from "@/contexts/NotificationContext";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -22,11 +21,14 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { ChatList } from "./messaging/ChatList";
+import { ChatWindow } from "./messaging/ChatWindow";
+
 
 interface MessagingChannel {
   id: string;
@@ -37,12 +39,12 @@ interface MessagingChannel {
   channel_type: string;
   members_count: number;
   online_count: number;
-  invite_link?: string | null;  // Added for group linking
-  is_online?: boolean;         // Added online status
   posts_count?: number;
   profile_picture?: string;
-  cover_photo?: string | null;
   created_at: string;
+  invite_link?: string | null;
+  is_online?: boolean;
+  cover_photo?: string | null;
 }
 
 interface Message {
@@ -58,8 +60,8 @@ interface Message {
   recipient_name: string | null;
   platform: string | null;
   created_at: string;
-  metadata?: Record<string, any>;
   mime_type?: string | null;
+  metadata?: Record<string, any> | null;
 }
 
 const messagingPlatformConfigs = [
@@ -70,7 +72,6 @@ const messagingPlatformConfigs = [
   { id: "linkedin", name: "LinkedIn", types: ["group"] },
   { id: "twitter", name: "X (Twitter)", types: ["group"] },
   { id: "threads", name: "Threads", types: ["broadcast"] },
-  { id: "reddit", name: "Reddit", types: ["broadcast", "individual"] },
   { id: "custom", name: "Outra rede", types: ["group", "broadcast", "channel", "community", "individual"] },
 ];
 
@@ -91,12 +92,23 @@ const messageStatusConfig: Record<string, { label: string; color: string; icon: 
   sending: { label: "Enviando", color: "text-blue-300", icon: Loader2 },
 };
 
+// Helper to resolve profile/channel photos
 const getChatPhoto = (url: string | null | undefined) => {
   if (!url) return null;
-  if (url.startsWith('http')) return url;
-  // If it's a relative path from our media bucket
-  const { data } = supabase.storage.from("media").getPublicUrl(url);
-  return data.publicUrl;
+  // Proxy through Supabase for CDNs that block CORS (Telegram, WhatsApp, etc.)
+  if (url.startsWith('http')) {
+    return getProxyUrl(url);
+  }
+  if (url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+  // Try to resolve from Supabase storage if it's just a path
+  try {
+    const { data } = supabase.storage.from("media").getPublicUrl(url);
+    return data.publicUrl;
+  } catch (e) {
+    return null;
+  }
 };
 
 // Brand Colors & Clean Styles (Dark Mode Premium)
@@ -110,8 +122,9 @@ const getPlatformStyles = (platformId: string|null) => {
         softBg: "bg-[#0b141a]/60 backdrop-blur-md",
         bubbleSelf: "bg-[#005C4B] text-[#E9EDEF] shadow-lg border border-white/5",
         bubbleOther: "bg-[#202C33] text-[#E9EDEF] shadow-lg border border-white/5",
-        chatBg: "bg-[#0b141a]", // WhatsApp Dark background
+        chatBg: "bg-[#0b141a]",
         headerGradient: "from-[#25D366]/20 to-transparent",
+        sendIcon: MessageCircle,
       };
     case 'telegram':
       return {
@@ -122,6 +135,7 @@ const getPlatformStyles = (platformId: string|null) => {
         bubbleOther: "bg-[#182533] text-white shadow-lg border border-white/5",
         chatBg: "bg-[#0E1621]",
         headerGradient: "from-[#0088CC]/20 to-transparent",
+        sendIcon: Send,
       };
     case 'facebook':
       return {
@@ -132,6 +146,7 @@ const getPlatformStyles = (platformId: string|null) => {
         bubbleOther: "bg-[#3A3B3C] text-white shadow-lg border border-white/5",
         chatBg: "bg-[#18191A]",
         headerGradient: "from-[#1877F2]/20 to-transparent",
+        sendIcon: MessageCircle,
       };
     default:
       return {
@@ -142,98 +157,39 @@ const getPlatformStyles = (platformId: string|null) => {
         bubbleOther: "bg-white/10 text-white shadow-lg border border-white/5",
         chatBg: "bg-[#0A0A0A]",
         headerGradient: "from-primary/20 to-transparent",
+        sendIcon: Send,
       };
   }
 };
 
-// Cover fallback removed — clean minimal design per platform style
-// const getCoverFallback = () => null; // kept as ref to avoid any stale usages
-
 export const MessagingView = () => {
-  const queryClient = useQueryClient();
   const { user } = useAuth();
   const { toast } = useToast();
   const { addNotification } = useNotifications();
   const { connections } = useSocialConnections();
-
-  // Fetch Channels with React Query
-  const { data: channels = [], isLoading: loading, refetch: refetchChannels } = useQuery<MessagingChannel[]>({
-    queryKey: ['messaging_channels', user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("messaging_channels")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-        
-      if (error) throw error;
-
-      const { data: accounts } = await supabase
-        .from("social_accounts")
-        .select("*")
-        .eq("user_id", user.id);
-
-      const enrichedChannels = (data || []).map((ch: any) => {
-         const chId = ch.channel_id ? ch.channel_id.toString().toLowerCase() : "";
-         const chName = ch.channel_name ? ch.channel_name.toLowerCase() : "";
-         
-         const linkedAccount = accounts?.find(a =>
-            a.platform === ch.platform && (
-               (chId && (a as any).chat_id?.toString().toLowerCase() === chId) ||
-               (chId && (a as any).platform_user_id?.toLowerCase() === chId) ||
-               (chId && (a as any).username?.toLowerCase() === chId) ||
-               (chName && (a as any).username?.toLowerCase() === chName) ||
-               (chName && (a as any).page_name?.toLowerCase() === chName)
-            )
-         );
-
-         return {
-           ...ch,
-           members_count: (linkedAccount as any)?.followers ?? (linkedAccount as any)?.followers_count ?? ch.members_count ?? 0,
-           posts_count: (linkedAccount as any)?.posts_count ?? ch.posts_count ?? 0,
-           profile_picture: ch.profile_picture || linkedAccount?.profile_picture || null,
-           cover_photo: ch.cover_photo || (linkedAccount as any)?.cover_photo || null
-         };
-      });
-
-      // Deduplicate
-      const globalSeen = new Set();
-      return (enrichedChannels as any[]).filter(ch => {
-         const dKey = ch.channel_id ? `${ch.platform}:${ch.channel_id}` : ch.id;
-         if (globalSeen.has(dKey)) return false;
-         globalSeen.add(dKey);
-         return true;
-      }) as MessagingChannel[];
-    },
-    enabled: !!user
-  });
-
-  // Fetch Messages with React Query
-  const { data: messages = [], isLoading: messagesLoading, refetch: refetchMessages } = useQuery<Message[]>({
-    queryKey: ['messaging_messages', user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as unknown as Message[];
-    },
-    enabled: !!user
-  });
-
+  const queryClient = useQueryClient();
+  const [channels, setChannels] = useState<MessagingChannel[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [activeTab, setActiveTab] = useState("channels");
-  const [sidebarTab, setSidebarTab] = useState<"all" | "individual" | "groups" | "channels" | "broadcast">("all");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<MessagingChannel[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<"all" | "individual" | "groups" | "channels" | "broadcast">("all");
   const [activeChatType, setActiveChatType] = useState<"channel" | "individual">("channel");
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+
+  useEffect(() => {
+    const handleGlobalSearch = (e: any) => {
+      const query = e.detail?.query || "";
+      setChatSearchQuery(query);
+      setHistorySearch(query);
+    };
+    window.addEventListener('system-search', handleGlobalSearch);
+    return () => window.removeEventListener('system-search', handleGlobalSearch);
+  }, []);
 
   const activeMessages = useMemo(() => {
     if (!activeChatId) return [];
@@ -274,9 +230,9 @@ export const MessagingView = () => {
       let photoUrl = null;
       if (ch.profile_picture) {
         if (ch.profile_picture.startsWith('http') || ch.profile_picture.startsWith('data:')) {
-          photoUrl = getProxyUrl(ch.profile_picture);
+          photoUrl = ch.profile_picture;
         } else {
-          photoUrl = getProxyUrl(supabase.storage.from("media").getPublicUrl(ch.profile_picture).data.publicUrl);
+          photoUrl = supabase.storage.from("media").getPublicUrl(ch.profile_picture).data.publicUrl;
         }
       }
 
@@ -313,9 +269,9 @@ export const MessagingView = () => {
           let photoUrl = null;
           if (rawPhoto) {
             if (rawPhoto.startsWith('http') || rawPhoto.startsWith('data:')) {
-              photoUrl = getProxyUrl(rawPhoto);
+              photoUrl = rawPhoto;
             } else {
-              photoUrl = getProxyUrl(supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl);
+              photoUrl = supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl;
             }
           }
 
@@ -358,6 +314,12 @@ export const MessagingView = () => {
   // 2. Filter chats based on sidebar tab
   const filteredChats = useMemo(() => {
     return processedChats.filter(chat => {
+      const matchesSearch = !chatSearchQuery.trim() || 
+        (chat.name || "").toLowerCase().includes(chatSearchQuery.toLowerCase()) ||
+        (chat.platform || "").toLowerCase().includes(chatSearchQuery.toLowerCase());
+        
+      if (!matchesSearch) return false;
+      
       if (sidebarTab === "all") return true;
       if (sidebarTab === "individual") return chat.type === "individual";
       if (sidebarTab === "groups") return chat.type === "channel" && chat.channel_type === "group";
@@ -365,7 +327,8 @@ export const MessagingView = () => {
       if (sidebarTab === "broadcast") return chat.type === "channel" && chat.channel_type === "broadcast";
       return true;
     });
-  }, [processedChats, sidebarTab]);
+  }, [processedChats, sidebarTab, chatSearchQuery]);
+
 
   // Add channel form
   const [formPlatform, setFormPlatform] = useState("");
@@ -386,30 +349,6 @@ export const MessagingView = () => {
   const [composeSending, setComposeSending] = useState(false);
   const [sendMode, setSendMode] = useState<"channels" | "individual">("channels");
 
-  const [showDiscoverDialog, setShowDiscoverDialog] = useState(false);
-  const [discoverChatIds, setDiscoverChatIds] = useState("");
-  const [discoverPlatform, setDiscoverPlatform] = useState("telegram");
-  const [discoverResults, setDiscoverResults] = useState<any[]>([]);
-  const [discovering, setDiscovering] = useState(false);
-
-  // Info Dialog
-  const [showInfoDialog, setShowInfoDialog] = useState(false);
-  const [selectedInfoChannel, setSelectedInfoChannel] = useState<MessagingChannel | null>(null);
-  const [infoMembers, setInfoMembers] = useState<any[]>([]);
-  const [fetchingInfo, setFetchingInfo] = useState(false);
-  const [syncingGoogle, setSyncingGoogle] = useState(false);
-  const [audienceLogs, setAudienceLogs] = useState<any[]>([]);
-  const [infoPosts, setInfoPosts] = useState(0);
-
-  // Avatar detail modal
-  const [showAvatarModal, setShowAvatarModal] = useState(false);
-
-  // Add People
-  const [showAddPeopleDialog, setShowAddPeopleDialog] = useState(false);
-  const [hubContacts, setHubContacts] = useState<any[]>([]);
-  const [loadingContacts, setLoadingContacts] = useState(false);
-  const [addingContactId, setAddingContactId] = useState<string | null>(null);
-
   // Attachments
   const [attachments, setAttachments] = useState<{ url: string; type: string; name: string }[]>([]);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
@@ -418,7 +357,6 @@ export const MessagingView = () => {
 
   // History filters
   const [historyFilter, setHistoryFilter] = useState("all");
-  const [historySearch, setHistorySearch] = useState("");
 
   // Edit message dialog
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
@@ -426,11 +364,75 @@ export const MessagingView = () => {
   const [editScheduledAt, setEditScheduledAt] = useState("");
   const [editStatus, setEditStatus] = useState("");
 
+  // Discover Telegram/WhatsApp channels dialog
+  const [showDiscoverDialog, setShowDiscoverDialog] = useState(false);
+  const [discoverChatIds, setDiscoverChatIds] = useState("");
+  const [discovering, setDiscovering] = useState(false);
+  const [discoverResults, setDiscoverResults] = useState<any[]>([]);
+  const [discoverPlatform, setDiscoverPlatform] = useState<"telegram" | "whatsapp">("telegram");
+  const [linkingResult, setLinkingResult] = useState<string | null>(null);
+
+  // Avatar detail modal
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [selectedInfoChannel, setSelectedInfoChannel] = useState<MessagingChannel | null>(null);
+
+  // Info Dialog
+  const [showInfoDialog, setShowInfoDialog] = useState(false);
+  const [infoMembers, setInfoMembers] = useState<any[]>([]);
+  const [fetchingInfo, setFetchingInfo] = useState(false);
+  const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const [audienceLogs, setAudienceLogs] = useState<any[]>([]);
+  const [infoPosts, setInfoPosts] = useState(0);
+
+  // Add People
+  const [showAddPeopleDialog, setShowAddPeopleDialog] = useState(false);
+  const [hubContacts, setHubContacts] = useState<any[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [addingContactId, setAddingContactId] = useState<string | null>(null);
+
   // Inbox reply
   const [replyMessage, setReplyMessage] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
 
-  // Removed local fetchers as they are replaced by useQuery
+  const fetchChannels = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("messaging_channels")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    if (!error && data) setChannels(data as unknown as MessagingChannel[]);
+    setLoading(false);
+  };
+
+  const fetchMessages = async () => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("messages")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    if (!error && data) setMessages(data as unknown as Message[]);
+    setMessagesLoading(false);
+  };
+
+  const cleanupSystemMessages = async () => {
+    if (!user) return;
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    try {
+      const { data: oldSystem } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("user_id", user.id)
+        .lt("created_at", tenMinAgo)
+        .filter("metadata->>is_service_message", "eq", "true");
+      if (oldSystem && oldSystem.length > 0) {
+        const ids = oldSystem.map(m => m.id);
+        await supabase.from("messages").delete().in("id", ids);
+        setMessages(prev => prev.filter(m => !ids.includes(m.id)));
+      }
+    } catch { /* tabela ou coluna pode nao existir */ }
+  };
 
   const handleOpenInfo = async (channel: MessagingChannel) => {
     if (!user) return;
@@ -442,7 +444,6 @@ export const MessagingView = () => {
     
     const channelKey = channel.channel_id || channel.id;
     
-    // Fetch members (safe - table might not exist yet)
     try {
       const { data: membersData } = await supabase
         .from("messaging_members" as any)
@@ -453,7 +454,6 @@ export const MessagingView = () => {
       if (membersData) setInfoMembers(membersData);
     } catch { setInfoMembers([]); }
     
-    // Fetch real audience logs (last 24 hours)
     try {
       const { data: logs } = await supabase
         .from("messaging_audience_logs" as any)
@@ -465,7 +465,6 @@ export const MessagingView = () => {
       if (logs) setAudienceLogs(logs);
     } catch { setAudienceLogs([]); }
     
-    // Count posts (messages sent to this channel)
     try {
       const { count } = await supabase
         .from("messages")
@@ -475,7 +474,6 @@ export const MessagingView = () => {
       setInfoPosts(count || 0);
     } catch { setInfoPosts(0); }
 
-    // RECORD DATA: Automated snapshot on view/read
     try {
       await supabase.from("messaging_audience_logs" as any).insert({
         user_id: user.id,
@@ -524,7 +522,7 @@ export const MessagingView = () => {
         user_id: user.id,
         channel_id: channelKey,
         platform: selectedInfoChannel.platform,
-        profile_picture: "", // Removido fallback externo para evitar erros de CORS
+        profile_picture: "",
         full_name: contact.name,
         phone_number: contact.phone,
         role: 'member',
@@ -535,7 +533,6 @@ export const MessagingView = () => {
       if (error) throw error;
       
       toast({ title: "Participante adicionado!", description: `${contact.name} agora faz parte do grupo.` });
-      // Refresh members list
       handleOpenInfo(selectedInfoChannel);
     } catch (e: any) {
       toast({ title: "Erro ao adicionar", description: e.message, variant: "destructive" });
@@ -552,8 +549,7 @@ export const MessagingView = () => {
     setSyncingGoogle(true);
     
     try {
-      // 1. Map members to what the Edge Function expects (token fetching and validation is now handled securely on the backend)
-      const memberData = infoMembers.map(m => ({
+      const memberData = infoMembers.map((m: any) => ({
         full_name: m.full_name,
         first_name: m.first_name,
         last_name: m.last_name,
@@ -566,12 +562,8 @@ export const MessagingView = () => {
         channel_id: selectedInfoChannel?.channel_id
       }));
 
-      // 3. Call Edge Function to sync google contacts (token fetching managed entirely on the backend)
-      const currentSession = (await supabase.auth.getSession()).data.session;
-      const { data: syncResult, error: syncError } = await safeInvoke('sync-google-contacts', {
-        body: { members: memberData },
-        headers: currentSession ? { Authorization: `Bearer ${currentSession.access_token}` } : undefined,
-        timeoutMs: 45000
+      const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-google-contacts', {
+        body: { members: memberData }
       });
       
       if (syncError || !syncResult?.success) {
@@ -594,61 +586,89 @@ export const MessagingView = () => {
   };
 
   const syncChannels = async (platformArg?: any) => {
-    if (!user) return;
-    // loading state is handled by useQuery's isLoading
+    if (!user) return;    setLoading(true);
     try {
       const platform = typeof platformArg === 'string' ? platformArg : undefined;
       const session = (await supabase.auth.getSession()).data.session;
-      const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+      const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
       const baseUrl = (supabase as any).functionsUrl || import.meta.env.VITE_SUPABASE_URL + '/functions/v1';
 
-      // Determine correct edge function
       const functionName = platform === 'telegram' ? 'sync-telegram-chats' : 'sync-messaging-channels';
 
-      const { data, error } = await safeInvoke(functionName, {
-        body: { platform },
-        timeoutMs: 40000
-      });
+      const doFetch = async (useAuth: boolean) => {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'apikey': anonKey
+        };
+        if (useAuth && session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+        return await fetch(`${baseUrl}/${functionName}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ platform })
+        });
+      };
 
-      if (error) {
-        console.error("[SYNC] Invoke Error:", error);
-        toast({ title: "Erro na sincronização", description: error.message, variant: "destructive" });
-      } else if (data?.success) {
-        toast({ title: "Sincronização concluída", description: "Seus canais e mensagens foram atualizados." });
-      } else {
-        toast({ title: "Aviso", description: data?.error || "A sincronização não retornou resultados." });
+      let response = await doFetch(true);
+      if (response.status === 401) {
+        response = await doFetch(false);
       }
-    } catch (err: any) {
-      console.error("[SYNC] Catch Error:", err);
-      toast({ title: "Erro fatal", description: err.message, variant: "destructive" });
+      if (response.ok) {
+        const result = await response.json();
+        if (result?.success) {
+          await fetchChannels();
+          await fetchMessages();
+          toast({ title: "Sincronizado!", description: "Dados de canais e fotos atualizados." });
+        } else {
+          toast({ title: "Aviso", description: result?.error || "Sincronização parcial realizada.", variant: "default" });
+        }
+      } else {
+        const errorText = await response.text();
+        console.error("Sync error:", errorText);
+        toast({ title: "Erro na Sincronização", description: "Não foi possível conectar ao servidor de sincronização.", variant: "destructive" });
+      }
+    } catch (e: any) {
+      console.error("Sync catch error:", e);
+      toast({ title: "Erro fatal", description: e.message, variant: "destructive" });
     } finally {
-      refetchChannels();
-      refetchMessages();
+      setLoading(false);
     }
   };
 
-  // Initial fetch handled by useQuery enabled: !!user
+  useEffect(() => {
+    fetchChannels();
+    fetchMessages();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
     const ch1 = supabase
       .channel("messaging-channels-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, () => refetchChannels())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, () => fetchChannels())
       .subscribe();
     const ch2 = supabase
       .channel("messages-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, () => refetchMessages())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, () => fetchMessages())
       .subscribe();
 
     // Listen for telegram sync events
-    const handleChannelsUpdate = () => { refetchChannels(); };
+    const handleChannelsUpdate = () => { fetchChannels(); };
     window.addEventListener("messaging-channels-updated", handleChannelsUpdate);
 
     return () => { 
-      supabase.removeChannel(ch1); 
-      supabase.removeChannel(ch2);
+      supabase.removeChannel(ch1).catch(() => {}); 
+      supabase.removeChannel(ch2).catch(() => {});
       window.removeEventListener("messaging-channels-updated", handleChannelsUpdate);
     };
+  }, [user]);
+
+  // Auto-cleanup system messages every 60s
+  useEffect(() => {
+    if (!user) return;
+    cleanupSystemMessages();
+    const interval = setInterval(cleanupSystemMessages, 60_000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const availableTypes = formPlatform
@@ -658,7 +678,11 @@ export const MessagingView = () => {
   // Editing channel state
   const [editingChannel, setEditingChannel] = useState<MessagingChannel | null>(null);
 
-  const handleEditChannel = (ch: MessagingChannel) => {
+  const handleEditChannel = (ch: MessagingChannel, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setEditingChannel(ch);
     setFormPlatform(messagingPlatformConfigs.find(p => p.id === ch.platform) ? ch.platform : "custom");
     setFormCustomPlatform(messagingPlatformConfigs.find(p => p.id === ch.platform) ? "" : ch.platform);
@@ -687,8 +711,9 @@ export const MessagingView = () => {
       if (error) {
         toast({ title: "Erro", description: error.message, variant: "destructive" });
       } else {
-        toast({ title: "Canal atualizado!" });
+        toast({ title: "Canal atualizado!", description: `${formChannelName} foi salvo com sucesso.` });
         addNotification({ type: "success", title: "Canal atualizado", message: `${formChannelName} foi atualizado.`, platform: platformName });
+        queryClient.invalidateQueries({ queryKey: ['messaging_channels', user?.id] });
         setShowAddDialog(false);
         resetAddForm();
       }
@@ -697,8 +722,9 @@ export const MessagingView = () => {
       if (error) {
         toast({ title: "Erro", description: error.message, variant: "destructive" });
       } else {
-        toast({ title: "Canal adicionado!" });
+        toast({ title: "Canal adicionado!", description: `${formChannelName} adicionado com sucesso.` });
         addNotification({ type: "success", title: "Canal adicionado", message: `${formChannelName} foi adicionado como ${formChannelType}.`, platform: platformName });
+        queryClient.invalidateQueries({ queryKey: ['messaging_channels', user?.id] });
         setShowAddDialog(false);
         resetAddForm();
       }
@@ -707,15 +733,17 @@ export const MessagingView = () => {
   };
 
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (!confirm("Tem certeza que deseja remover este canal?")) return;
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     
-    // Clear active chat if we're deleting it
+    if (!confirm("Tem certeza que deseja excluir este canal e todo o seu histórico?")) return;
+    
     if (activeChatId === id) {
       setActiveChatId(null);
     }
 
-    // Optimistic Update
     const previousChannels = queryClient.getQueryData<MessagingChannel[]>(['messaging_channels', user?.id]);
     queryClient.setQueryData(['messaging_channels', user?.id], (old: MessagingChannel[] | undefined) => 
       old?.filter(c => c.id !== id) || []
@@ -729,20 +757,17 @@ export const MessagingView = () => {
        return;
     }
     
-    // Optimistic Update for messages too
     const previousMessages = queryClient.getQueryData<Message[]>(['messaging_messages', user?.id]);
     queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
       old?.filter(m => m.channel_id !== id) || []
     );
 
-    // Also cleanup messages for this channel
     await supabase.from("messages").delete().eq("channel_id", id);
     
     toast({ title: "Canal e histórico removidos com sucesso" });
-    
-    // Immediate state refresh
-    queryClient.invalidateQueries({ queryKey: ['messaging_channels', user?.id] });
-    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user?.id] });
+    fetchChannels();
+    fetchMessages();
+
   };
 
   const resetAddForm = () => {
@@ -758,6 +783,7 @@ export const MessagingView = () => {
       const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
       const baseUrl = (supabase as any).functionsUrl || import.meta.env.VITE_SUPABASE_URL + '/functions/v1';
 
+      // Parse entered IDs (one per line or comma-separated)
       const enteredIds = discoverChatIds
         .split(/[\n,]+/)
         .map(s => s.trim())
@@ -767,9 +793,7 @@ export const MessagingView = () => {
         'Content-Type': 'application/json',
         'apikey': anonKey,
       };
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
       const response = await fetch(`${baseUrl}/discover-telegram-chats`, {
         method: 'POST',
@@ -780,10 +804,18 @@ export const MessagingView = () => {
       const result = await response.json();
       if (result?.success) {
         setDiscoverResults(result.results || []);
-        if (result.results?.length === 0) {
+        const registered = (result.results || []).filter((r: any) => r.success);
+        if (registered.length > 0) {
           toast({
-            title: 'Nenhum resultado',
-            description: 'Verifique os IDs informados ou tente outro formato.',
+            title: `✅ ${registered.length} canal(is)/grupo(s) importado(s)!`,
+            description: `Total de ${(result.total_members || 0).toLocaleString('pt-BR')} membros encontrados.`
+          });
+          await fetchChannels();
+          window.dispatchEvent(new Event('social-connections-updated'));
+        } else {
+          toast({
+            title: 'Nenhum canal encontrado',
+            description: 'Verifique os IDs informados. Use @username ou o ID numérico do grupo/canal.',
             variant: 'destructive'
           });
         }
@@ -796,8 +828,6 @@ export const MessagingView = () => {
       setDiscovering(false);
     }
   };
-
-  const [linkingResult, setLinkingResult] = useState<string | null>(null);
 
   const handleLinkDiscoveryResult = async (result: any) => {
     if (!user || !result.success) return;
@@ -814,23 +844,19 @@ export const MessagingView = () => {
         updated_at: new Date().toISOString(),
       };
 
-      // Try with all new columns
-      const fullPayload = { 
-        ...payload, 
+      const fullPayload = {
+        ...payload,
         invite_link: result.invite_link || null,
         full_name: result.name || null,
         is_online: result.isOnline || false,
         last_seen: result.isOnline ? new Date().toISOString() : null
       };
 
-      // Master Safe Upsert: Dynamically remove columns that the DB doesn't have
       const safeUpsert = async (currentPayload: any) => {
         const { error } = await supabase
           .from("messaging_channels")
           .upsert(currentPayload, { onConflict: 'user_id,platform,channel_id' });
-
         if (error && error.message.includes("Could not find the") && error.message.includes("column")) {
-          // Extract column name from error message (e.g. "Could not find the 'invite_link' column")
           const match = error.message.match(/'([^']+)'/);
           if (match && match[1]) {
             const missingCol = match[1];
@@ -842,59 +868,39 @@ export const MessagingView = () => {
       };
 
       const { error } = await safeUpsert(fullPayload);
-
       if (error) throw error;
-      
-      // Check if this was a duplicate (upsert updates existing row)
+
       const existingChannel = channels.find(c => (c.channel_id === result.chatId || c.id === result.chatId) && c.platform === discoverPlatform);
-      
+
       if (existingChannel) {
-        toast({ 
-          title: "🔄 Registro Mesclado", 
-          description: `Os dados de "${payload.channel_name}" foram atualizados e mesclados ao registro original (${new Date(existingChannel.created_at).toLocaleDateString()}).` 
-        });
+        toast({ title: "🔄 Registro Mesclado", description: `Os dados de "${payload.channel_name}" foram atualizados e mesclados ao registro original.` });
       } else {
         toast({ title: "✅ Canal vinculado!", description: `${payload.channel_name} agora faz parte do seu Hub.` });
       }
-      
-      // RECORD DATA: Snapshot of audience metrics
+
       try {
         await supabase.from("messaging_audience_logs" as any).insert({
-          user_id: user.id,
-          channel_id: result.chatId,
-          platform: discoverPlatform,
+          user_id: user.id, channel_id: result.chatId, platform: discoverPlatform,
           members_total: result.members || 0,
           members_online: result.isOnline ? Math.max(1, Math.floor((result.members || 0) * 0.05)) : 0,
         });
-      } catch (logErr) {
-      }
-       
-      // RECORD DATA: Snapshot of members/admins
+      } catch (logErr) {}
+
       if (result.admins && result.admins.length > 0) {
         const adminsMapping = result.admins.map((a: any) => ({
-          user_id: user.id,
-          channel_id: result.chatId,
-          platform: discoverPlatform,
-          username: a.username,
-          first_name: a.first_name,
-          last_name: a.last_name,
+          user_id: user.id, channel_id: result.chatId, platform: discoverPlatform,
+          username: a.username, first_name: a.first_name, last_name: a.last_name,
           full_name: `${a.first_name || ""} ${a.last_name || ""}`.trim(),
-          role: a.status === 'creator' ? 'owner' : 'admin',
-          is_admin: true,
-          telegram_user_id: a.id,
-          updated_at: new Date().toISOString()
+          role: a.status === 'creator' ? 'owner' : 'admin', is_admin: true,
+          telegram_user_id: a.id, updated_at: new Date().toISOString()
         }));
-
         try {
           await supabase.from("messaging_members" as any).upsert(adminsMapping, { onConflict: "user_id,platform,channel_id,telegram_user_id" });
-        } catch (memErr) {
-        }
+        } catch (memErr) {}
       }
-      
-      // Update result state locally to show "Linked"
+
       setDiscoverResults(prev => prev.map(r => r.chatId === result.chatId ? { ...r, registered: true } : r));
-      
-      await refetchChannels();
+      await fetchChannels();
       window.dispatchEvent(new Event('social-connections-updated'));
     } catch (e: any) {
       toast({ title: "Erro ao vincular", description: e.message, variant: "destructive" });
@@ -907,52 +913,14 @@ export const MessagingView = () => {
     setComposeTarget(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
   };
 
-  async function uploadAttachments(files: { url?: string; type: string; name: string; file?: File }[]): Promise<string[]> {
-    if (!files.length) return [];
-    const urls: string[] = [];
-    for (const att of files) {
-      if (att.url && !att.url.startsWith("blob:")) {
-        urls.push(att.url);
-        continue;
-      }
-      if (!att.file) continue;
-      try {
-        const ext = att.file.name.split(".").pop() || "bin";
-        const path = `${user!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await supabase.storage.from("media").upload(path, att.file, { cacheControl: '3600' });
-        if (error) throw error;
-        const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-        urls.push(urlData.publicUrl);
-      } catch (err) {
-        console.error("[UPLOAD] Failed:", err);
-      }
-    }
-    return urls;
-  }
-
-  const inferMediaType = (mediaUrl: string | null, mimeType?: string | null): string => {
-    if (!mediaUrl) return "text";
-    const firstUrl = mediaUrl.split(",")[0];
-    if (mimeType?.startsWith("image/")) return "image";
-    if (mimeType?.startsWith("video/")) return "video";
-    if (mimeType?.startsWith("audio/")) return "audio";
-    const ext = firstUrl.split("?").shift()?.split("#").shift()?.split(".").pop()?.toLowerCase() || "";
-    if (["jpg","jpeg","png","gif","webp","svg","bmp","ico"].includes(ext)) return "image";
-    if (["mp4","webm","ogg","mov","avi","mkv","m3u8"].includes(ext)) return "video";
-    if (["mp3","wav","aac","flac","m4a","opus","wma"].includes(ext)) return "audio";
-    if (["pdf","doc","docx","xls","xlsx","ppt","pptx","zip","rar","7z","txt","csv"].includes(ext)) return "document";
-    return "document";
-  };
-
-  const handleReply = async (incomingAttachments?: any[]) => {
-    const hasText = replyMessage.trim().length > 0;
-    const allAttachments = incomingAttachments || attachments;
-    if (!user || !activeChatId || (!hasText && allAttachments.length === 0)) {
-      setSendingReply(false);
-      return;
-    }
-    setSendingReply(true);
+  const handleReply = async (content?: string, customAttachments?: any[]) => {
+    if (!user || !activeChatId) return;
     
+    const messageContent = content || replyMessage;
+    if (!messageContent.trim() && (!customAttachments || customAttachments.length === 0)) return;
+    
+    setSendingReply(true);
+
     const now = new Date().toISOString();
     const tempId = `temp-${Date.now()}`;
     
@@ -961,22 +929,13 @@ export const MessagingView = () => {
     const channelDbId = isChannel ? activeChat.id : null;
     const chatPlatform = activeChat?.platform || "telegram";
 
-    // Upload attachments first
-    const mediaUrls = await uploadAttachments(allAttachments);
-    const firstMedia = mediaUrls[0] || null;
-    const contentType = allAttachments.length > 0
-      ? (allAttachments[0].type === "image" ? "image"
-        : allAttachments[0].type === "video" ? "video"
-        : allAttachments[0].type === "audio" ? "audio"
-        : allAttachments[0].type === "location" ? "location"
-        : "document")
-      : "text";
+    const mediaUrls = (customAttachments || attachments).map(a => a.url).join(",");
 
     const optimisticMsg: Message = {
       id: tempId,
       user_id: user.id,
-      content: replyMessage.trim(),
-      media_url: firstMedia,
+      content: messageContent.trim(),
+      media_url: mediaUrls || null,
       status: "sending",
       scheduled_at: null,
       sent_at: now,
@@ -988,24 +947,18 @@ export const MessagingView = () => {
     } as Message;
     
     queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => [optimisticMsg, ...(old || [])]);
-    setReplyMessage("");
-    setAttachments([]);
+    if (!content) setReplyMessage("");
+    if (!customAttachments) setAttachments([]);
     
     try {
       const insertPayload: any = {
         user_id: user.id,
-        content: optimisticMsg.content,
-        status: "sending",
+        content: messageContent.trim(),
+        media_url: mediaUrls || null,
+        status: "sent",
         sent_at: now,
-        platform: chatPlatform,
-        metadata: {
-          media_type: contentType,
-          filename: allAttachments[0]?.name || null,
-          mime_type: allAttachments[0]?.type || null,
-        }
+        platform: chatPlatform
       };
-      
-      if (firstMedia) insertPayload.media_url = mediaUrls.join(",");
       
       if (isChannel) {
         insertPayload.channel_id = channelDbId;
@@ -1016,62 +969,16 @@ export const MessagingView = () => {
       const { data, error } = await supabase.from("messages").insert(insertPayload).select().single();
       if (error) throw error;
       
-      // Update optimistic with real ID
       queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-        old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id } : m) || []
+        old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id, status: "sent" } : m) || []
       );
-      
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const anonKey = (supabase as any).supabaseKey || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        const baseUrl = (supabase as any).functionsUrl || import.meta.env.VITE_SUPABASE_URL + '/functions/v1';
-
-        const publishPayload: any = {
-          content: optimisticMsg.content,
-          postId: data.id,
-          platforms: [chatPlatform],
-          postType: "message",
-          mediaType: contentType,
-          mediaUrls,
-          recipientPhone: !isChannel ? (activeChatId.startsWith('ind-') ? activeChatId.slice(4) : activeChatId) : undefined,
-          channelId: isChannel ? channelDbId : undefined
-        };
-
-        const response = await fetch(`${baseUrl}/publish-post`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session?.access_token || anonKey}`,
-            'apikey': anonKey
-          },
-          body: JSON.stringify(publishPayload)
-        });
-        
-        const resultData = await response.json();
-        if (!response.ok || !resultData?.success) {
-          await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
-          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-            old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
-          );
-          toast({ title: "Erro no envio", description: resultData?.error || "Falha na API da plataforma", variant: "destructive" });
-        } else {
-          await supabase.from("messages").update({ status: "sent", sent_at: now } as any).eq("id", data.id);
-          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-            old?.map(m => m.id === (data as any).id ? { ...m, status: "sent" } : m) || []
-          );
-          toast({ title: "Resposta enviada!" });
-        }
-      } catch (publishErr: any) {
-        await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
-        queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-          old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
-        );
-      }
+      toast({ title: "Mensagem enviada!" });
     } catch (e: any) {
       queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
         old?.filter(m => m.id !== tempId) || []
       );
-      toast({ title: "Erro ao responder", description: e.message, variant: "destructive" });
+      toast({ title: "Erro ao enviar", description: e.message, variant: "destructive" });
+
     } finally {
       setSendingReply(false);
     }
@@ -1105,6 +1012,24 @@ export const MessagingView = () => {
     setTimeout(() => fileInputRef.current?.click(), 50);
   };
 
+  const removeAttachment = (idx: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const inferMediaType = (mediaUrl: string | null, mimeType?: string | null): string => {
+    if (!mediaUrl) return "text";
+    const firstUrl = mediaUrl.split(",")[0];
+    if (mimeType?.startsWith("image/")) return "image";
+    if (mimeType?.startsWith("video/")) return "video";
+    if (mimeType?.startsWith("audio/")) return "audio";
+    const ext = firstUrl.split("?").shift()?.split("#").shift()?.split(".").pop()?.toLowerCase() || "";
+    if (["jpg","jpeg","png","gif","webp","svg","bmp","ico"].includes(ext)) return "image";
+    if (["mp4","webm","ogg","mov","avi","mkv","m3u8"].includes(ext)) return "video";
+    if (["mp3","wav","aac","flac","m4a","opus","wma"].includes(ext)) return "audio";
+    if (["pdf","doc","docx","xls","xlsx","ppt","pptx","zip","rar","7z","txt","csv"].includes(ext)) return "document";
+    return "document";
+  };
+
   const handleLocationAttach = () => {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -1112,30 +1037,23 @@ export const MessagingView = () => {
         setAttachments(prev => [...prev, { url, type: 'location', name: 'Minha Localização' }]);
         toast({ title: "Localização anexada", description: "As coordenadas foram salvas para o envio." });
       },
-      (err) => {
+      () => {
         toast({ title: "Erro na localização", description: "Ative o GPS do seu dispositivo.", variant: "destructive" });
       }
     );
   };
 
-  const removeAttachment = (idx: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== idx));
-  };
-
   const handleSendMessage = async () => {
     if (!user) return;
     setComposeSending(true);
-    const now = new Date().toISOString();
 
     try {
       const mediaUrls = attachments.length > 0 ? attachments.map(a => a.url) : [];
       const isScheduled = !!composeScheduledAt;
 
-      const contentType = attachments.length > 0 ? attachments[0].type === "location" ? "location" : attachments[0].type : "text";
       const payload: any = {
         content: composeMessage.trim(),
         mediaUrls,
-        mediaType: contentType,
         postType: "message",
         platforms: [],
       };
@@ -1144,24 +1062,6 @@ export const MessagingView = () => {
         if (!composeIndividualPhone.trim() || !composeMessage.trim()) return;
         payload.platforms = [composeIndividualPlatform];
         payload.recipientPhone = composeIndividualPhone.trim();
-
-        // Optimistic update: mostra instantaneamente na tela
-        const tempId = `temp-${Date.now()}`;
-        const optimisticMsg: Message = {
-          id: tempId,
-          user_id: user.id,
-          channel_id: null,
-          content: composeMessage.trim(),
-          media_url: mediaUrls.join(",") || null,
-          status: isScheduled ? "scheduled" : "sending",
-          scheduled_at: composeScheduledAt || null,
-          sent_at: now,
-          recipient_phone: composeIndividualPhone.trim(),
-          recipient_name: composeIndividualName.trim() || null,
-          platform: composeIndividualPlatform,
-          created_at: now
-        };
-        queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => [optimisticMsg, ...(old || [])]);
         
         const { data, error } = await supabase.from("messages").insert({
           user_id: user.id,
@@ -1172,24 +1072,9 @@ export const MessagingView = () => {
           recipient_phone: composeIndividualPhone.trim(),
           recipient_name: composeIndividualName.trim() || null,
           platform: composeIndividualPlatform,
-          metadata: {
-            media_type: contentType,
-            filename: attachments[0]?.name || null,
-            mime_type: attachments[0]?.type || null,
-          }
         } as any).select().single();
         
-        if (error) {
-          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-            old?.filter(m => m.id !== tempId) || []
-          );
-          throw error;
-        }
-
-        // Substituir temp pelo ID real
-        queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-          old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id } : m) || []
-        );
+        if (error) throw error;
 
         if (!isScheduled) {
           try {
@@ -1210,15 +1095,9 @@ export const MessagingView = () => {
             const resultData = await response.json();
             if (!response.ok || !resultData?.success) {
               await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
-              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-                old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
-              );
-            } else {
-              await supabase.from("messages").update({ status: "sent", sent_at: now } as any).eq("id", data.id);
-              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-                old?.map(m => m.id === (data as any).id ? { ...m, status: "sent" } : m) || []
-              );
+              throw new Error(resultData?.message || "Erro ao disparar envio");
             }
+            await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", data.id);
           } catch (e) { console.error("Silent publish error", e); }
         }
 
@@ -1231,24 +1110,6 @@ export const MessagingView = () => {
           const ch = channels.find(c => c.id === channelId);
           if (!ch) continue;
 
-          // Optimistic update por canal
-          const tempId = `temp-${Date.now()}-${channelId}`;
-          const optimisticMsg: Message = {
-            id: tempId,
-            user_id: user.id,
-            channel_id: channelId,
-            content: composeMessage.trim(),
-            media_url: mediaUrls.join(",") || null,
-            status: isScheduled ? "scheduled" : "sending",
-            scheduled_at: composeScheduledAt || null,
-            sent_at: now,
-            recipient_phone: null,
-            recipient_name: null,
-            platform: ch.platform,
-            created_at: now
-          };
-          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => [optimisticMsg, ...(old || [])]);
-
           const { data, error } = await supabase.from("messages").insert({
             user_id: user.id,
             channel_id: channelId,
@@ -1257,22 +1118,9 @@ export const MessagingView = () => {
             status: isScheduled ? "scheduled" : "sending",
             scheduled_at: composeScheduledAt || null,
             platform: ch.platform,
-            metadata: {
-              media_type: contentType,
-              filename: attachments[0]?.name || null,
-              mime_type: attachments[0]?.type || null,
-            }
           } as any).select().single();
 
-          if (error) {
-            queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => old?.filter(m => m.id !== tempId) || []);
-            throw error;
-          }
-
-          // Substituir temp pelo ID real
-          queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-            old?.map(m => m.id === tempId ? { ...optimisticMsg, id: (data as any).id } : m) || []
-          );
+          if (error) throw error;
 
           if (!isScheduled) {
             const chanPayload = { 
@@ -1282,21 +1130,14 @@ export const MessagingView = () => {
               postId: data.id 
             };
             
-            const { data: resultData, error: funcError } = await safeInvoke('publish-post', {
-              body: chanPayload,
-              timeoutMs: 30000
+            const { data: resultData, error: funcError } = await supabase.functions.invoke('publish-post', {
+              body: chanPayload
             });
 
             if (funcError || !resultData?.success) {
               await supabase.from("messages").update({ status: "failed" } as any).eq("id", data.id);
-              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-                old?.map(m => m.id === (data as any).id ? { ...m, status: "failed" } : m) || []
-              );
             } else {
-              await supabase.from("messages").update({ status: "sent", sent_at: now } as any).eq("id", data.id);
-              queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) => 
-                old?.map(m => m.id === (data as any).id ? { ...m, status: "sent" } : m) || []
-              );
+              await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", data.id);
             }
           }
         }
@@ -1318,33 +1159,22 @@ export const MessagingView = () => {
     setComposeSending(true);
     try {
       const mediaUrl = attachments.length > 0 ? attachments.map(a => a.url).join(",") : null;
-      const draftContentType = attachments.length > 0
-        ? (attachments[0].type === "location" ? "location" : attachments[0].type)
-        : "text";
-      const draftMeta = {
-        media_type: draftContentType,
-        filename: attachments[0]?.name || null,
-        mime_type: attachments[0]?.type || null,
-      };
       if (sendMode === "individual") {
         const { error } = await supabase.from("messages").insert({
           user_id: user.id, content: composeMessage.trim(), media_url: mediaUrl,
           status: "draft", recipient_phone: composeIndividualPhone.trim() || null,
           recipient_name: composeIndividualName.trim() || null, platform: composeIndividualPlatform,
-          metadata: draftMeta,
         } as any);
         if (error) throw error;
       } else {
         if (composeTarget.length === 0) {
           const { error } = await supabase.from("messages").insert({
             user_id: user.id, content: composeMessage.trim(), media_url: mediaUrl, status: "draft", platform: null,
-            metadata: draftMeta,
           } as any);
           if (error) throw error;
         } else {
           const inserts = composeTarget.map(channelId => ({
             user_id: user.id, channel_id: channelId, content: composeMessage.trim(), media_url: mediaUrl, status: "draft", platform: channels.find(c => c.id === channelId)?.platform || null,
-            metadata: draftMeta,
           }));
           const { error } = await supabase.from("messages").insert(inserts as any);
           if (error) throw error;
@@ -1352,6 +1182,7 @@ export const MessagingView = () => {
       }
       toast({ title: "Rascunho salvo!" });
       addNotification({ type: "info", title: "Rascunho salvo", message: "Sua mensagem foi salva como rascunho." });
+      fetchMessages();
       resetCompose();
     } catch (error: any) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -1366,39 +1197,32 @@ export const MessagingView = () => {
 
   // === CRUD operations for history ===
   const handleDeleteMessage = async (id: string) => {
-    if (!user) return;
-    
-    // Optimistic Update
-    const previousMessages = queryClient.getQueryData<Message[]>(['messaging_messages', user.id]);
-    queryClient.setQueryData(['messaging_messages', user.id], (old: Message[] | undefined) => 
+    const previousMessages = queryClient.getQueryData<Message[]>(['messaging_messages', user?.id]);
+    queryClient.setQueryData(['messaging_messages', user?.id], (old: Message[] | undefined) =>
       old?.filter(m => m.id !== id) || []
     );
-
+    setMessages(prev => prev.filter(m => m.id !== id));
     const { error } = await supabase.from("messages").delete().eq("id", id);
-    
     if (error) {
-      console.error("[DELETE MESSAGE] Error:", error);
-      toast({ title: "Erro ao remover mensagem", description: error.message, variant: "destructive" });
-      queryClient.setQueryData(['messaging_messages', user.id], previousMessages);
+      queryClient.setQueryData(['messaging_messages', user?.id], previousMessages);
+      setMessages(prev => [...prev, ...(previousMessages?.filter(m => m.id === id) || [])]);
+      toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
       return;
     }
-    
-    toast({ title: "Mensagem removida com sucesso" });
+    toast({ title: "Mensagem removida" });
     addNotification({ type: "info", title: "Mensagem excluída", message: "A mensagem foi removida do histórico." });
-    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user?.id] });
   };
 
   const handleDeleteConversation = async (recipientId: string) => {
     if (!user || !recipientId) return;
     if (!confirm("Tem certeza que deseja apagar todo o histórico desta conversa?")) return;
-
     toast({ title: "Apagando conversa..." });
 
     const actualId = recipientId.startsWith('ind-') ? recipientId.substring(4) : recipientId;
 
-    // Optimistic Update for individual conversation history
     const previousMessages = queryClient.getQueryData<Message[]>(['messaging_messages', user.id]);
-    queryClient.setQueryData(['messaging_messages', user.id], (old: Message[] | undefined) => 
+    queryClient.setQueryData(['messaging_messages', user.id], (old: Message[] | undefined) =>
       old?.filter(m => m.recipient_phone !== actualId && m.recipient_name !== actualId && m.channel_id !== actualId) || []
     );
 
@@ -1420,10 +1244,10 @@ export const MessagingView = () => {
   };
 
   const handleMarkSent = async (id: string) => {
-    if (!user) return;
     const msg = messages.find(m => m.id === id);
     if (!msg) return;
 
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, status: "sending" } : m));
     toast({ title: "Enviando...", description: "Processando envio imediato" });
 
     const payload: any = {
@@ -1440,27 +1264,33 @@ export const MessagingView = () => {
       if (ch) payload.chatId = ch.channel_id;
     }
 
-    const { data: resultData, error: funcError } = await safeInvoke('publish-post', {
-      body: payload,
-      timeoutMs: 30000
+    const { data: resultData, error: funcError } = await supabase.functions.invoke('publish-post', {
+      body: payload
     });
 
     if (funcError || !resultData?.success) {
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, status: "failed" } : m));
       await supabase.from("messages").update({ status: "failed" } as any).eq("id", id);
       toast({ title: "Erro no envio", description: funcError?.message || "Falha na plataforma", variant: "destructive" });
     } else {
+      setMessages(prev => prev.map(m => m.id === id ? { ...m, status: "sent", sent_at: new Date().toISOString() } : m));
       await supabase.from("messages").update({ status: "sent", sent_at: new Date().toISOString() } as any).eq("id", id);
       toast({ title: "Enviada com sucesso!" });
     }
-    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user?.id] });
   };
 
   const handleScheduleMessage = async (id: string, scheduledAt: string) => {
-    if (!user) return;
-    await supabase.from("messages").update({ status: "scheduled", scheduled_at: scheduledAt } as any).eq("id", id);
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, status: "scheduled", scheduled_at: scheduledAt } : m));
+    const { error } = await supabase.from("messages").update({ status: "scheduled", scheduled_at: scheduledAt } as any).eq("id", id);
+    if (error) {
+      fetchMessages();
+      toast({ title: "Erro ao agendar", description: error.message, variant: "destructive" });
+      return;
+    }
     toast({ title: "Mensagem agendada" });
     addNotification({ type: "info", title: "Mensagem agendada", message: `Agendada para ${new Date(scheduledAt).toLocaleString("pt-BR")}` });
-    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user?.id] });
   };
 
   const openEditMessage = (msg: Message) => {
@@ -1471,7 +1301,7 @@ export const MessagingView = () => {
   };
 
   const handleSaveEditMessage = async () => {
-    if (!editingMessage || !user) return;
+    if (!editingMessage) return;
     const updates: any = { content: editContent.trim() };
     if (editStatus === "scheduled" && editScheduledAt) {
       updates.status = "scheduled";
@@ -1483,17 +1313,18 @@ export const MessagingView = () => {
       updates.status = "draft";
       updates.scheduled_at = null;
     }
-    
-    const { error } = await supabase.from("messages").update(updates).eq("id", editingMessage.id);
+    const previousMsg = editingMessage;
+    setMessages(prev => prev.map(m => m.id === editingMessage.id ? { ...m, ...updates } : m));
+    setEditingMessage(null);
+    const { error } = await supabase.from("messages").update(updates).eq("id", previousMsg.id);
     if (error) {
+      setMessages(prev => prev.map(m => m.id === previousMsg.id ? previousMsg : m));
       toast({ title: "Erro ao editar", description: error.message, variant: "destructive" });
       return;
     }
-    
     toast({ title: "Mensagem atualizada" });
     addNotification({ type: "success", title: "Mensagem editada", message: "As alterações foram salvas." });
-    setEditingMessage(null);
-    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user.id] });
+    queryClient.invalidateQueries({ queryKey: ['messaging_messages', user?.id] });
   };
 
   const getTypeIcon = (type: string) => channelTypes.find(ct => ct.id === type)?.icon || Users;
@@ -1520,13 +1351,13 @@ export const MessagingView = () => {
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <input ref={fileInputRef} type="file" accept={fileAccept} onChange={handleAttachmentUpload} className="hidden" />
 
-      <div className="mb-8">
-        <h1 className="font-display font-bold text-3xl mb-2">Mensagens & Canais</h1>
-        <p className="text-muted-foreground">Gerencie canais, compose e veja o histórico de mensagens</p>
+      <div className="mb-4 md:mb-8">
+        <h1 className="font-display font-bold text-xl md:text-3xl mb-1 md:mb-2">Mensagens & Canais</h1>
+        <p className="text-muted-foreground text-xs md:text-base">Gerencie canais, compose e veja o histórico de mensagens</p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-muted/50 p-1 rounded-xl scrollbar-none overflow-x-auto justify-start md:justify-center">
+        <TabsList className="bg-muted/50 p-1 rounded-xl">
           <TabsTrigger value="channels" className="rounded-lg data-[state=active]:bg-background gap-2">
             <Hash className="w-4 h-4" /> Canais
           </TabsTrigger>
@@ -1541,17 +1372,17 @@ export const MessagingView = () => {
           </TabsTrigger>
         </TabsList>
 
-        {/* ===== INBOX TAB (INDIVIDUAL MESSAGES) ===== */}
+        {/* ===== INBOX TAB (Unified Messaging Hub) ===== */}
         <TabsContent value="inbox">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[calc(100vh-280px)] md:h-[650px]">
-            {/* Sidebar: Unified Chat List - hidden on mobile when chat is active */}
+            {/* Sidebar: Unified Chat List */}
             <div className={cn("md:col-span-4 glass-card rounded-2xl border border-border flex flex-col overflow-hidden", activeChatId ? "hidden md:flex" : "flex")}>
               <div className="p-4 border-b border-border space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-lg">Conversas</h3>
-                  <Button variant="ghost" size="icon" onClick={() => refetchMessages()} className="h-8 w-8"><RefreshCw className={cn("w-4 h-4", messagesLoading && "animate-spin")} /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => { fetchChannels(); fetchMessages(); }} className="h-8 w-8"><RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} /></Button>
                 </div>
-                
+
                 {/* Internal Sidebar Tabs */}
                 <div className="flex gap-1 p-1 bg-muted/40 rounded-xl mb-4 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]">
                   {[
@@ -1581,7 +1412,7 @@ export const MessagingView = () => {
                   const styles = getPlatformStyles(chat.platform);
                   const platform = socialPlatforms.find(p => p.id === chat.platform);
                   const PlatformIcon = platform?.icon || MessageCircle;
-                  
+
                   const photoUrl = chat.photoUrl;
                   const TypeIcon = chat.channel_type === 'broadcast' ? Megaphone : (chat.type === 'individual' ? User : (chat.channel_type === 'group' ? Users : Hash));
 
@@ -1594,7 +1425,7 @@ export const MessagingView = () => {
                           }}
                           className={cn(
                             "w-full rounded-2xl transition-all text-left relative group border border-white/5 overflow-hidden mb-2 md:mb-3 aspect-[4/1] md:aspect-auto",
-                            isActive 
+                            isActive
                               ? "ring-2 ring-primary/40 ring-offset-2 ring-offset-background shadow-2xl scale-[1.02] z-10"
                               : "hover:bg-white/5 opacity-80 hover:opacity-100"
                           )}
@@ -1620,7 +1451,6 @@ export const MessagingView = () => {
                                   <TypeIcon className={cn("w-7 h-7", styles.accent)} />
                                 )}
                               </div>
-                              {/* Indicador de Status Online Estático */}
                               {(chat.is_online || (chat.online_count || 0) > 0) && (
                                 <div className="absolute -top-1 -right-1 flex items-center justify-center">
                                   <div className="relative w-3.5 h-3.5 rounded-full border-2 border-background bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
@@ -1643,7 +1473,6 @@ export const MessagingView = () => {
                                 )}
                               </div>
                               <div className="flex flex-wrap items-center gap-2 mt-1">
-                                {/* Métricas no Sidebar */}
                                 <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-white/40 bg-white/5 px-2 py-0.5 rounded-md">
                                   <Users className="w-3 h-3 opacity-50" />
                                   <span>{((chat as any).members_count || 0).toLocaleString('pt-BR')}</span>
@@ -1676,19 +1505,19 @@ export const MessagingView = () => {
               {activeChatId ? (
                 (() => {
                   const isChannel = activeChatType === "channel";
-                  const channelData = isChannel 
+                  const channelData = isChannel
                     ? channels.find(c => c.channel_id === activeChatId || c.id === activeChatId)
                     : null;
                   const msgData = !isChannel
                     ? messages.find(m => m.recipient_phone === activeChatId || m.recipient_name === activeChatId)
                     : null;
                   const styles = getPlatformStyles(isChannel ? channelData?.platform : msgData?.platform);
-                  
-                  const conn = connections.find(c => 
+
+                  const conn = connections.find(c =>
                         (isChannel && (c.platform_user_id === (channelData?.channel_id || channelData?.id))) ||
                         (!isChannel && (c.page_name === activeChatId || c.platform_user_id === activeChatId))
                       );
-                  
+
                   const photoUrl = getChatPhoto(isChannel ? (channelData?.profile_picture || conn?.profile_image_url) : (conn?.profile_image_url));
                   const name = isChannel ? (channelData?.channel_name || activeChatId) : (msgData?.recipient_name || activeChatId);
                   const typeLabel = isChannel ? getTypeLabel(channelData?.channel_type || 'group') : "Contato Individual";
@@ -1697,9 +1526,9 @@ export const MessagingView = () => {
                     <>
                       <div className={cn("p-4 border-b border-border flex items-center justify-between", styles.chatBg)}>
                         <div className="flex items-center gap-4">
-                          <div 
+                          <div
                             className={cn("w-12 h-12 rounded-2xl flex items-center justify-center overflow-hidden border border-white/5 shadow-2xl cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all", styles.softBg)}
-                            onClick={() => isChannel && channelData ? handleOpenInfo(channelData) : setShowAvatarModal(true)}
+                            onClick={() => { if (isChannel && channelData) handleOpenInfo(channelData); }}
                           >
                             {photoUrl ? (
                               <SafeImage src={photoUrl} className="w-full h-full object-cover" />
@@ -1730,10 +1559,10 @@ export const MessagingView = () => {
                         </div>
                         <div className="flex items-center gap-1">
                           {isChannel && (
-                             <Button 
-                               variant="ghost" 
-                               size="icon" 
-                               className="rounded-xl hover:bg-white/10" 
+                             <Button
+                               variant="ghost"
+                               size="icon"
+                               className="rounded-xl hover:bg-white/10"
                                disabled={loading}
                                onClick={async () => {
                                  toast({ title: "Sincronizando...", description: "Atualizando dados desta conversa em tempo real." });
@@ -1754,7 +1583,7 @@ export const MessagingView = () => {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
                               <DropdownMenuItem onClick={() => { if (isChannel && channelData) handleOpenInfo(channelData); }} className="cursor-pointer">
-                                <MessageCircle className="w-4 h-4 mr-2" /> Ver Informações
+                                <Info className="w-4 h-4 mr-2" /> Ver Informações
                               </DropdownMenuItem>
                               {isChannel && channelData && (
                                 <DropdownMenuItem onClick={() => handleEditChannel(channelData)} className="cursor-pointer">
@@ -1762,7 +1591,11 @@ export const MessagingView = () => {
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem 
+                              <DropdownMenuItem onClick={cleanupSystemMessages} className="cursor-pointer">
+                                <AlertCircle className="w-4 h-4 mr-2" /> Limpar Mensagens do Sistema
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
                                 onClick={(e) => {
                                   if (isChannel && channelData) {
                                     handleDelete(channelData.id, e as any);
@@ -1772,7 +1605,7 @@ export const MessagingView = () => {
                                   } else {
                                     toast({ title: "Erro", description: "Nenhuma conversa ativa para excluir." });
                                   }
-                                }} 
+                                }}
                                 className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" /> Excluir Histórico/Conversa
@@ -1786,14 +1619,11 @@ export const MessagingView = () => {
                       {chatSearchOpen && (
                         <div className={cn("px-4 py-2 border-b border-white/5", styles.chatBg)}>
                           <div className="flex items-center gap-2">
-                            <Input 
-                              id="chat-search"
-                              name="chat_search"
-                              value={chatSearchQuery} 
-                              onChange={e => setChatSearchQuery(e.target.value)} 
+                            <Input
+                              value={chatSearchQuery}
+                              onChange={e => setChatSearchQuery(e.target.value)}
                               placeholder="Pesquisar nesta conversa..."
                               className="h-8 text-sm bg-muted/30 border-white/10 rounded-xl"
-                              aria-label="Pesquisar nesta conversa"
                               autoFocus
                             />
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg shrink-0" onClick={() => { setChatSearchOpen(false); setChatSearchQuery(""); }}>
@@ -1812,17 +1642,15 @@ export const MessagingView = () => {
                       ) : (
                         <div className={cn("flex-1 overflow-y-auto p-3 md:p-6 space-y-3 md:space-y-4", styles.chatBg)}>
                           {activeMessages.map((msg) => {
-                            const isSelf = msg.status !== "received";
+                            const isSelfMsg = msg.status !== "received";
                             const msgStyles = getPlatformStyles(msg.platform);
-                            const mediaType = msg.metadata?.media_type || inferMediaType(msg.media_url, msg.mime_type);
-                            const mediaId = msg.metadata?.media_id;
-                            const mediaUrl = msg.media_url || (mediaId ? getWhatsAppMediaUrl(mediaId, msg.user_id) : null);
-                            const location = msg.metadata?.location;
+                            const mediaType = inferMediaType(msg.media_url);
+                            const mediaUrl = msg.media_url;
                             return (
-                              <div key={msg.id} className={cn("flex flex-col", isSelf ? "items-end" : "items-start")}>
+                              <div key={msg.id} className={cn("flex flex-col", isSelfMsg ? "items-end" : "items-start")}>
                                 <div className={cn(
                                   "max-w-[95%] sm:max-w-[85%] px-3 md:px-4 py-2.5 rounded-2xl text-[14px] relative shadow-xl backdrop-blur-md group/msg",
-                                  isSelf ? cn(msgStyles.bubbleSelf, "rounded-tr-none") : cn(msgStyles.bubbleOther, "rounded-tl-none")
+                                  isSelfMsg ? cn(msgStyles.bubbleSelf, "rounded-tr-none") : cn(msgStyles.bubbleOther, "rounded-tl-none")
                                 )}>
                                   <div className="absolute top-1 right-2 opacity-0 group-hover/msg:opacity-100 transition-opacity z-10 bg-background/20 backdrop-blur-md rounded-md">
                                     <DropdownMenu>
@@ -1831,8 +1659,8 @@ export const MessagingView = () => {
                                           <MoreHorizontal className="w-3.5 h-3.5" />
                                         </button>
                                       </DropdownMenuTrigger>
-                                      <DropdownMenuContent align={isSelf ? "end" : "start"} className="w-40 bg-background/95 backdrop-blur-xl border-border/50">
-                                        <DropdownMenuItem onClick={() => setEditingMessage(msg)} className="cursor-pointer">
+                                      <DropdownMenuContent align={isSelfMsg ? "end" : "start"} className="w-40 bg-background/95 backdrop-blur-xl border-border/50">
+                                        <DropdownMenuItem onClick={() => openEditMessage(msg)} className="cursor-pointer">
                                           <Edit className="w-4 h-4 mr-2" /> Editar
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => handleDeleteMessage(msg.id)} className="text-destructive cursor-pointer focus:bg-destructive/10 focus:text-destructive">
@@ -1841,72 +1669,43 @@ export const MessagingView = () => {
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
-                                  {mediaType === "sticker" ? (
-                                    mediaUrl ? (
-                                      <SafeImage src={mediaUrl} alt="Sticker" className="max-w-[150px] md:max-w-[200px] max-h-[200px]" isWhatsAppImage={!!mediaId} />
-                                    ) : (
-                                      <div className="p-2 text-sm italic opacity-60">🎨 Figurinha</div>
-                                    )
-                                  ) : (
-                                    <>
-                                      {msg.content && <p className="leading-relaxed font-medium whitespace-pre-wrap break-words">{msg.content}</p>}
+                                  <p className="leading-relaxed font-medium whitespace-pre-wrap break-words">{msg.content}</p>
 
-                                      {(mediaUrl || mediaId) && mediaType === "image" && (
-                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
-                                          <SafeImage src={mediaUrl!} alt="Imagem" className="max-h-[300px] w-full object-contain" isWhatsAppImage={msg.platform === "whatsapp"} />
-                                        </div>
-                                      )}
-
-                                      {(mediaUrl || mediaId) && (mediaType === "video" || msg.mime_type?.startsWith("video/")) && (
-                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
-                                          <video src={mediaUrl!} controls preload="metadata" className="max-h-[300px] w-full" style={{ aspectRatio: "16/9" }}>
-                                            Seu navegador não suporta vídeo.
-                                          </video>
-                                        </div>
-                                      )}
-
-                                      {(mediaUrl || mediaId) && (mediaType === "audio" || mediaType === "voice") && (
-                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20 p-3">
-                                          <audio src={mediaUrl!} controls preload="metadata" className="w-full h-10" />
-                                          {msg.metadata?.duration && <p className="text-xs opacity-50 mt-1">{Math.round(msg.metadata.duration)}s</p>}
-                                        </div>
-                                      )}
-
-                                      {(mediaUrl || mediaId) && (mediaType === "document" || msg.metadata?.filename) && (
-                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20 p-3 flex items-center gap-3">
-                                          <FileText className="w-8 h-8 text-amber-400 shrink-0" />
-                                          <div className="min-w-0 flex-1">
-                                            <p className="text-sm font-bold truncate">{msg.metadata?.filename || "Documento"}</p>
-                                            {msg.metadata?.mime_type && <p className="text-[10px] opacity-50">{msg.metadata.mime_type}</p>}
-                                          </div>
-                                          {msg.metadata?.filename?.endsWith(".pdf") && mediaUrl && (
-                                            <a href={mediaUrl} target="_blank" rel="noopener noreferrer" download={msg.metadata.filename}>
-                                              <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full"><Download className="w-4 h-4" /></Button>
-                                            </a>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {location && (
-                                        <div className="mt-2 rounded-lg overflow-hidden border border-white/10">
-                                          <iframe src={`https://maps.google.com/maps?q=${location.lat},${location.lng}&z=15&output=embed`} className="w-full h-[150px] md:h-[200px]" style={{ border: 0 }} loading="lazy" title="Localização" />
-                                        </div>
-                                      )}
-
-                                      {msg.metadata?.contact && (
-                                        <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-3 flex items-center gap-3">
-                                          <User className="w-8 h-8 text-blue-400" />
-                                          <div>
-                                            <p className="font-bold text-sm">{msg.metadata.contact.name}</p>
-                                            {msg.metadata.contact.phone && <p className="text-xs opacity-70">{msg.metadata.contact.phone}</p>}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </>
+                                  {mediaUrl && mediaType === "image" && (
+                                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                      <SafeImage src={mediaUrl} alt="Imagem" className="max-h-[300px] w-full object-contain" />
+                                    </div>
                                   )}
+
+                                  {mediaUrl && (mediaType === "video") && (
+                                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+                                      <video src={mediaUrl} controls preload="metadata" className="max-h-[300px] w-full" style={{ aspectRatio: "16/9" }}>
+                                        Seu navegador não suporta vídeo.
+                                      </video>
+                                    </div>
+                                  )}
+
+                                  {mediaUrl && (mediaType === "audio") && (
+                                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20 p-3">
+                                      <audio src={mediaUrl} controls preload="metadata" className="w-full h-10" />
+                                    </div>
+                                  )}
+
+                                  {mediaUrl && mediaType === "document" && (
+                                    <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/20 p-3 flex items-center gap-3">
+                                      <FileText className="w-8 h-8 text-amber-400 shrink-0" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-bold truncate">Documento</p>
+                                      </div>
+                                      <a href={mediaUrl} target="_blank" rel="noopener noreferrer" download>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full"><Download className="w-4 h-4" /></Button>
+                                      </a>
+                                    </div>
+                                  )}
+
                                   <div className="flex items-center justify-end gap-1.5 mt-1 opacity-40 text-[9px] font-bold uppercase">
                                     <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                    {isSelf && <CheckCircle2 className={cn("w-2.5 h-2.5", msg.status === "failed" && "text-red-500")} />}
+                                    {isSelfMsg && msg.status !== "sending" && <CheckCircle2 className={cn("w-2.5 h-2.5", msg.status === "failed" && "text-red-500")} />}
                                   </div>
                                 </div>
                               </div>
@@ -1929,17 +1728,14 @@ export const MessagingView = () => {
                               setReplyMessage(prev => prev + pick);
                             }} title="Adicionar Emoji"><Smile className="w-4 h-4" /></Button>
                           </div>
-                          
+
                           <div className="flex-1 relative">
                             <Textarea
-                              id="message-reply"
-                              name="message_reply"
                               placeholder="Digite uma mensagem..."
                               value={replyMessage}
                               onChange={(e) => setReplyMessage(e.target.value)}
                               className="min-h-[44px] max-h-[200px] resize-none py-3 pr-12 bg-muted/30 border-border/50 rounded-2xl focus:ring-primary/30 text-sm"
                               disabled={sendingReply}
-                              aria-label="Responder mensagem"
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
                                   e.preventDefault();
@@ -1947,22 +1743,15 @@ export const MessagingView = () => {
                                 }
                               }}
                             />
-                            <Button 
-                              size="icon" 
+                            <Button
+                              size="icon"
                               className={cn(
-                                "h-9 w-9 absolute right-1.5 bottom-1.5 rounded-xl shadow-lg transition-all",
-                                (() => {
-                                  const isCh = activeChatType === "channel";
-                                  const ch = channels.find(c => c.channel_id === activeChatId || c.id === activeChatId);
-                                  const msg = messages.find(m => m.recipient_phone === activeChatId || m.recipient_name === activeChatId);
-                                  const pId = isCh ? ch?.platform : msg?.platform;
-                                  return getPlatformStyles(pId).bg;
-                                })()
+                                "h-9 w-9 absolute right-1.5 bottom-1.5 rounded-xl shadow-lg transition-all bg-primary text-white"
                               )}
-                              onClick={handleReply}
+                              onClick={() => handleReply()}
                               disabled={sendingReply || (!replyMessage.trim() && attachments.length === 0)}
                             >
-                              <Send className="w-4 h-4" />
+                              {sendingReply ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                             </Button>
                           </div>
                         </div>
@@ -2049,20 +1838,21 @@ export const MessagingView = () => {
                               setActiveChatId(ch.channel_id || ch.id);
                               setActiveChatType("channel");
                             }}
-                            className="glass-card rounded-2xl border border-border p-4 hover:border-primary/40 hover:shadow-lg transition-all group cursor-pointer">
+                            className="glass-card rounded-2xl border border-border p-4 hover:border-primary/40 hover:shadow-lg transition-all group overflow-hidden relative cursor-pointer">
                             
-                            {/* Top accent line — platform color */}
-                            <div className={cn("absolute top-0 left-0 w-full h-0.5 opacity-0 group-hover:opacity-100 transition-opacity", platformColor)} />
+                            {/* Decorative background gradient */}
+                            <div className={cn("absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity")} />
 
-                            <div className="flex items-start justify-between">
+                            <div className="flex items-start justify-between relative z-10">
                               <div className="flex items-center gap-4">
                                 <div className="relative">
                                   <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-background shadow-md bg-muted/30">
                                     {ch.profile_picture ? (
                                       <SafeImage 
-                                        src={getProxyUrl(ch.profile_picture)} 
+                                        src={ch.profile_picture} 
                                         alt={ch.channel_name} 
-                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                                        fallbackLetter={ch.channel_name?.substring(0, 1)}
                                       />
                                     ) : (
                                       <div className={cn("w-full h-full flex items-center justify-center", platformColor)}>
@@ -2071,6 +1861,7 @@ export const MessagingView = () => {
                                     )}
                                   </div>
                                   
+                                  {/* Platform mini-badge */}
                                   <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-lg bg-background flex items-center justify-center p-1 border border-border shadow-sm">
                                     {PIcon ? (
                                       <div className={cn("w-full h-full rounded-sm flex items-center justify-center", platformColor)}>
@@ -2080,30 +1871,25 @@ export const MessagingView = () => {
                                       <TypeIcon className="w-2.5 h-2.5 text-primary" />
                                     )}
                                   </div>
-
-                                  {/* Online Pulse Indicator */}
-                                  <div className={cn(
-                                    "absolute top-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-background shadow-sm transition-colors",
-                                    (ch as any).is_online || ch.online_count > 0 ? "bg-green-500" : "bg-muted-foreground/30"
-                                  )} title={(ch as any).is_online ? "Online" : "Offline"} />
                                 </div>
 
                                 <div className="min-w-0">
                                   <p className="font-display font-bold text-base truncate pr-2">{ch.channel_name}</p>
                                   <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
                                     <TypeIcon className="w-3 h-3" />
-                                    {getTypeLabel(ch.channel_type || 'group')}
+                                    {getTypeLabel(ch.channel_type)}
                                   </div>
                                 </div>
                               </div>
 
                               <div className="flex gap-1 shrink-0">
-                                <button onClick={() => handleEditChannel(ch)}
-                                  className="p-2 rounded-xl opacity-0 group-hover:opacity-100 hover:bg-primary/10 hover:text-primary transition-all duration-200">
+                                <button onClick={(e) => { e.stopPropagation(); handleEditChannel(ch, e); }}
+                                  className="p-2 rounded-xl opacity-0 group-hover:opacity-100 hover:bg-primary/10 hover:text-primary transition-all duration-200" title="Editar canal">
                                   <Edit className="w-4 h-4" />
                                 </button>
                                 <button onClick={(e) => handleDelete(ch.id, e)}
-                                  className="p-2 rounded-xl opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all duration-200">
+                                  className="p-2 rounded-xl opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-all duration-200" title="Remover canal">
+
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
@@ -2123,11 +1909,11 @@ export const MessagingView = () => {
                                 <span className="text-[10px] opacity-70 font-medium">posts</span>
                               </div>
 
-                              {((ch as any).is_online || ch.online_count > 0) && (
+                              {ch.online_count > 0 && (
                                 <div className="flex items-center gap-1.5 text-green-500 bg-green-500/5 px-3 py-1.5 rounded-xl border border-green-500/10">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" /> 
-                                  <span className="text-xs font-bold">{ch.online_count > 0 ? ch.online_count : "Online"}</span>
-                                  <span className="text-[10px] opacity-70 font-medium whitespace-nowrap">ativo</span>
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" /> 
+                                  <span className="text-xs font-bold">{ch.online_count}</span>
+                                  <span className="text-[10px] opacity-70 font-medium whitespace-nowrap">online</span>
                                 </div>
                               )}
                             </div>
@@ -2158,15 +1944,16 @@ export const MessagingView = () => {
                                 <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center"><TypeIcon className="w-5 h-5 text-muted-foreground" /></div>
                                 <div>
                                   <p className="font-medium text-sm">{ch.channel_name}</p>
-                                  <p className="text-xs text-muted-foreground">{getTypeLabel(ch.channel_type || 'group')}</p>
+                                  <p className="text-xs text-muted-foreground">{getTypeLabel(ch.channel_type)}</p>
                                 </div>
                               </div>
                               <div className="flex gap-1">
-                                <button onClick={() => handleEditChannel(ch)}
-                                  className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-accent transition-all">
+                                <button onClick={(e) => { e.stopPropagation(); handleEditChannel(ch, e); }}
+                                  className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-accent transition-all" title="Editar canal">
                                   <Edit className="w-4 h-4" />
                                 </button>
-                                <button onClick={(e) => handleDelete(ch.id, e)} className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all">
+                                <button onClick={(e) => handleDelete(ch.id, e)} className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-destructive/20 hover:text-destructive transition-all" title="Remover canal">
+
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
@@ -2190,10 +1977,10 @@ export const MessagingView = () => {
             {/* Send mode toggle */}
             <div className="flex gap-2 mb-6">
               <Button variant={sendMode === "channels" ? "default" : "outline"} size="sm" onClick={() => setSendMode("channels")} className="gap-2">
-                <Users className="w-4 h-4" /> Para Canais/Grupos
+                <Users className="w-4 h-4" /> Para Canais
               </Button>
               <Button variant={sendMode === "individual" ? "default" : "outline"} size="sm" onClick={() => setSendMode("individual")} className="gap-2">
-                <Phone className="w-4 h-4" /> Para Individual
+                <Phone className="w-4 h-4" /> Individual
               </Button>
             </div>
 
@@ -2214,7 +2001,7 @@ export const MessagingView = () => {
                             selected ? "bg-primary/10 border-primary/40 shadow-sm" : "hover:bg-muted/40 border-transparent")}>
                           <div className="relative shrink-0">
                             {ch.profile_picture ? (
-                              <SafeImage src={getProxyUrl(ch.profile_picture)} alt={ch.channel_name} className="w-8 h-8 rounded-lg object-cover border border-border" />
+                              <SafeImage src={ch.profile_picture} alt={ch.channel_name} className="w-8 h-8 rounded-lg object-cover border border-border" fallbackLetter={ch.channel_name?.substring(0, 1)} />
                             ) : (
                               <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", platform?.color || "bg-muted")}>
                                 {PIcon ? <PIcon className="w-4 h-4 text-white" /> : <Hash className="w-4 h-4 text-muted-foreground" />}
@@ -2241,9 +2028,9 @@ export const MessagingView = () => {
             ) : (
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="compose-platform" className="text-sm font-medium mb-1 block">Plataforma</label>
+                  <label className="text-sm font-medium mb-1 block">Plataforma</label>
                   <Select value={composeIndividualPlatform} onValueChange={setComposeIndividualPlatform}>
-                    <SelectTrigger id="compose-platform"><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="whatsapp">WhatsApp</SelectItem>
                       <SelectItem value="telegram">Telegram</SelectItem>
@@ -2251,39 +2038,21 @@ export const MessagingView = () => {
                   </Select>
                 </div>
                 <div>
-                  <label htmlFor="compose-contact" className="text-sm font-medium mb-1 block">Número / Username</label>
-                  <Input 
-                    id="compose-contact"
-                    name="compose_contact"
-                    value={composeIndividualPhone} 
-                    onChange={e => setComposeIndividualPhone(e.target.value)}
-                    placeholder={composeIndividualPlatform === "whatsapp" ? "+55 11 99999-9999" : "@username"} 
-                  />
+                  <label className="text-sm font-medium mb-1 block">Número / Username</label>
+                  <Input value={composeIndividualPhone} onChange={e => setComposeIndividualPhone(e.target.value)}
+                    placeholder={composeIndividualPlatform === "whatsapp" ? "+55 11 99999-9999" : "@username"} />
                 </div>
                 <div>
-                  <label htmlFor="compose-name" className="text-sm font-medium mb-1 block">Nome (opcional)</label>
-                  <Input 
-                    id="compose-name"
-                    name="compose_name"
-                    value={composeIndividualName} 
-                    onChange={e => setComposeIndividualName(e.target.value)} 
-                    placeholder="Nome do contato" 
-                  />
+                  <label className="text-sm font-medium mb-1 block">Nome (opcional)</label>
+                  <Input value={composeIndividualName} onChange={e => setComposeIndividualName(e.target.value)} placeholder="Nome do contato" />
                 </div>
               </div>
             )}
 
             <div className="mt-4 space-y-4">
               <div>
-                <label htmlFor="compose-message" className="text-sm font-medium mb-1 block">Mensagem</label>
-                <Textarea 
-                  id="compose-message"
-                  name="compose_message"
-                  value={composeMessage} 
-                  onChange={e => setComposeMessage(e.target.value)} 
-                  placeholder="Digite sua mensagem..." 
-                  rows={4} 
-                />
+                <label className="text-sm font-medium mb-1 block">Mensagem</label>
+                <Textarea value={composeMessage} onChange={e => setComposeMessage(e.target.value)} placeholder="Digite sua mensagem..." rows={4} />
               </div>
 
               {/* Attachments preview */}
@@ -2292,7 +2061,7 @@ export const MessagingView = () => {
                   {attachments.map((att, i) => (
                     <div key={i} className="relative group rounded-lg border border-border p-2 flex items-center gap-2 bg-muted/30">
                       {att.type === "image" ? (
-                        <SafeImage src={att.url} alt={att.name} className="w-12 h-12 rounded object-cover" />
+                        <img src={att.url} alt={att.name} className="w-12 h-12 rounded object-cover" />
                       ) : att.type === "video" ? (
                         <Video className="w-6 h-6 text-blue-500" />
                       ) : att.type === "audio" ? (
@@ -2331,15 +2100,8 @@ export const MessagingView = () => {
 
                 <div className="flex-1" />
 
-                <Input 
-                  id="compose-schedule"
-                  name="compose_schedule"
-                  type="datetime-local" 
-                  value={composeScheduledAt} 
-                  onChange={e => setComposeScheduledAt(e.target.value)}
-                  className="w-auto h-8 text-xs bg-transparent border-0 focus-visible:ring-0" 
-                  aria-label="Agendar para"
-                />
+                <Input type="datetime-local" value={composeScheduledAt} onChange={e => setComposeScheduledAt(e.target.value)}
+                  className="w-auto h-8 text-xs bg-transparent border-0 focus-visible:ring-0" />
               </div>
 
               {/* Action buttons */}
@@ -2350,7 +2112,7 @@ export const MessagingView = () => {
                 <Button onClick={handleSendMessage}
                   disabled={composeSending || !composeMessage.trim() || (sendMode === "channels" && composeTarget.length === 0) || (sendMode === "individual" && !composeIndividualPhone.trim())}
                   className="gap-2 bg-gradient-to-r from-green-500 to-emerald-600 hover:opacity-90 text-white flex-1">
-                  {composeSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <SendHorizontal className="w-4 h-4" />}
+                  {composeSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                   {composeScheduledAt ? "Agendar envio" : "Enviar agora"}
                 </Button>
               </div>
@@ -2364,15 +2126,7 @@ export const MessagingView = () => {
             <div className="flex flex-wrap gap-3 items-center">
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  id="history-search"
-                  name="history_search"
-                  value={historySearch} 
-                  onChange={e => setHistorySearch(e.target.value)} 
-                  placeholder="Buscar mensagens..." 
-                  className="pl-10" 
-                  aria-label="Buscar no histórico"
-                />
+                <Input value={historySearch} onChange={e => setHistorySearch(e.target.value)} placeholder="Buscar mensagens..." className="pl-10" />
               </div>
               <div className="flex gap-1">
                 {[{ id: "all", label: "Todas" }, { id: "draft", label: "Rascunhos" }, { id: "scheduled", label: "Agendadas" }, { id: "sent", label: "Enviadas" }, { id: "received", label: "Recebidas" }, { id: "failed", label: "Falhas" }].map(f => (
@@ -2384,7 +2138,12 @@ export const MessagingView = () => {
             </div>
 
             {messagesLoading ? (
-              <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+              <div className="flex flex-col gap-2 p-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-20 w-full rounded-xl bg-white/5 animate-pulse" />
+                ))}
+              </div>
+
             ) : filteredMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center glass-card rounded-2xl border border-border">
                 <MessageCircle className="w-12 h-12 text-muted-foreground mb-3" />
@@ -2406,7 +2165,7 @@ export const MessagingView = () => {
                       <div className="flex items-start gap-3">
                         <div className="relative shrink-0">
                           {ch?.profile_picture ? (
-                            <SafeImage src={getProxyUrl(ch.profile_picture)} alt={ch.channel_name} className="w-12 h-12 rounded-xl object-cover border border-border shadow-sm" />
+                            <SafeImage src={ch.profile_picture} alt={ch.channel_name} className="w-12 h-12 rounded-xl object-cover border border-border shadow-sm" fallbackLetter={ch.channel_name?.substring(0, 1)} />
                           ) : (
                             <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", platform?.color || "bg-muted")}>
                               {PIcon ? <PIcon className="w-6 h-6 text-white" /> : <MessageCircle className="w-6 h-6 text-muted-foreground" />}
@@ -2500,9 +2259,9 @@ export const MessagingView = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label htmlFor="channel-platform" className="text-sm font-medium mb-1 block">Plataforma</label>
+              <label className="text-sm font-medium mb-1 block">Plataforma</label>
               <Select value={formPlatform} onValueChange={(v) => { setFormPlatform(v); setFormChannelType(messagingPlatformConfigs.find(p => p.id === v)?.types[0] || "group"); }}>
-                <SelectTrigger id="channel-platform"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   {messagingPlatformConfigs.map(p => (
                     <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
@@ -2512,22 +2271,16 @@ export const MessagingView = () => {
             </div>
             {formPlatform === "custom" && (
               <div>
-                <label htmlFor="custom-platform" className="text-sm font-medium mb-1 block">Nome da rede</label>
-                <Input 
-                  id="custom-platform"
-                  name="custom_platform"
-                  value={formCustomPlatform} 
-                  onChange={e => setFormCustomPlatform(e.target.value)} 
-                  placeholder="Ex: Discord, Slack..." 
-                />
+                <label className="text-sm font-medium mb-1 block">Nome da rede</label>
+                <Input value={formCustomPlatform} onChange={e => setFormCustomPlatform(e.target.value)} placeholder="Ex: Discord, Slack..." />
               </div>
             )}
             {formPlatform && (
               <>
                 <div>
-                  <label htmlFor="channel-type" className="text-sm font-medium mb-1 block">Tipo</label>
+                  <label className="text-sm font-medium mb-1 block">Tipo</label>
                   <Select value={formChannelType} onValueChange={setFormChannelType}>
-                    <SelectTrigger id="channel-type"><SelectValue /></SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {availableTypes.map(t => {
                         const ct = channelTypes.find(c => c.id === t);
@@ -2537,35 +2290,16 @@ export const MessagingView = () => {
                   </Select>
                 </div>
                 <div>
-                  <label htmlFor="channel-name" className="text-sm font-medium mb-1 block">Nome do canal/grupo</label>
-                  <Input 
-                    id="channel-name"
-                    name="channel_name"
-                    value={formChannelName} 
-                    onChange={e => setFormChannelName(e.target.value)} 
-                    placeholder="Nome do grupo ou canal" 
-                  />
+                  <label className="text-sm font-medium mb-1 block">Nome do canal/grupo</label>
+                  <Input value={formChannelName} onChange={e => setFormChannelName(e.target.value)} placeholder="Nome do grupo ou canal" />
                 </div>
                 <div>
-                  <label htmlFor="channel-id" className="text-sm font-medium mb-1 block">ID ou link (opcional)</label>
-                  <Input 
-                    id="channel-id"
-                    name="channel_id"
-                    value={formChannelId} 
-                    onChange={e => setFormChannelId(e.target.value)} 
-                    placeholder="Ex: https://chat.whatsapp.com/... ou @canal" 
-                  />
+                  <label className="text-sm font-medium mb-1 block">ID ou link (opcional)</label>
+                  <Input value={formChannelId} onChange={e => setFormChannelId(e.target.value)} placeholder="Ex: https://chat.whatsapp.com/... ou @canal" />
                 </div>
                 <div>
-                  <label htmlFor="members-count" className="text-sm font-medium mb-1 block">Membros (opcional)</label>
-                  <Input 
-                    id="members-count"
-                    name="members_count"
-                    type="number" 
-                    value={formMembersCount} 
-                    onChange={e => setFormMembersCount(e.target.value)} 
-                    placeholder="0" 
-                  />
+                  <label className="text-sm font-medium mb-1 block">Membros (opcional)</label>
+                  <Input type="number" value={formMembersCount} onChange={e => setFormMembersCount(e.target.value)} placeholder="0" />
                 </div>
               </>
             )}
@@ -2587,19 +2321,13 @@ export const MessagingView = () => {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <label htmlFor="edit-message-content" className="text-sm font-medium mb-1 block">Conteúdo</label>
-              <Textarea 
-                id="edit-message-content"
-                name="edit_message_content"
-                value={editContent} 
-                onChange={e => setEditContent(e.target.value)} 
-                rows={4} 
-              />
+              <label className="text-sm font-medium mb-1 block">Conteúdo</label>
+              <Textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={4} />
             </div>
             <div>
-              <label htmlFor="edit-message-status" className="text-sm font-medium mb-1 block">Status</label>
+              <label className="text-sm font-medium mb-1 block">Status</label>
               <Select value={editStatus} onValueChange={setEditStatus}>
-                <SelectTrigger id="edit-message-status"><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="draft">Rascunho</SelectItem>
                   <SelectItem value="scheduled">Agendada</SelectItem>
@@ -2609,14 +2337,8 @@ export const MessagingView = () => {
             </div>
             {editStatus === "scheduled" && (
               <div>
-                <label htmlFor="edit-message-schedule" className="text-sm font-medium mb-1 block">Agendar para</label>
-                <Input 
-                  id="edit-message-schedule"
-                  name="edit_message_schedule"
-                  type="datetime-local" 
-                  value={editScheduledAt} 
-                  onChange={e => setEditScheduledAt(e.target.value)} 
-                />
+                <label className="text-sm font-medium mb-1 block">Agendar para</label>
+                <Input type="datetime-local" value={editScheduledAt} onChange={e => setEditScheduledAt(e.target.value)} />
               </div>
             )}
           </div>
@@ -2624,182 +2346,6 @@ export const MessagingView = () => {
             <Button variant="outline" onClick={() => setEditingMessage(null)}>Cancelar</Button>
             <Button onClick={handleSaveEditMessage} disabled={!editContent.trim()}>Salvar</Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* ===== Detailed Info Dialog (WhatsApp/Telegram Theme) ===== */}
-      <Dialog open={showInfoDialog} onOpenChange={setShowInfoDialog}>
-        <DialogContent className={cn(
-          "sm:max-w-2xl p-0 overflow-hidden border-none shadow-2xl",
-          selectedInfoChannel?.platform === "whatsapp" ? "bg-[#0b141a]" : "bg-[#17212b]"
-        )} aria-describedby={undefined}>
-          <DialogHeader className="sr-only">
-            <DialogTitle>{selectedInfoChannel?.channel_name || "Informações do Canal"}</DialogTitle>
-          </DialogHeader>
-          
-          {/* Header Banner */}
-          <div className={cn(
-             "relative p-6 flex items-center gap-6",
-             selectedInfoChannel?.platform === "whatsapp" ? "bg-[#202c33]" : "bg-[#242f3d]"
-          )}>
-            <div className="relative cursor-pointer" onClick={() => setShowAvatarModal(true)}>
-              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/10 shadow-xl hover:ring-2 hover:ring-primary/50 transition-all">
-                 {selectedInfoChannel?.profile_picture ? (
-                   <SafeImage src={getChatPhoto(selectedInfoChannel.profile_picture) || ""} className="w-full h-full object-cover" />
-                 ) : (
-                   <div className="w-full h-full bg-muted flex items-center justify-center">
-                     <User className="w-10 h-10 opacity-30" />
-                   </div>
-                 )}
-              </div>
-              {selectedInfoChannel?.is_online && (
-                <div className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-[#202c33] shadow-lg" />
-              )}
-            </div>
-            
-            <div className="flex-1 min-w-0">
-               <h2 className="text-2xl font-bold text-white">{selectedInfoChannel?.channel_name}</h2>
-               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                 <Badge variant="outline" className="bg-white/5 border-white/10 text-white/60">
-                   {getTypeLabel(selectedInfoChannel?.channel_type || "group")}
-                 </Badge>
-                 <span className="text-xs text-white/40 font-medium">#{selectedInfoChannel?.channel_id}</span>
-               </div>
-               <p className="text-[10px] text-white/30 mt-1">
-                 Registrado em {selectedInfoChannel?.created_at ? new Date(selectedInfoChannel.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
-               </p>
-            </div>
-            
-            <Button variant="ghost" size="icon" onClick={() => setShowInfoDialog(false)} className="text-white/40 hover:text-white hover:bg-white/5 shrink-0">
-               <X className="w-5 h-5" />
-            </Button>
-          </div>
-
-          <div className="p-6 space-y-8 max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
-            {/* Stats Summary - REAL DATA */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: "Membros Total", val: selectedInfoChannel?.members_count || 0, icon: Users, color: "text-blue-400" },
-                { label: "Online Agora", val: selectedInfoChannel?.online_count || 0, icon: Clock, color: "text-green-400" },
-                { label: "Posts Realizados", val: infoPosts, icon: SendHorizontal, color: "text-purple-400" },
-                { label: "Administradores", val: infoMembers.filter(m => m.is_admin).length, icon: UserPlus, color: "text-orange-400" },
-              ].map((stat, i) => (
-                <div key={i} className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                  <div className="flex items-center justify-between mb-2">
-                    <stat.icon className={cn("w-4 h-4", stat.color)} />
-                  </div>
-                  <p className="text-xl font-bold text-white">{(typeof stat.val === 'number' ? stat.val : 0).toLocaleString('pt-BR')}</p>
-                  <p className="text-[10px] uppercase font-bold text-white/40 tracking-wider mt-1">{stat.label}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Audience Chart - REAL DATA from audience_logs */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-widest opacity-80">
-                   <BarChart3 className="w-4 h-4 text-primary" /> Histórico de Audiência
-                </h3>
-                <span className="text-[10px] text-white/40 font-bold bg-white/5 px-2 py-1 rounded-lg">
-                  {audienceLogs.length > 0 ? `${audienceLogs.length} registros` : "AGUARDANDO DADOS"}
-                </span>
-              </div>
-              <div className="bg-white/5 rounded-2xl p-4 border border-white/5 h-32 flex items-end justify-between gap-1 overflow-hidden group">
-                 {audienceLogs.length > 0 ? (
-                   audienceLogs.map((log, i) => {
-                     const maxMembers = Math.max(...audienceLogs.map(l => l.members_online || 1));
-                     const h = Math.max(5, Math.round(((log.members_online || 0) / maxMembers) * 100));
-                     return (
-                       <div key={i} className="flex-1 bg-primary/20 hover:bg-primary transition-all rounded-t-sm relative group/bar" style={{ height: `${h}%` }}>
-                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-primary text-[8px] px-1 rounded opacity-0 group-hover/bar:opacity-100 font-bold whitespace-nowrap">
-                           {log.members_online} online
-                         </div>
-                       </div>
-                     );
-                   })
-                 ) : (
-                   <div className="flex-1 flex items-center justify-center text-white/20 text-xs font-medium">
-                     Os dados do gráfico serão preenchidos conforme a atividade for capturada
-                   </div>
-                 )}
-              </div>
-              {audienceLogs.length > 0 && (
-                <div className="flex justify-between mt-2 text-[9px] text-white/20 font-bold uppercase tracking-widest px-1">
-                  <span>{new Date(audienceLogs[0]?.logged_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</span>
-                  <span>{new Date(audienceLogs[audienceLogs.length-1]?.logged_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="h-10 rounded-xl bg-white/5 border-white/10 text-white/70 hover:bg-white/10 gap-2" onClick={() => {
-                const link = selectedInfoChannel?.invite_link || selectedInfoChannel?.channel_id || '';
-                navigator.clipboard.writeText(link);
-                toast({ title: "Link copiado!", description: link });
-              }}>
-                <Copy className="w-4 h-4" /> Copiar Link
-              </Button>
-              <Button variant="outline" className="h-10 rounded-xl bg-white/5 border-white/10 text-white/70 hover:bg-white/10 gap-2" onClick={handleOpenAddPeople}>
-                <UserPlus className="w-4 h-4" /> Adicionar Pessoas
-              </Button>
-            </div>
-
-            {/* Connected Profiles / Admins */}
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-widest opacity-80">
-                   <Users className="w-4 h-4 text-primary" /> Perfis e Administradores ({infoMembers.length})
-                </h3>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  className="h-8 rounded-xl bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 gap-2"
-                  onClick={syncToGoogle}
-                  disabled={syncingGoogle || infoMembers.length === 0}
-                >
-                  {syncingGoogle ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                  Sincronizar Google
-                </Button>
-              </div>
-              
-              <div className="space-y-2">
-                {fetchingInfo ? (
-                   <div className="flex items-center justify-center py-10 opacity-30"><Loader2 className="w-8 h-8 animate-spin" /></div>
-                ) : infoMembers.length === 0 ? (
-                   <div className="bg-white/5 rounded-2xl p-8 border border-dashed border-white/10 text-center">
-                     <p className="text-sm text-white/30">Nenhum perfil identificado ainda. Use a busca para capturar contatos.</p>
-                   </div>
-                ) : infoMembers.map((member, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-colors">
-                    <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-white/10">
-                       {member.profile_picture ? (
-                         <SafeImage src={member.profile_picture} className="w-full h-full object-cover" />
-                       ) : (
-                         <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/20 font-bold">{member.full_name?.charAt(0) || "?"}</div>
-                       )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                       <p className="text-xs font-bold text-white truncate">{member.full_name || member.phone_number}</p>
-                       <p className="text-[10px] text-white/40 truncate">
-                         {member.username ? `@${member.username}` : member.phone_number} 
-                         {member.is_admin && <span className="ml-2 text-primary/60 font-black">ADM</span>}
-                       </p>
-                    </div>
-                    {member.google_contact_id ? (
-                      <Badge className="bg-green-500/20 text-green-400 border-none h-5 px-1.5 text-[8px] font-black uppercase">SYNC</Badge>
-                    ) : (
-                      <div className="w-2 h-2 rounded-full bg-white/10" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="p-4 border-t border-white/5 text-center">
-             <p className="text-[9px] text-white/20 font-medium uppercase tracking-[0.2em]">Vitória Net Advanced Messaging Business Module v3.4</p>
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -2817,7 +2363,7 @@ export const MessagingView = () => {
                 <div className="w-full h-full bg-muted flex items-center justify-center"><User className="w-20 h-20 opacity-20" /></div>
               )}
             </div>
-            <h3 className="text-lg font-bold text-white text-center">{selectedInfoChannel?.channel_name}</h3>
+            <h3 className="text-lg font-bold text-white text-center">{selectedInfoChannel?.channel_name || activeChatId}</h3>
             <p className="text-xs text-white/40">ID: {selectedInfoChannel?.channel_id}</p>
             {selectedInfoChannel?.members_count && selectedInfoChannel.members_count > 0 && (
               <p className="text-xs text-white/50">{selectedInfoChannel.members_count.toLocaleString('pt-BR')} membros</p>
@@ -2829,7 +2375,7 @@ export const MessagingView = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ===== Discover Telegram Channels Dialog ===== */}
+      {/* ===== Discover Telegram/WhatsApp Channels Dialog ===== */}
       <Dialog open={showDiscoverDialog} onOpenChange={setShowDiscoverDialog}>
         <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
@@ -2949,7 +2495,7 @@ export const MessagingView = () => {
                             <p className="text-xs text-red-400">{r.error}</p>
                           )}
                         </div>
-                        
+
                         {r.success && (
                           <div className="flex items-center gap-2 shrink-0">
                             {r.registered && (
@@ -2957,8 +2503,8 @@ export const MessagingView = () => {
                                 <CheckCircle2 className="w-3 h-3" /> Vinculado
                               </Badge>
                             )}
-                            <Button 
-                              size="sm" 
+                            <Button
+                              size="sm"
                               variant={r.registered ? "outline" : "secondary"}
                               className="h-8 gap-1.5"
                               onClick={() => handleLinkDiscoveryResult(r)}
@@ -2999,6 +2545,183 @@ export const MessagingView = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ===== Detailed Info Dialog ===== */}
+      <Dialog open={showInfoDialog} onOpenChange={setShowInfoDialog}>
+        <DialogContent className={cn(
+          "sm:max-w-2xl p-0 overflow-hidden border-none shadow-2xl",
+          selectedInfoChannel?.platform === "whatsapp" ? "bg-[#0b141a]" : "bg-[#17212b]"
+        )} aria-describedby={undefined}>
+          <DialogHeader className="sr-only">
+            <DialogTitle>{selectedInfoChannel?.channel_name || "Informações do Canal"}</DialogTitle>
+          </DialogHeader>
+          
+          {/* Header Banner */}
+          <div className={cn(
+             "relative p-6 flex items-center gap-6",
+             selectedInfoChannel?.platform === "whatsapp" ? "bg-[#202c33]" : "bg-[#242f3d]"
+          )}>
+            <div className="relative cursor-pointer" onClick={() => setShowAvatarModal(true)}>
+              <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-white/10 shadow-xl hover:ring-2 hover:ring-primary/50 transition-all">
+                 {selectedInfoChannel?.profile_picture ? (
+                   <SafeImage src={getChatPhoto(selectedInfoChannel.profile_picture) || ""} className="w-full h-full object-cover" />
+                 ) : (
+                   <div className="w-full h-full bg-muted flex items-center justify-center">
+                     <User className="w-10 h-10 opacity-30" />
+                   </div>
+                 )}
+              </div>
+              {selectedInfoChannel?.is_online && (
+                <div className="absolute bottom-1 right-1 w-4 h-4 rounded-full bg-green-500 border-2 border-[#202c33] shadow-lg" />
+              )}
+            </div>
+            
+            <div className="flex-1 min-w-0">
+               <h2 className="text-2xl font-bold text-white">{selectedInfoChannel?.channel_name}</h2>
+               <div className="flex items-center gap-2 mt-1 flex-wrap">
+                 <Badge variant="outline" className="bg-white/5 border-white/10 text-white/60">
+                   {getTypeLabel(selectedInfoChannel?.channel_type || "group")}
+                 </Badge>
+                 <span className="text-xs text-white/40 font-medium">#{selectedInfoChannel?.channel_id}</span>
+               </div>
+               <p className="text-[10px] text-white/30 mt-1">
+                 Registrado em {selectedInfoChannel?.created_at ? new Date(selectedInfoChannel.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
+               </p>
+            </div>
+            
+            <Button variant="ghost" size="icon" onClick={() => setShowInfoDialog(false)} className="text-white/40 hover:text-white hover:bg-white/5 shrink-0">
+               <X className="w-5 h-5" />
+            </Button>
+          </div>
+
+          <div className="p-6 space-y-8 max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+            {/* Stats Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: "Membros Total", val: selectedInfoChannel?.members_count || 0, icon: Users, color: "text-blue-400" },
+                { label: "Online Agora", val: selectedInfoChannel?.online_count || 0, icon: Clock, color: "text-green-400" },
+                { label: "Posts Realizados", val: infoPosts, icon: SendHorizontal, color: "text-purple-400" },
+                { label: "Administradores", val: infoMembers.filter((m: any) => m.is_admin).length, icon: UserPlus, color: "text-orange-400" },
+              ].map((stat, i) => (
+                <div key={i} className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                  <div className="flex items-center justify-between mb-2">
+                    <stat.icon className={cn("w-4 h-4", stat.color)} />
+                  </div>
+                  <p className="text-xl font-bold text-white">{(typeof stat.val === 'number' ? stat.val : 0).toLocaleString('pt-BR')}</p>
+                  <p className="text-[10px] uppercase font-bold text-white/40 tracking-wider mt-1">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Audience Chart */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-widest opacity-80">
+                   <BarChart3 className="w-4 h-4 text-primary" /> Histórico de Audiência
+                </h3>
+                <span className="text-[10px] text-white/40 font-bold bg-white/5 px-2 py-1 rounded-lg">
+                  {audienceLogs.length > 0 ? `${audienceLogs.length} registros` : "AGUARDANDO DADOS"}
+                </span>
+              </div>
+              <div className="bg-white/5 rounded-2xl p-4 border border-white/5 h-32 flex items-end justify-between gap-1 overflow-hidden group">
+                 {audienceLogs.length > 0 ? (
+                   audienceLogs.map((log: any, i: number) => {
+                     const maxMembers = Math.max(...audienceLogs.map((l: any) => l.members_online || 1));
+                     const h = Math.max(5, Math.round(((log.members_online || 0) / maxMembers) * 100));
+                     return (
+                       <div key={i} className="flex-1 bg-primary/20 hover:bg-primary transition-all rounded-t-sm relative group/bar" style={{ height: `${h}%` }}>
+                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-primary text-[8px] px-1 rounded opacity-0 group-hover/bar:opacity-100 font-bold whitespace-nowrap">
+                           {log.members_online} online
+                         </div>
+                       </div>
+                     );
+                   })
+                 ) : (
+                   <div className="flex-1 flex items-center justify-center text-white/20 text-xs font-medium">
+                     Os dados do gráfico serão preenchidos conforme a atividade for capturada
+                   </div>
+                 )}
+              </div>
+              {audienceLogs.length > 0 && (
+                <div className="flex justify-between mt-2 text-[9px] text-white/20 font-bold uppercase tracking-widest px-1">
+                  <span>{new Date(audienceLogs[0]?.logged_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</span>
+                  <span>{new Date(audienceLogs[audienceLogs.length-1]?.logged_at).toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="outline" className="h-10 rounded-xl bg-white/5 border-white/10 text-white/70 hover:bg-white/10 gap-2" onClick={() => {
+                const link = selectedInfoChannel?.channel_id || '';
+                navigator.clipboard.writeText(link);
+                toast({ title: "Link copiado!", description: link });
+              }}>
+                <Copy className="w-4 h-4" /> Copiar Link
+              </Button>
+              <Button variant="outline" className="h-10 rounded-xl bg-white/5 border-white/10 text-white/70 hover:bg-white/10 gap-2" onClick={handleOpenAddPeople}>
+                <UserPlus className="w-4 h-4" /> Adicionar Pessoas
+              </Button>
+            </div>
+
+            {/* Connected Profiles / Admins */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2 uppercase tracking-widest opacity-80">
+                   <Users className="w-4 h-4 text-primary" /> Perfis e Administradores ({infoMembers.length})
+                </h3>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="h-8 rounded-xl bg-green-500/10 border-green-500/20 text-green-400 hover:bg-green-500/20 gap-2"
+                  onClick={syncToGoogle}
+                  disabled={syncingGoogle || infoMembers.length === 0}
+                >
+                  {syncingGoogle ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  Sincronizar Google
+                </Button>
+              </div>
+              
+              <div className="space-y-2">
+                {fetchingInfo ? (
+                   <div className="flex items-center justify-center py-10 opacity-30"><Loader2 className="w-8 h-8 animate-spin" /></div>
+                ) : infoMembers.length === 0 ? (
+                   <div className="bg-white/5 rounded-2xl p-8 border border-dashed border-white/10 text-center">
+                     <p className="text-sm text-white/30">Nenhum perfil identificado ainda. Use a busca para capturar contatos.</p>
+                   </div>
+                ) : infoMembers.map((member: any, i: number) => (
+                  <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 group hover:bg-white/10 transition-colors">
+                    <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 border border-white/10">
+                       {member.profile_picture ? (
+                         <SafeImage src={member.profile_picture} className="w-full h-full object-cover" />
+                       ) : (
+                         <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/20 font-bold">{member.full_name?.charAt(0) || "?"}</div>
+                       )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                       <p className="text-xs font-bold text-white truncate">{member.full_name || member.phone_number}</p>
+                       <p className="text-[10px] text-white/40 truncate">
+                         {member.username ? `@${member.username}` : member.phone_number} 
+                         {member.is_admin && <span className="ml-2 text-primary/60 font-black">ADM</span>}
+                       </p>
+                    </div>
+                    {member.google_contact_id ? (
+                      <Badge className="bg-green-500/20 text-green-400 border-none h-5 px-1.5 text-[8px] font-black uppercase">SYNC</Badge>
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-white/10" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-white/5 text-center">
+             <p className="text-[9px] text-white/20 font-medium uppercase tracking-[0.2em]">Vitória Net Advanced Messaging Business Module v3.4</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ===== Add People Dialog (Contact Picker) ===== */}
       <Dialog open={showAddPeopleDialog} onOpenChange={setShowAddPeopleDialog}>
         <DialogContent className="sm:max-w-md bg-[#17212b] border border-white/10 p-0 overflow-hidden" aria-describedby={undefined}>
@@ -3018,14 +2741,14 @@ export const MessagingView = () => {
                 <div className="bg-white/5 rounded-2xl p-8 border border-dashed border-white/10 text-center">
                   <p className="text-xs text-white/30">Nenhum contato encontrado no Hub.</p>
                 </div>
-              ) : hubContacts.map((contact, i) => {
-                const isAlreadyIn = infoMembers.some(m => m.phone_number === contact.phone || m.full_name === contact.name);
+              ) : hubContacts.map((contact: any, i: number) => {
+                const isAlreadyIn = infoMembers.some((m: any) => m.phone_number === contact.phone || m.full_name === contact.name);
                 return (
                   <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-2xl border border-white/5 group transition-colors">
                     <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary font-bold">{contact.name.charAt(0)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-white truncate">{contact.name}</p>
-                      <p className="text-[10px] text-white/40">{contact.phone || contact.email || "Sem dados"}</p>
+                      <p className="text-[10px] text-white/40">{contact.phone || "Sem dados"}</p>
                     </div>
                     <Button 
                       size="sm" 

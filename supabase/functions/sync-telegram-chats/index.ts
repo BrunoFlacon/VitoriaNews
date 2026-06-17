@@ -12,6 +12,13 @@ const corsHeaders = (req) => ({
   "Access-Control-Max-Age": "86400",
   "Permissions-Policy": "browsing-topics=()",
 });
+=======
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-authorization",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 
 function json(data: any, status = 200, req?: Request) {
   const dummyHeaders: Record<string, string> = { get: (name: string) => null } as any;
@@ -177,6 +184,12 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
         // Individual channels are stored in messaging_channels for the inbox.
 
         channelRecords.push({
+=======
+        // We no longer insert chats/groups into social_accounts to avoid polluting the Analytics dropdown.
+        // They are only inserted into messaging_channels.
+
+        const msgChannelRecord = {
+
           user_id: userId,
           platform: "telegram",
           channel_id: chatId.toString(),

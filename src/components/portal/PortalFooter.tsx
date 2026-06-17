@@ -1,5 +1,5 @@
 import React from "react";
-import { useSystem } from "@/contexts/SystemContext";
+import { useSystem } from "@/hooks/useSystem";
 import { Link } from "react-router-dom";
 import { MessageSquare, Heart, Shield, HelpCircle, ExternalLink, Bell, FileText } from "lucide-react";
 import { motion } from "framer-motion";

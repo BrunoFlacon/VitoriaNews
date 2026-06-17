@@ -47,7 +47,7 @@ export const StatsCard = memo(({
         "glass-card rounded-2xl p-3 md:p-4 bg-gradient-to-br border animate-fade-in",
         colorStyles[color]
       )}
-      style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards' }}
+      style={{ animationDelay: `${delay}ms`, animationFillMode: 'backwards', contain: 'layout paint' }}
     >
       <div className="flex items-start justify-between">
         <div>

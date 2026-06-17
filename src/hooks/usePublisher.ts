@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useNotifications } from '@/contexts/NotificationContext';
 
 interface PublishResult {
   platform: string;
@@ -23,28 +23,6 @@ export function usePublisher() {
   const [publishing, setPublishing] = useState(false);
   const { toast } = useToast();
   const { addNotification } = useNotifications();
-
-  const resolvePrimaryPages = async (platforms: string[]): Promise<string[]> => {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) return platforms;
-
-    const { data: connections } = await (supabase as any)
-      .from('social_connections')
-      .select('platform, platform_user_id')
-      .eq('user_id', session.session.user.id)
-      .eq('is_primary', true)
-      .in('platform', platforms);
-
-    if (!connections || connections.length === 0) return platforms;
-
-    return platforms.map(p => {
-      const primary = connections.find(c => c.platform === p);
-      if (primary?.platform_user_id) {
-        return `${p}|${primary.platform_user_id}`;
-      }
-      return p;
-    });
-  };
 
   const publishPost = async (
     postId: string,
@@ -69,11 +47,8 @@ export function usePublisher() {
         throw new Error("Sessão inválida");
       }
 
-      const resolvedPlatforms = await resolvePrimaryPages(platforms);
-
-      const baseUrl = import.meta.env.VITE_SUPABASE_URL;
       const response = await fetch(
-        `${baseUrl}/functions/v1/publish-post`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/publish-post`,
         {
           method: "POST",
           headers: {
@@ -82,7 +57,7 @@ export function usePublisher() {
           },
           body: JSON.stringify({
             postId,
-            platforms: resolvedPlatforms,
+            platforms,
             content,
             mediaUrls,
           }),
@@ -138,12 +113,6 @@ export function usePublisher() {
     }
   };
 
-  const getMediaType = (url: string): string => {
-    if (/\.(mp4|webm|ogg|mov)$/i.test(url)) return 'video';
-    if (/\.(mp3|wav|ogg|aac)$/i.test(url)) return 'audio';
-    return 'image';
-  };
-
   const publishNow = async (
     content: string,
     platforms: string[],
@@ -157,14 +126,14 @@ export function usePublisher() {
       }
 
       // Create post first
-      const { data: post, error } = await (supabase as any)
+      const { data: post, error } = await supabase
         .from('scheduled_posts')
         .insert({
           user_id: session.session.user.id,
           content,
           platforms,
           media_ids: [],
-          media_type: mediaUrls.length > 0 ? getMediaType(mediaUrls[0]) : 'image',
+          media_type: 'image',
           status: 'scheduled',
           scheduled_at: new Date().toISOString(),
         })

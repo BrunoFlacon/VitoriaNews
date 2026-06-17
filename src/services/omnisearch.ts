@@ -1,4 +1,3 @@
-import { supabase } from '@/integrations/supabase/client';
 import type { OmniResult, OmniResultType, OmniSearchResponse } from '@/types/omnisearch';
 
 // Dicionário de menus estáticos para busca
@@ -210,10 +209,10 @@ function highlightText(text: string, query: string): string {
 /**
  * Busca unificada (estática + dinâmica)
  */
-export async function omniSearch(
+export function omniSearch(
   query: string, 
   limit: number = 10
-): Promise<OmniSearchResponse> {
+): OmniSearchResponse {
   const startTime = performance.now();
   
   if (!query || query.trim().length < 2) {
@@ -225,73 +224,16 @@ export async function omniSearch(
     };
   }
 
-  try {
-    // Busca em paralelo
-    const [staticResults, { data: dynamicResults, error }] = await Promise.all([
-      // Busca em menus estáticos
-      Promise.resolve(searchStaticMenus(query)),
-      
-      // Busca dinâmica no banco via RPC
-      // @ts-ignore - função recém adicionada ao BD
-      supabase.rpc('omni_search', {
-        p_search_term: query.trim(),
-        p_limit: limit
-      })
-    ]);
+  const staticResults = searchStaticMenus(query).slice(0, limit);
 
-    if (error) {
-      console.warn(`Database search error: ${error.message}`);
-    }
+  const duration = performance.now() - startTime;
 
-    // Mapear resultados dinâmicos
-    const dynamicArray = (dynamicResults as any[]) || [];
-    const mappedDynamicResults: OmniResult[] = dynamicArray.map((item: any) => ({
-      id: item.id,
-      title: item.title,
-      type: item.type as OmniResultType,
-      link: item.slug, // O SQL já retorna o link correto com ?tab=
-      thumbnail: item.thumbnail_url,
-      highlightedText: item.snippet || '',
-      categoryLabel: getCategoryLabel(item.type),
-      rank: item.rank
-    }));
-
-    // Mesclar e ordenar resultados (estáticos ficam um pouco acima se houver relevância)
-    const combinedResults: OmniResult[] = [
-      ...staticResults.slice(0, Math.ceil(limit / 2)),
-      ...mappedDynamicResults
-    ]
-    // Apenas sortear por rank os dinâmicos, ou exibir os estáticos primeiro
-    .sort((a, b) => {
-      // Prioridade para menus se o nome for idêntico
-      if (a.type === 'menu' || a.type === 'action') return -1;
-      if (b.type === 'menu' || b.type === 'action') return 1;
-      return (b.rank || 0) - (a.rank || 0);
-    })
-    .slice(0, limit);
-
-    const duration = performance.now() - startTime;
-
-    return {
-      results: combinedResults,
-      total: combinedResults.length,
-      query,
-      duration: Math.round(duration)
-    };
-
-  } catch (error) {
-    console.error('OmniSearch error:', error);
-    
-    // Fallback: retornar apenas menus estáticos em caso de erro
-    const staticResults = searchStaticMenus(query).slice(0, limit);
-    
-    return {
-      results: staticResults,
-      total: staticResults.length,
-      query,
-      duration: 0
-    };
-  }
+  return {
+    results: staticResults,
+    total: staticResults.length,
+    query,
+    duration: Math.round(duration)
+  };
 }
 
 /**

@@ -9,6 +9,7 @@ const corsHeaders = (req) => ({
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 });
 
+
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
   try {
     const { data } = await supabase
@@ -78,6 +79,18 @@ serve(async (req: Request) => {
     let totalComments = 0;
     let totalSubscribersGained = 0;
 
+    // Buscar subscriber count anterior para calcular ganho real
+    let previousSubscribers = 0;
+    try {
+      const { data: prevAccount } = await supabase
+        .from("social_accounts")
+        .select("subscribers_count, followers_count, followers")
+        .eq("user_id", userId)
+        .eq("platform", "youtube")
+        .maybeSingle();
+      previousSubscribers = prevAccount?.subscribers_count || prevAccount?.followers_count || prevAccount?.followers || 0;
+    } catch (_) { /* ok */ }
+
     // Step 1: Get channel ID
     let channelId = ytConnection?.platform_user_id;
     if (!channelId && ytAccessToken) {
@@ -120,6 +133,9 @@ serve(async (req: Request) => {
         ]);
 
         // Update social_accounts with latest data
+        const currentSubscribers = parseInt(stats.subscriberCount || "0");
+        totalSubscribersGained = Math.max(0, currentSubscribers - previousSubscribers);
+
         await supabase.from("social_accounts").upsert({
           user_id: userId,
           platform: "youtube",
@@ -128,8 +144,8 @@ serve(async (req: Request) => {
           page_name: snippet.title || "",
           profile_picture: cachedAvatar || snippet.thumbnails?.high?.url || "",
           cover_photo: cachedCover || branding.bannerExternalUrl || "",
-          followers_count: parseInt(stats.subscriberCount || "0"),
-          subscribers_count: parseInt(stats.subscriberCount || "0"),
+          followers_count: currentSubscribers,
+          subscribers_count: currentSubscribers,
           posts_count: parseInt(stats.videoCount || "0"),
           views: parseInt(stats.viewCount || "0"),
           metadata: { posts_count: parseInt(stats.videoCount || "0") },
@@ -170,6 +186,7 @@ serve(async (req: Request) => {
         );
         const videosData = await videosRes.json();
 
+        let videoIdx = 0;
         for (const video of (videosData.items || [])) {
           const vStats = video.statistics || {};
           const vSnippet = video.snippet || {};
@@ -183,16 +200,22 @@ serve(async (req: Request) => {
           totalViews += views;
           totalLikes += likes;
           totalComments += comments;
+          // Só o primeiro vídeo do lote carrega o ganho de inscritos (dado é canal, não vídeo)
+          if (videoIdx === 0) {
+            totalSubscribersGained = Math.max(0, totalSubscribersGained);
+          }
 
           await supabase.from("youtube_analytics").upsert({
             user_id: userId,
             video_id: video.id,
             channel_id: channelId,
+            title: vSnippet.title,
             views,
             watch_time_minutes: watchTimeMinutes,
+            estimated_minutes_watched: watchTimeMinutes,
             likes,
             comments,
-            subscribers_gained: 0,
+            subscribers_gained: videoIdx === 0 ? totalSubscribersGained : 0,
             date: vSnippet.publishedAt ? new Date(vSnippet.publishedAt).toISOString().split("T")[0] : null,
             metadata: {
               title: vSnippet.title,
@@ -204,6 +227,7 @@ serve(async (req: Request) => {
             },
             created_at: new Date().toISOString()
           });
+          videoIdx++;
 
           results.push({
             type: "video",
@@ -270,9 +294,7 @@ serve(async (req: Request) => {
       .from("youtube_analytics")
       .select("views, likes, comments, subscribers_gained")
       .eq("user_id", userId)
-      .eq("channel_id", channelId)
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .eq("channel_id", channelId);
 
     const aggregated = {
       total_views: totalViews,
@@ -315,7 +337,7 @@ serve(async (req: Request) => {
     if (aggregated.total_views > 0) updates.views = aggregated.total_views;
     if (aggregated.total_likes > 0) updates.likes = aggregated.total_likes;
     if (aggregated.total_comments > 0) updates.comments = aggregated.total_comments;
-    if (aggregated.total_subscribers_gained > 0) updates.subscribers_gained = aggregated.total_subscribers_gained;
+    // Nota: subscribers_gained é armazenado em youtube_analytics, não em social_accounts
 
     await supabase.from("social_accounts").upsert(updates, { onConflict: "user_id,platform,platform_user_id" });
 

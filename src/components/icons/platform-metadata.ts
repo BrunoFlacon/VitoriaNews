@@ -1,4 +1,4 @@
-import { Camera, Newspaper } from "lucide-react";
+import { Camera, Mail } from "lucide-react";
 import {
   FacebookIcon,
   InstagramIcon,
@@ -16,12 +16,8 @@ import {
   TruthSocialIcon,
   GettrIcon,
   SpotifyIcon,
-  GoogleNewsIcon,
-  RedditIcon,
-  GoogleIcon,
-  MetaIcon,
   GiphyIcon,
-  NewsapiIcon
+  GoogleNewsIcon
 } from "./SocialIcons";
 
 export const socialPlatforms = [
@@ -32,7 +28,6 @@ export const socialPlatforms = [
     color: "bg-[#1877F2]",
     textColor: "text-[#1877F2]",
     gradient: "from-[#1877F2] to-[#0D65D9]",
-    shadow: "shadow-[#1877F2]/40",
     type: "social"
   },
   {
@@ -42,7 +37,6 @@ export const socialPlatforms = [
     color: "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
     textColor: "text-[#DD2A7B]",
     gradient: "from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
-    shadow: "shadow-[#DD2A7B]/40",
     type: "social"
   },
   {
@@ -88,17 +82,16 @@ export const socialPlatforms = [
     color: "bg-[#25D366]",
     textColor: "text-[#25D366]",
     gradient: "from-[#25D366] to-[#128C7E]",
-    type: "messaging"
+    type: "social"
   },
   {
     id: "telegram",
     name: "Telegram",
     icon: TelegramIcon,
-    color: "bg-[#24A1DE]",
-    textColor: "text-[#24A1DE]",
-    gradient: "from-[#2AABEE] to-[#229ED9]",
-    shadow: "shadow-[#24A1DE]/40",
-    type: "messaging"
+    color: "bg-[#0088CC]",
+    textColor: "text-[#0088CC]",
+    gradient: "from-[#0088CC] to-[#006699]",
+    type: "social"
   },
   {
     id: "pinterest",
@@ -182,22 +175,13 @@ export const socialPlatforms = [
     type: "tool"
   },
   {
-    id: "google",
-    name: "Google Cloud (Maps, YouTube, Ads, News)",
-    icon: GoogleIcon,
-    color: "bg-white",
+    id: "googlenews",
+    name: "Google News",
+    icon: GoogleNewsIcon,
+    color: "bg-[#4285F4]",
     textColor: "text-[#4285F4]",
-    gradient: "from-white via-[#f8f9fa] to-white",
-    type: "tool"
-  },
-  {
-    id: "reddit",
-    name: "Reddit",
-    icon: RedditIcon,
-    color: "bg-[#FF4500]",
-    textColor: "text-[#FF4500]",
-    gradient: "from-[#FF4500] to-[#FF5700]",
-    type: "social"
+    gradient: "from-[#4285F4] via-[#34A853] via-[#FBBC05] to-[#EA4335]",
+    type: "news"
   },
   {
     id: "site",
@@ -211,12 +195,49 @@ export const socialPlatforms = [
   {
     id: "meta_ads",
     name: "Meta Marketing & Ads API",
-    icon: MetaIcon,
+    icon: FacebookIcon,
     color: "bg-[#0081FB]",
-    textColor: "text-[#0081FB]",
+    textColor: "#0081FB",
     gradient: "from-[#0081FB] to-[#0165E1]",
     type: "tool"
   },
+  {
+    id: "google_news",
+    name: "Google News",
+    icon: GoogleNewsIcon,
+    color: "bg-white",
+    textColor: "text-[#4285F4]",
+    gradient: "from-white to-[#f8f9fa]",
+    type: "social"
+  },
+  {
+    id: "medium",
+    name: "Medium",
+    icon: Camera, // Placeholder for now, could add icon later
+    color: "bg-black",
+    textColor: "text-white",
+    gradient: "from-zinc-800 to-black",
+    type: "social"
+  },
+  {
+    id: "substack",
+    name: "Substack",
+    icon: Camera,
+    color: "bg-[#FF6719]",
+    textColor: "text-[#FF6719]",
+    gradient: "from-[#FF6719] to-[#E65C16]",
+    type: "social"
+  },
+  {
+    id: "resend",
+    name: "Email (Resend)",
+    icon: Mail,
+    color: "bg-[#000000]",
+    textColor: "text-white",
+    gradient: "from-[#000000] to-[#333333]",
+    type: "social"
+  },
+
 ] as const;
 
 export type SocialPlatformId = typeof socialPlatforms[number]["id"];
@@ -228,14 +249,12 @@ export const platformMetadata = Object.fromEntries(
   socialPlatforms.map(p => [p.id, p])
 ) as Record<string, typeof socialPlatforms[number]>;
 
-import { normalizePlatform } from "@/lib/utils";
-
-export const getPlatformDetails = (platform: string) => {
-  if (!platform) return null;
-  const normalized = normalizePlatform(platform);
-  return (
-    socialPlatforms.find(p => p.id === normalized) ||
-    socialPlatforms.find(p => p.id === platform.toLowerCase()) ||
-    null
-  );
-};
+export const getPlatformDetails = (id: string) => 
+  socialPlatforms.find(p => p.id === id) || { 
+    id, 
+    name: id, 
+    color: 'bg-muted', 
+    textColor: 'text-muted-foreground',
+    icon: Camera, 
+    type: 'social' 
+  };

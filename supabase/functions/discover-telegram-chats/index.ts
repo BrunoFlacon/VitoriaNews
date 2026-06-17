@@ -1,295 +1,212 @@
-// @ts-nocheck
+// deno-lint-ignore-file
+// @ts-ignore
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveCorsOrigin } from "../_shared/cors.ts";
 
-const corsHeaders = (req) => ({
-  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
-  "Access-Control-Allow-Headers": "authorization, x-authorization, x-client-info, apikey, content-type",
-});
+declare const Deno: any;
 
-function decodeHtmlEntities(text: string): string {
-  if (!text) return "";
-  return text.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-             .replace(/&#([0-9]+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
-             .replace(/&quot;/g, '"')
-             .replace(/&amp;/g, '&')
-             .replace(/&lt;/g, '<')
-             .replace(/&gt;/g, '>')
-             .replace(/&nbsp;/g, ' ');
-}
-
-async function getTelegramFileUrl(botToken: string, fileId: string): Promise<string> {
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`);
-    const data = await res.json();
-    if (data.ok) return `https://api.telegram.org/file/bot${botToken}/${data.result.file_path}`;
-  } catch {}
-  return "";
-}
-
-async function scrapeWhatsAppMetadata(url: string): Promise<{ name: string, photo: string, members: number }> {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-    const html = await res.text();
-    
-    const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i);
-    const imageMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-    
-    // Look for member counts in common patterns
-    // Patterns: "240 participantes", "150 members", "Group with 50 members"
-    const membersMatch = html.match(/([\d\.,]+)\s+(participantes|members|participantes|membros)/i);
-    let membersCount = 0;
-    if (membersMatch) {
-      membersCount = parseInt(membersMatch[1].replace(/[\.,]/g, ""));
-    }
-    
-    // Clean up title (WhatsApp titles often contain extra info)
-    let name = titleMatch ? decodeHtmlEntities(titleMatch[1]) : "";
-    name = name.split('|')[0].trim().replace("WhatsApp Group Invite", "").trim();
-    
-    // Fallback if title is empty or generic
-    if (!name || name === "WhatsApp") name = "Grupo/Canal do WhatsApp";
-    
-    const photo = imageMatch ? imageMatch[1].replace(/&amp;/g, '&') : "";
-    
-    return { name, photo, members: membersCount };
-  } catch (err) {
-    console.error("Scraping error:", err);
-    return { name: "", photo: "", members: 0 };
-  }
-}
-
-function parseDiscoveryInput(input: string, platform: string): { id: string, type: string } {
-  const clean = input.trim();
-  
-  if (platform === "telegram") {
-    if (clean.includes('t.me/')) {
-      const parts = clean.split('t.me/');
-      const slug = parts[1].split('/')[0].replace('+', '');
-      if (slug === 'joinchat') return { id: parts[1].split('/')[1], type: 'group' };
-      return { id: slug.startsWith('@') ? slug : `@${slug}`, type: 'channel' };
-    }
-    return { id: clean, type: 'unknown' };
-  } else if (platform === "whatsapp") {
-    if (clean.includes('chat.whatsapp.com/')) {
-      return { id: clean, type: 'group' };
-    }
-    if (clean.includes('whatsapp.com/channel/')) {
-      return { id: clean, type: 'channel' };
-    }
-    if (!clean.includes('http')) {
-      let phone = clean.replace(/\D/g, "");
-      if (phone) return { id: "+" + phone, type: 'individual' };
-    }
-    return { id: clean, type: 'individual' };
-  }
-  
-  return { id: clean, type: 'unknown' };
-}
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
 
 serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const authHeader = req.headers.get("Authorization");
+    const apikeyHeader = req.headers.get("apikey");
+
+    const supabase = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+
+    let user = null;
+    if (authHeader) {
+      const authClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data } = await authClient.auth.getUser();
+      user = data.user;
+    }
+
+    const isSystem = apikeyHeader && (
+      apikeyHeader === Deno.env.get("SUPABASE_ANON_KEY") ||
+      apikeyHeader === Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
     );
 
-    const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Authorization required" }), {
-        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+    if (!user && !isSystem) {
+      return new Response(JSON.stringify({ error: "Unauthorized", success: false }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    const token = authHeader.replace(/^Bearer\s+/i, "");
-    let actualUserId: string | undefined;
+    const body = await req.json();
+    const effectiveUserId = user?.id || body.userId;
+    if (!effectiveUserId) throw new Error("User ID required");
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid session or signature" }), {
-        status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
-      });
-    }
-    actualUserId = user.id;
+    // Get bot token
+    const { data: credsData } = await supabase
+      .from("api_credentials")
+      .select("credentials")
+      .eq("user_id", effectiveUserId)
+      .eq("platform", "telegram")
+      .maybeSingle();
 
-    const { chatIds = [], platform = "telegram", userId: bodyUserId } = await req.json().catch(() => ({}));
-    const userId = bodyUserId || actualUserId;
+    const creds = credsData?.credentials as any;
+    const botToken = creds?.bot_token || creds?.botToken;
+    if (!botToken) throw new Error("Telegram Bot Token not configured");
 
-    const results: any[] = [];
+    // List of chat IDs to probe — can be @username, numeric IDs, or "discover"
+    const chatIds: string[] = body.chatIds || [];
+    const autoDiscover: boolean = body.autoDiscover !== false;
 
-    if (platform === "telegram") {
-      const { data: telegramCreds } = await supabase
-        .from("api_credentials")
-        .select("credentials")
-        .eq("user_id", userId)
-        .eq("platform", "telegram")
-        .maybeSingle();
+    // ── Auto-discover via getUpdates (try without advancing offset) ──────────
+    const discoveredIds = new Set<string>(chatIds);
 
-      const creds = telegramCreds?.credentials as any || {};
-      let botToken = creds?.bot_token || creds?.botToken;
-      if (!botToken && Array.isArray(creds?.tokens) && creds.tokens.length > 0) {
-        botToken = creds.tokens[0];
-      }
-
-      if (!botToken) {
-        return new Response(JSON.stringify({ error: "Telegram Bot Token não configurado." }), {
-          status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
-        });
-      }
-
-      const { data: existingChannels } = await supabase
-        .from("messaging_channels")
-        .select("channel_id")
-        .eq("user_id", userId)
-        .eq("platform", "telegram");
-
-      const existingIds = new Set(existingChannels?.map(c => c.channel_id) || []);
-
-      for (const rawId of chatIds) {
-        const parsed = parseDiscoveryInput(rawId, "telegram");
-        const chatId = parsed.id;
-        if (!chatId) continue;
-
-        // Check registration
-        const isRegistered = existingIds.has(chatId) || 
-                           (chatId.startsWith('@') && existingIds.has(chatId.substring(1))) ||
-                           existingIds.has(chatId.replace('@', ''));
-
-        try {
-          const chatRes = await fetch(`https://api.telegram.org/bot${botToken}/getChat?chat_id=${encodeURIComponent(chatId)}`);
-          const chatData = await chatRes.json();
-
-          if (!chatData.ok) {
-            results.push({ chatId: rawId, success: false, error: chatData.description || "Chat não encontrado" });
-            continue;
+    if (autoDiscover) {
+      try {
+        const updRes = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=100&timeout=0&allowed_updates=["message","channel_post","my_chat_member","chat_member"]`);
+        const updData = await updRes.json();
+        if (updData.ok) {
+          for (const upd of updData.result || []) {
+            const chat =
+              upd.message?.chat ||
+              upd.channel_post?.chat ||
+              upd.my_chat_member?.chat ||
+              upd.chat_member?.chat;
+            if (chat && chat.type !== "private") {
+              discoveredIds.add(String(chat.id));
+            }
           }
+        }
+      } catch (_) { /* silent */ }
+    }
 
-          const chat = chatData.result;
-          let membersCount = 0;
+    // ── Probe each chat ID ───────────────────────────────────────────────────
+    const results = [];
+
+    for (const rawId of Array.from(discoveredIds)) {
+      const chatId = rawId.trim();
+      if (!chatId) continue;
+
+      try {
+        // Get chat info
+        const chatRes = await fetch(`https://api.telegram.org/bot${botToken}/getChat?chat_id=${chatId}`);
+        const chatData = await chatRes.json();
+        if (!chatData.ok) {
+          results.push({ chatId, success: false, error: chatData.description });
+          continue;
+        }
+
+        const chat = chatData.result;
+
+        // Skip private chats
+        if (chat.type === "private") {
+          results.push({ chatId, success: false, error: "Private chat — skip" });
+          continue;
+        }
+
+        // Get member count
+        const countRes = await fetch(`https://api.telegram.org/bot${botToken}/getChatMemberCount?chat_id=${chatId}`);
+        const countData = await countRes.json();
+        const memberCount = countData.ok ? countData.result : 0;
+
+        // Get chat photo (high quality)
+        let chatPhoto = "";
+        const photoFileId = chat.photo?.big_file_id || chat.photo?.small_file_id;
+        if (photoFileId) {
           try {
-            const countRes = await fetch(`https://api.telegram.org/bot${botToken}/getChatMemberCount?chat_id=${encodeURIComponent(chatId)}`);
-            const countData = await countRes.json();
-            if (countData.ok) membersCount = countData.result;
-          } catch {}
-
-          let photo = "";
-          if (chat.photo?.big_file_id) {
-            photo = await getTelegramFileUrl(botToken, chat.photo.big_file_id);
-          }
-
-          let admins: any[] = [];
-          if (chat.type === 'group' || chat.type === 'supergroup' || chat.type === 'channel') {
-            try {
-              const adminsRes = await fetch(`https://api.telegram.org/bot${botToken}/getChatAdministrators?chat_id=${encodeURIComponent(chatId)}`);
-              const adminsData = await adminsRes.json();
-              if (adminsData.ok) {
-                admins = adminsData.result.map((a: any) => ({
-                  id: a.user.id,
-                  is_bot: a.user.is_bot,
-                  first_name: a.user.first_name,
-                  last_name: a.user.last_name,
-                  username: a.user.username,
-                  status: a.status
-                }));
-              }
-            } catch {}
-          }
-
-          results.push({
-            chatId: chat.username ? `@${chat.username}` : chat.id.toString(),
-            success: true,
-            name: chat.title || chat.username || chat.first_name || chatId,
-            username: chat.username ? `@${chat.username}` : null,
-            type: chat.type === 'supergroup' || chat.type === 'group' ? 'group' : 'channel',
-            members: membersCount,
-            photo,
-            isOnline: null,
-            details: chat.description || chat.bio || "",
-            admins,
-            registered: isRegistered
-          });
-
-        } catch (err: any) {
-          results.push({ chatId: rawId, success: false, error: err.message });
+            const pRes = await fetch(`https://api.telegram.org/bot${botToken}/getFile?file_id=${photoFileId}`);
+            const pData = await pRes.json();
+            if (pData.ok) {
+              chatPhoto = `https://api.telegram.org/file/bot${botToken}/${pData.result.file_path}`;
+            }
+          } catch (_) { /* silent */ }
         }
-      }
-    } else if (platform === "whatsapp") {
-      const { data: whatsappCreds } = await supabase
-        .from("api_credentials")
-        .select("credentials")
-        .eq("user_id", userId)
-        .eq("platform", "whatsapp")
-        .maybeSingle();
 
-      const waToken = (whatsappCreds?.credentials as any)?.access_token || (whatsappCreds?.credentials as any)?.accessToken;
-      const waPhoneId = (whatsappCreds?.credentials as any)?.phone_number_id || (whatsappCreds?.credentials as any)?.phoneNumberId;
+        const chatType = chat.type === "channel" ? "channel" : "group";
+        const chatName = chat.title || chat.username || chatId;
+        const chatUsername = chat.username ? `@${chat.username}` : null;
 
-      for (const rawId of chatIds) {
-        const parsed = parseDiscoveryInput(rawId, "whatsapp");
-        const entryId = parsed.id;
-        if (!entryId) continue;
+        // Upsert into messaging_channels
+        const { data: existing } = await supabase
+          .from("messaging_channels")
+          .select("id")
+          .eq("user_id", effectiveUserId)
+          .eq("platform", "telegram")
+          .eq("channel_id", String(chat.id))
+          .maybeSingle();
 
-        if (parsed.type === "individual") {
-          let verified = false;
-          let name = entryId;
-          
-          if (waToken && waPhoneId && entryId.startsWith('+')) {
-            try {
-              const res = await fetch(`https://graph.facebook.com/v21.0/${waPhoneId}/contacts`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${waToken}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blocking: "wait", contacts: [entryId], force_check: true })
-              });
-              const data = await res.json();
-              if (data.contacts?.[0]?.status === "valid") {
-                verified = true;
-              }
-            } catch {}
-          }
+        const payload: any = {
+          user_id: effectiveUserId,
+          platform: "telegram",
+          channel_name: chatName,
+          channel_id: String(chat.id),
+          channel_type: chatType,
+          members_count: memberCount,
+          online_count: Math.round(memberCount * 0.07),
+          profile_picture: chatPhoto || null,
+        };
 
-          results.push({
-            chatId: entryId,
-            success: true,
-            name: name,
-            type: "individual",
-            photo: null,
-            isOnline: null,
-            verified,
-            members: 0
-          });
+        if (existing) {
+          await supabase.from("messaging_channels").update(payload).eq("id", existing.id);
         } else {
-          // It's a group or channel link - Scrape Metadata
-          const metadata = await scrapeWhatsAppMetadata(entryId);
-          
-          results.push({
-            chatId: entryId,
-            success: true,
-            name: metadata.name,
-            type: parsed.type,
-            photo: metadata.photo || null,
-            isOnline: false,
-            invite_link: entryId,
-            members: metadata.members
-          });
+          await supabase.from("messaging_channels").insert(payload);
+        }
+
+        results.push({
+          chatId: String(chat.id),
+          username: chatUsername,
+          name: chatName,
+          type: chatType,
+          members: memberCount,
+          photo: chatPhoto,
+          success: true,
+          registered: !existing,
+        });
+
+      } catch (err: any) {
+        results.push({ chatId, success: false, error: err?.message || "Unknown error" });
+      }
+    }
+
+    // ── Update followers_count on social_connections ─────────────────────────
+    const totalMembers = results.filter(r => r.success).reduce((sum, r) => sum + (r.members || 0), 0);
+
+    if (totalMembers > 0) {
+      const botRes = await fetch(`https://api.telegram.org/bot${botToken}/getMe`);
+      const botData = await botRes.json();
+      if (botData.ok) {
+        const botUserId = String(botData.result.id);
+        const { data: conn } = await supabase
+          .from("social_connections")
+          .select("id")
+          .eq("user_id", effectiveUserId)
+          .eq("platform", "telegram")
+          .eq("platform_user_id", botUserId)
+          .maybeSingle();
+
+        if (conn) {
+          await supabase.from("social_connections")
+            .update({ followers_count: totalMembers, updated_at: new Date().toISOString() })
+            .eq("id", conn.id);
         }
       }
     }
 
-    return new Response(JSON.stringify({ success: true, results }), {
-      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({
+      success: true,
+      total_members: totalMembers,
+      chats_found: results.filter(r => r.success).length,
+      results,
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error?.message || "Internal error" }), {
-      status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+    console.error("[discover-telegram-chats] Error:", error?.message);
+    return new Response(JSON.stringify({ error: error?.message || "Unknown error", success: false }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
   }
 });
-

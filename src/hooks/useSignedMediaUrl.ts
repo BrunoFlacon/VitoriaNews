@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
  * Accepts either a storage path (e.g. "userId/file.jpg") or an existing
  * signed URL — in which case the file path is extracted and re-signed.
  */
-export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 3600) {
+export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 3600, bucketOverride?: string) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,42 +21,37 @@ export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 
       return;
     }
 
+    const buckets = ["media", "documents", "avatars", "posts", "thumbnails"];
     let path = input;
-    const marker = "/object/sign/media/";
-    if (input.includes(marker)) {
-      const tail = input.split(marker)[1] ?? "";
-      path = decodeURIComponent(tail.split("?")[0]);
-    } else if (input.includes("/object/public/media/")) {
-      path = decodeURIComponent(input.split("/object/public/media/")[1] ?? "");
+    let bucket = bucketOverride || "media";
+
+    // Extract path and bucket from the URL
+    for (const b of buckets) {
+      const signMarker = `/object/sign/${b}/`;
+      const publicMarker = `/object/public/${b}/`;
+      
+      if (input.includes(signMarker)) {
+        bucket = b;
+        const tail = input.split(signMarker)[1] ?? "";
+        path = decodeURIComponent(tail.split("?")[0]);
+        break;
+      } else if (input.includes(publicMarker)) {
+        bucket = b;
+        path = decodeURIComponent(input.split(publicMarker)[1] ?? "");
+        break;
+      }
     }
 
-    if (!path) {
-      setUrl(null);
-      return;
-    }
+    if (path.startsWith("/")) path = path.substring(1);
 
     const checkAndSign = async () => {
-      const { data: fileList, error: listError } = await supabase.storage
-        .from('media')
-        .list(path.split('/').slice(0, -1).join('/'), {
-          search: path.split('/').pop(),
-          limit: 1,
-        });
-
-      if (cancelled) return;
-
-      if (listError || !fileList?.length) {
-        setUrl(null);
-        return;
-      }
-
       const { data, error } = await supabase.storage
-        .from('media')
+        .from(bucket)
         .createSignedUrl(path, expiresIn);
 
       if (cancelled) return;
       if (error || !data) {
-        setUrl(null);
+        setUrl(input); // fall back to original
       } else {
         setUrl(data.signedUrl);
       }
@@ -64,10 +59,11 @@ export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 
 
     checkAndSign();
 
+
     return () => {
       cancelled = true;
     };
-  }, [input, expiresIn]);
+  }, [input, expiresIn, bucketOverride]);
 
   return url;
 }

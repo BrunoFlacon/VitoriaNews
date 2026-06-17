@@ -1,8 +1,13 @@
 {
   "compilerOptions": {
     "allowJs": true,
-    "lib": ["deno.window", "deno.ns", "esnext"],
+    "lib": ["deno.window", "deno.ns"],
     "strict": false
   },
-  "importMap": "import_map.json"
+  "importMap": "./import_map.json",
+  "lint": {
+    "rules": {
+      "exclude": ["no-explicit-any"]
+    }
+  }
 }

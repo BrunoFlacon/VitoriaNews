@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Radio, Video, Clock, Plus, Play, Eye, Heart, MessageCircle, Calendar, Trash2, X, Upload, 
-  Loader2, MoreVertical, Edit2, Send, Scissors, Copy, Square, Download, CheckCircle2, Globe, Instagram, Phone
+  Loader2, MoreVertical, Edit2, Send, Scissors, Copy, Square, Download, User, Image, Mic,
+  CheckCircle2, Globe
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
@@ -11,10 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialStats } from "@/hooks/useSocialStats";
+import { useSocialConnections } from "@/hooks/useSocialConnections";
+
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -27,12 +30,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { StoryEditor } from "./StoryEditor";
 import { SafeImage } from "@/components/ui/SafeImage";
-import { useSignedMediaUrl } from "@/hooks/useSignedMediaUrl";
-
-const StoryThumbnail = ({ url, alt, className }: { url?: string | null; alt?: string; className?: string }) => {
-  const signedUrl = useSignedMediaUrl(url, 3600);
-  return <SafeImage src={signedUrl || url} alt={alt} className={className} placeholderIcon={null} />;
-};
+import { CarrosselView } from "./CarrosselView";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface StoryLive {
   id: string;
@@ -59,11 +63,14 @@ interface LiveSession {
   title: string;
   description: string | null;
   scheduled_at: string | null;
-  stream_key: string | null;
+  stream_key?: string | null;
   status: string;
-  recording_url: string | null;
+  recording_url?: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  thumbnail_url?: string | null;
 }
 
 interface LiveClip {
@@ -84,7 +91,10 @@ export const StoriesLivesView = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { isConnected: isPlatformConnected } = useSocialStats();
+  const { connections } = useSocialConnections();
+
   const [activeTab, setActiveTab] = useState("stories");
+  const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
   
   // States for Stories & Lives
   const [items, setItems] = useState<StoryLive[]>([]);
@@ -114,6 +124,42 @@ export const StoriesLivesView = () => {
   const [memories, setMemories] = useState<StoryLive[]>([]);
   const [showMemories, setShowMemories] = useState(false);
   const [editingStory, setEditingStory] = useState<StoryLive | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmTable, setDeleteConfirmTable] = useState<string>("stories_lives");
+
+  const platformOptions = createType === "story" ? storyPlatforms : livePlatforms;
+
+  const platformConnectionData = useMemo(() => {
+    return socialPlatforms
+      .filter(p => platformOptions.includes(p.id))
+      .map(platform => {
+        const platformConnections = connections.filter(c => c.platform === platform.id && c.is_connected);
+        const hasConnections = platformConnections.length > 0;
+        
+        const selectedInPlatform = platformConnections.filter(c => formPlatforms.includes(`${platform.id}|${c.id}`));
+        const isGenericSelected = formPlatforms.includes(platform.id);
+        const isSelected = selectedInPlatform.length > 0 || isGenericSelected;
+        
+        const sortedConnections = [...platformConnections].sort((a, b) => {
+          const aId = Number(a.platform_user_id) || 0;
+          const bId = Number(b.platform_user_id) || 0;
+          if (aId > 0 && bId <= 0) return -1;
+          if (aId <= 0 && bId > 0) return 1;
+          return 0;
+        });
+        
+        const primaryAccount = selectedInPlatform[0] || (sortedConnections.length === 1 ? sortedConnections[0] : null);
+
+        return {
+          platform,
+          connections: sortedConnections,
+          hasConnections,
+          isSelected,
+          selectedInPlatform,
+          primaryAccount
+        };
+      });
+  }, [socialPlatforms, connections, formPlatforms, platformOptions]);
 
   const fetchItems = async () => {
     if (!user) return;
@@ -122,7 +168,8 @@ export const StoriesLivesView = () => {
       .select("*")
       .eq("user_id", user.id)
       .neq("status", "archived")
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(50);
     if (!error && data) setItems(data as unknown as StoryLive[]);
     setLoading(false);
   };
@@ -133,8 +180,9 @@ export const StoriesLivesView = () => {
       .from("live_sessions")
       .select("*")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
-    setSessions((data as LiveSession[]) || []);
+      .order("created_at", { ascending: false })
+      .limit(20);
+    setSessions((data as unknown as LiveSession[]) || []);
     setSessionsLoading(false);
   };
 
@@ -144,7 +192,8 @@ export const StoriesLivesView = () => {
       .from("live_clips")
       .select("*")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(20);
     setClips((data as LiveClip[]) || []);
     setClipsLoading(false);
   };
@@ -175,7 +224,7 @@ export const StoriesLivesView = () => {
       .select("*")
       .eq("user_id", user.id)
       .eq("status", "published")
-      .or(`completed_at.gte.${sixMonthsAgoStart.toISOString()},completed_at.gte.${twelveMonthsAgoStart.toISOString()}`);
+      .or(`and(completed_at.gte.${sixMonthsAgoStart.toISOString()},completed_at.lte.${sixMonthsAgoEnd.toISOString()}),and(completed_at.gte.${twelveMonthsAgoStart.toISOString()},completed_at.lte.${twelveMonthsAgoEnd.toISOString()})`);
 
     if (memData) {
       const filtered = memData.filter(m => {
@@ -189,17 +238,22 @@ export const StoriesLivesView = () => {
   };
 
   useEffect(() => { 
-    fetchItems();
-    fetchSessions();
-    fetchClips();
-    fetchMemories();
+    // Load all data in parallel for faster initial render
+    Promise.all([fetchItems(), fetchSessions(), fetchClips(), fetchMemories()]);
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
+
+    let timeoutId: NodeJS.Timeout;
+    const debouncedFetchItems = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fetchItems(), 1000);
+    };
+
     const chStories = supabase
       .channel("stories-lives-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "stories_lives", filter: `user_id=eq.${user.id}` }, () => fetchItems())
+      .on("postgres_changes", { event: "*", schema: "public", table: "stories_lives", filter: `user_id=eq.${user.id}` }, () => debouncedFetchItems())
       .subscribe();
     
     const chSessions = supabase
@@ -213,9 +267,10 @@ export const StoriesLivesView = () => {
       .subscribe();
 
     return () => { 
-      supabase.removeChannel(chStories); 
-      supabase.removeChannel(chSessions);
-      supabase.removeChannel(chClips);
+      supabase.removeChannel(chStories).catch(() => {}); 
+      supabase.removeChannel(chSessions).catch(() => {});
+      supabase.removeChannel(chClips).catch(() => {});
+      clearTimeout(timeoutId);
     };
   }, [user]);
 
@@ -224,27 +279,44 @@ export const StoriesLivesView = () => {
     if (files.length === 0 || !user) return;
     
     setUploadingThumb(true);
-    const newUrls: string[] = [];
     
-    for (const file of files) {
-      const ext = file.name.split(".").pop();
-      const path = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-      const { error } = await supabase.storage.from("media").upload(path, file);
-      if (!error) {
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const ext = file.name.split(".").pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        const path = `${user.id}/${fileName}`;
+        
+        // Use a longer timeout for large video/audio files
+        const { data, error } = await supabase.storage.from("media").upload(path, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+        if (error) throw error;
+        
         const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-        newUrls.push(urlData.publicUrl);
-      }
-    }
-    
-    if (newUrls.length > 0) {
+        
+        // Detect media type
+        let type = "story";
+        if (file.type.startsWith("video/")) type = "video";
+        if (file.type.startsWith("audio/")) type = "audio";
+        if (file.type.startsWith("image/")) type = "image";
+        
+        return { url: urlData.publicUrl, type };
+      });
+
+      const results = await Promise.all(uploadPromises);
+      const newUrls = results.map(r => r.url);
+      const firstType = results[0]?.type || "story";
+      
       setThumbnailUrls(prev => [...prev, ...newUrls]);
-      // If editing multiple, we might want to open the editor immediately
+      
       if (createType === "story") {
         const tempStoryId = "new-" + Date.now();
         setEditingStory({
            id: tempStoryId,
            user_id: user.id,
-           type: "story",
+           type: firstType,
            platform: formPlatforms[0] || "instagram",
            title: formTitle || "Novo Story",
            content: formContent,
@@ -259,8 +331,15 @@ export const StoriesLivesView = () => {
            created_at: new Date().toISOString()
         } as any);
       }
+    } catch (error: any) {
+      toast({ 
+        title: "Erro no upload", 
+        description: error.message || "Falha ao processar arquivos grandes.", 
+        variant: "destructive" 
+      });
+    } finally {
+      setUploadingThumb(false);
     }
-    setUploadingThumb(false);
   };
 
   const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -273,12 +352,8 @@ export const StoriesLivesView = () => {
     if (error) {
       toast({ title: "Erro no upload", description: error.message, variant: "destructive" });
     } else {
-      const { data: signedData, error: signedError } = await supabase.storage.from("media").createSignedUrl(path, 60 * 60 * 24 * 30);
-      if (signedError) {
-        toast({ title: "Erro ao gerar link", description: signedError.message, variant: "destructive" });
-      } else {
-        setThumbnailUrls([signedData.signedUrl]);
-      }
+      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+      setThumbnailUrls([urlData.publicUrl]);
     }
     setUploadingThumb(false);
   };
@@ -289,7 +364,7 @@ export const StoriesLivesView = () => {
     );
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (targetStatus: string = "draft") => {
     if (!user || !formTitle.trim() || formPlatforms.length === 0) return;
     setSubmitting(true);
 
@@ -305,26 +380,31 @@ export const StoriesLivesView = () => {
             description: formContent.trim() || null,
             scheduled_at: formScheduledAt ? new Date(formScheduledAt).toISOString() : null,
             stream_key: streamKey,
-            status: formScheduledAt ? "scheduled" : "draft",
+            status: targetStatus,
           } as any)
           .select()
           .single();
 
         if (sessError) throw sessError;
+        
+        await fetchSessions();
+        if (publishToStories) await fetchItems();
 
-        // If publish to stories is checked, also create story entries
+        toast({ title: "Live agendada!" });
         if (publishToStories) {
           const compatibleStoryPlatforms = formPlatforms.filter(p => storyPlatforms.includes(p as SocialPlatformId));
           if (compatibleStoryPlatforms.length > 0) {
             const storyInserts = compatibleStoryPlatforms.map(platform => ({
               user_id: user.id,
-              type: "story",
+              type: "live_promotion",
               platform,
               title: `LIVE: ${formTitle.trim()}`,
               content: formContent.trim() || null,
               thumbnail_url: thumbnailUrls[0] || null,
-              status: formScheduledAt ? "scheduled" : "published",
+              media_url: thumbnailUrls[0] || null,
+              status: targetStatus,
               scheduled_at: formScheduledAt ? new Date(formScheduledAt).toISOString() : null,
+              metadata: { source: 'live_promotion' }
             }));
             await supabase.from("stories_lives").insert(storyInserts as any);
           }
@@ -334,16 +414,21 @@ export const StoriesLivesView = () => {
         // Create standard story entries
         const inserts = formPlatforms.map(platform => ({
           user_id: user.id,
+          author_id: user.id,
           type: "story",
           platform,
           title: formTitle.trim(),
           content: formContent.trim() || null,
           thumbnail_url: thumbnailUrls[0] || null,
-          status: formScheduledAt ? "scheduled" : "draft",
+          media_url: thumbnailUrls[0] || null,
+          status: targetStatus,
           scheduled_at: formScheduledAt ? new Date(formScheduledAt).toISOString() : null,
+          metadata: []
         }));
         const { error } = await supabase.from("stories_lives").insert(inserts as any);
         if (error) throw error;
+        
+        await fetchItems();
         toast({ title: `${formPlatforms.length} Story(s) criado(s)!` });
       }
 
@@ -364,23 +449,48 @@ export const StoriesLivesView = () => {
       try {
         // Build one insert per platform per story slide
         const inserts = formPlatforms.flatMap(platform =>
-          (metadata.stories as any[]).map((s: any) => ({
-            user_id: user?.id,
-            type: "story",
-            platform,
-            title: formTitle.trim() || "Novo Story",
-            content: formContent.trim() || null,
-            thumbnail_url: s.url || null,
-            media_url: s.url || null,
-            status: formScheduledAt ? "scheduled" : "published",
-            scheduled_at: formScheduledAt ? new Date(formScheduledAt).toISOString() : null,
-            metadata: metadata.stories, // Store the advanced creative state
-            author_id: user?.id,
-          }))
+          (metadata.stories as any[]).map((s: any) => {
+            // Detect type from URL extension or metadata
+            let mediaType = s.type || "story";
+            if (!s.type && s.url) {
+              const ext = s.url.split(".").pop()?.toLowerCase();
+              if (["mp4", "webm", "mov"].includes(ext || "")) mediaType = "video";
+              if (["mp3", "wav", "ogg"].includes(ext || "")) mediaType = "audio";
+              if (["jpg", "jpeg", "png", "webp", "gif"].includes(ext || "")) mediaType = "image";
+            }
+
+            return {
+              user_id: user?.id,
+              author_id: user?.id,
+              type: mediaType,
+              platform,
+              title: formTitle.trim() || "Novo Story",
+              content: formContent.trim() || null,
+              thumbnail_url: s.url || null,
+              media_url: s.url || null,
+              status: metadata.forcePublish ? (formScheduledAt ? "scheduled" : "published") : "draft",
+              scheduled_at: formScheduledAt ? new Date(formScheduledAt).toISOString() : null,
+              metadata: metadata.stories, // Store the advanced creative state
+            };
+          })
         );
 
-        const { error } = await supabase.from("stories_lives").insert(inserts as any);
+        // Try inserting with metadata first, fallback if column missing
+        let { error } = await supabase.from("stories_lives").insert(inserts as any);
+        
+        if (error?.message?.includes("metadata") || error?.code === "PGRST204") {
+          console.warn("Metadata column missing, falling back to basic insert");
+          const fallbackInserts = inserts.map(ins => {
+            const { metadata, ...rest } = ins as any;
+            return rest; // Remove metadata field and try again
+          });
+          const { error: fallbackError } = await supabase.from("stories_lives").insert(fallbackInserts as any);
+          error = fallbackError;
+        }
+
         if (error) throw error;
+        
+        await fetchItems();
         toast({ title: "Stories criados e publicados!" });
         setShowCreateDialog(false);
         resetForm();
@@ -406,10 +516,27 @@ export const StoriesLivesView = () => {
       }
 
       if (Object.keys(updates).length > 0) {
-        const { error } = await supabase
+        let { error } = await supabase
           .from("stories_lives")
           .update(updates as any)
           .eq("id", id);
+
+        if (error?.message?.includes("metadata") || error?.code === "PGRST204" || error?.message?.includes("400")) {
+           console.warn("Metadata update failed, falling back to content field as string");
+           const { metadata: metaField, ...rest } = updates as any;
+           
+           // Stringify metadata to save it in the content field if metadata column is missing
+           const finalUpdates = {
+             ...rest,
+             content: JSON.stringify(metaField)
+           };
+
+           const { error: fallbackError } = await supabase
+             .from("stories_lives")
+             .update(finalUpdates as any)
+             .eq("id", id);
+           error = fallbackError;
+        }
 
         if (error) {
           toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
@@ -419,24 +546,31 @@ export const StoriesLivesView = () => {
           return;
         }
       }
-
       toast({ title: forcePublish ? "Publicado com sucesso!" : "Edição salva com sucesso!" });
     }
     setEditingStory(null);
     setThumbnailUrls([]);
-    fetchItems();
+    // Use a small delay before refetching to let the DB update settle
+    setTimeout(fetchItems, 300);
   };
 
   const handleDelete = async (id: string, table: string = "stories_lives") => {
-    if (table === "stories_lives") {
-      await supabase.from("stories_lives").update({ status: 'archived' } as any).eq("id", id);
-      toast({ title: "Story arquivado com sucesso" });
-      fetchItems();
-    } else {
-      await supabase.from(table as any).delete().eq("id", id);
-      toast({ title: "Removido com sucesso" });
-      if (table === "live_sessions") fetchSessions();
+    try {
+      const { error } = await supabase.from(table as any).delete().eq("id", id);
+      if (error) {
+        // Fallback to soft-delete if DELETE fails (e.g., RLS policy)
+        if (table === "stories_lives") {
+          await supabase.from("stories_lives").update({ status: 'archived' } as any).eq("id", id);
+        }
+        console.warn("Hard delete failed, used soft delete:", error.message);
+      }
+      toast({ title: "Removido com sucesso!" });
+      if (table === "stories_lives") fetchItems();
+      else if (table === "live_sessions") fetchSessions();
       else if (table === "live_clips") fetchClips();
+    } catch (err) {
+      console.error("Delete error:", err);
+      toast({ title: "Erro ao excluir", variant: "destructive" });
     }
   };
 
@@ -449,8 +583,8 @@ export const StoriesLivesView = () => {
     setFormTitle(""); setFormPlatforms([]); setFormContent(""); setFormScheduledAt(""); setThumbnailUrls([]); setPublishToStories(false);
   };
 
-  const stories = items.filter(i => i.type === "story");
-  const livesLegacy = items.filter(i => i.type === "live"); // Keeping legacy for compatibility
+  const stories = useMemo(() => items.filter(i => ["story", "video", "image", "audio", "live_promotion"].includes(i.type)), [items]);
+  const livesLegacy = useMemo(() => items.filter(i => i.type === "live"), [items]);
 
   const openCreate = (type: "story" | "live") => {
     setCreateType(type);
@@ -483,8 +617,6 @@ export const StoriesLivesView = () => {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const platformOptions = createType === "story" ? storyPlatforms : livePlatforms;
-
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="mb-8">
@@ -493,20 +625,52 @@ export const StoriesLivesView = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-muted/50 p-1 rounded-xl">
-          <TabsTrigger value="stories" className="rounded-lg data-[state=active]:bg-background gap-2">
-            <Radio className="w-4 h-4" /> Stories
-          </TabsTrigger>
-          <TabsTrigger value="lives" className="rounded-lg data-[state=active]:bg-background gap-2">
-            <Video className="w-4 h-4" /> Transmissões ao Vivo
-          </TabsTrigger>
-          <TabsTrigger value="clips" className="rounded-lg data-[state=active]:bg-background gap-2">
-            <Scissors className="w-4 h-4" /> Cortes de Vídeo
-          </TabsTrigger>
-          <TabsTrigger value="published" className="rounded-lg data-[state=active]:bg-background gap-2">
-            <CheckCircle2 className="w-4 h-4" /> Publicados
-          </TabsTrigger>
-        </TabsList>
+        <TooltipProvider>
+          <TabsList className="bg-muted/50 p-1 rounded-xl">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="stories" className="rounded-lg data-[state=active]:bg-background gap-2">
+                  <Radio className="w-4 h-4" /> <span className="hidden sm:inline">Stories</span>
+                </TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Stories</TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="lives" className="rounded-lg data-[state=active]:bg-background gap-2">
+                  <Video className="w-4 h-4" /> <span className="hidden sm:inline">Transmissões ao Vivo</span>
+                </TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Transmissões ao Vivo</TooltipContent>
+            </Tooltip>
+            
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="clips" className="rounded-lg data-[state=active]:bg-background gap-2">
+                  <Scissors className="w-4 h-4" /> <span className="hidden sm:inline">Cortes de Vídeo</span>
+                </TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Cortes de Vídeo</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="published" className="rounded-lg data-[state=active]:bg-background gap-2">
+                  <CheckCircle2 className="w-4 h-4" /> <span className="hidden sm:inline">Publicados</span>
+                </TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Publicados</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <TabsTrigger value="carrosseis" className="rounded-lg data-[state=active]:bg-background gap-2">
+                  <Copy className="w-4 h-4" /> <span className="hidden sm:inline">Carrosséis</span>
+                </TabsTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Carrosséis</TooltipContent>
+            </Tooltip>
+          </TabsList>
+        </TooltipProvider>
 
         {/* ===== STORIES TAB ===== */}
         <TabsContent value="stories" className="space-y-6">
@@ -555,7 +719,7 @@ export const StoriesLivesView = () => {
                     {memories.map(mem => (
                       <div key={mem.id} className="relative w-32 aspect-[9/16] shrink-0 rounded-xl overflow-hidden group cursor-pointer border border-pink-500/30">
                         {mem.thumbnail_url ? (
-                          <SafeImage src={mem.thumbnail_url} className="w-full h-full object-cover transition-transform group-hover:scale-110" placeholderIcon={null} />
+                          <SafeImage src={mem.thumbnail_url} className="w-full h-full object-cover transition-transform group-hover:scale-110" />
                         ) : (
                           <div className="w-full h-full bg-muted flex items-center justify-center"><Radio className="w-8 h-8 text-muted-foreground" /></div>
                         )}
@@ -588,7 +752,8 @@ export const StoriesLivesView = () => {
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {stories.map((story, index) => {
-                const platform = socialPlatforms.find(p => p.id === story.platform);
+                const platformId = story.platform?.split('|')[0];
+                const platform = socialPlatforms.find(p => p.id === platformId);
                 const Icon = platform?.icon;
                 return (
                   <motion.div key={story.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: index * 0.05 }}
@@ -599,10 +764,61 @@ export const StoriesLivesView = () => {
                             toast({ title: "Sem mídia", description: "Faça o upload de uma mídia para editar." });
                         }
                     }}
-                    className="relative aspect-[9/16] rounded-2xl overflow-hidden glass-card border border-border group hover:border-primary/50 transition-all cursor-pointer"
+                    className="relative aspect-[9/16] rounded-2xl overflow-hidden glass-card border border-border group hover:border-primary/50 transition-all cursor-pointer will-change-transform"
+                    style={{ containIntrinsicSize: '200px 355px' }}
                   >
-                    {story.thumbnail_url ? (
-                      <StoryThumbnail url={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" />
+                    {story.thumbnail_url || story.media_url ? (
+                      <div className="w-full h-full relative">
+                        {story.type === 'video' || (story.media_url && story.media_url.match(/\.(mp4|webm|mov|m4v)/i)) ? (
+                          <video 
+                            key={story.id}
+                            src={story.media_url || story.thumbnail_url || ""} 
+                            className="w-full h-full object-cover bg-zinc-950"
+                            preload="metadata"
+                            muted
+                            loop
+                            onMouseOver={e => (e.target as HTMLVideoElement).play()}
+                            onMouseOut={e => (e.target as HTMLVideoElement).pause()}
+                            playsInline
+                          />
+                        ) : (
+                          <SafeImage 
+                            src={story.thumbnail_url || story.media_url || ""} 
+                            alt={story.title} 
+                            className="w-full h-full !object-contain bg-zinc-950" 
+                          />
+                        )}
+                        
+                        {/* Overlay Metadata (Stickers/Texts) Preview */}
+                        {(() => {
+                          const items = Array.isArray(story.metadata) ? story.metadata : [];
+                          const firstStory = items[0];
+                          if (!firstStory) return null;
+
+                          return (
+                            <div className="absolute inset-0 pointer-events-none overflow-hidden scale-[0.3] origin-center flex items-center justify-center">
+                               {/* Render a tiny version of stickers and text for preview */}
+                               {firstStory.text && (
+                                 <div 
+                                   className="px-4 py-2 rounded-lg text-center font-bold"
+                                   style={{ 
+                                     backgroundColor: firstStory.textConfig?.bgColor,
+                                     color: firstStory.textConfig?.color,
+                                     fontSize: '40px'
+                                   }}
+                                 >
+                                   {firstStory.text}
+                                 </div>
+                               )}
+                               {firstStory.stickers?.map((s: any) => (
+                                 <div key={s.id} className="absolute bg-white/20 backdrop-blur-md px-2 py-1 rounded text-white text-[20px]">
+                                   {s.label}
+                                 </div>
+                               ))}
+                            </div>
+                          );
+                        })()}
+                      </div>
                     ) : (
                       <div className="w-full h-full bg-muted flex items-center justify-center text-muted-foreground">
                         <Radio className="w-8 h-8" />
@@ -616,40 +832,66 @@ export const StoriesLivesView = () => {
                       </div>
                     </div>
                     
-                    <div className="absolute top-2 right-2 flex gap-1 items-center">
+                    <div className="absolute top-2 right-2 flex gap-1 items-center z-50" onClick={(e) => e.stopPropagation()}>
                       <Badge variant="outline" className={cn("text-[10px] py-0 px-1 border-0 h-5", statusColor(story.status))}>
                         {statusLabel(story.status)}
                       </Badge>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button onClick={(e) => e.stopPropagation()} className="p-1 rounded-md bg-black/40 opacity-0 group-hover:opacity-100 hover:bg-white/20 transition-all">
-                            <MoreVertical className="w-3.5 h-3.5 text-white" />
+                          <button onClick={(e) => e.stopPropagation()} className="p-2.5 rounded-full bg-black/60 hover:bg-white/20 transition-all border border-white/10 shadow-lg active:scale-90">
+                            <MoreVertical className="w-5 h-5 text-white" />
                           </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40 bg-zinc-900 border-white/10 text-white">
-                          <DropdownMenuItem onClick={() => setEditingStory(story)} className="gap-2 focus:bg-white/10 focus:text-white cursor-pointer">
-                            <Eye className="w-4 h-4" /> Visualizar
+                        <DropdownMenuContent 
+                          align="end" 
+                          className="w-48 bg-zinc-900 border-white/10 text-white rounded-xl p-1 shadow-2xl z-[100]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <DropdownMenuItem 
+                            onClick={(e) => { e.stopPropagation(); setEditingStory(story); }} 
+                            className="gap-3 p-3 focus:bg-white/10 focus:text-white cursor-pointer rounded-lg"
+                          >
+                            <Eye className="w-4 h-4 text-white/70" /> 
+                            <div className="flex flex-col"><span className="text-sm font-bold">Visualizar</span><span className="text-[10px] text-white/40">Ver detalhes da mídia</span></div>
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setEditingStory(story)} className="gap-2 focus:bg-white/10 focus:text-white cursor-pointer">
-                            <Edit2 className="w-4 h-4" /> Editar
+                          <DropdownMenuItem 
+                            onClick={(e) => { e.stopPropagation(); setEditingStory(story); }} 
+                            className="gap-3 p-3 focus:bg-white/10 focus:text-white cursor-pointer rounded-lg"
+                          >
+                            <Edit2 className="w-4 h-4 text-white/70" /> 
+                            <div className="flex flex-col"><span className="text-sm font-bold">Editar</span><span className="text-[10px] text-white/40">Alterar stickers e texto</span></div>
                           </DropdownMenuItem>
                           {story.status === 'draft' && (
-                            <DropdownMenuItem onClick={() => handleUpdateMetadata(story.id, { ...story.metadata, forcePublish: true })} className="gap-2 text-primary focus:bg-primary/10 focus:text-primary cursor-pointer">
-                              <Send className="w-4 h-4" /> Publicar agora
+                            <DropdownMenuItem 
+                              onClick={(e) => { e.stopPropagation(); handleUpdateMetadata(story.id, { forcePublish: true }); }} 
+                              className="gap-3 p-3 text-primary focus:bg-primary/10 focus:text-primary cursor-pointer rounded-lg"
+                            >
+                              <Send className="w-4 h-4" /> 
+                              <div className="flex flex-col"><span className="text-sm font-bold">Publicar Agora</span><span className="text-[10px] text-primary/60">Enviar para as redes</span></div>
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem onClick={() => { if(confirm("Deseja excluir?")) handleDelete(story.id); }} className="gap-2 text-red-500 focus:bg-red-500/10 focus:text-red-500 cursor-pointer">
-                            <Trash2 className="w-4 h-4" /> Excluir
+                          <div className="h-px bg-white/5 my-1" />
+                          <DropdownMenuItem 
+                            onClick={(e) => { 
+                              e.preventDefault(); 
+                              e.stopPropagation(); 
+                              setDeleteConfirmId(story.id); 
+                              setDeleteConfirmTable("stories_lives"); 
+                            }} 
+                            className="gap-3 p-3 text-red-500 focus:bg-red-500/10 focus:text-red-500 cursor-pointer rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" /> 
+                            <div className="flex flex-col"><span className="text-sm font-bold">Excluir</span><span className="text-[10px] text-red-500/60">Remover permanentemente</span></div>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
 
-                    <div className="absolute bottom-3 left-3 right-3">
-                      <p className="text-white text-xs font-medium truncate">{story.title}</p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[10px] text-white/70">{new Date(story.created_at).toLocaleDateString("pt-BR")}</span>
-                        <div className="flex items-center gap-1 text-[10px] text-white/70">
+                    <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent">
+                      <p className="text-white text-xs font-bold line-clamp-2 mb-1 leading-snug drop-shadow-md">{story.title}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-white/60 font-medium">{new Date(story.created_at).toLocaleDateString("pt-BR")}</span>
+                        <div className="flex items-center gap-1 text-[9px] text-white/60">
                           <Eye className="w-2.5 h-2.5" /> {story.viewers}
                         </div>
                       </div>
@@ -702,7 +944,13 @@ export const StoriesLivesView = () => {
                       <Badge className={cn("border-0", statusColor(session.status))}>
                         {session.status === "live" ? "🔴 AO VIVO" : statusLabel(session.status)}
                       </Badge>
-                      <button onClick={() => handleDelete(session.id, "live_sessions")} className="p-1 px-1.5 rounded-lg bg-black/40 hover:bg-destructive/60 transition-colors">
+                      <button 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          handleDelete(session.id, "live_sessions"); 
+                        }} 
+                        className="p-1 px-1.5 rounded-lg bg-black/40 hover:bg-destructive/60 transition-colors"
+                      >
                         <Trash2 className="w-4 h-4 text-white" />
                       </button>
                     </div>
@@ -773,7 +1021,13 @@ export const StoriesLivesView = () => {
                       <Play className="w-8 h-8 text-muted-foreground" />
                     )}
                     <div className="absolute top-2 right-2">
-                       <button onClick={() => handleDelete(clip.id, "live_clips")} className="p-1 px-1.5 rounded-lg bg-black/40 hover:bg-destructive/60 transition-colors">
+                       <button 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          handleDelete(clip.id, "live_clips"); 
+                        }} 
+                        className="p-1 px-1.5 rounded-lg bg-black/40 hover:bg-destructive/60 transition-colors"
+                      >
                         <Trash2 className="w-3.5 h-3.5 text-white" />
                       </button>
                     </div>
@@ -822,7 +1076,6 @@ export const StoriesLivesView = () => {
             </div>
           ) : (
             <div className="space-y-8">
-              {/* Group by platform */}
               {storyPlatforms.map(platformId => {
                 const published = stories.filter(s => s.platform === platformId);
                 if (published.length === 0) return null;
@@ -844,7 +1097,7 @@ export const StoriesLivesView = () => {
                           className="relative aspect-[9/16] rounded-2xl overflow-hidden border border-border/50 group cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
                         >
                           {story.thumbnail_url ? (
-                            <StoryThumbnail url={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" />
+                            <img src={story.thumbnail_url} alt={story.title} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full bg-muted flex items-center justify-center">
                               <Icon className="w-6 h-6 text-muted-foreground/50" />
@@ -871,6 +1124,11 @@ export const StoriesLivesView = () => {
             </div>
           )}
         </TabsContent>
+
+        {/* ===== CARROSSÉIS TAB ===== */}
+        <TabsContent value="carrosseis" className="space-y-6">
+          <CarrosselView />
+        </TabsContent>
       </Tabs>
 
       {/* Create Dialog — Integrated */}
@@ -885,31 +1143,109 @@ export const StoriesLivesView = () => {
           <div className="space-y-4 pt-4">
             <div>
               <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Título da {createType === "story" ? "Story" : "Live"}</label>
-              <Input id="story-title" name="story-title" autoComplete="off" value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Dê um nome impactante..." className="rounded-xl border-muted" />
+              <Input value={formTitle} onChange={e => setFormTitle(e.target.value)} placeholder="Dê um nome impactante..." className="rounded-xl border-muted" />
             </div>
             
-            <div>
-              <label className="text-xs font-semibold uppercase text-muted-foreground mb-2 block">Canais de Destino</label>
-              <div className="grid grid-cols-2 gap-2">
-                {platformOptions.map(pid => {
-                  const p = socialPlatforms.find(sp => sp.id === pid);
-                  if (!p) return null;
-                  const Icon = p.icon;
-                  const selected = formPlatforms.includes(pid);
-                  const connected = isPlatformConnected(pid);
+            <div className="space-y-3">
+              <label className="text-xs font-black uppercase text-primary tracking-widest flex items-center gap-2">
+                <Send className="w-3 h-3" /> Onde publicar?
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {platformConnectionData.map(({ platform, connections: platformConnections, hasConnections, isSelected, selectedInPlatform, primaryAccount }) => {
+                  const Icon = platform.icon;
+                  
                   return (
-                    <button key={pid} type="button" onClick={() => togglePlatform(pid)}
-                      className={cn("flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-sm",
-                        selected ? "border-primary/40 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
-                        !connected && "opacity-70")}
-                    >
-                      <div className={cn("w-6 h-6 rounded flex items-center justify-center", connected ? p.color : "bg-slate-700/50")}>
-                        <Icon className="w-3 h-3 text-white" />
-                      </div>
-                      <span className="flex-1 text-left">{p.name}</span>
-                      {connected && <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" title="Conectado" />}
-                      {selected && !connected && <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                    </button>
+                    <DropdownMenu key={`platform-container-${platform.id}`}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          onClick={(e) => {
+                            if (!hasConnections) {
+                              togglePlatform(platform.id);
+                              e.preventDefault();
+                            } else if (platformConnections.length === 1) {
+                              togglePlatform(`${platform.id}|${platformConnections[0].id}`);
+                              e.preventDefault();
+                            }
+                          }}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-xl border transition-all text-sm shrink-0",
+                            isSelected
+                              ? "border-primary/40 bg-primary/10 text-foreground shadow-sm shadow-primary/20"
+                              : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40",
+                            !hasConnections && "opacity-70"
+                          )}
+                        >
+                          <div className={cn("relative shrink-0 w-6 h-6 rounded flex items-center justify-center", hasConnections ? platform.color : "bg-slate-700/50")}>
+                            <Icon className="w-3 h-3 text-white" />
+                            {hasConnections && (
+                              <div className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-background bg-green-500" />
+                            )}
+                          </div>
+                          
+                          <span className="text-sm font-semibold truncate">
+                            {isSelected && primaryAccount ? (
+                              <span className="flex flex-col items-start leading-tight text-left">
+                                <span className="text-[9px] opacity-70 uppercase font-bold tracking-tighter">{platform.name}</span>
+                                <span className="truncate max-w-[100px] text-[11px] font-black">{primaryAccount.page_name || primaryAccount.username}</span>
+                              </span>
+                            ) : (
+                              <span className="font-bold">{platform.name}</span>
+                            )}
+                          </span>
+                          
+                          {isSelected && (
+                            <X 
+                              className="w-3.5 h-3.5 shrink-0 opacity-70 hover:opacity-100 transition-opacity ml-1" 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!hasConnections) togglePlatform(platform.id);
+                                else selectedInPlatform.forEach(c => togglePlatform(`${platform.id}|${c.id}`));
+                              }} 
+                            />
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+
+                      {hasConnections && platformConnections.length > 1 && (
+                        <DropdownMenuContent align="start" className="w-56 bg-background/95 backdrop-blur-md rounded-xl p-1 z-[100]">
+                          <div className="p-2 border-b border-border/50 mb-1 flex items-center gap-2">
+                            <Icon className={cn("w-4 h-4", platform.textColor)} />
+                            <p className="text-xs font-bold text-foreground capitalize">Contas do {platform.name}</p>
+                          </div>
+                          {platformConnections.map(conn => {
+                            const connKey = `${platform.id}|${conn.id}`;
+                            const isConnSelected = formPlatforms.includes(connKey);
+                            return (
+                              <DropdownMenuItem
+                                key={conn.id}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  togglePlatform(connKey);
+                                }}
+                                className={cn(
+                                  "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all",
+                                  isConnSelected 
+                                    ? "bg-primary/10 text-primary hover:bg-primary/20" 
+                                    : "text-foreground hover:bg-muted"
+                                )}
+                              >
+                                {conn.profile_image_url ? (
+                                  <div className="w-6 h-6 rounded-md overflow-hidden border border-border/50 shrink-0">
+                                    <SafeImage src={conn.profile_image_url} alt="" className="w-full h-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div className={cn("w-6 h-6 rounded-md flex items-center justify-center shrink-0", platform.color)}>
+                                    <User className="w-3 h-3 text-white" />
+                                  </div>
+                                )}
+                                <span className="truncate flex-1 font-medium">{conn.page_name || `Conta de ${platform.name}`}</span>
+                              </DropdownMenuItem>
+                            );
+                          })}
+                        </DropdownMenuContent>
+                      )}
+                    </DropdownMenu>
+
                   );
                 })}
               </div>
@@ -921,33 +1257,64 @@ export const StoriesLivesView = () => {
                   <span className="text-xs font-bold">Postar nos Stories?</span>
                   <span className="text-[10px] text-muted-foreground">Avise seus seguidores quando estiver ao vivo</span>
                 </div>
-                <Checkbox id="publish-to-stories" name="publish-to-stories" checked={publishToStories} onCheckedChange={(v) => setPublishToStories(!!v)} />
+                <Checkbox checked={publishToStories} onCheckedChange={(v) => setPublishToStories(!!v)} />
               </div>
             )}
 
             <div>
               <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Descrição / Conteúdo</label>
-              <Textarea id="story-content" name="story-content" autoComplete="off" value={formContent} onChange={e => setFormContent(e.target.value)} placeholder="Opcional..." rows={2} className="rounded-xl border-muted resize-none" />
+              <Textarea value={formContent} onChange={e => setFormContent(e.target.value)} placeholder="Opcional..." rows={2} className="rounded-xl border-muted resize-none" />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Data/Hora</label>
-                <Input id="story-scheduled-at" name="story-scheduled-at" type="datetime-local" autoComplete="off" value={formScheduledAt} onChange={e => setFormScheduledAt(e.target.value)} className="rounded-xl border-muted text-xs" />
+                <Input type="datetime-local" value={formScheduledAt} onChange={e => setFormScheduledAt(e.target.value)} className="rounded-xl border-muted text-xs" />
               </div>
               <div>
                 <label className="text-xs font-semibold uppercase text-muted-foreground mb-1 block">Mídias (Vários para múltiplos Stories)</label>
                 <div className="flex flex-col gap-2">
-                  <input ref={multiFileInputRef} id="story-media-upload" name="story-media-upload" type="file" accept="image/*,video/*,audio/*" multiple onChange={handleMultipleUpload} className="hidden" />
-                  <Button variant="outline" className="w-full h-12 border-dashed rounded-xl border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary" onClick={() => multiFileInputRef.current?.click()}>
-                    <Plus className="w-4 h-4 mr-2" /> {uploadingThumb ? "Subindo arquivos..." : "Adicionar Fotos / Vídeos / Áudios"}
-                  </Button>
+                  <input ref={multiFileInputRef} type="file" accept="image/*,video/*,audio/*" multiple onChange={handleMultipleUpload} className="hidden" />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" className="w-full h-12 border-dashed rounded-xl border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary flex items-center justify-center">
+                        <Plus className="w-5 h-5 mr-2 animate-pulse" /> 
+                        <span className="font-bold">{uploadingThumb ? "Subindo arquivos..." : "Adicionar Mídias"}</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center" className="w-56 bg-zinc-900 border-white/10 text-white rounded-xl p-2 z-[150]">
+                       <div className="p-2 mb-1 border-b border-white/5">
+                         <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Selecione o tipo</p>
+                       </div>
+                       <DropdownMenuItem onClick={() => {
+                          const input = multiFileInputRef.current;
+                          if (input) { input.accept = "image/*"; input.click(); }
+                       }} className="gap-3 p-3 focus:bg-white/10 rounded-lg cursor-pointer transition-all">
+                         <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center"><Image className="w-4 h-4 text-blue-400" /></div>
+                         <div className="flex flex-col"><span className="font-bold">Fotos / Imagens</span><span className="text-[9px] text-white/50">PNG, JPG, WebP</span></div>
+                       </DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => {
+                          const input = multiFileInputRef.current;
+                          if (input) { input.accept = "video/*"; input.click(); }
+                       }} className="gap-3 p-3 focus:bg-white/10 rounded-lg cursor-pointer transition-all">
+                         <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center"><Video className="w-4 h-4 text-purple-400" /></div>
+                         <div className="flex flex-col"><span className="font-bold">Vídeos / Reels</span><span className="text-[9px] text-white/50">MP4, MOV, WebM</span></div>
+                       </DropdownMenuItem>
+                       <DropdownMenuItem onClick={() => {
+                          const input = multiFileInputRef.current;
+                          if (input) { input.accept = "audio/*"; input.click(); }
+                       }} className="gap-3 p-3 focus:bg-white/10 rounded-lg cursor-pointer transition-all">
+                         <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center"><Mic className="w-4 h-4 text-green-400" /></div>
+                         <div className="flex flex-col"><span className="font-bold">Áudios / Narrações</span><span className="text-[9px] text-white/50">MP3, WAV</span></div>
+                       </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   
                   {thumbnailUrls.length > 0 && (
                     <div className="grid grid-cols-4 gap-2 mt-2">
                        {thumbnailUrls.map((url, i) => (
                          <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-border group">
-                            <SafeImage src={url} className="w-full h-full object-cover" placeholderIcon={null} />
+                            <img src={url} className="w-full h-full object-cover" />
                             <button type="button" onClick={() => setThumbnailUrls(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
                               <X className="w-3 h-3 text-white" />
                             </button>
@@ -959,14 +1326,53 @@ export const StoriesLivesView = () => {
               </div>
             </div>
           </div>
-          <DialogFooter className="mt-4">
-            <Button variant="ghost" onClick={() => setShowCreateDialog(false)} className="rounded-xl">Cancelar</Button>
-            <Button onClick={handleCreate} disabled={submitting || !formTitle.trim() || formPlatforms.length === 0} 
-              className={cn("rounded-xl flex-1", createType === "story" ? "bg-primary" : "bg-red-500 hover:bg-red-600")}
-            >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-              {createType === "story" ? `Postar Story` : `Agendar Transmissão`}
-            </Button>
+          <DialogFooter className="mt-4 flex flex-col sm:flex-row gap-2">
+            <Button variant="ghost" className="rounded-xl w-full sm:w-auto order-1 sm:order-none" onClick={() => setShowCreateDialog(false)}>Cancelar</Button>
+            {createType === "story" ? (
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button 
+                  variant="outline" 
+                  className="rounded-xl flex-1 border-primary/30 text-primary hover:bg-primary/5" 
+                  disabled={submitting || !formTitle.trim() || formPlatforms.length === 0} 
+                  onClick={() => handleCreate("draft")}
+                >
+                  Salvar Rascunho
+                </Button>
+                <Button 
+                  className="rounded-xl flex-1 bg-primary text-white hover:bg-primary/90 font-bold" 
+                  disabled={submitting || !formTitle.trim() || formPlatforms.length === 0} 
+                  onClick={() => handleCreate(formScheduledAt ? "scheduled" : "published")}
+                >
+                  {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  {formScheduledAt ? "Agendar Story" : "Postar Agora"}
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                className="w-full sm:w-auto rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold" 
+                disabled={submitting || !formTitle.trim() || formPlatforms.length === 0} 
+                onClick={() => handleCreate(formScheduledAt ? "scheduled" : "published")}
+              >
+                {submitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                {formScheduledAt ? "Agendar Live" : "Iniciar Live"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
+        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-500">
+              <Trash2 className="w-5 h-5" /> Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">Deseja realmente excluir este item? Esta ação não pode ser desfeita.</p>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={async () => { if (deleteConfirmId) { await handleDelete(deleteConfirmId, deleteConfirmTable); setDeleteConfirmId(null); } }}>Excluir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -974,8 +1380,27 @@ export const StoriesLivesView = () => {
       {/* Story Visual Editor Overlay */}
       <AnimatePresence>
         {editingStory && (
-          <StoryEditor 
-            initialMediaUrls={thumbnailUrls.length > 0 ? thumbnailUrls : [editingStory.thumbnail_url || editingStory.media_url || ""]}
+           <StoryEditor 
+            initialMediaUrls={
+              (() => {
+                // Try to parse metadata from content field if metadata is empty
+                let items: any[] = [];
+                if (editingStory.metadata && Array.isArray(editingStory.metadata)) {
+                  items = editingStory.metadata;
+                } else if (editingStory.content && (editingStory.content.trim().startsWith('[') || editingStory.content.trim().startsWith('{'))) {
+                  try {
+                    const parsed = JSON.parse(editingStory.content);
+                    items = Array.isArray(parsed) ? parsed : [];
+                  } catch (e) {
+                    // Silent fail if not a valid JSON string
+                  }
+                }
+                
+                return items.length > 0 
+                  ? items.map(s => s.url) 
+                  : [editingStory.thumbnail_url || editingStory.media_url || ""];
+              })()
+            }
             platform={editingStory.platform as SocialPlatformId}
             onClose={() => {
               setEditingStory(null);
@@ -987,4 +1412,5 @@ export const StoriesLivesView = () => {
       </AnimatePresence>
     </motion.div>
   );
+
 };

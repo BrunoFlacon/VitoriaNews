@@ -1,12 +1,15 @@
 {
   "compilerOptions": {
-    "allowJs": true,
-    "lib": ["ESNext", "DOM"],
-    "strict": false,
     "target": "ESNext",
-    "moduleResolution": "Bundler",
-    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["esnext", "dom"],
+    "strict": false,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "noImplicitAny": false,
     "allowImportingTsExtensions": true,
-    "skipLibCheck": true
-  }
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
 }

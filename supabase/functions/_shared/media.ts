@@ -18,14 +18,31 @@ export async function cacheProfileImage(
   try {
     console.log(`[MEDIA] Caching image for ${platform}:${platformUserId} from ${remoteUrl}`);
     
-    const response = await fetch(remoteUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    let response: Response;
+    try {
+      response = await fetch(remoteUrl, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+      });
+    } catch (fetchErr: any) {
+      clearTimeout(timeoutId);
+      if (fetchErr?.name === 'AbortError') {
+        console.warn(`[MEDIA] Fetch timeout for ${platform} image — returning original URL`);
+      } else {
+        console.warn(`[MEDIA] Fetch error for ${platform} image:`, fetchErr?.message);
       }
-    });
+      return remoteUrl;
+    }
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      console.warn(`[MEDIA] Failed to fetch remote image: ${response.statusText}`);
-      return null;
+      console.warn(`[MEDIA] Failed to fetch remote image: ${response.status} ${response.statusText}`);
+      return remoteUrl;
     }
 
     const contentType = response.headers.get("content-type") || "image/jpeg";

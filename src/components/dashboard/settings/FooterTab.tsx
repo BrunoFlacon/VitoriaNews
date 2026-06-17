@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Save, Loader2, Link2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useSystem } from "@/contexts/SystemContext";
+import { useSystem } from "@/hooks/useSystem";
 
 import { Switch } from "@/components/ui/switch";
 
@@ -85,9 +85,6 @@ export const FooterTab = () => {
         <div className="space-y-2">
            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Texto de Copyright</label>
            <Input 
-             id="footer-copyright-text"
-             name="footer_text"
-             autoComplete="off"
              value={settings.footer_text || ""} 
              onChange={(e) => setSettings({ ...settings, footer_text: e.target.value })} 
              className="bg-muted/30"
@@ -97,9 +94,6 @@ export const FooterTab = () => {
         <div className="space-y-2">
            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Email de Contato</label>
            <Input 
-             id="footer-contact-email"
-             name="contact_email"
-             autoComplete="email"
              value={settings.contact_email || ""} 
              onChange={(e) => setSettings({ ...settings, contact_email: e.target.value })} 
              className="bg-muted/30"
@@ -109,9 +103,6 @@ export const FooterTab = () => {
         <div className="space-y-2">
            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Manual do Sistema (URL)</label>
            <Input 
-             id="footer-manual-url"
-             name="manual_url"
-             autoComplete="url"
              value={settings.manual_url || ""} 
              onChange={(e) => setSettings({ ...settings, manual_url: e.target.value })} 
              className="bg-muted/30"
@@ -121,9 +112,6 @@ export const FooterTab = () => {
         <div className="space-y-2">
            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Uso da Plataforma (URL)</label>
            <Input 
-             id="footer-platform-use-url"
-             name="uso_plataforma_url"
-             autoComplete="url"
              value={settings.uso_plataforma_url || ""} 
              onChange={(e) => setSettings({ ...settings, uso_plataforma_url: e.target.value })} 
              className="bg-muted/30"
@@ -133,9 +121,6 @@ export const FooterTab = () => {
         <div className="space-y-2">
            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Responsabilidade (URL)</label>
            <Input 
-             id="footer-responsibility-url"
-             name="responsabilidade_url"
-             autoComplete="url"
              value={settings.responsabilidade_url || ""} 
              onChange={(e) => setSettings({ ...settings, responsabilidade_url: e.target.value })} 
              className="bg-muted/30"
@@ -145,9 +130,6 @@ export const FooterTab = () => {
         <div className="space-y-2">
            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Política de Privacidade (URL)</label>
            <Input 
-             id="footer-privacy-url"
-             name="privacy_policy_url"
-             autoComplete="url"
              value={settings.privacy_policy_url || ""} 
              onChange={(e) => setSettings({ ...settings, privacy_policy_url: e.target.value })} 
              className="bg-muted/30"
@@ -157,9 +139,6 @@ export const FooterTab = () => {
         <div className="space-y-2">
            <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Termos de Serviço (URL)</label>
            <Input 
-             id="footer-terms-url"
-             name="terms_of_service_url"
-             autoComplete="url"
              value={settings.terms_of_service_url || ""} 
              onChange={(e) => setSettings({ ...settings, terms_of_service_url: e.target.value })} 
              className="bg-muted/30"

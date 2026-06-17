@@ -105,9 +105,8 @@ function SearchResultItem({ result, onClose }: SearchResultItemProps) {
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    onClose();
-    // Use navigate do react-router para mudar o search param
     navigate(result.link);
+    onClose();
   };
 
   return (

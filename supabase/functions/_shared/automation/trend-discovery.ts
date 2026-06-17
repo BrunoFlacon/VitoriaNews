@@ -15,18 +15,32 @@ const SOCIAL_SEARCH_URLS: Record<string, (kw: string) => string> = {
   'WhatsApp':     (kw) => `https://api.whatsapp.com/send?text=${encodeURIComponent(kw)}`,
 };
 
+async function fetchCreds(supabaseClient: any, platform: string): Promise<Record<string, string>> {
+  try {
+    const { data } = await supabaseClient
+      .from('api_credentials')
+      .select('credentials')
+      .eq('platform', platform)
+      .limit(1)
+      .maybeSingle();
+    return data?.credentials || {};
+  } catch {
+    return {};
+  }
+}
+
 import { collectMetaIntelligence } from './collectors/meta.ts';
 import { collectGoogleIntelligence } from './collectors/google.ts';
 import { collectTikTokIntelligence } from './collectors/tiktok.ts';
 import { collectAlternativeIntelligence } from './collectors/alt-social.ts';
-import { collectXIntelligence } from './collectors/x-twitter.ts';
-import { collectMessagingIntelligence } from './collectors/messaging.ts';
 import { monitorPoliticalTrends } from '../radar/political-trends.ts';
 
 export async function discoverTrends(supabaseClient: any, userId?: string) {
   const allTrends: any[] = [];
   let trendsCount = 0;
 
+  // Se userId não for informado, pegamos o primeiro usuário logado ou rodamos globalmente
+  // Para fins de automação, muitas vezes rodamos para todos os usuários com conexões
   const targetUserId = userId || (await supabaseClient.auth.getUser())?.data?.user?.id;
 
   if (!targetUserId) {
@@ -34,162 +48,55 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
     return { success: false, error: 'No user ID' };
   }
 
-  // 1. Coleta em Redes Sociais
-  console.log('[discoverTrends] Collecting from social networks...');
-  let googleTrends: any[] = [];
-  try {
-    const results = await Promise.all([
-      collectMetaIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Meta collector failed:', e); return []; }),
-      collectGoogleIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Google collector failed:', e); return []; }),
-      collectTikTokIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] TikTok collector failed:', e); return []; }),
-      collectAlternativeIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Alt collector failed:', e); return []; }),
-      collectXIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] X collector failed:', e); return []; }),
-      collectMessagingIntelligence(supabaseClient, targetUserId).catch(e => { console.error('[discoverTrends] Messaging collector failed:', e); return []; })
-    ]);
+  // 1. Coleta Unificada
+  const metaTrends = await collectMetaIntelligence(supabaseClient, targetUserId);
+  const googleTrends = await collectGoogleIntelligence(supabaseClient, targetUserId);
+  const tikTokTrends = await collectTikTokIntelligence(supabaseClient, targetUserId);
+  const altTrends = await collectAlternativeIntelligence(supabaseClient, targetUserId);
 
-    const [metaTrends, gTrends, tikTokTrends, altTrends, xTrendsResult, msgTrends] = results;
-    
-    // googleTrends is used later for enrichment
-    googleTrends = gTrends as any[];
-    
-    // X collector returns { trends: any[], accounts_stats: any[] }
-    const xTrends = (xTrendsResult && 'trends' in xTrendsResult) ? (xTrendsResult as any).trends : [];
+  allTrends.push(...metaTrends, ...googleTrends, ...tikTokTrends, ...altTrends);
 
-    allTrends.push(...metaTrends, ...googleTrends, ...tikTokTrends, ...altTrends, ...xTrends, ...msgTrends);
-    console.log(`[discoverTrends] Social collection done. Found ${allTrends.length} items.`);
-  } catch (allErr) {
-    console.error('[discoverTrends] Promise.all block failed:', allErr);
-  }
-
-
-
-  // 2. Notícias em Tempo Real (NewsAPI - Fonte Principal)
+  // 2. Coleta de Notícias (NewsAPI como Fonte Principal)
   try {
     const { data: newsApiData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'newsapi').maybeSingle();
-    let newsApiKey = newsApiData?.credentials?.api_key || newsApiData?.credentials?.apiKey || '';
-
-    if (!newsApiKey) {
-      const { data: googleCloudData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'google_cloud').maybeSingle();
-      newsApiKey = googleCloudData?.credentials?.news_api_key || '';
-    }
+    const newsApiKey = newsApiData?.credentials?.api_key || '';
 
     if (newsApiKey) {
       console.log('[discoverTrends] Fetching from NewsAPI...');
-      // Buscando manchetes globais e do Brasil para dados reais
-      const responses = await Promise.all([
-        fetch(`https://newsapi.org/v2/top-headlines?country=br&pageSize=15&apiKey=${newsApiKey}`),
-        fetch(`https://newsapi.org/v2/top-headlines?language=en&pageSize=15&apiKey=${newsApiKey}`),
-        // Adicionando filtros de categorias solicitadas (Política, Tecnologia, Geral/Mundo)
-        fetch(`https://newsapi.org/v2/everything?q=geopolitics%20OR%20politica&pageSize=10&apiKey=${newsApiKey}`),
-        fetch(`https://newsapi.org/v2/everything?q=tecnologia%20OR%20tech&pageSize=10&apiKey=${newsApiKey}`)
-      ]);
-
-      for (const res of responses) {
-        if (res.ok) {
-          const json = await res.json();
-          for (const article of (json.articles || [])) {
-            // Evita erro de .substring em title nulo, muito comum na NewsAPI
-            const title = article.title || 'Sem Título';
-            const contentSnippet = article.content ? String(article.content).substring(0, 200) : null;
-            
-            allTrends.push({
-              keyword: title.substring(0, 100),
-              source: 'News',
-              sub_source: article.source?.name || 'NewsAPI',
-              category: 'Headline',
-              url: article.url,
-              thumbnail_url: article.urlToImage,
-              description: article.description,
-              score: 90,
-              metadata: { 
-                published_at: article.publishedAt,
-                author: article.author,
-                content_snippet: contentSnippet
-              }
-            });
-          }
+      const res = await fetch(`https://newsapi.org/v2/top-headlines?country=br&pageSize=20&apiKey=${newsApiKey}`);
+      if (res.ok) {
+        const json = await res.json();
+        for (const article of (json.articles || [])) {
+          allTrends.push({
+            keyword: article.title.substring(0, 100),
+            source: article.source?.name || 'Notícias',
+            sub_source: 'NewsAPI',
+            category: 'Geral',
+            url: article.url,
+            thumbnail_url: article.urlToImage,
+            description: article.description,
+            score: 85,
+            metadata: { 
+              published_at: article.publishedAt,
+              author: article.author,
+              content_snippet: article.content ? article.content.substring(0, 200) : null
+            }
+          });
         }
       }
     }
   } catch (e) { console.error('[discoverTrends] NewsAPI failed:', e); }
 
-  // 3. Suporte Adicional a Google News & NewsAPI Enrichment
+  // 3. Sincronizar Radar Político / Geopolítico
   try {
-    const { data: newsApiData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'newsapi').maybeSingle();
-    let newsApiKey = newsApiData?.credentials?.api_key || newsApiData?.credentials?.apiKey || '';
+    console.log('[discoverTrends] Monitoring Political Trends...');
+    await monitorPoliticalTrends(supabaseClient);
+  } catch (e) { console.error('[discoverTrends] Political monitoring failed:', e); }
 
-    if (!newsApiKey) {
-      const { data: googleCloudData } = await supabaseClient.from('api_credentials').select('credentials').eq('platform', 'google_cloud').maybeSingle();
-      newsApiKey = googleCloudData?.credentials?.news_api_key || '';
-    }
-
-    if (newsApiKey) {
-      console.log('[discoverTrends] Enriching trends with NewsAPI...');
-      
-      // Para cada tendência descoberta pelo Google, buscamos mais dados (foto, manchete rica) na NewsAPI
-      const enrichPromises = googleTrends.slice(0, 5).map(async (trend: any) => {
-
-        try {
-          const res = await fetch(`https://newsapi.org/v2/everything?q=${encodeURIComponent(trend.keyword)}&language=pt&sortBy=relevancy&pageSize=3&apiKey=${newsApiKey}`);
-          if (res.ok) {
-            const json = await res.json();
-            const bestArticle = json.articles?.find((a: any) => a.urlToImage) || json.articles?.[0];
-            
-            if (bestArticle) {
-              const title = bestArticle.title || 'Sem Título';
-              return {
-                ...trend,
-                keyword: title.substring(0, 100),
-                thumbnail_url: bestArticle.urlToImage,
-                description: bestArticle.description,
-                url: bestArticle.url,
-                score: trend.score || 85,
-                metadata: {
-                  ...trend.metadata,
-                  enriched: true,
-                  source_original: trend.source,
-                  author: bestArticle.author,
-                  published_at: bestArticle.publishedAt
-                }
-              };
-            }
-          }
-        } catch (e) { console.error(`[discoverTrends] Enrichment failed for ${trend.keyword}:`, e); }
-        return trend;
-      });
-
-      const enrichedGoogleTrends = await Promise.all(enrichPromises);
-      
-      // Substituir os originais pelos enriquecidos (ou manter se não houver melhora)
-      enrichedGoogleTrends.forEach(enriched => {
-        const idx = allTrends.findIndex(t => t.keyword === enriched.keyword || (enriched.metadata?.source_original === t.source && t.keyword === enriched.metadata?.keyword_original));
-        if (idx !== -1) allTrends[idx] = enriched;
-        else allTrends.push(enriched);
-      });
-    }
-  } catch (e) { console.error('[discoverTrends] Enrichment block failed:', e); }
-
-    // 4. Radar Político e Ataques
+  // 3. Salvar no banco
+  for (const trend of allTrends) {
     try {
-      console.log('[discoverTrends] Running political radar...');
-      await monitorPoliticalTrends(supabaseClient);
-      
-      // Chamada interna para a nova Edge Function de Google Trends se estiver no ambiente Supabase
-      // Isso garante que os dados mundiais e geopolíticos sejam capturados
-      const baseUrl = Deno.env.get('SUPABASE_URL');
-      if (baseUrl) {
-          fetch(`${baseUrl}/functions/v1/collect-google-trends`, {
-              headers: { Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}` }
-          }).catch(e => console.error('[discoverTrends] collect-google-trends trigger failed:', e));
-      }
-    } catch (e) { console.error('[discoverTrends] Political monitoring failed:', e); }
-
-  // 5. Salvar no banco (Sem duplicatas por keyword no mesmo batch) usando UPSERT em massa
-  const uniqueTrends = Array.from(new Map(allTrends.map(item => [item.keyword, item])).values());
-  
-  if (uniqueTrends.length > 0) {
-    try {
-      const rows = uniqueTrends.map(trend => ({
+      const { error } = await supabaseClient.from('trends').insert({
         user_id: targetUserId,
         keyword: trend.keyword,
         source: trend.source,
@@ -201,22 +108,13 @@ export async function discoverTrends(supabaseClient: any, userId?: string) {
         description: trend.description || null,
         metadata: trend.metadata || {},
         detected_at: new Date().toISOString(),
-      }));
-
-      const { error: upsertErr } = await supabaseClient
-        .from('trends')
-        .upsert(rows, { onConflict: 'keyword', ignoreDuplicates: false });
-
-      if (upsertErr) {
-        console.error('[discoverTrends] Upsert error:', upsertErr.message);
-      } else {
-        trendsCount = uniqueTrends.length;
-      }
-    } catch (e: any) {
-      console.error('[discoverTrends] Upsert error:', e.message);
+      });
+      if (!error) trendsCount++;
+    } catch (e) {
+      console.error('[discoverTrends] Insert error:', e);
     }
   }
 
-  console.log(`[discoverTrends] Concluído. Processados: ${trendsCount}/${uniqueTrends.length}`);
+  console.log(`[discoverTrends] Concluído. Inserido: ${trendsCount}/${allTrends.length}`);
   return { success: true, count: trendsCount };
 }

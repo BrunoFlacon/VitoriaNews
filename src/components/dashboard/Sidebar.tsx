@@ -23,7 +23,7 @@ import {
   Activity
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useSystem } from "@/contexts/SystemContext";
+import { useSystem } from "@/hooks/useSystem";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -146,16 +146,12 @@ export const Sidebar = memo(({
         )}
       </AnimatePresence>
 
-      <motion.aside
-        initial={false}
-        animate={{ 
-          width: isMobile ? 256 : (isCollapsed ? 80 : 256),
-          x: isMobile ? (isCollapsed ? -256 : 0) : 0
-        }}
-        transition={{ duration: 0.25, ease: "easeOut" }}
+      <aside
         className={cn(
-          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col items-center",
-          (!isMobile && isCollapsed) ? "py-4 md:py-6" : ""
+          "fixed left-0 top-0 h-screen bg-sidebar border-r border-sidebar-border z-50 flex flex-col items-center transition-[width] duration-200 ease-out",
+          isMobile
+            ? (isCollapsed ? "-translate-x-full" : "translate-x-0 w-64")
+            : (isCollapsed ? "w-20 py-4 md:py-6" : "w-64")
         )}
       >
       <div className={cn(
@@ -297,7 +293,7 @@ export const Sidebar = memo(({
           isCollapsed ? "rotate-180" : ""
         )} />
       </button>
-    </motion.aside>
+    </aside>
     </>
   );
 });

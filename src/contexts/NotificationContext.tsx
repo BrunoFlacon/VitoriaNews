@@ -1,6 +1,6 @@
-import React, { createContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface Notification {
   id: string;
@@ -12,7 +12,7 @@ export interface Notification {
   platform?: string;
 }
 
-export interface NotificationContextType {
+interface NotificationContextType {
   notifications: Notification[];
   unreadCount: number;
   addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
@@ -23,6 +23,14 @@ export interface NotificationContextType {
 }
 
 export const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+
+export const useNotifications = () => {
+  const context = useContext(NotificationContext);
+  if (!context) {
+    throw new Error('useNotifications must be used within a NotificationProvider');
+  }
+  return context;
+};
 
 interface NotificationProviderProps {
   children: ReactNode;
@@ -38,35 +46,23 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
       setNotifications([]);
       return;
     }
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(50); // Reduzido de 100 para 50 para aliviar carga
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(100);
 
-      if (error) {
-        // Não logar 500 como erro crítico para evitar spam no console
-        if (error.code !== '57014') { // ignora statement timeout
-          console.warn('[Notifications] fetch error:', error.message);
-        }
-        return; // Retorna silenciosamente, não quebra o sistema
-      }
-
-      if (data) {
-        setNotifications(data.map((n: any) => ({
-          id: n.id,
-          type: n.type as Notification['type'],
-          title: n.title,
-          message: n.message,
-          timestamp: new Date(n.created_at),
-          read: n.read,
-          platform: n.platform || undefined,
-        })));
-      }
-    } catch (e) {
-      console.warn('[Notifications] fetchNotifications exception:', e);
+    if (!error && data) {
+      setNotifications(data.map((n: any) => ({
+        id: n.id,
+        type: n.type as Notification['type'],
+        title: n.title,
+        message: n.message,
+        timestamp: new Date(n.created_at),
+        read: n.read,
+        platform: n.platform || undefined,
+      })));
     }
   }, [user]);
 
@@ -74,6 +70,49 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
+
+  // Realtime subscription com debounce para evitar cascata de fetch
+  useEffect(() => {
+    if (!user) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedFetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(fetchNotifications, 500);
+    };
+
+    const channel = supabase
+      .channel('notifications-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        () => debouncedFetch()
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'eventos_de_ataque', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const newNotif = { type: 'error' as const, title: 'Ataque Detectado', message: `Padrão coordenado detectado: ${payload.new.topico}` };
+          addNotification(newNotif);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'repost_suggestions', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const newNotif = { type: 'info' as const, title: 'Sugestao de Repost', message: `O sistema sugere republicar conteudo para ${payload.new.target_platform}` };
+          addNotification(newNotif);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      supabase.removeChannel(channel).catch(() => {});
+    };
+  }, [user, fetchNotifications]);
+
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   const addNotification = useCallback(async (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
     if (!user) return;
@@ -86,83 +125,6 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
     });
     // Realtime will trigger refetch
   }, [user]);
-
-  // Realtime subscription
-  useEffect(() => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel('notifications-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-        () => {
-          fetchNotifications();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'eventos_de_ataque', filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          addNotification({
-            type: 'error',
-            title: '🚨 Ataque Detectado',
-            message: `Padrão coordenado detectado: ${payload.new.topico}`,
-          });
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'repost_suggestions', filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          addNotification({
-            type: 'info',
-            title: '💡 Sugestão de Repost',
-            message: `O sistema sugere republicar conteúdo para ${payload.new.target_platform}`,
-          });
-        }
-      )
-      .subscribe();
-
-    const messagesChannel = supabase
-      .channel('messages-realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${user.id}` },
-        async (payload) => {
-          if (payload.new.status === 'received') {
-            // Check bot settings for audio alerts
-            const { data: settings } = await (supabase as any)
-              .from('bot_settings')
-              .select('audio_alerts_enabled')
-              .eq('user_id', user.id)
-              .eq('platform', payload.new.platform)
-              .maybeSingle();
-
-            if ((settings as any)?.audio_alerts_enabled !== false) {
-              const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3');
-              audio.play().catch(e => console.log("Audio play blocked by browser:", e));
-            }
-
-            addNotification({
-              type: 'info',
-              title: `Nova mensagem (${payload.new.platform})`,
-              message: payload.new.content?.substring(0, 100) || 'Clique para ver',
-              platform: payload.new.platform
-            });
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-      supabase.removeChannel(messagesChannel);
-    };
-  }, [user, fetchNotifications, addNotification]);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
-
 
   const markAsRead = useCallback(async (id: string) => {
     await supabase.from('notifications').update({ read: true }).eq('id', id);

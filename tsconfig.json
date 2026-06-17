@@ -10,13 +10,9 @@
       ]
     },
     "skipLibCheck": true,
-    "strictNullChecks": false,
-    "forceConsistentCasingInFileNames": true
+    "strictNullChecks": false
   },
   "files": [],
-  "exclude": [
-    "supabase/functions"
-  ],
   "references": [
     {
       "path": "./tsconfig.app.json"

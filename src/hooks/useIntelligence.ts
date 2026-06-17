@@ -17,79 +17,58 @@ export function useIntelligence() {
   const narrativesQuery = useQuery<Narrative[]>({
     queryKey: ["narratives"],
     queryFn: async () => {
-      try {
-        const { data, error } = await (supabase as any).from("narratives")
-          .select("*").order("detected_at", { ascending: false });
-        if (error) return [];
-        return (data || []) as unknown as Narrative[];
-      } catch { return []; }
+      const { data, error } = await (supabase as any)
+        .from("narratives")
+        .select("*")
+        .order("detected_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as Narrative[];
     }
   });
 
   const campaignsQuery = useQuery<ViralCampaign[]>({
     queryKey: ["viral-campaigns"],
     queryFn: async () => {
-      try {
-        const { data, error } = await (supabase as any).from("viral_campaigns")
-          .select("*").order("detected_at", { ascending: false });
-        if (error) return [];
-        return (data || []) as unknown as ViralCampaign[];
-      } catch { return []; }
+      const { data, error } = await (supabase as any)
+        .from("viral_campaigns")
+        .select("*")
+        .order("detected_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as ViralCampaign[];
     }
   });
 
   const attacksQuery = useQuery<AttackEvent[]>({
     queryKey: ["attack-events"],
     queryFn: async () => {
-      try {
-        const { data, error } = await (supabase as any).from("eventos_de_ataque")
-          .select("*").order("criado_em", { ascending: false });
-        if (error) return [];
-        return (data || []) as unknown as AttackEvent[];
-      } catch { return []; }
+      const { data, error } = await (supabase as any)
+        .from("eventos_de_ataque")
+        .select("*")
+        .order("criado_em", { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as AttackEvent[];
     }
   });
 
   const suggestionsQuery = useQuery<RepostSuggestion[]>({
     queryKey: ["repost-suggestions"],
     queryFn: async () => {
-      try {
-        const { data, error } = await (supabase as any).from("repost_suggestions")
-          .select("*").eq("status", "pending").order("created_at", { ascending: false });
-        if (error) return [];
-        return (data || []) as unknown as RepostSuggestion[];
-      } catch { return []; }
-    }
-  });
-  
-  const competitorsQuery = useQuery<any[]>({
-    queryKey: ["competitor-intel"],
-    queryFn: async () => {
-      try {
-        const { data, error } = await (supabase as any).from("competitor_intel")
-          .select("*").order("last_updated", { ascending: false });
-        if (error) return [];
-        return data || [];
-      } catch { return []; }
-    }
-  });
-
-  const influenceNodesQuery = useQuery<any[]>({
-    queryKey: ["influence-nodes"],
-    queryFn: async () => {
-      try {
-        const { data, error } = await (supabase as any).from("influence_nodes")
-          .select("*").order("influence_score", { descending: true });
-        if (error) return [];
-        return data || [];
-      } catch { return []; }
+      const { data, error } = await (supabase as any)
+        .from("repost_suggestions")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as unknown as RepostSuggestion[];
     }
   });
 
   const updateSuggestionStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
-      const { data, error } = await (supabase as any).from("repost_suggestions")
-        .update({ status }).eq("id", id);
+      const { data, error } = await (supabase as any)
+        .from("repost_suggestions")
+        .update({ status })
+        .eq("id", id);
       if (error) throw error;
       return data;
     },
@@ -120,7 +99,7 @@ export function useIntelligence() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel).catch(() => {});
     };
   }, [queryClient, toast]);
 
@@ -129,9 +108,7 @@ export function useIntelligence() {
     campaigns: campaignsQuery.data || [],
     attacks: attacksQuery.data || [],
     suggestions: suggestionsQuery.data || [],
-    competitors: competitorsQuery.data || [],
-    influenceNodes: influenceNodesQuery.data || [],
-    loading: narrativesQuery.isLoading || campaignsQuery.isLoading || attacksQuery.isLoading || suggestionsQuery.isLoading || competitorsQuery.isLoading || influenceNodesQuery.isLoading,
+    loading: narrativesQuery.isLoading || campaignsQuery.isLoading || attacksQuery.isLoading || suggestionsQuery.isLoading,
     updateSuggestionStatus,
   };
 }

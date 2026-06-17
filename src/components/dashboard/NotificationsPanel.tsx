@@ -10,8 +10,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Notification } from "@/contexts/NotificationContext";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useNotifications, Notification } from "@/contexts/NotificationContext";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 
@@ -84,7 +83,7 @@ export const NotificationsPanel = ({ isOpen, onClose, onViewAll }: Notifications
             initial={{ opacity: 0, x: 20, scale: 0.95 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 20, scale: 0.95 }}
-            className="fixed right-4 top-20 w-96 max-h-[calc(100vh-6rem)] z-50 glass-card rounded-2xl border border-border shadow-xl overflow-hidden"
+            className="fixed right-4 top-20 w-[calc(100vw-2rem)] md:w-96 max-h-[calc(100vh-6rem)] z-50 glass-card rounded-2xl border border-border shadow-xl overflow-hidden"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-border">

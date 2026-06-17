@@ -3,14 +3,13 @@ import { motion } from "framer-motion";
 import { Share2, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2, Phone, Key as KeyIcon, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Profile } from "@/contexts/AuthContext";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, Profile } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { SystemFooter } from "@/components/SystemFooter";
-import { useSystem } from "@/contexts/SystemContext";
+import { useSystem } from "@/hooks/useSystem";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -22,11 +21,6 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
-  // OTIMIZAÇÃO: Prefetch do Dashboard enquanto o usuário digita
-  const prefetchDashboard = () => {
-    import("./Dashboard");
-  };
   const [errors, setErrors] = useState<{ email?: string; password?: string; otp?: string; phone?: string }>({});
   const [show2FA, setShow2FA] = useState(false);
   const [otp, setOtp] = useState("");
@@ -41,7 +35,7 @@ const Login = () => {
 
   useEffect(() => {
     if (user) {
-      navigate("/dashboard");
+      navigate("/dashboard", { replace: true });
     }
   }, [user, navigate]);
 
@@ -63,21 +57,7 @@ const Login = () => {
 
     setIsLoading(true);
 
-    let loginResult: { success: boolean; error?: string };
-    try {
-      loginResult = await login(email, password);
-    } catch (networkErr: any) {
-      // Servidor Supabase inacessível (522/CORS) — evita crash na UI
-      toast({
-        title: "Servidor inacessível",
-        description: "Não foi possível conectar ao servidor. Verifique sua internet ou aguarde alguns minutos.",
-        variant: "destructive"
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    const { success, error } = loginResult;
+    const { success, error } = await login(email, password);
     
     if (success) {
       // Check for 2FA
@@ -94,18 +74,10 @@ const Login = () => {
         }
       } else {
         toast({ title: "Bem-vindo ao Vitória Net.", description: "Login realizado com sucesso." });
-        navigate("/dashboard");
+        navigate("/dashboard", { replace: true });
       }
     } else {
-      // Detecta se o erro é de rede (522/CORS) ou de credenciais
-      const isNetworkError = error?.includes('fetch') || error?.includes('network') || error?.includes('CORS');
-      toast({
-        title: isNetworkError ? "Servidor inacessível" : "Erro no login",
-        description: isNetworkError
-          ? "Não foi possível conectar. Verifique sua internet."
-          : (error || "Email ou senha incorretos."),
-        variant: "destructive"
-      });
+      toast({ title: "Erro no login", description: error || "Email ou senha incorretos.", variant: "destructive" });
     }
     setIsLoading(false);
   };
@@ -116,7 +88,7 @@ const Login = () => {
     const res = await verifyOtp(tempProfile.phone, otp);
     if (res.success) {
       toast({ title: "Sucesso", description: "Identidade verificada." });
-      navigate("/dashboard");
+      navigate("/dashboard", { replace: true });
     } else {
       toast({ title: "Código Inválido", description: "O código digitado está incorreto ou expirou.", variant: "destructive" });
     }
@@ -150,21 +122,14 @@ const Login = () => {
           <div className="glass-card rounded-3xl border border-border p-8">
             {/* Logo */}
             <div className="flex items-center justify-center gap-3 mb-8">
-              {settings?.show_logo !== false && (
-                settings?.logo_url ? (
-                  <img src={settings.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-xl bg-background/50" />
-                ) : (
-                  /* INÍCIO LOGOMARCA PADRÃO DO SISTEMA (SVG NOVO) */
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#4F8AFF] to-[#8B5CF6] flex items-center justify-center">
-                    <svg viewBox="0 0 64 64" className="w-[98%] h-[98%] text-black fill-current">
-                      <path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z" />
-                      <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z" />
-                    </svg>
-                  </div>
-                  /* FIM LOGOMARCA PADRÃO DO SISTEMA */
-                )
+              {settings?.logo_url ? (
+                <img src={settings.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-xl bg-background/50" />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                  <Share2 className="w-6 h-6 text-primary-foreground" />
+                </div>
               )}
-              <span className="font-display font-bold text-3xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[#4F8AFF] to-[#8B5CF6] truncate">
+              <span className="font-display font-bold text-2xl gradient-text truncate">
                 {settings?.platform_name || "Vitória Net"}
               </span>
             </div>
@@ -183,11 +148,11 @@ const Login = () => {
                 Digite o código de 6 dígitos enviado para seu telefone.
               </p>
               <div className="space-y-2">
-                <label htmlFor="otp-code" className="text-sm font-medium">Código de Verificação</label>
+                <label htmlFor="otp" className="text-sm font-medium">Código de Verificação</label>
                 <div className="relative">
                   <KeyIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <Input
-                    id="otp-code"
+                    id="otp"
                     name="otp"
                     type="text"
                     placeholder="000000"
@@ -195,7 +160,6 @@ const Login = () => {
                     onChange={(e) => setOtp(e.target.value)}
                     className="pl-10 h-12 bg-muted/50 border-border"
                     maxLength={6}
-                    autoComplete="one-time-code"
                     required
                   />
                 </div>
@@ -286,20 +250,19 @@ const Login = () => {
                   </p>
                   
                   <div className="space-y-2">
-                    <label htmlFor={recoveryMethod === "email" ? "recovery-email" : "recovery-phone"} className="text-sm font-medium">{recoveryMethod === "email" ? "E-mail" : "Celular / WhatsApp"}</label>
+                    <label htmlFor="recovery-email" className="text-sm font-medium">{recoveryMethod === "email" ? "E-mail" : "Celular / WhatsApp"}</label>
                     <div className="relative">
                       {recoveryMethod === "email" ? (
                         <>
                           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                           <Input
                             id="recovery-email"
-                            name="recovery_email"
+                            name="email"
                             type="email"
                             placeholder="seu@email.com"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="pl-10 h-12 bg-muted/50 border-border"
-                            autoComplete="email"
                             required
                           />
                         </>
@@ -308,13 +271,12 @@ const Login = () => {
                           <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                           <Input
                             id="recovery-phone"
-                            name="recovery_phone"
+                            name="phone"
                             type="tel"
                             placeholder="(00) 00000-0000"
                             value={phone}
                             onChange={(e) => setPhone(e.target.value)}
                             className="pl-10 h-12 bg-muted/50 border-border"
-                            autoComplete="tel"
                             required
                           />
                         </>
@@ -343,10 +305,7 @@ const Login = () => {
                     type="email"
                     placeholder="seu@email.com"
                     value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (e.target.value.length > 3) prefetchDashboard();
-                    }}
+                    onChange={(e) => setEmail(e.target.value)}
                     className={`pl-10 h-12 bg-muted/50 border-border ${errors.email ? 'border-destructive' : ''}`}
                     autoComplete="username"
                     required
@@ -383,7 +342,7 @@ const Login = () => {
 
               <div className="flex items-center justify-between">
                 <label htmlFor="remember-me" className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-                  <input id="remember-me" name="remember_me" type="checkbox" className="rounded border-border" />
+                  <input id="remember-me" name="remember" type="checkbox" className="rounded border-border" />
                   Lembrar de mim
                 </label>
                 <button 

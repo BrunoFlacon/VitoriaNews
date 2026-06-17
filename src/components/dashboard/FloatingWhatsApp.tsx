@@ -20,30 +20,38 @@ export const FloatingWhatsApp = ({ onOpenMessaging }: FloatingWhatsAppProps) => 
 
     // 1. Check if floating button is enabled in settings
     const checkSettings = async () => {
-      const { data } = await (supabase as any)
-        .from('bot_settings')
-        .select('floating_button_enabled')
-        .eq('user_id', user.id)
-        .eq('platform', 'whatsapp')
-        .maybeSingle();
-      
-      if (data) {
-        setIsEnabled(data.floating_button_enabled ?? true);
+      try {
+        const { data, error } = await supabase
+          .from('bot_settings' as any)
+          .select('floating_button_enabled')
+          .eq('user_id', user.id)
+          .eq('platform', 'whatsapp')
+          .maybeSingle();
+        
+        if (!error && data) {
+          setIsEnabled((data as any).floating_button_enabled ?? true);
+        }
+      } catch (err) {
+        console.error('Error fetching bot settings:', err);
       }
     };
 
     // 2. Count unread messages
     const fetchUnreadCount = async () => {
-      const { count, error } = await supabase
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('platform', 'whatsapp')
-        .eq('status', 'received');
-      
-      if (!error) {
-        setUnreadCount(count || 0);
-        setIsVisible((count || 0) > 0);
+      try {
+        const { count, error } = await supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('platform', 'whatsapp')
+          .eq('status', 'received');
+        
+        if (!error) {
+          setUnreadCount(count || 0);
+          setIsVisible((count || 0) > 0);
+        }
+      } catch (err) {
+        console.error('Error fetching unread count:', err);
       }
     };
 
@@ -61,7 +69,7 @@ export const FloatingWhatsApp = ({ onOpenMessaging }: FloatingWhatsAppProps) => 
         }
       )
       .on(
-        'postgres_changes',
+        'postgres_changes' as any,
         { event: '*', schema: 'public', table: 'bot_settings', filter: `user_id=eq.${user.id}` },
         () => {
           checkSettings();
@@ -70,7 +78,7 @@ export const FloatingWhatsApp = ({ onOpenMessaging }: FloatingWhatsAppProps) => 
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel).catch(() => {});
     };
   }, [user]);
 

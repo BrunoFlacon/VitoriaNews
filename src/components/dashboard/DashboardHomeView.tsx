@@ -297,7 +297,7 @@ export const DashboardHomeView = memo(({
         </div>
 
       {/* Account List and Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '400px' }}>
         <div className="lg:col-span-2">
           <AnalyticsChart 
             data={dashboardChartData}
@@ -308,8 +308,8 @@ export const DashboardHomeView = memo(({
         </div>
         <div className="h-full">
           <div
-            className="glass-card rounded-2xl border border-border p-4 md:p-5 h-full flex flex-col justify-between animate-fade-in"
-            style={{ animationDelay: '400ms', animationFillMode: 'backwards' }}
+            className="glass-card rounded-2xl border border-border p-4 md:p-5 h-full flex flex-col justify-between animate-fade-in min-h-[200px]"
+            style={{ animationDelay: '400ms', animationFillMode: 'backwards', contentVisibility: 'auto' }}
           >
             <h3 className="font-display font-bold text-lg mb-4">Redes Conectadas</h3>
             <div className="space-y-3">
@@ -342,7 +342,7 @@ export const DashboardHomeView = memo(({
         </div>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6" style={{ contentVisibility: 'auto', containIntrinsicHeight: 400 }}>
         <Suspense fallback={null}>
           <RecentPosts onEditPost={(post: ScheduledPost) => {
             setEditingPost(post);

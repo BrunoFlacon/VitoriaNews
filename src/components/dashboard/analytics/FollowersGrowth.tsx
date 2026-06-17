@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { motion } from "framer-motion";
 import { 
   Users, 
@@ -23,7 +23,6 @@ interface FollowersGrowthProps {
   setSelectedProfileId: (id: string | null) => void;
   platformActiveProfile: Record<string, string>;
   setPlatformActiveProfile: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  scrollContainer: (id: string, direction: 'left' | 'right') => void;
   onNavigate?: (tab: string, subtab?: string) => void;
 }
 
@@ -33,9 +32,13 @@ export const FollowersGrowth = ({
   setSelectedProfileId,
   platformActiveProfile,
   setPlatformActiveProfile,
-  scrollContainer,
   onNavigate
 }: FollowersGrowthProps) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (direction: 'left' | 'right') => {
+    scrollRef.current?.scrollBy({ left: direction === 'left' ? -300 : 300, behavior: 'smooth' });
+  };
   const renderTrend = (value: string | number) => {
     const numValue = typeof value === 'string' ? parseFloat(value) : value;
     const isPositive = numValue > 0;
@@ -60,33 +63,33 @@ export const FollowersGrowth = ({
   });
 
   return (
-    <Card className="p-6 shadow-2xl border-white/10 bg-white/5 backdrop-blur-xl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-        <h3 className="font-display font-black text-xl text-foreground flex items-center gap-2 uppercase tracking-wider">
-          <Users className="w-6 h-6 text-primary" />
+    <Card className="p-4 md:p-6 shadow-xl border-border bg-card hover:shadow-2xl transition-shadow">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+        <h3 className="font-display font-bold text-lg md:text-xl text-white flex items-center gap-2">
+          <Users className="w-5 h-5 text-primary" />
           Crescimento de Seguidores
         </h3>
         <div className="flex items-center gap-4">
           {selectedProfileId && (
             <button 
               onClick={() => setSelectedProfileId(null)}
-              className="text-[10px] font-black uppercase tracking-widest text-primary hover:underline"
+              className="text-xs text-primary hover:underline font-bold"
             >
               Limpar Filtro
             </button>
           )}
-          <div className="flex gap-1 border-l border-white/10 pl-4">
-            <button onClick={() => scrollContainer('follower-scroll', 'left')} className="p-2 rounded-lg hover:bg-white/10 border border-white/10 transition-all">
+          <div className="flex gap-1 border-l border-border/50 pl-4">
+            <button onClick={() => scroll('left')} className="p-1.5 rounded-md hover:bg-muted/50 border border-border transition-all">
               <ChevronLeft className="w-4 h-4 text-primary" />
             </button>
-            <button onClick={() => scrollContainer('follower-scroll', 'right')} className="p-2 rounded-lg hover:bg-white/10 border border-white/10 transition-all">
+            <button onClick={() => scroll('right')} className="p-1.5 rounded-md hover:bg-muted/50 border border-border transition-all">
               <ChevronRight className="w-4 h-4 text-primary" />
             </button>
           </div>
         </div>
       </div>
       
-      <div id="follower-scroll" className="flex gap-6 overflow-x-auto scrollbar-hide pb-4 snap-x smooth-scroll">
+      <div ref={scrollRef} className="flex gap-4 overflow-x-auto scrollbar-hide pb-2 snap-x smooth-scroll">
         {sortedPlatforms.map((platformInfo) => {
           const PlatformIcon = platformInfo.icon;
           const group = groupedFollowers?.find((g: any) => g.platform === platformInfo.id);
@@ -94,21 +97,21 @@ export const FollowersGrowth = ({
           
           if (!isConnected) {
             return (
-              <div key={platformInfo.id} className="w-[300px] shrink-0 snap-center bg-white/5 rounded-2xl p-6 border border-white/5 opacity-40 grayscale flex flex-col justify-between min-h-[160px]">
+              <div key={platformInfo.id} className="w-[280px] shrink-0 snap-center bg-card rounded-xl p-5 border border-border/40 transition-all opacity-60 grayscale-[0.5] flex flex-col justify-between min-h-[140px]">
                 <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-4">
-                    <div className={`p-3 rounded-xl ${platformInfo.color}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${platformInfo.color}`}>
                       <PlatformIcon className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <h4 className="font-black text-sm uppercase tracking-tight line-through opacity-50">{platformInfo.name}</h4>
-                      <p className="text-[10px] font-bold uppercase tracking-widest">Inativo</p>
+                      <h4 className="font-bold text-white line-through opacity-50">{platformInfo.name}</h4>
+                      <p className="text-[10px] text-muted-foreground">Inativo</p>
                     </div>
                   </div>
                 </div>
                 <button 
                   onClick={() => onNavigate?.('settings', 'api')} 
-                  className="w-full mt-6 py-2 rounded-xl bg-white/5 text-[10px] font-black uppercase tracking-widest hover:bg-white/10 transition-all"
+                  className="w-full mt-4 py-2 rounded-lg bg-muted/30 text-xs font-bold hover:bg-muted/50 transition-all"
                 >
                   Configurar API
                 </button>
@@ -124,28 +127,28 @@ export const FollowersGrowth = ({
           const totalCount = displayedProfile ? displayedProfile.currentFollowers : group.totalFollowers;
 
           return (
-            <div key={group.platform} className="w-[300px] shrink-0 snap-center bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/5 hover:border-primary/40 transition-all group relative overflow-hidden">
-               <div className="flex justify-between items-start mb-6">
-                 <div className="flex items-center gap-4">
-                   <div className={`p-3 rounded-xl ${platformInfo.color} group-hover:scale-110 transition-transform`}>
+            <div key={group.platform} className="w-[280px] shrink-0 snap-center bg-card rounded-xl p-5 border border-border hover:border-primary/50 transition-all group overflow-hidden relative">
+               <div className="flex justify-between items-start mb-4">
+                 <div className="flex items-center gap-3">
+                   <div className={`p-2 rounded-lg ${platformInfo.color}`}>
                       <PlatformIcon className="w-5 h-5 text-white" />
                    </div>
                    <div>
-                     <h4 className="font-black text-sm uppercase tracking-tight">{platformInfo.name}</h4>
-                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{group.profiles.length} perfil(is)</p>
+                     <h4 className="font-bold text-sm text-white">{platformInfo.name}</h4>
+                     <p className="text-xs text-muted-foreground">{group.profiles.length} perfil(is)</p>
                    </div>
                  </div>
                  {renderTrend(displayedProfile?.growth || group.profiles[0]?.growth || "0")}
                </div>
                
-               <p className="text-4xl font-black font-display tracking-tighter text-foreground mb-1">
+               <p className="text-2xl font-bold text-white">
                   {(totalCount || 0).toLocaleString()}
                 </p>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {platformInfo.id === 'youtube' ? "inscritos" : "seguidores"} {displayedProfile ? "no perfil" : "totais"}
                 </p>
 
-               <div className="mt-6 pt-6 border-t border-white/5">
+               <div className="mt-4 pt-4 border-t border-border">
                  {group.profiles.length > 1 ? (
                    <Select 
                      value={activeProfile || "all"} 
@@ -155,10 +158,10 @@ export const FollowersGrowth = ({
                        else setSelectedProfileId(null);
                      }}
                    >
-                     <SelectTrigger className="h-9 text-[10px] font-black uppercase tracking-widest bg-white/5 border-white/10">
+                     <SelectTrigger className="h-8 text-[10px] bg-muted/30 border-none">
                        <SelectValue placeholder="Selecionar perfil" />
                      </SelectTrigger>
-                     <SelectContent className="bg-background/95 backdrop-blur-xl border-white/10">
+                     <SelectContent>
                         <SelectItem value="all">Visão Consolidada</SelectItem>
                         {group.profiles.map((prof: any, pIdx: number) => {
                            const pId = `${prof.platform}-${prof.username || prof.platform_user_id}`;
@@ -172,13 +175,13 @@ export const FollowersGrowth = ({
                      </SelectContent>
                    </Select>
                   ) : (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
                        {group.profiles[0]?.profileImage ? (
-                           <SafeImage src={group.profiles[0].profileImage} alt="" className="w-6 h-6 rounded-full object-cover border border-white/10" fallbackLetter={(group.profiles[0]?.page_name || group.profiles[0]?.username || 'T')[0].toUpperCase()} />
+                           <SafeImage src={group.profiles[0].profileImage} alt="" className="w-4 h-4 rounded-full object-cover" fallbackLetter={(group.profiles[0]?.page_name || group.profiles[0]?.username || 'T')[0].toUpperCase()} />
                         ) : (
-                         <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-black">{(group.profiles[0]?.page_name || group.profiles[0]?.username || 'T')[0].toUpperCase()}</div>
+                         <div className="w-4 h-4 rounded-full bg-muted flex items-center justify-center text-[8px]">{(group.profiles[0]?.page_name || group.profiles[0]?.username || 'T')[0].toUpperCase()}</div>
                       )}
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-60 truncate">{group.profiles[0]?.page_name ? group.profiles[0].page_name : `@${group.profiles[0]?.username || 'Perfil'}`}</span>
+                      <span className="truncate">{group.profiles[0]?.page_name ? group.profiles[0].page_name : `@${group.profiles[0]?.username || 'Perfil'}`}</span>
                     </div>
                   )}
                </div>
@@ -187,15 +190,15 @@ export const FollowersGrowth = ({
                  <motion.div 
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-4 p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-2"
+                    className="mt-3 p-3 bg-primary/5 rounded-lg border border-primary/10 space-y-1.5"
                  >
-                    <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
+                    <div className="flex justify-between items-center text-[10px]">
                        <span className="text-muted-foreground">Posts Totais</span>
-                       <span className="text-foreground">{(displayedProfile.postsCount || 0).toLocaleString()}</span>
+                       <span className="font-bold text-white">{(displayedProfile.postsCount || 0).toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between items-center text-[9px] font-black uppercase tracking-widest">
+                    <div className="flex justify-between items-center text-[10px]">
                        <span className="text-muted-foreground">Engajamento Médio</span>
-                       <span className="text-primary">{(displayedProfile.avgEngagement || 0).toFixed(1)}%</span>
+                       <span className="font-bold text-primary">{(displayedProfile.avgEngagement || 0).toFixed(1)}%</span>
                     </div>
                  </motion.div>
                )}

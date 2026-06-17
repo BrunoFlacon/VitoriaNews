@@ -78,8 +78,8 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
   return (
     <Carousel className="w-full h-full">
       <CarouselContent className="h-full ml-0">
-        {media.map((m: any) => (
-          <CarouselItem key={m.id} className="h-full pl-0">
+        {media.map((m: any, idx: number) => (
+          <CarouselItem key={m?.id ?? `media-${idx}`} className="h-full pl-0">
             {m.file_type?.startsWith("image/") ? (
               <SafeImage src={getMediaUrl(m.file_url)} className={cn("w-full h-full object-cover", className)} alt="" />
             ) : m.file_type?.startsWith("video/") ? (

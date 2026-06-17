@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std/http/server.ts"
-import { publishHandler } from "./api/publish.ts"
+import { publishHandler } from "./api/publish"
 import { uploadHandler } from "./api/upload.ts"
 
 serve(async (req: Request) => {

@@ -1,3 +1,4 @@
+// Componente de listagem de posts recentes - Estabilizado
 import { motion } from "framer-motion";
 import { 
   MoreHorizontal, 
@@ -15,15 +16,21 @@ import { cn, normalizePlatform } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
-import { useSocialStats } from "@/hooks/useSocialStats";
 import { FeedPreview } from "./FeedPreview";
-import { useState } from "react";
+import { useState, useEffect, useMemo, startTransition } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { PostsFeedView } from "@/components/dashboard/PostsFeedView";
 import { Trash, Send, Edit2 } from "lucide-react";
 
 const statusConfig = {
@@ -55,11 +62,25 @@ const statusConfig = {
 
 export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost) => void }) => {
   const { posts, loading, deletePost, updatePost } = useScheduledPosts();
-  const { isConnected: isPlatformConnected } = useSocialStats();
   const [previewPost, setPreviewPost] = useState<ScheduledPost | null>(null);
+  const [showAllPosts, setShowAllPosts] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Show only the most recent 5 posts
-  const recentPosts = posts.slice(0, 5);
+  useEffect(() => {
+    const handleGlobalSearch = (e: any) => {
+      const query = e.detail?.query || "";
+      setSearchQuery(query.toLowerCase());
+    };
+    window.addEventListener('system-search', handleGlobalSearch);
+    return () => window.removeEventListener('system-search', handleGlobalSearch);
+  }, []);
+
+  // Show only the most recent 5 posts, filtered by search
+  const filteredRecentPosts = useMemo(() => {
+    return posts
+      .filter(p => !searchQuery || (p.content || "").toLowerCase().includes(searchQuery))
+      .slice(0, 5);
+  }, [posts, searchQuery]);
 
   const formatDate = (dateString: string | null): string => {
     if (!dateString) return "";
@@ -74,19 +95,14 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
 
   if (loading) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="glass-card rounded-2xl border border-border"
-      >
+      <div className="glass-card rounded-2xl border border-border min-h-[400px]">
         <div className="p-6 border-b border-border">
           <h2 className="font-display font-bold text-xl">Publicações Recentes</h2>
         </div>
         <div className="flex items-center justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
-      </motion.div>
+      </div>
     );
   }
 
@@ -95,17 +111,22 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.3 }}
-      className="glass-card rounded-2xl border border-border"
+      className="glass-card rounded-2xl border border-border min-h-[400px] flex flex-col overflow-hidden"
     >
       <div className="p-6 border-b border-border">
         <div className="flex items-center justify-between">
           <h2 className="font-display font-bold text-xl">Publicações Recentes</h2>
-          <button className="text-sm text-primary hover:underline">Ver todas</button>
+          <button 
+            onClick={() => setShowAllPosts(true)}
+            className="text-sm text-primary hover:underline"
+          >
+            Ver todas
+          </button>
         </div>
       </div>
 
-      {recentPosts.length === 0 ? (
-        <div className="p-12 text-center">
+      {filteredRecentPosts.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-12 text-center min-h-[334px]">
           <p className="text-muted-foreground">Nenhuma publicação ainda.</p>
           <p className="text-sm text-muted-foreground mt-1">
             Crie seu primeiro post na aba "Criar Post"
@@ -113,7 +134,7 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
         </div>
       ) : (
         <div className="divide-y divide-border">
-          {recentPosts.map((post, index) => {
+          {filteredRecentPosts.map((post, index) => {
             const StatusIcon = statusConfig[post.status]?.icon || Clock;
             
             return (
@@ -123,7 +144,8 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.1 * index }}
                 className="p-6 hover:bg-muted/30 transition-colors group relative cursor-pointer"
-                onClick={() => setPreviewPost(post)}
+                style={{ contain: "paint layout" }}
+                onClick={() => startTransition(() => setPreviewPost(post))}
               >
                 <div className="flex items-start gap-4">
                   <div className="flex items-center gap-2">
@@ -136,7 +158,6 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                           key={normalizedId}
                           platform={platform}
                           size="sm"
-                          muted={!isPlatformConnected(normalizedId)}
                           className="border-2 border-background shadow-sm"
                         />
                       );
@@ -148,12 +169,12 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm line-clamp-2 mb-2">{post.content}</p>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <p className="text-sm font-medium line-clamp-2 mb-1.5 md:mb-2">{post.content || "Sem conteúdo"}</p>
                     
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                       <span className={cn(
-                        "inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium",
+                        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider whitespace-nowrap",
                         statusConfig[post.status]?.bg,
                         statusConfig[post.status]?.color
                       )}>
@@ -161,23 +182,14 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                         {statusConfig[post.status]?.label}
                       </span>
                       
-                      {post.published_at && (
-                        <span className="text-xs text-muted-foreground">
-                          {formatDate(post.published_at)}
+                      <div className="flex items-center gap-2 text-muted-foreground/60 whitespace-nowrap">
+                        <Clock className="w-3 h-3" />
+                        <span className="text-[10px] font-medium uppercase tracking-tight">
+                          {post.status === 'draft' ? "Criado em: " : 
+                           post.status === 'scheduled' ? "Agendado: " : ""}
+                          {formatDate(post.published_at || post.scheduled_at || post.created_at)}
                         </span>
-                      )}
-                      
-                      {post.scheduled_at && post.status === 'scheduled' && (
-                        <span className="text-xs text-muted-foreground">
-                          Agendado: {formatDate(post.scheduled_at)}
-                        </span>
-                      )}
-                      
-                      {post.status === 'draft' && (
-                        <span className="text-xs text-muted-foreground">
-                          Criado: {formatDate(post.created_at)}
-                        </span>
-                      )}
+                      </div>
                     </div>
 
                     {/* Error message */}
@@ -235,8 +247,28 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
           post={previewPost} 
           isOpen={!!previewPost} 
           onClose={() => setPreviewPost(null)} 
+          onEdit={onEditPost}
+          onDelete={deletePost}
         />
       )}
+
+      {/* All Posts Dialog */}
+      <Dialog open={showAllPosts} onOpenChange={setShowAllPosts}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0">
+          <DialogTitle className="sr-only">Todas as Publicações</DialogTitle>
+          <DialogDescription className="sr-only">
+            Visualize e gerencie todas as suas publicações recentes e agendadas.
+          </DialogDescription>
+          <div className="p-6">
+            <PostsFeedView 
+              onEditPost={(post) => {
+                setShowAllPosts(false);
+                onEditPost?.(post);
+              }} 
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 };

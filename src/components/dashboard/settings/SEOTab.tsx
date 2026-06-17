@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Save, Image as ImageIcon, Loader2, Globe, Search } from "lucide-react";
 import { motion } from "framer-motion";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { sanitizeHtml } from "@/lib/utils";
 
 export const SEOTab = () => {
   const { toast } = useToast();
@@ -41,7 +42,15 @@ export const SEOTab = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = { ...settings, group: 'seo' };
+      // Sanitize all SEO fields
+      const sanitizedSettings = {
+        ...settings,
+        seo_title: sanitizeHtml(settings.seo_title),
+        seo_description: sanitizeHtml(settings.seo_description),
+        site_url: sanitizeHtml(settings.site_url)
+      };
+
+      const payload = { ...sanitizedSettings, group: 'seo' };
       if (!settings.id) {
         const { error } = await (supabase as any).from('system_settings').insert([payload]);
         if (error) throw error;

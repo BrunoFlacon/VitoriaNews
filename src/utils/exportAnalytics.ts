@@ -12,6 +12,7 @@ export interface ExportData {
   gaStats?: Record<string, any>;
   messageStats?: Record<string, any>;
   followerData: Record<string, any>[];
+  demographics?: { ageGroups?: any[]; gender?: any[]; devices?: any[]; topCities?: any[]; topCountries?: any[] };
   period: string;
   platform: string;
 }
@@ -30,7 +31,7 @@ function objToRows(obj: Record<string, any>, keyLabel = 'Métrica', valueLabel =
   }));
 }
 
-export function exportToCSV(data: ExportData, filename: string) {
+export function exportToXLSX(data: ExportData, filename: string) {
   const wb = XLSX.utils.book_new();
 
   const addSheet = (name: string, rows: Record<string, any>[]) => {
@@ -72,6 +73,14 @@ export function exportToCSV(data: ExportData, filename: string) {
 
   if (data.gaStats) {
     addSheet('Google Analytics', objToRows(data.gaStats, 'Métrica', 'Valor'));
+  }
+
+  if (data.demographics) {
+    const demoRows: Record<string, any>[] = [];
+    if (data.demographics.ageGroups?.length) demoRows.push({ Demográfico: 'Faixa Etária', ...Object.fromEntries(data.demographics.ageGroups.map((a: any) => [a.range, a.value])) });
+    if (data.demographics.gender?.length) demoRows.push({ Demográfico: 'Gênero', ...Object.fromEntries(data.demographics.gender.map((g: any) => [g.label, g.value])) });
+    if (data.demographics.devices?.length) demoRows.push({ Demográfico: 'Dispositivos', ...Object.fromEntries(data.demographics.devices.map((d: any) => [d.label, d.value])) });
+    if (demoRows.length) addSheet('Demografia', demoRows);
   }
 
   XLSX.writeFile(wb, `${filename}.xlsx`);

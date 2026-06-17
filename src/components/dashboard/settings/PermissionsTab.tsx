@@ -200,9 +200,6 @@ export const PermissionsTab = () => {
             <div className="space-y-2">
               <Label>Nome Amigável (Ex: Gestão de Leads)</Label>
               <Input 
-                id="perm-section-name"
-                name="section_name"
-                autoComplete="off"
                 placeholder="Ex: Minha Nova Sessão" 
                 value={newSection.value}
                 onChange={(e) => setNewSection({ ...newSection, value: e.target.value })}
@@ -211,9 +208,6 @@ export const PermissionsTab = () => {
             <div className="space-y-2">
               <Label>Chave Técnica (Slug único)</Label>
               <Input 
-                id="perm-section-key"
-                name="section_key"
-                autoComplete="off"
                 placeholder="Ex: leads_management" 
                 value={newSection.key}
                 onChange={(e) => setNewSection({ ...newSection, key: e.target.value })}
