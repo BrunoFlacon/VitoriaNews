@@ -1,0 +1,50 @@
+@echo off
+chcp 65001 > nul
+title Agente IA + Chatbot WhatsApp
+echo.
+echo ================================================
+echo   AGENTE DE IA + CHATBOT WHATSAPP
+echo ================================================
+echo.
+
+cd /d "%~dp0"
+
+:: Verificar se Node.js está instalado
+where node >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERRO] Node.js nao encontrado!
+    echo.
+    echo Baixe e instale o Node.js em: https://nodejs.org/
+    echo Escolha a versao LTS ^(recomendada^).
+    echo.
+    pause
+    exit /b 1
+)
+
+:: Instalar dependências se não existir node_modules
+if not exist "node_modules" (
+    echo Instalando dependencias pela primeira vez...
+    echo Isso pode demorar 1-2 minutos. Aguarde.
+    echo.
+    call npm install
+    if %errorlevel% neq 0 (
+        echo [ERRO] Falha ao instalar. Verifique sua conexao com a internet.
+        pause
+        exit /b 1
+    )
+    echo.
+)
+
+echo Iniciando o servidor...
+echo.
+echo Abra seu navegador em:  http://localhost:3000
+echo.
+echo O QR Code aparecera na tela. Escaneie com o WhatsApp!
+echo.
+echo Para fechar, feche esta janela ou pressione Ctrl+C
+echo ================================================
+echo.
+
+node server.js
+
+pause

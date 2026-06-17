@@ -107,8 +107,12 @@ export const AnalyticsDetailedReports = ({
                 </div>
               );
             }) : (
-              <div className="flex-1 flex items-center justify-center text-muted-foreground text-xs italic py-12">
-                Sem métricas capturadas
+              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-center py-10 px-4 bg-muted/10 rounded-2xl border border-dashed border-border/60">
+                <Clock className="w-8 h-8 text-purple-500/40 mb-2.5 animate-pulse" />
+                <p className="font-semibold text-xs text-foreground mb-1">Sem métricas de horários capturadas</p>
+                <p className="text-[10px] text-muted-foreground max-w-[220px] leading-relaxed">
+                  Para analisar seus horários ideais de engajamento, sincronize suas contas na aba de configurações.
+                </p>
               </div>
             )}
           </div>
@@ -163,8 +167,12 @@ export const AnalyticsDetailedReports = ({
                 </div>
               </div>
             )) : (
-              <div className="flex items-center justify-center text-muted-foreground text-xs py-12 italic">
-                Sem posts em destaque
+              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-center py-10 px-4 bg-muted/10 rounded-2xl border border-dashed border-border/60">
+                <TrendingUp className="w-8 h-8 text-green-500/40 mb-2.5 animate-pulse" />
+                <p className="font-semibold text-xs text-foreground mb-1">Nenhum post em destaque</p>
+                <p className="text-[10px] text-muted-foreground max-w-[220px] leading-relaxed">
+                  Quando seus conteúdos forem publicados e acumularem visualizações, seus principais posts aparecerão listados aqui.
+                </p>
               </div>
             )}
           </div>

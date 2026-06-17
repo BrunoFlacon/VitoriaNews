@@ -30,6 +30,7 @@ serve(async (req: Request) => {
       "fbcdn.net",
       "facebook.com",
       "instagram.com",
+      "cdninstagram.com",
       "threads.net",
       "twimg.com",
       "twitter.com",

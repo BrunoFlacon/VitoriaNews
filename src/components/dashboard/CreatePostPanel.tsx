@@ -202,6 +202,24 @@ const popularHashtags: Partial<Record<SocialPlatformId, string[]>> = {
   site: ["#website", "#blog", "#content", "#digital", "#online", "#web"],
 };
 
+const postTemplates = [
+  {
+    name: "Notícia Rápida 📰",
+    description: "Ideal para furos ou manchetes imediatas",
+    content: "🔴 NOTÍCIA DE ÚLTIMA HORA:\n\n[Insira a manchete aqui]\n\n👉 [Detalhes rápidos sobre o ocorrido].\n\nFique por dentro para mais atualizações em instantes.\n\n#VitoriaNews #Noticias #Tupa"
+  },
+  {
+    name: "Alerta ⚠️",
+    description: "Alertas de trânsito ou tempo para a comunidade local",
+    content: "⚠️ ATENÇÃO MOTORISTAS E MORADORES:\n\n[Descreva a situação/localização aqui]\n\n🌧️ Condições atuais: [Insira tempo/situação].\n\nCompartilhe com quem precisa passar por essa região.\n\n#Alerta #Cidade #VitoriaNews"
+  },
+  {
+    name: "Giro 🎙️",
+    description: "Giro de notícias curto da redação",
+    content: "🎙️ GIRO DE NOTÍCIAS DA REDAÇÃO:\n\n1️⃣ [Destaque 1]\n2️⃣ [Destaque 2]\n3️⃣ [Destaque 3]\n\nQual dessas pautas você está acompanhando mais de perto? Deixe nos comentários!\n\n#GiroDeNoticias #RadarNews #TupaRegiao"
+  }
+];
+
 interface CreatePostPanelProps {
   initialDate?: string;
   editingPost?: ScheduledPost | null;
@@ -1257,9 +1275,28 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
         {/* Content Textarea */}
         <div>
-          <label className="text-sm font-medium mb-3 block">
-            Conteúdo da Publicação
-          </label>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <label className="text-sm font-medium">
+              Conteúdo da Publicação
+            </label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mr-1">Modelos Rápidos:</span>
+              {postTemplates.map((t, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    if (content.trim() && !confirm("Deseja substituir o conteúdo atual pelo modelo?")) return;
+                    setContent(t.content);
+                  }}
+                  className="px-2 py-1 text-[10px] font-bold bg-muted hover:bg-primary/20 hover:text-primary border border-border rounded-lg transition-all"
+                  title={t.description}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
           <Textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
