@@ -17,6 +17,7 @@ import "./PostPreview.css";
 import { useSocialStats } from "@/hooks/useSocialStats";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { formatNum, getMediaUrl } from "@/utils/mediaUtils";
+import { useResolvedMediaUrl } from "@/hooks/useResolvedMediaUrl";
 
 interface UploadedMedia {
   id: string;
@@ -41,7 +42,7 @@ interface PostPreviewProps {
 }
 
 const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, controls, videoRef, playing, setPlaying }: any) {
-  const resolvedUrl = getMediaUrl(fileUrl);
+  const resolvedUrl = useResolvedMediaUrl(fileUrl);
   const handleClick = useCallback(() => {
     if (videoRef?.current) {
       if (playing) videoRef.current.pause();
@@ -65,7 +66,7 @@ const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, co
 });
 
 const ResolvedAudio = React.memo(function ResolvedAudio({ fileUrl, className, audioRef, onEnded }: any) {
-  const resolvedUrl = getMediaUrl(fileUrl);
+  const resolvedUrl = useResolvedMediaUrl(fileUrl);
   if (!resolvedUrl) return <div className="w-full h-10 bg-zinc-800 animate-pulse rounded" />;
   return <audio ref={audioRef} src={resolvedUrl} className={className} onEnded={onEnded} />;
 });

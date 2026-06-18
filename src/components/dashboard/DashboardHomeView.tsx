@@ -52,7 +52,7 @@ interface DashboardHomeViewProps {
   setDashboardPeriod: (p: string) => void;
   isConnected: (p: string) => boolean;
   setActiveTab: (t: string) => void;
-  setEditingPost: (p: ScheduledPost) => void;
+  onEditPost: (p: ScheduledPost) => void;
   metricGrowth: { views?: string; engagement?: string; followers?: string } | null;
 }
 
@@ -78,7 +78,7 @@ export const DashboardHomeView = memo(({
   setDashboardPeriod,
   isConnected,
   setActiveTab,
-  setEditingPost,
+  onEditPost,
   metricGrowth,
 }: DashboardHomeViewProps) => {
   // Compute filtered stats for the selected platform
@@ -344,10 +344,7 @@ export const DashboardHomeView = memo(({
 
       <div className="mt-6" style={{ contentVisibility: 'auto', containIntrinsicHeight: 400 }}>
         <Suspense fallback={null}>
-          <RecentPosts onEditPost={(post: ScheduledPost) => {
-            setEditingPost(post);
-            setActiveTab("create");
-          }} />
+          <RecentPosts onEditPost={onEditPost} />
         </Suspense>
       </div>
     </>

@@ -13,6 +13,37 @@ interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   fetchPriority?: "high" | "low" | "auto";
 }
 
+function base64UrlDecode(str: string): string {
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (base64.length % 4) {
+    base64 += '=';
+  }
+  return atob(base64);
+}
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return true;
+    const payload = JSON.parse(base64UrlDecode(parts[1]));
+    const exp = payload.exp;
+    if (typeof exp === 'number') {
+      // exp is in seconds, Date.now() is in milliseconds
+      return exp * 1000 < Date.now();
+    }
+  } catch (e) {
+    return true;
+  }
+  return true;
+}
+
+function isSupabaseUrlExpired(url: string): boolean {
+  if (!url) return false;
+  const match = url.match(/[?&]token=([^&]+)/);
+  if (!match) return false;
+  return isTokenExpired(match[1]);
+}
+
 function extractStoragePath(url: string): string | null {
   const patterns = [
     /\/object\/(?:public|sign|authenticated)\/[^/]+\/(.+?)(?:\?|$)/,
@@ -51,6 +82,13 @@ export const SafeImage = ({
     const url = signedUrl || resolvedBase;
     if (!url) return null;
 
+    // Pre-emptively block rendering if the initial URL is an expired Supabase signed URL
+    if (!signedUrl && resolvedBase && resolvedBase.includes('supabase.co/storage/') && resolvedBase.includes('token=')) {
+      if (isSupabaseUrlExpired(resolvedBase)) {
+        return null;
+      }
+    }
+
     const proxied = getProxyUrl(url);
     if (proxied !== url) return proxied;
 
@@ -63,16 +101,12 @@ export const SafeImage = ({
 
   const isWhatsAppUrl = rawSrc?.includes('whatsapp.net');
 
-  useEffect(() => {
-    setError(false);
-    setLoading(true);
-    setSignedUrl(null);
-    signedUrlRef.current = null;
-  }, [rawSrc]);
-
   const trySignedUrl = useCallback(() => {
     const path = resolvedBase ? extractStoragePath(resolvedBase) : null;
     if (!path || signedUrlRef.current) return;
+
+    // Set a temporary token placeholder to prevent duplicate signing calls in parallel renders
+    signedUrlRef.current = "signing_in_progress";
 
     supabase.storage
       .from('media')
@@ -84,18 +118,35 @@ export const SafeImage = ({
           setError(false);
           setLoading(true);
         } else {
+          signedUrlRef.current = null;
           setError(true);
           setLoading(false);
         }
       })
       .catch(() => {
+        signedUrlRef.current = null;
         setError(true);
         setLoading(false);
       });
   }, [resolvedBase]);
 
+  useEffect(() => {
+    setError(false);
+    setLoading(true);
+    setSignedUrl(null);
+    signedUrlRef.current = null;
+
+    // If the base URL is expired on mount/change, immediately start re-signing without rendering it
+    if (resolvedBase && resolvedBase.includes('supabase.co/storage/') && resolvedBase.includes('token=')) {
+      if (isSupabaseUrlExpired(resolvedBase)) {
+        trySignedUrl();
+      }
+    }
+  }, [rawSrc, resolvedBase, trySignedUrl]);
+
   const handleError = useCallback(() => {
-    if (resolvedBase?.includes('supabase.co/storage/') && !signedUrlRef.current) {
+    if (resolvedBase?.includes('supabase.co/storage/') && (!signedUrlRef.current || signedUrlRef.current === "signing_in_progress")) {
+      signedUrlRef.current = null;
       trySignedUrl();
     } else {
       setError(true);

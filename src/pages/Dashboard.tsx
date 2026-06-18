@@ -192,6 +192,15 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     if (subTab) setSettingsSubTab(subTab);
   }, [handleTabChange]);
 
+  const handleEditPost = useCallback((post: ScheduledPost) => {
+    if (post.media_type === "carousel") {
+      setSearchParams({ tab: "stories", subtab: "carrosseis", edit: post.id });
+    } else {
+      setEditingPost(post);
+      setActiveTab("create");
+    }
+  }, [setSearchParams]);
+
   const connectedPlatforms = useMemo(() => 
     socialPlatforms.filter(p => connections?.some(c => c.platform === p.id)),
     [connections]
@@ -387,7 +396,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
                  setDashboardPeriod={setAnalyticsPeriod}
                isConnected={isConnected}
                setActiveTab={handleTabChange}
-               setEditingPost={setEditingPost}
+               onEditPost={handleEditPost}
                 metricGrowth={metricGrowth}
             /></ErrorBoundary>
           </div>
@@ -425,10 +434,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
               setPreSelectedDate(date || null);
               setActiveTab("create");
             }}
-            onEditPost={(post) => {
-              setEditingPost(post);
-              setActiveTab("create");
-            }}
+            onEditPost={handleEditPost}
           /></ErrorBoundary>
           </Suspense>
         );

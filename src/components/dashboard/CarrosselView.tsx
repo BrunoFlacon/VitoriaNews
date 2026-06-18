@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Plus, Trash2, ArrowLeft, GripVertical,
@@ -131,15 +132,19 @@ function PreviewCarousel({ urls, carouselId, previewIdx, setPreviewIdx, previewT
       onClick={onOpen}
     >
       <AnimatePresence mode="wait">
-        <motion.img
+        <motion.div
           key={curIdx}
-          src={urls[curIdx]}
-          className="absolute inset-0 w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-        />
+        >
+          <SafeImage
+            src={urls[curIdx]}
+            className="w-full h-full object-cover"
+          />
+        </motion.div>
       </AnimatePresence>
 
       {/* Gradient overlay */}
@@ -198,6 +203,8 @@ export const CarrosselView = () => {
   const { isConnected: isPlatformConnected } = useSocialStats();
   const { brands, defaultBrand } = useBrands();
   const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const editIdFromUrl = searchParams.get("edit");
 
   const [carousels, setCarousels] = useState<CarouselPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,18 +263,7 @@ export const CarrosselView = () => {
           if (mediaItems) {
             const mediaMap: Record<string, string> = {};
             mediaItems.forEach((m: any) => {
-              let path = m.file_url;
-              if (path.includes('supabase.co/storage/')) {
-                const signMarker = '/object/sign/media/';
-                const publicMarker = '/object/public/media/';
-                if (path.includes(signMarker)) {
-                  path = decodeURIComponent(path.split(signMarker)[1]?.split('?')[0] ?? '');
-                } else if (path.includes(publicMarker)) {
-                  path = decodeURIComponent(path.split(publicMarker)[1]?.split('?')[0] ?? '');
-                }
-                if (path.startsWith('/')) path = path.substring(1);
-              }
-              mediaMap[m.id] = supabase.storage.from("media").getPublicUrl(path).data.publicUrl;
+              mediaMap[m.id] = m.file_url;
             });
             const urlsMap: Record<string, string[]> = {};
             posts.forEach((p: any) => {
@@ -301,6 +297,18 @@ export const CarrosselView = () => {
   };
 
   useEffect(() => { fetchCarousels(); }, [user]);
+
+  useEffect(() => {
+    if (editIdFromUrl && carousels.length > 0) {
+      const carouselToEdit = carousels.find(c => c.id === editIdFromUrl);
+      if (carouselToEdit) {
+        handleViewCarousel(carouselToEdit);
+        const newParams = new URLSearchParams(window.location.search);
+        newParams.delete("edit");
+        setSearchParams(newParams, { replace: true });
+      }
+    }
+  }, [editIdFromUrl, carousels, setSearchParams]);
 
   const getTransform = useCallback((slideId: string): SlideTransform => {
     return slideTransforms[slideId] || { scale: 1, x: 0, y: 0, objectFit: "cover" };
@@ -447,18 +455,7 @@ export const CarrosselView = () => {
   };
 
   const resolveMediaUrl = (fileUrl: string) => {
-    let path = fileUrl;
-    if (path.includes('supabase.co/storage/')) {
-      const signMarker = '/object/sign/media/';
-      const publicMarker = '/object/public/media/';
-      if (path.includes(signMarker)) {
-        path = decodeURIComponent(path.split(signMarker)[1]?.split('?')[0] ?? '');
-      } else if (path.includes(publicMarker)) {
-        path = decodeURIComponent(path.split(publicMarker)[1]?.split('?')[0] ?? '');
-      }
-      if (path.startsWith('/')) path = path.substring(1);
-    }
-    return supabase.storage.from("media").getPublicUrl(path).data.publicUrl;
+    return fileUrl;
   };
 
   const handlePublish = async (carousel: CarouselPost) => {

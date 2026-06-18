@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Radio, Video, Clock, Plus, Play, Eye, Heart, MessageCircle, Calendar, Trash2, X, Upload, 
@@ -93,7 +94,16 @@ export const StoriesLivesView = () => {
   const { isConnected: isPlatformConnected } = useSocialStats();
   const { connections } = useSocialConnections();
 
-  const [activeTab, setActiveTab] = useState("stories");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("subtab") === "carrosseis" ? "carrosseis" : "stories");
+
+  useEffect(() => {
+    const subtab = searchParams.get("subtab");
+    if (subtab) {
+      setActiveTab(subtab);
+    }
+  }, [searchParams]);
+
   const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
   
   // States for Stories & Lives
