@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { cn, getProxyUrl } from "@/lib/utils";
-import { User } from "lucide-react";
-import { useSignedMediaUrl } from "@/hooks/useSignedMediaUrl";
+import { getMediaUrl } from "@/utils/mediaUtils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   fallback?: string;
@@ -10,6 +10,19 @@ interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   isExternal?: boolean;
   fallbackLetter?: string;
   isWhatsAppImage?: boolean;
+  fetchPriority?: "high" | "low" | "auto";
+}
+
+function extractStoragePath(url: string): string | null {
+  const patterns = [
+    /\/object\/(?:public|sign|authenticated)\/[^/]+\/(.+?)(?:\?|$)/,
+    /storage\/v1\/object\/(?:public|sign|authenticated)\/[^/]+\/(.+?)(?:\?|$)/
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) return decodeURIComponent(m[1]);
+  }
+  return null;
 }
 
 export const SafeImage = ({ 
@@ -22,32 +35,73 @@ export const SafeImage = ({
   isExternal = false,
   fallbackLetter,
   isWhatsAppImage,
+  fetchPriority,
   ...props 
 }: SafeImageProps) => {
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const signedUrlRef = useRef<string | null>(null);
 
-  const signedUrl = useSignedMediaUrl(rawSrc);
+  const resolvedBase = useMemo(() => getMediaUrl(rawSrc), [rawSrc]);
 
   const resolvedSrc = useMemo(() => {
     if (!rawSrc) return null;
 
-    const proxied = getProxyUrl(rawSrc);
-    if (proxied !== rawSrc) return proxied;
+    const url = signedUrl || resolvedBase;
+    if (!url) return null;
 
-    if (rawSrc.startsWith('http') || rawSrc.startsWith('blob:') || rawSrc.startsWith('data:') || isExternal) {
-      return rawSrc;
+    const proxied = getProxyUrl(url);
+    if (proxied !== url) return proxied;
+
+    if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') || isExternal) {
+      return url;
     }
 
-    return signedUrl || rawSrc;
-  }, [rawSrc, isExternal, signedUrl]);
+    return url;
+  }, [rawSrc, resolvedBase, isExternal, signedUrl]);
 
   const isWhatsAppUrl = rawSrc?.includes('whatsapp.net');
 
+  useEffect(() => {
+    setError(false);
+    setLoading(true);
+    setSignedUrl(null);
+    signedUrlRef.current = null;
+  }, [rawSrc]);
+
+  const trySignedUrl = useCallback(() => {
+    const path = resolvedBase ? extractStoragePath(resolvedBase) : null;
+    if (!path || signedUrlRef.current) return;
+
+    supabase.storage
+      .from('media')
+      .createSignedUrl(path, 3600)
+      .then(({ data }) => {
+        if (data?.signedUrl) {
+          signedUrlRef.current = data.signedUrl;
+          setSignedUrl(data.signedUrl);
+          setError(false);
+          setLoading(true);
+        } else {
+          setError(true);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        setError(true);
+        setLoading(false);
+      });
+  }, [resolvedBase]);
+
   const handleError = useCallback(() => {
-    setError(true);
-    setLoading(false);
-  }, []);
+    if (resolvedBase?.includes('supabase.co/storage/') && !signedUrlRef.current) {
+      trySignedUrl();
+    } else {
+      setError(true);
+      setLoading(false);
+    }
+  }, [resolvedBase, trySignedUrl]);
 
   const handleLoad = useCallback(() => {
     setLoading(false);
@@ -65,7 +119,6 @@ export const SafeImage = ({
           "flex items-center justify-center bg-gradient-to-br from-muted/30 to-muted/50 rounded-full overflow-hidden",
           className
         )} 
-        {...(props as any)}
       >
         {placeholderIcon || (
           <div className="flex items-center justify-center text-muted-foreground/40">
@@ -79,7 +132,7 @@ export const SafeImage = ({
   }
 
   return (
-    <div className={cn("relative", className)}>
+    <div className={cn("relative overflow-hidden", className)}>
       {loading && (
         <div 
           className={cn(
@@ -102,7 +155,7 @@ export const SafeImage = ({
         decoding="async"
         referrerPolicy="no-referrer"
         crossOrigin="anonymous"
-        {...(isWhatsAppUrl ? { fetchpriority: "low" } : {})}
+        fetchpriority={isWhatsAppUrl ? "low" : fetchPriority}
         {...props}
       />
     </div>

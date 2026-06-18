@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, memo, useRef } from "react";
+import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, 
@@ -11,12 +11,12 @@ import {
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { SafeImage } from "@/components/ui/SafeImage";
-import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, type CarouselApi } from "@/components/ui/carousel";
 import { supabase } from "@/integrations/supabase/client";
 import "./PostPreview.css";
 import { useSocialStats } from "@/hooks/useSocialStats";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
-import { getMediaUrl, formatNum } from "@/utils/mediaUtils";
+import { formatNum, getMediaUrl } from "@/utils/mediaUtils";
 
 interface UploadedMedia {
   id: string;
@@ -40,65 +40,145 @@ interface PostPreviewProps {
   visibility?: string;
 }
 
-const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, className, isStory = false }: any) => {
+const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, controls, videoRef, playing, setPlaying }: any) {
+  const resolvedUrl = getMediaUrl(fileUrl);
+  const handleClick = useCallback(() => {
+    if (videoRef?.current) {
+      if (playing) videoRef.current.pause();
+      else videoRef.current.play();
+      setPlaying?.(!playing);
+    }
+  }, [videoRef, playing, setPlaying]);
+
+  if (!resolvedUrl) return <div className="w-full h-full bg-zinc-900 animate-pulse" />;
+
+  if (controls) {
+    return <video src={resolvedUrl} className={cn("w-full h-full object-cover", className)} controls />;
+  }
+
+  return (
+    <div className="relative w-full h-full" onClick={handleClick}>
+      <video ref={videoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} loop playsInline />
+      {!playing && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Play className="w-12 h-12 text-white fill-white" /></div>}
+    </div>
+  );
+});
+
+const ResolvedAudio = React.memo(function ResolvedAudio({ fileUrl, className, audioRef, onEnded }: any) {
+  const resolvedUrl = getMediaUrl(fileUrl);
+  if (!resolvedUrl) return <div className="w-full h-10 bg-zinc-800 animate-pulse rounded" />;
+  return <audio ref={audioRef} src={resolvedUrl} className={className} onEnded={onEnded} />;
+});
+
+const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, className: _outerClassName, isStory = false }: any) => {
   if (!media || media.length === 0) return null;
-  
+
+  const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  useEffect(() => {
+    if (!carouselApi) return;
+    const onSelect = () => setCurrentSlide(carouselApi.selectedScrollSnap());
+    carouselApi.on("select", onSelect);
+    onSelect();
+    return () => { carouselApi.off("select", onSelect); };
+  }, [carouselApi]);
+
+  const renderImage = (fileUrl: string, idx: number) => (
+    <SafeImage
+      src={fileUrl}
+      className="absolute inset-0"
+      alt=""
+      loading="eager"
+      fetchPriority={idx === 0 ? "high" : "auto"}
+    />
+  );
+
+  const renderVideo = (fileUrl: string, idx: number) => (
+    <ResolvedVideo
+      fileUrl={fileUrl}
+      className="absolute inset-0"
+      videoRef={idx === 0 ? videoRef : undefined}
+      playing={playing}
+      setPlaying={setPlaying}
+      controls={media.length > 1}
+    />
+  );
+
+  const renderAudio = (fileUrl: string) => (
+    <div className="p-8 bg-zinc-900 flex flex-col items-center gap-6 w-full h-full justify-center">
+      <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
+        <Music className={cn("w-8 h-8 text-primary", playing && "animate-pulse")} />
+      </div>
+      <ResolvedAudio fileUrl={fileUrl} className="w-full h-10 px-4" audioRef={audioRef} onEnded={() => setPlaying?.(false)} />
+    </div>
+  );
+
   if (media.length === 1) {
     const m = media[0];
-    if (m.file_type?.startsWith("image/")) {
-      return <SafeImage src={getMediaUrl(m.file_url)} className={cn("w-full h-full object-cover", className)} alt="" />;
-    }
+    if (m.file_type?.startsWith("image/")) return renderImage(m.file_url, 0);
     if (m.file_type?.startsWith("video/")) {
       return (
-        <div className="relative w-full h-full" onClick={() => { 
-          if (videoRef?.current) { 
-            if (playing) videoRef.current.pause(); 
-            else videoRef.current.play(); 
-            setPlaying(!playing); 
-          } 
-        }}>
-          <video ref={videoRef} src={getMediaUrl(m.file_url)} className={cn("w-full h-full object-cover", className)} loop playsInline />
-          {!playing && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Play className="w-12 h-12 text-white fill-white" /></div>}
-        </div>
+        <ResolvedVideo
+          fileUrl={m.file_url}
+          className="absolute inset-0"
+          videoRef={videoRef}
+          playing={playing}
+          setPlaying={setPlaying}
+        />
       );
     }
-    if (m.file_type?.startsWith("audio/")) {
-      return (
-        <div className="p-8 bg-zinc-900 flex flex-col items-center gap-6 w-full h-full justify-center">
-          <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-            <Music className={cn("w-8 h-8 text-primary", playing && "animate-pulse")} />
-          </div>
-          <audio ref={audioRef} src={getMediaUrl(m.file_url)} className="w-full h-10 px-4" onEnded={() => setPlaying?.(false)} />
-        </div>
-      );
-    }
+    if (m.file_type?.startsWith("audio/")) return renderAudio(m.file_url);
     return null;
   }
 
   return (
-    <Carousel className="w-full h-full">
+    <Carousel className="absolute inset-0" setApi={setCarouselApi} opts={{ watchDrag: true }}>
       <CarouselContent className="h-full ml-0">
         {media.map((m: any, idx: number) => (
-          <CarouselItem key={m?.id ?? `media-${idx}`} className="h-full pl-0">
-            {m.file_type?.startsWith("image/") ? (
-              <SafeImage src={getMediaUrl(m.file_url)} className={cn("w-full h-full object-cover", className)} alt="" />
-            ) : m.file_type?.startsWith("video/") ? (
-              <video src={getMediaUrl(m.file_url)} className={cn("w-full h-full object-cover", className)} controls />
-            ) : m.file_type?.startsWith("audio/") ? (
-              <div className="flex flex-col items-center justify-center h-full bg-zinc-800 gap-4 p-4">
-                <Music className="w-12 h-12 text-primary" />
-                <audio src={getMediaUrl(m.file_url)} controls className="w-full max-w-[200px]" />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full bg-zinc-800">
-                <ImageIcon className="w-12 h-12 text-zinc-600" />
-              </div>
-            )}
+          <CarouselItem key={m?.id ?? `media-${idx}`} className="h-full pl-0 relative">
+            {m.file_type?.startsWith("image/") ? renderImage(m.file_url, idx) :
+             m.file_type?.startsWith("video/") ? renderVideo(m.file_url, idx) :
+             m.file_type?.startsWith("audio/") ? renderAudio(m.file_url) :
+             <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
+               <ImageIcon className="w-12 h-12 text-zinc-600" />
+             </div>}
           </CarouselItem>
         ))}
       </CarouselContent>
-      <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 border-none text-white hover:bg-black/80 z-20" />
-      <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/50 border-none text-white hover:bg-black/80 z-20" />
+
+      {media.length > 1 && (
+        <>
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+            {media.map((_: any, idx: number) => (
+              <button
+                key={idx}
+                onClick={(e) => { e.stopPropagation(); carouselApi?.scrollTo(idx); }}
+                className={cn(
+                  "rounded-full transition-all cursor-pointer border-0",
+                  idx === currentSlide
+                    ? "bg-white w-2 h-2 scale-110"
+                    : "bg-white/40 hover:bg-white/60 w-1.5 h-1.5"
+                )}
+              />
+            ))}
+          </div>
+          {currentSlide > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); carouselApi?.scrollPrev(); }}
+              className="absolute left-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer"
+              aria-label="Previous"
+            />
+          )}
+          {currentSlide < media.length - 1 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); carouselApi?.scrollNext(); }}
+              className="absolute right-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer"
+              aria-label="Next"
+            />
+          )}
+        </>
+      )}
     </Carousel>
   );
 };
@@ -1087,7 +1167,7 @@ export const WebsiteCard = memo(function WebsiteCardRenderer({ content, media, a
 
 // --- MAIN COMPONENT ---
 
-export function PostPreview({ content, selectedPlatforms, uploadedFiles, videoTitle, thumbnailUrl, mediaType, authorName: initialAuthorName, authorAvatar: initialAuthorAvatar, platformId: initialPlatformId, realMetrics: initialRealMetrics, visibility }: PostPreviewProps) {
+export const PostPreview = memo(function PostPreview({ content, selectedPlatforms, uploadedFiles, videoTitle, thumbnailUrl, mediaType, authorName: initialAuthorName, authorAvatar: initialAuthorAvatar, platformId: initialPlatformId, realMetrics: initialRealMetrics, visibility }: PostPreviewProps) {
   const { stats: socialAccounts } = useSocialStats();
   const { connections } = useSocialConnections();
   const [previewMode, setPreviewMode] = useState<"mobile" | "desktop">("mobile");
@@ -1238,4 +1318,4 @@ export function PostPreview({ content, selectedPlatforms, uploadedFiles, videoTi
       </div>
     </div>
   );
-}
+});

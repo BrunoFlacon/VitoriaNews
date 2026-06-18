@@ -233,6 +233,12 @@ interface CreatePostPanelProps {
   rejectPost?: (postId: string, reason: string) => Promise<boolean>;
 }
 
+const ResolvedVideo = ({ fileUrl, className }: { fileUrl: string; className?: string }) => {
+  const resolvedUrl = getMediaUrl(fileUrl);
+  if (!resolvedUrl) return <div className={cn("bg-muted animate-pulse rounded-lg", className)} />;
+  return <video src={resolvedUrl} controls className={className} />;
+};
+
 export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackToCalendar, onEditPost, createPost, updatePost, submitForApproval, approvePost, rejectPost }: CreatePostPanelProps) => {
   const [content, setContent] = useState(editingPost?.content || "");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(() => {
@@ -1191,9 +1197,8 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                           className="w-full max-h-[300px] object-contain rounded-lg bg-black/5"
                         />
                       ) : file.file_type.startsWith("video/") ? (
-                        <video 
-                          src={getMediaUrl(file.file_url)} 
-                          controls
+                        <ResolvedVideo
+                          fileUrl={file.file_url}
                           className="w-full max-h-[300px] object-contain rounded-lg bg-black/5"
                         />
                       ) : (

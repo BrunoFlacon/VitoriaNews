@@ -15,6 +15,7 @@ import { FeedPreview } from "@/components/dashboard/FeedPreview";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { Heart, MessageCircle, Share2, Globe, Lock, Users as UsersIcon } from "lucide-react";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { getMediaUrl } from "@/utils/mediaUtils";
 
 const statusConfig = {
   draft: { label: "Rascunho", icon: FileText, color: "bg-muted text-muted-foreground border-border" },
@@ -45,55 +46,56 @@ function MediaPreview({ mediaIds, mediaType }: MediaPreviewProps) {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    loadMedia();
-  }, [mediaIds]);
-
-  const loadMedia = async () => {
-    if (loaded || mediaIds.length === 0) return;
-    setLoaded(true);
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase as any)
-        .from("media")
-        .select("id, file_url, file_type")
-        .in("id", mediaIds);
-      if (data) {
-        setMediaUrls(data.map((m: any) => ({ id: m.id, url: m.file_url, type: m.file_type })));
+    let active = true;
+    const loadMedia = async () => {
+      if (mediaIds.length === 0) return;
+      try {
+        const { data } = await (supabase as any)
+          .from("media")
+          .select("id, file_url, file_type")
+          .in("id", mediaIds);
+        if (data && active) {
+          setMediaUrls(data.map((m: any) => ({ id: m.id, url: m.file_url, type: m.file_type })));
+          setLoaded(true);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-  };
+    };
+
+    setLoaded(false);
+    setMediaUrls([]);
+    loadMedia();
+
+    return () => {
+      active = false;
+    };
+  }, [mediaIds]);
 
   if (mediaIds.length === 0) return null;
 
   return (
     <div className="mt-3">
       {!loaded ? (
-        <button
-          onClick={loadMedia}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {mediaType === "video" ? <Play className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
-          {mediaIds.length} mídia{mediaIds.length > 1 ? "s" : ""} anexada{mediaIds.length > 1 ? "s" : ""}
-        </button>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {mediaType === "video" ? <Play className="w-3.5 h-3.5 animate-pulse" /> : <ImageIcon className="w-3.5 h-3.5 animate-pulse" />}
+          Carregando mídias...
+        </div>
       ) : (
         <div className="grid grid-cols-3 gap-1.5">
           {mediaUrls.slice(0, expanded ? undefined : 3).map((m) =>
             m.type.startsWith("image/") ? (
               <div key={m.id} className="w-full aspect-square rounded-lg overflow-hidden bg-muted">
-                <img
+                <SafeImage
                   src={m.url}
                   alt="mídia"
                   className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
               </div>
             ) : m.type.startsWith("video/") || m.type.startsWith("audio/") ? (
               <video
                 key={m.id}
-                src={m.url}
+                src={getMediaUrl(m.url)}
                 className="w-full aspect-square object-cover rounded-lg bg-black"
                 controls
               />
