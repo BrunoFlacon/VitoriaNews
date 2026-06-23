@@ -3,7 +3,7 @@ import { cn, getProxyUrl } from "@/lib/utils";
 import { getMediaUrl } from "@/utils/mediaUtils";
 import { supabase } from "@/integrations/supabase/client";
 
-interface SafeImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
+interface SafeImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'fetchPriority'> {
   fallback?: string;
   onLoadSuccess?: () => void;
   placeholderIcon?: React.ReactNode;
@@ -66,11 +66,12 @@ export const SafeImage = ({
   isExternal = false,
   fallbackLetter,
   isWhatsAppImage,
-  fetchPriority,
+  fetchPriority: _fetchPriority,
+  loading: imgLoading = "lazy",
   ...props 
 }: SafeImageProps) => {
   const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const signedUrlRef = useRef<string | null>(null);
 
@@ -100,6 +101,7 @@ export const SafeImage = ({
   }, [rawSrc, resolvedBase, isExternal, signedUrl]);
 
   const isWhatsAppUrl = rawSrc?.includes('whatsapp.net');
+  const fetchpriority = isWhatsAppUrl ? "low" : (_fetchPriority || "auto");
 
   const trySignedUrl = useCallback(() => {
     const path = resolvedBase ? extractStoragePath(resolvedBase) : null;
@@ -116,23 +118,23 @@ export const SafeImage = ({
           signedUrlRef.current = data.signedUrl;
           setSignedUrl(data.signedUrl);
           setError(false);
-          setLoading(true);
+          setIsLoading(true);
         } else {
           signedUrlRef.current = null;
           setError(true);
-          setLoading(false);
+          setIsLoading(false);
         }
       })
       .catch(() => {
         signedUrlRef.current = null;
         setError(true);
-        setLoading(false);
+        setIsLoading(false);
       });
   }, [resolvedBase]);
 
   useEffect(() => {
     setError(false);
-    setLoading(true);
+    setIsLoading(true);
     setSignedUrl(null);
     signedUrlRef.current = null;
 
@@ -150,12 +152,12 @@ export const SafeImage = ({
       trySignedUrl();
     } else {
       setError(true);
-      setLoading(false);
+      setIsLoading(false);
     }
   }, [resolvedBase, trySignedUrl]);
 
   const handleLoad = useCallback(() => {
-    setLoading(false);
+    setIsLoading(false);
     onLoadSuccess?.();
   }, [onLoadSuccess]);
 
@@ -182,31 +184,33 @@ export const SafeImage = ({
     );
   }
 
+  const imgClasses = useMemo(() => {
+    if (!className) return "object-cover";
+    const fits = className.split(' ').filter(c => c.startsWith('object-'));
+    return fits.length > 0 ? fits.join(' ') : "object-cover";
+  }, [className]);
+
   return (
-    <div className={cn("relative overflow-hidden", className)}>
-      {loading && (
-        <div 
-          className={cn(
-            "absolute inset-0 bg-muted animate-pulse rounded-lg",
-            className
-          )}
-        />
+    <div className={cn("relative overflow-hidden", className)} style={{ contain: 'paint' }}>
+      {isLoading && (
+        <div className="absolute inset-0 bg-muted animate-pulse" />
       )}
       
       <img
         src={resolvedSrc}
         alt={alt}
         className={cn(
-          className,
-          loading ? "opacity-0" : "opacity-100 transition-opacity duration-300"
+          "w-full h-full",
+          imgClasses,
+          isLoading ? "opacity-0" : "opacity-100 transition-opacity duration-200"
         )}
         onError={handleError}
         onLoad={handleLoad}
-        loading="lazy"
         decoding="async"
         referrerPolicy="no-referrer"
         crossOrigin="anonymous"
-        fetchpriority={isWhatsAppUrl ? "low" : fetchPriority}
+        fetchpriority={fetchpriority}
+        loading={imgLoading}
         {...props}
       />
     </div>
