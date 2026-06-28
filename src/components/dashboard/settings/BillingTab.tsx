@@ -185,7 +185,7 @@ const GatewaySection = () => {
   const SecretField = ({ label, fieldKey, placeholder }: { label: string; fieldKey: keyof GatewaySettings; placeholder?: string }) => (
     <div className="space-y-1.5">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <form role="presentation" autoComplete="off" onSubmit={e => e.preventDefault()}>
+      <div>
         <input 
           type="text" 
           name="username" 
@@ -213,7 +213,7 @@ const GatewaySection = () => {
             {showSecrets[fieldKey] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 

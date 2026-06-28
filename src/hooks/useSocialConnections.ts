@@ -281,7 +281,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const e = sharedChannels.get(channelName);
       if (e) setRealtimeError(e.errorCount > 2);
     };
-    const checkInterval = setInterval(checkHandler, 15000);
+    const checkInterval = setInterval(checkHandler, 60000);
 
     return () => {
       clearInterval(checkInterval);

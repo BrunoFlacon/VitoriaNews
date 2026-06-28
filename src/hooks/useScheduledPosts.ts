@@ -200,8 +200,8 @@ export function useScheduledPosts() {
     queryKey,
     queryFn: fetchPosts,
     enabled: !!user,
-    staleTime: 5000, // 5 seconds
-    refetchInterval: 10000, // 10 seconds auto-refresh
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const createPost = async (input: CreatePostInput): Promise<ScheduledPost | null> => {

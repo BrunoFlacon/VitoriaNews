@@ -129,7 +129,16 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [applyThemeStyles, loadFromCache]);
 
-  useEffect(() => { loadFromCache(); fetchSettings(); }, [fetchSettings, loadFromCache]);
+  useEffect(() => {
+    loadFromCache();
+    const id = typeof requestIdleCallback === 'function'
+      ? requestIdleCallback(() => fetchSettings(), { timeout: 3000 })
+      : setTimeout(fetchSettings, 1000);
+    return () => {
+      if (typeof id === 'number') clearTimeout(id);
+      else if (id) cancelIdleCallback(id);
+    };
+  }, [fetchSettings, loadFromCache]);
 
   const refreshSettings = async () => {
     await fetchSettings();

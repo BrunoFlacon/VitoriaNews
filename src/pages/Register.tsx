@@ -110,7 +110,8 @@ const Register = () => {
               Comece a gerenciar suas redes sociais
             </p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
+              <input type="text" name="username" autoComplete="username" className="hidden" aria-hidden="true" />
               <div className="space-y-2">
                 <label htmlFor="register-name" className="text-sm font-medium">Nome completo</label>
                 <div className="relative">

@@ -66,13 +66,16 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
   const [isPlatformMenuOpen, setIsPlatformMenuOpen] = useState(false);
   const [isMobilePlatformMenuOpen, setIsMobilePlatformMenuOpen] = useState(false);
+  // Cache for heavy chart computations
+  const snapshotsCache = useRef<{ key: string; data: any }>({ key: '', data: null });
+  const chartCache = useRef<{ key: string; data: any }>({ key: '', data: null });
   // TAB INTELLIGENCE: Only fetch data for active tabs
   const isDashboardTab = activeTab === 'dashboard';
   const isAnalyticsTab = activeTab === 'analytics' || isDashboardTab;
   const isCalendarTab = activeTab === 'calendar' || activeTab === 'create' || isDashboardTab;
   
   const { stats: localStats, socialStats: localSocialStats, messagingStats: localMessagingStats, messagingChannels, audienceBreakdown, totalSocialFollowers, totalMessagingMembers, loading: statsLoading } = useSocialStats({ enabled: isDashboardTab });
-  const { data: analyticsData, loading: analyticsLoading, isSyncingAll: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform, period: analyticsPeriod, setPeriod: setAnalyticsPeriod } = useAnalytics({ enabled: isAnalyticsTab });
+  const { data: analyticsData, loading: analyticsLoading, isSyncingAll: analyticsSyncing, syncAnalytics, platform: analyticsPlatform, setPlatform: setAnalyticsPlatform, period: analyticsPeriod, setPeriod: setAnalyticsPeriod } = useAnalytics({ enabled: isAnalyticsTab && statsLoading === false });
 
   // Query account_metrics for real time-series chart data when Edge Function has none
   const { data: accountMetricsData, isLoading: metricsLoading } = useQuery({
@@ -230,7 +233,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     [localMessagingStats, totalMessagingMembers]
   );
 
-  // Per-metric growth: compare recent half vs older half of account_metrics
+  // Per-metric growth with cache
   const metricGrowth = useMemo(() => {
     const metrics = (accountMetricsData ?? []) as any[];
     if (metrics.length < 3) return null;
@@ -263,10 +266,13 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     };
   }, [accountMetricsData]);
 
-  // Pre-process raw metrics into daily snapshots per account (recomputes only when metrics change)
+  // Pre-process raw metrics into daily snapshots per account with ref cache
   const accountDailySnapshots = useMemo(() => {
     const metrics = (accountMetricsData ?? []) as any[];
     if (metrics.length === 0) return null;
+
+    const cacheKey = `${(accountMetricsData ?? []).length}-${platformState}`;
+    if (snapshotsCache.current.key === cacheKey) return snapshotsCache.current.data;
 
     const filtered = platformState !== 'all'
       ? metrics.filter((m: any) => normalizePlatform(m.platform) === platformState)
@@ -274,7 +280,6 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
 
     if (filtered.length === 0) return null;
 
-    // Single-pass: group by (account + date), keep latest snapshot per day per account
     const grouped = new Map<string, any>();
     for (let i = 0; i < filtered.length; i++) {
       const m = filtered[i];
@@ -301,7 +306,6 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
       }
     }
 
-    // Group snapshots by account, sorted by time
     const accountGroups = new Map<string, any[]>();
     for (const snap of grouped.values()) {
       const key = snap.accountKey;
@@ -312,21 +316,28 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
       snaps.sort((a: any, b: any) => new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime());
     }
 
+    snapshotsCache.current = { key: cacheKey, data: accountGroups };
     return accountGroups;
   }, [accountMetricsData, platformState]);
 
   // Build final chart array from pre-computed snapshots for the selected period
   const dashboardChartData = useMemo(() => {
-    // Priority 1: Edge Function chart data
     const rawChartData = analyticsData?.chartData || [];
-    if (rawChartData.length > 0) return rawChartData;
+    // Only use API chart data if it has at least one point with real (non-zero) values.
+    // This prevents the chart from flashing empty/zeroed data after the Edge Function
+    // resolves and overwrites the good local account_metrics data.
+    const apiHasRealData = rawChartData.some(
+      (d: any) => (d.views ?? 0) > 0 || (d.engagement ?? 0) > 0 || (d.reach ?? 0) > 0
+    );
+    if (apiHasRealData) return rawChartData;
 
-    // Priority 2: Build from account_metrics snapshots
     if (!accountDailySnapshots) return [];
+
+    const cacheKey = `${(accountDailySnapshots?.size ?? 0)}-${analyticsPeriod}`;
+    if (chartCache.current.key === cacheKey) return chartCache.current.data;
 
     const periodDays = analyticsPeriod === '15d' ? 15 : analyticsPeriod === '30d' ? 30 : analyticsPeriod === '45d' ? 45 : analyticsPeriod === '60d' ? 60 : analyticsPeriod === '90d' ? 90 : 7;
 
-    // Compute day-over-day deltas across all accounts for the period
     const dateDeltas = new Map<string, { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number }>();
     for (const snaps of accountDailySnapshots.values()) {
       for (let idx = 0; idx < snaps.length; idx++) {
@@ -364,10 +375,12 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         reach: delta?.reach ?? 0,
       };
     }
+    chartCache.current = { key: cacheKey, data: result };
     return result;
   }, [analyticsData, accountDailySnapshots, analyticsPeriod]);
 
-  const chartLoading = (analyticsLoading || metricsLoading) && !dashboardChartData.length;
+  // Show loading spinner only when we have no data at all (neither from API nor local metrics)
+  const chartLoading = (analyticsLoading || metricsLoading) && dashboardChartData.length === 0;
 
   const renderContent = () => {
     switch (activeTab) {

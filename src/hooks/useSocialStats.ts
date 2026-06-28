@@ -92,10 +92,11 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['social_stats_all', user?.id],
-    staleTime: 0,
+    staleTime: 30 * 1000,
+    gcTime: 10 * 60 * 1000,
     initialData: loadCache,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       if (!user) return null;
       
@@ -495,7 +496,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       const e = sharedChannels.get(channelName);
       if (e) setRealtimeError(e.errorCount > 2);
     };
-    const checkInterval = setInterval(checkHandler, 15000);
+    const checkInterval = setInterval(checkHandler, 60000);
 
     return () => {
       clearInterval(checkInterval);

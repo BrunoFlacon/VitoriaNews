@@ -66,9 +66,15 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
     }
   }, [user]);
 
-  // Initial fetch
+  // Initial fetch - deferred to not block paint
   useEffect(() => {
-    fetchNotifications();
+    const id = typeof requestIdleCallback === 'function'
+      ? requestIdleCallback(() => fetchNotifications(), { timeout: 2000 })
+      : setTimeout(fetchNotifications, 800);
+    return () => {
+      if (typeof id === 'number') clearTimeout(id);
+      else if (id) cancelIdleCallback(id);
+    };
   }, [fetchNotifications]);
 
   // Realtime subscription com debounce para evitar cascata de fetch

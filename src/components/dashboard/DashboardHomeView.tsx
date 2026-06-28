@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, lazy, Suspense } from "react";
+import { memo, useMemo, lazy, Suspense } from "react";
 import { 
   Eye, 
   Heart, 
@@ -106,7 +106,7 @@ export const DashboardHomeView = memo(({
   );
 
   // All trends computed from localStats — appear instantly, no API dependency
-  const computeEngagementRate = useCallback(() => {
+  const engagementRate = useMemo(() => {
     if (!localStats || localStats.length === 0) return 0;
     const fs = platform === 'all' ? localStats : localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform));
     if (fs.length === 0) return 0;
@@ -115,11 +115,11 @@ export const DashboardHomeView = memo(({
     return views > 0 ? Number(((eng / views) * 100).toFixed(2)) : 0;
   }, [localStats, platform]);
 
-  const computeEngagementPerPost = useCallback(() => {
+  const engagementPerPost = useMemo(() => {
     return platformTotalPosts > 0 && platformEngagement > 0 ? Number((platformEngagement / platformTotalPosts).toFixed(1)) : 0;
   }, [platformTotalPosts, platformEngagement]);
 
-  const computeViewsPerFollower = useCallback(() => {
+  const viewsPerFollower = useMemo(() => {
     return platformFollowers > 0 && platformViews > 0 ? Number((platformViews / platformFollowers).toFixed(1)) : 0;
   }, [platformViews, platformFollowers]);
 
@@ -258,7 +258,7 @@ export const DashboardHomeView = memo(({
               title="Total de Posts" 
               value={platformTotalPosts.toLocaleString('pt-BR')} 
               icon={TrendingUp} 
-              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : computeEngagementPerPost()} 
+              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : engagementPerPost} 
               trendLabel={metricGrowth?.engagement ? "cresc." : "por post"} 
               trendType="growth"
               color="primary" 
@@ -268,7 +268,7 @@ export const DashboardHomeView = memo(({
               title="Visualizações" 
               value={platformViews.toLocaleString('pt-BR')} 
               icon={Eye} 
-              trend={metricGrowth?.views ? Number(metricGrowth.views) : computeViewsPerFollower()} 
+              trend={metricGrowth?.views ? Number(metricGrowth.views) : viewsPerFollower} 
               trendLabel={metricGrowth?.views ? "cresc." : "por seguidor"} 
               trendType="growth"
               color="accent" 
@@ -278,7 +278,7 @@ export const DashboardHomeView = memo(({
               title="Engajamento" 
               value={platformEngagement.toLocaleString('pt-BR')} 
               icon={Heart} 
-              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : computeEngagementRate()} 
+              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : engagementRate} 
               trendLabel={metricGrowth?.engagement ? "cresc." : "taxa"} 
               trendType="growth"
               color="success" 

@@ -72,7 +72,7 @@ export const SafeImage = memo(({
   isWhatsAppImage,
   fetchPriority: _fetchPriority,
   loading: imgLoading = "lazy",
-  aspectRatio,
+  aspectRatio = "1",
   containerHeight,
   ...props 
 }: SafeImageProps) => {

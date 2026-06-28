@@ -290,7 +290,8 @@ const Login = () => {
               )}
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="on">
+              <input type="text" name="username" value={email} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
               <div className="space-y-2">
                 <label htmlFor="login-email" className="text-sm font-medium">Email</label>
                 <div className="relative">

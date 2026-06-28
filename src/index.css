@@ -51,6 +51,13 @@
     @apply border-border;
   }
 
+  /* Prevent CLS: images default to block display with auto height */
+  img, video, canvas, svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary/20;
     font-family: 'Inter', sans-serif;

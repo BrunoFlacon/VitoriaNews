@@ -17,84 +17,73 @@ export const ThemeEngine = () => {
   useEffect(() => {
     if (!themeToInject) return;
     
-    // Build root CSS variables
-    let cssString = ':root {\n';
+    const root = document.documentElement;
     
     // Inject Colors
     Object.entries(themeToInject.colors).forEach(([key, val]) => {
       let finalVal = val;
-      
-      // Fallback logic for secondary/accent if features are disabled
       if (key === 'secondary' && !themeToInject.features?.secondary_color) {
         finalVal = themeToInject.colors.primary;
       }
       if (key === 'accent' && !themeToInject.features?.accent_color) {
         finalVal = themeToInject.colors.primary;
       }
-
-      if (finalVal) cssString += `  --${cssVarSafeName(key)}-color: ${finalVal};\n`;
+      if (finalVal) root.style.setProperty(`--${cssVarSafeName(key)}-color`, finalVal);
     });
     
     // Inject Typography
     Object.entries(themeToInject.typography).forEach(([key, val]) => {
       if (val) {
         if (key === 'font_family') {
-          cssString += `  --font-family-base: ${val};\n`;
+          root.style.setProperty('--font-family-base', val);
         } else if (key.match(/^h[1-6]$/)) {
-          cssString += `  --font-size-${key}: ${val};\n`;
+          root.style.setProperty(`--font-size-${key}`, val);
         } else {
-          cssString += `  --font-${cssVarSafeName(key)}: ${val};\n`;
+          root.style.setProperty(`--font-${cssVarSafeName(key)}`, val);
         }
       }
     });
     
     // Inject Buttons
     Object.entries(themeToInject.buttons).forEach(([key, val]) => {
-      if (val) cssString += `  --btn-${cssVarSafeName(key)}: ${val};\n`;
+      if (val) root.style.setProperty(`--btn-${cssVarSafeName(key)}`, val);
     });
     
     // Inject Shadows
     if (themeToInject.features?.shadows !== false) {
       Object.entries(themeToInject.shadows).forEach(([key, val]) => {
-        if (val) cssString += `  --shadow-${cssVarSafeName(key)}: ${val};\n`;
+        if (val) root.style.setProperty(`--shadow-${cssVarSafeName(key)}`, val);
       });
     } else {
-      cssString += `  --shadow-depth: 0px;\n`;
-      cssString += `  --shadow-blur: 0px;\n`;
+      root.style.setProperty('--shadow-depth', '0px');
+      root.style.setProperty('--shadow-blur', '0px');
     }
 
     // Inject Effects
     if (themeToInject.features?.glass_effect !== false) {
       Object.entries(themeToInject.effects).forEach(([key, val]) => {
-        if (val) cssString += `  --effect-${cssVarSafeName(key)}: ${val};\n`;
+        if (val) root.style.setProperty(`--effect-${cssVarSafeName(key)}`, val);
       });
     } else {
-      cssString += `  --effect-glass-blur-px: 0px;\n`;
-      cssString += `  --effect-glass-opacity: 1;\n`;
+      root.style.setProperty('--effect-glass-blur-px', '0px');
+      root.style.setProperty('--effect-glass-opacity', '1');
     }
 
     // Inject Layout
     Object.entries(themeToInject.layout).forEach(([key, val]) => {
-      if (val) cssString += `  --layout-${cssVarSafeName(key)}: ${val};\n`;
+      if (val) root.style.setProperty(`--layout-${cssVarSafeName(key)}`, val);
     });
-
-    cssString += '}\n';
-
-    // Inject Dynamic Styles into DOM
-    let styleEl = document.getElementById('dynamic-theme-vars');
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = 'dynamic-theme-vars';
-      document.head.appendChild(styleEl);
-    }
-    
-    styleEl.innerHTML = cssString;
-
   }, [themeToInject]);
 
-  // Load themes on mount
+  // Load themes on mount, deferred to avoid blocking paint
   useEffect(() => {
-    useThemeStore.getState().fetchThemes();
+    const id = typeof requestIdleCallback === 'function'
+      ? requestIdleCallback(() => useThemeStore.getState().fetchThemes(), { timeout: 3000 })
+      : setTimeout(() => useThemeStore.getState().fetchThemes(), 1500);
+    return () => {
+      if (typeof id === 'number') clearTimeout(id);
+      else if (id) cancelIdleCallback(id);
+    };
   }, []);
 
   return null; // Silent component
