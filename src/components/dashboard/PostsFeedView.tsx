@@ -1,9 +1,9 @@
-import { useState, useEffect, startTransition } from "react";
+import { memo, useState, useEffect, startTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Image as ImageIcon, Video, FileText, Eye, Trash2, Edit2, 
   Clock, CheckCircle2, AlertCircle, XCircle, Send, Filter,
-  RefreshCw, Play, ChevronDown, ChevronUp, Calendar
+  RefreshCw, Play, ChevronDown, ChevronUp, Calendar, BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +40,7 @@ interface MediaPreviewProps {
   mediaType: string;
 }
 
-function MediaPreview({ mediaIds, mediaType }: MediaPreviewProps) {
+const MediaPreview = memo(({ mediaIds, mediaType }: MediaPreviewProps) => {
   const [mediaUrls, setMediaUrls] = useState<{ id: string; url: string; type: string }[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -113,7 +113,7 @@ function MediaPreview({ mediaIds, mediaType }: MediaPreviewProps) {
       )}
     </div>
   );
-}
+});
 
 interface PostCardProps {
   post: ScheduledPost;
@@ -122,7 +122,7 @@ interface PostCardProps {
   onClick: (post: ScheduledPost) => void;
 }
 
-function PostCard({ post, onEdit, onDelete, onClick }: PostCardProps) {
+const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
   const { connections } = useSocialConnections();
   const status = statusConfig[post.status] || statusConfig.draft;
   const StatusIcon = status.icon;
@@ -231,22 +231,53 @@ function PostCard({ post, onEdit, onDelete, onClick }: PostCardProps) {
         {/* Real Metrics Footer */}
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/50">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+            <div className="flex items-center gap-1.5 text-muted-foreground transition-colors">
               <Heart className="w-4 h-4" />
-              <span className="text-xs font-bold">{metrics.likes.toLocaleString()}</span>
+              {post.status === 'published' && (
+                <span className="text-xs font-bold">{metrics.likes.toLocaleString('pt-BR')}</span>
+              )}
             </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+            <div className="flex items-center gap-1.5 text-muted-foreground transition-colors">
               <MessageCircle className="w-4 h-4" />
-              <span className="text-xs font-bold">{metrics.comments.toLocaleString()}</span>
+              {post.status === 'published' && (
+                <span className="text-xs font-bold">{metrics.comments.toLocaleString('pt-BR')}</span>
+              )}
             </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+            <div className="flex items-center gap-1.5 text-muted-foreground transition-colors">
               <Share2 className="w-4 h-4" />
-              <span className="text-xs font-bold">{metrics.shares.toLocaleString()}</span>
+              {post.status === 'published' && (
+                <span className="text-xs font-bold">{metrics.shares.toLocaleString('pt-BR')}</span>
+              )}
             </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
+            <button 
+              type="button"
+              onClick={(e) => {
+                if (post.status === 'published') {
+                  e.stopPropagation();
+                  onClick(post);
+                }
+              }}
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors cursor-pointer bg-transparent border-0 p-0"
+            >
               <Eye className="w-4 h-4" />
-              <span className="text-xs font-bold">{metrics.views.toLocaleString()}</span>
-            </div>
+              {post.status === 'published' && (
+                <span className="text-xs font-bold">{metrics.views.toLocaleString('pt-BR')}</span>
+              )}
+            </button>
+            {post.status === 'published' && (
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClick(post);
+                }}
+                className="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-full transition-all border-0 cursor-pointer"
+                title="Métricas detalhadas e gráficos"
+              >
+                <BarChart3 className="w-3 h-3" />
+                <span>Métricas</span>
+              </button>
+            )}
           </div>
 
           {/* Other platforms icons */}
@@ -268,7 +299,7 @@ function PostCard({ post, onEdit, onDelete, onClick }: PostCardProps) {
       </div>
     </motion.div>
   );
-}
+});
 
 interface PostsFeedViewProps {
   onEditPost?: (post: ScheduledPost) => void;
@@ -282,7 +313,7 @@ const FILTERS = [
   { id: "pending_approval", label: "Revisão" },
 ] as const;
 
-export function PostsFeedView({ onEditPost }: PostsFeedViewProps) {
+export const PostsFeedView = memo(({ onEditPost }: PostsFeedViewProps) => {
   const { posts, loading, deletePost, refetch } = useScheduledPosts();
   const [filter, setFilter] = useState<string>("all");
   const [previewPost, setPreviewPost] = useState<ScheduledPost | null>(null);
@@ -370,4 +401,4 @@ export function PostsFeedView({ onEditPost }: PostsFeedViewProps) {
       )}
     </div>
   );
-}
+});

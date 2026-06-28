@@ -5,6 +5,21 @@ import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+export interface PlatformMetricDetail {
+  platform: string;
+  social_account_id?: string | null;
+  likes: number;
+  comments: number;
+  shares: number;
+  views: number;
+  reach: number;
+  impressions: number;
+  ad_revenue: number;
+  earnings: number;
+  performance_score: number;
+  breakdown?: Record<string, any> | null;
+}
+
 export interface ScheduledPost {
   id: string;
   user_id: string;
@@ -28,6 +43,7 @@ export interface ScheduledPost {
     views: number;
     reach: number;
   } | null;
+  platform_metrics?: PlatformMetricDetail[] | null;
 }
 
 export interface CreatePostInput {
@@ -61,22 +77,76 @@ export function useScheduledPosts() {
 
     if (postsError) throw postsError;
     
-    // Fetch latest metrics for these posts
+    // Fetch metrics for these posts
     const postIds = (postsData || []).map(p => p.id);
-    let metricsMap: Record<string, any> = {};
+    const summedMetricsMap: Record<string, { likes: number; comments: number; shares: number; views: number; reach: number }> = {};
+    const platformMetricsMap: Record<string, Record<string, PlatformMetricDetail>> = {};
     
     if (postIds.length > 0) {
+      // Fetch post_metrics
       const { data: metricsData, error: metricsError } = await supabase
         .from('post_metrics')
         .select('*')
         .in('post_id', postIds)
-        .order('collected_at', { ascending: false })
-        .limit(200); // Sanity limit for metrics
-        
+        .order('collected_at', { ascending: false });
+
+      // Fetch post_metrics_details
+      const { data: detailsData } = await supabase
+        .from('post_metrics_details')
+        .select('*')
+        .in('post_id', postIds)
+        .order('collected_at', { ascending: false });
+
+      // Map details breakdown by post_id and platform
+      const detailsMap: Record<string, Record<string, any>> = {};
+      if (detailsData) {
+        detailsData.forEach(d => {
+          if (d.post_id && d.platform) {
+            const key = `${d.post_id}|${d.platform}`;
+            if (!detailsMap[key]) {
+              detailsMap[key] = (d.breakdown as Record<string, any>) || {};
+            }
+          }
+        });
+      }
+
       if (!metricsError && metricsData) {
         metricsData.forEach(m => {
-          if (m.post_id && !metricsMap[m.post_id]) {
-            metricsMap[m.post_id] = m;
+          if (m.post_id) {
+            const platformKey = `${m.platform}|${m.social_account_id || ''}`;
+            if (!platformMetricsMap[m.post_id]) {
+              platformMetricsMap[m.post_id] = {};
+            }
+            // First encountered is the latest collected snapshot (due to order collected_at DESC)
+            if (!platformMetricsMap[m.post_id][platformKey]) {
+              const detailKey = `${m.post_id}|${m.platform}`;
+              const breakdown = detailsMap[detailKey] || null;
+
+              platformMetricsMap[m.post_id][platformKey] = {
+                platform: m.platform,
+                social_account_id: m.social_account_id,
+                likes: m.likes || 0,
+                comments: m.comments || 0,
+                shares: m.shares || 0,
+                views: m.views || m.impressions || 0,
+                reach: m.reach || 0,
+                impressions: m.impressions || 0,
+                ad_revenue: m.ad_revenue || 0,
+                earnings: m.earnings || 0,
+                performance_score: m.performance_score || 0,
+                breakdown: breakdown
+              };
+
+              // Add to sum
+              if (!summedMetricsMap[m.post_id]) {
+                summedMetricsMap[m.post_id] = { likes: 0, comments: 0, shares: 0, views: 0, reach: 0 };
+              }
+              summedMetricsMap[m.post_id].likes += m.likes || 0;
+              summedMetricsMap[m.post_id].comments += m.comments || 0;
+              summedMetricsMap[m.post_id].shares += m.shares || 0;
+              summedMetricsMap[m.post_id].views += m.views || m.impressions || 0;
+              summedMetricsMap[m.post_id].reach += m.reach || 0;
+            }
           }
         });
       }
@@ -112,18 +182,16 @@ export function useScheduledPosts() {
     }
 
     return (postsData || []).map((post: any) => {
-      const metrics = metricsMap[post.id];
+      const metrics = summedMetricsMap[post.id] || null;
+      const platformMetrics = platformMetricsMap[post.id]
+        ? Object.values(platformMetricsMap[post.id])
+        : [];
       return {
         ...post,
         status: post.status as ScheduledPost['status'],
         media_urls: (post.media_ids || []).map(id => mediaUrlMap[id] ?? null),
-        metrics: metrics ? {
-          likes: metrics.likes || 0,
-          comments: metrics.comments || 0,
-          shares: metrics.shares || 0,
-          views: metrics.views || metrics.impressions || 0,
-          reach: metrics.reach || 0
-        } : null
+        metrics: metrics,
+        platform_metrics: platformMetrics
       };
     });
   };
@@ -132,8 +200,8 @@ export function useScheduledPosts() {
     queryKey,
     queryFn: fetchPosts,
     enabled: !!user,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 15 * 60 * 1000,
+    staleTime: 5000, // 5 seconds
+    refetchInterval: 10000, // 10 seconds auto-refresh
   });
 
   const createPost = async (input: CreatePostInput): Promise<ScheduledPost | null> => {

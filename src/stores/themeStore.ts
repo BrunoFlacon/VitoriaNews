@@ -145,7 +145,23 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
 
   fetchThemes: async (target) => {
     const finalTarget = target || get().currentTarget;
+    const CACHE_KEY = `sc_themes_${finalTarget}`;
     set({ isLoading: true });
+
+    const loadFromCache = () => {
+      try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const active = parsed.active as AdvancedTheme | undefined;
+          if (active) {
+            set({ activeTheme: active, draftTheme: parsed.draft || { ...active, name: 'Rascunho atual', is_draft: true, is_active: false, id: undefined, target: finalTarget }, isLoading: false });
+            return true;
+          }
+        }
+      } catch {}
+      return false;
+    };
     
     try {
       const { data, error } = await supabase
@@ -158,11 +174,13 @@ export const useThemeStore = create<ThemeStore>((set, get) => ({
       const draftItem = data?.find((t: AdvancedTheme) => t.is_draft);
       const draft = draftItem || { ...active, name: 'Rascunho atual', is_draft: true, is_active: false, id: undefined, target: finalTarget };
       
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ active, draft }));
       set({ activeTheme: active, draftTheme: draft, isLoading: false });
     } catch (err) {
-      console.warn("Theme API error - returning defaults:", err);
-      const active = createDefaultPreset(finalTarget);
-      set({ activeTheme: active, draftTheme: { ...active, name: 'Rascunho atual', is_draft: true, is_active: false }, isLoading: false });
+      if (!loadFromCache()) {
+        const active = createDefaultPreset(finalTarget);
+        set({ activeTheme: active, draftTheme: { ...active, name: 'Rascunho atual', is_draft: true, is_active: false }, isLoading: false });
+      }
     }
   },
 

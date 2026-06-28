@@ -180,7 +180,7 @@ export const AudienceTracking = ({
                   <div>
                     <p className="text-[10px] text-muted-foreground mb-1">Membros</p>
                     <p className="text-xl font-bold text-white">
-                      {ch.members_count?.toLocaleString() || 0}
+                      {ch.members_count?.toLocaleString('pt-BR') || 0}
                     </p>
                   </div>
                   <div>
@@ -189,7 +189,7 @@ export const AudienceTracking = ({
                       "text-xl font-bold",
                       ch.online_count > 0 ? "text-green-400" : "text-muted-foreground/50"
                     )}>
-                      {ch.online_count > 0 ? ch.online_count.toLocaleString() : '0'}
+                      {ch.online_count > 0 ? ch.online_count.toLocaleString('pt-BR') : '0'}
                     </p>
                   </div>
                 </div>

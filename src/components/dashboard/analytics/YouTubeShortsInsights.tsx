@@ -46,7 +46,7 @@ export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate,
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <p className="text-[9px] uppercase font-bold tracking-wider opacity-80 text-white">Impressões</p>
-              <p className="text-lg font-bold text-white">{funnel.impressions.toLocaleString()}</p>
+              <p className="text-lg font-bold text-white">{funnel.impressions.toLocaleString('pt-BR')}</p>
             </div>
           </div>
           {hasFunnelData && (
@@ -62,7 +62,7 @@ export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate,
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <p className="text-[9px] uppercase font-bold tracking-wider opacity-80 text-white">Visualizações</p>
-              <p className="text-base font-bold text-white">{funnel.views.toLocaleString()}</p>
+              <p className="text-base font-bold text-white">{funnel.views.toLocaleString('pt-BR')}</p>
             </div>
           </div>
           {hasFunnelData && (
@@ -161,7 +161,7 @@ export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate,
           <p className="text-[10px] text-muted-foreground mb-2">Últimos 28 dias</p>
           <div className="flex justify-between items-end border-b border-border/50 pb-2">
             <span className="text-xs text-muted-foreground">Shorts</span>
-            <span className="text-2xl font-bold text-white">{hasSpectatorsData ? spec.newViewers.toLocaleString() : "—"}</span>
+            <span className="text-2xl font-bold text-white">{hasSpectatorsData ? spec.newViewers.toLocaleString('pt-BR') : "—"}</span>
           </div>
         </Card>
 
@@ -175,7 +175,7 @@ export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate,
           <p className="text-[10px] text-muted-foreground mb-2">Últimos 28 dias</p>
           <div className="flex justify-between items-end border-b border-border/50 pb-2">
             <span className="text-xs text-muted-foreground">Shorts</span>
-            <span className="text-2xl font-bold text-white">{hasSpectatorsData ? spec.returningViewers.toLocaleString() : "—"}</span>
+            <span className="text-2xl font-bold text-white">{hasSpectatorsData ? spec.returningViewers.toLocaleString('pt-BR') : "—"}</span>
           </div>
         </Card>
 
@@ -189,7 +189,7 @@ export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate,
           <p className="text-[10px] text-muted-foreground mb-2">Últimos 28 dias</p>
           <div className="flex justify-between items-end border-b border-border/50 pb-2">
             <span className="text-xs text-muted-foreground">Shorts</span>
-            <span className="text-2xl font-bold text-white">{hasSpectatorsData ? spec.subscribers.toLocaleString() : "—"}</span>
+            <span className="text-2xl font-bold text-white">{hasSpectatorsData ? spec.subscribers.toLocaleString('pt-BR') : "—"}</span>
           </div>
         </Card>
       </div>

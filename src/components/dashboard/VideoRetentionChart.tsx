@@ -25,7 +25,7 @@ export function VideoRetentionChart({ data, totalViews }: VideoRetentionChartPro
               />
             </div>
             <span className="w-20 text-xs font-bold text-right tabular-nums">
-              {metric.views.toLocaleString()}
+              {metric.views.toLocaleString('pt-BR')}
             </span>
             <span className="w-12 text-[10px] text-muted-foreground text-right">{totalPct}%</span>
           </div>

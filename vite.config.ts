@@ -12,6 +12,19 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      '/supabase': {
+        target: 'https://ghtkdkauseesambzqfrd.supabase.co',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/supabase/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            proxyReq.setHeader('origin', 'https://ghtkdkauseesambzqfrd.supabase.co');
+          });
+        },
+      },
+    },
   },
   optimizeDeps: {
     include: [

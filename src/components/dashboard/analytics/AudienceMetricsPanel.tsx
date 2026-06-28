@@ -72,13 +72,13 @@ export const AudienceMetricsPanel = ({
         <MetricCard
           icon={Users}
           label="Seguidores Redes"
-          value={totalSocialFollowers.toLocaleString()}
+          value={totalSocialFollowers.toLocaleString('pt-BR')}
           sublabel="Redes sociais"
         />
         <MetricCard
           icon={MessageCircle}
           label="Membros Mensageria"
-          value={totalMessagingMembers.toLocaleString()}
+          value={totalMessagingMembers.toLocaleString('pt-BR')}
           sublabel="Canais e grupos"
         />
         <MetricCard
@@ -90,7 +90,7 @@ export const AudienceMetricsPanel = ({
         <MetricCard
           icon={FileText}
           label="Total de Posts"
-          value={totalPosts.toLocaleString()}
+          value={totalPosts.toLocaleString('pt-BR')}
           sublabel="Conteúdo publicado"
         />
       </div>
@@ -107,14 +107,14 @@ export const AudienceMetricsPanel = ({
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
                 <span className="text-xs text-muted-foreground">Enviadas</span>
               </div>
-              <span className="text-sm font-bold text-white">{messageTotalSent.toLocaleString()}</span>
+              <span className="text-sm font-bold text-white">{messageTotalSent.toLocaleString('pt-BR')}</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <XCircle className="w-3.5 h-3.5 text-red-400" />
                 <span className="text-xs text-muted-foreground">Falhas</span>
               </div>
-              <span className="text-sm font-bold text-white">{messageTotalFailed.toLocaleString()}</span>
+              <span className="text-sm font-bold text-white">{messageTotalFailed.toLocaleString('pt-BR')}</span>
             </div>
             <div className="pt-2 border-t border-border/50">
               <div className="flex items-center justify-between">
@@ -166,7 +166,7 @@ const MetricCard = ({ icon: Icon, label, value, sublabel }: { icon: any; label: 
 
 const StatusBox = ({ label, value, color, bg }: { label: string; value: number; color: string; bg: string }) => (
   <div className={`p-3 rounded-xl ${bg} border border-border/50 text-center`}>
-    <p className={`text-lg font-bold ${color}`}>{value.toLocaleString()}</p>
+    <p className={`text-lg font-bold ${color}`}>{value.toLocaleString('pt-BR')}</p>
     <p className="text-[8px] font-bold text-muted-foreground mt-0.5 uppercase">{label}</p>
   </div>
 );

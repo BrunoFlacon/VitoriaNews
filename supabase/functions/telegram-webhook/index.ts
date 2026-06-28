@@ -7,13 +7,6 @@ const corsHeaders = (req) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 });
-=======
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, x-authorization",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
 
 async function sendTelegramMessage(botToken: string, chatId: string, text: string) {
   try {
@@ -86,9 +79,12 @@ serve(async (req: Request) => {
       .from("api_credentials")
       .select("user_id, credentials")
       .eq("platform", "telegram")
-      .or(`credentials->>bot_token.eq.${botToken},credentials->>token.eq.${botToken},credentials->tokens.cs.{${botToken}}`);
+      .eq("credentials->>bot_token", botToken);
 
-    if (credsError) console.error("[TG-WEBHOOK] Creds Fetch Error:", credsError);
+    if (credsError) {
+      console.error("[TG-WEBHOOK] Creds Fetch Error:", credsError);
+      return new Response(JSON.stringify({ error: "Database error" }), { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } });
+    }
 
     const creds = allCreds?.[0];
 

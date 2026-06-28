@@ -37,7 +37,7 @@ function MiniBar({ label, value, pct, maxValue }: { label: string; value: number
       <div className="flex-1 min-w-0">
         <div className="flex justify-between text-xs mb-1">
           <span className="truncate text-muted-foreground group-hover:text-white transition-colors">{label}</span>
-          <span className="font-bold text-white tabular-nums">{value.toLocaleString()}</span>
+          <span className="font-bold text-white tabular-nums">{value.toLocaleString('pt-BR')}</span>
         </div>
         <div className="h-1.5 w-full bg-muted/30 rounded-full overflow-hidden">
           <div className="h-full rounded-full bg-primary/60 transition-all duration-700" style={{ width: `${width}%` }} />

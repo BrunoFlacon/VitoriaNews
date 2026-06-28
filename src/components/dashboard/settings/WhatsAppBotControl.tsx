@@ -52,7 +52,7 @@ export const WhatsAppBotControl = ({
               </span>
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-green-500/80" />
-                <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botPosts.toLocaleString('en-US', { minimumIntegerDigits: 2 })}</span>
+                <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botPosts.toLocaleString('pt-BR', { minimumIntegerDigits: 2 })}</span>
               </div>
             </div>
 
@@ -64,7 +64,7 @@ export const WhatsAppBotControl = ({
               </span>
               <div className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-green-500/80" />
-                <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botAnswers.toLocaleString('en-US', { minimumIntegerDigits: 2 })}</span>
+                <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botAnswers.toLocaleString('pt-BR', { minimumIntegerDigits: 2 })}</span>
               </div>
             </div>
           </div>

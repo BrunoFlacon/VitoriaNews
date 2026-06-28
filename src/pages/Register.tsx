@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Share2, Mail, Lock, User, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, ArrowRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,7 +8,6 @@ import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { SystemFooter } from "@/components/SystemFooter";
-import { useSystem } from "@/hooks/useSystem";
 
 const registerSchema = z.object({
   name: z.string()
@@ -38,8 +37,6 @@ const Register = () => {
   const { register, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { settings } = useSystem();
-
   useEffect(() => {
     if (user) {
       navigate("/dashboard", { replace: true });
@@ -49,7 +46,7 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrors({});
-    
+
     // Validate inputs
     const result = registerSchema.safeParse({ name, email, password, confirmPassword });
     if (!result.success) {
@@ -67,7 +64,7 @@ const Register = () => {
     setIsLoading(true);
 
     const { success, error } = await register(email, password, name);
-    
+
     if (success) {
       toast({
         title: "Conta criada!",
@@ -87,7 +84,7 @@ const Register = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
-      
+
       <div className="flex-1 flex items-center justify-center p-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -97,15 +94,12 @@ const Register = () => {
           <div className="glass-card rounded-3xl border border-border p-8">
             {/* Logo */}
             <div className="flex items-center justify-center gap-3 mb-8">
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-xl bg-background/50" />
-              ) : (
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                  <Share2 className="w-6 h-6 text-primary-foreground" />
-                </div>
-              )}
-              <span className="font-display font-bold text-2xl gradient-text truncate">
-                {settings?.platform_name || "Vitória Net"}
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#4F8AFF] to-[#8B5CF6] flex items-center justify-center shadow-lg">
+                <svg viewBox="0 0 64 64" className="w-[97%] h-[97%] text-black fill-current"><path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z"></path>
+                  <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z"></path></svg>
+              </div>
+              <span className="font-display font-bold text-4xl gradient-text tracking-tighter truncate">
+                Vitória News
               </span>
             </div>
 

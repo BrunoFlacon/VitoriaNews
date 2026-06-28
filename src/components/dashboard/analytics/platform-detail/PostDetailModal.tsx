@@ -45,32 +45,32 @@ export const PostDetailModal = memo(({ post, open, onClose }: PostDetailModalPro
               <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1 tracking-wider flex items-center gap-1">
                 <Eye className="w-3 h-3" /> Visualizações
               </p>
-              <p className="text-lg font-bold">{(post.views || 0).toLocaleString()}</p>
+              <p className="text-lg font-bold">{(post.views || 0).toLocaleString('pt-BR')}</p>
             </div>
             <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
               <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1 tracking-wider flex items-center gap-1">
                 <Heart className="w-3 h-3" /> Curtidas
               </p>
-              <p className="text-lg font-bold">{(post.likes || 0).toLocaleString()}</p>
+              <p className="text-lg font-bold">{(post.likes || 0).toLocaleString('pt-BR')}</p>
             </div>
             <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
               <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1 tracking-wider flex items-center gap-1">
                 <MessageSquare className="w-3 h-3" /> Comentários
               </p>
-              <p className="text-lg font-bold">{(post.comments || 0).toLocaleString()}</p>
+              <p className="text-lg font-bold">{(post.comments || 0).toLocaleString('pt-BR')}</p>
             </div>
             <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
               <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1 tracking-wider flex items-center gap-1">
                 <Share2 className="w-3 h-3" /> Compartilhamentos
               </p>
-              <p className="text-lg font-bold">{(post.shares || 0).toLocaleString()}</p>
+              <p className="text-lg font-bold">{(post.shares || 0).toLocaleString('pt-BR')}</p>
             </div>
           </div>
 
           {post.impressions !== null && post.impressions !== undefined && (
             <div className="p-3 rounded-xl bg-muted/20 border border-border/50">
               <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1 tracking-wider">Impressões</p>
-              <p className="text-lg font-bold">{post.impressions.toLocaleString()}</p>
+              <p className="text-lg font-bold">{post.impressions.toLocaleString('pt-BR')}</p>
             </div>
           )}
 

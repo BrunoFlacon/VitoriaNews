@@ -204,7 +204,7 @@ export const ConnectionCard = ({
                 </span>
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-blue-500/80" />
-                  <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayFollowers.toLocaleString()}</span>
+                  <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayFollowers.toLocaleString('pt-BR')}</span>
                 </div>
               </div>
 

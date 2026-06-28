@@ -42,8 +42,7 @@ export const useBrands = () => {
       setBrands(list);
       const def = list.find(b => b.is_default) || list[0] || null;
       setDefaultBrand(def);
-    } catch (err) {
-      console.error("useBrands error:", err);
+    } catch {
     } finally {
       setLoading(false);
     }

@@ -1,7 +1,15 @@
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+
+const sharedChannels = new Map<string, {
+  channel: RealtimeChannel | null;
+  refCount: number;
+  errorCount: number;
+}>();
+
 
 export interface SocialAccountStat {
   id: string;
@@ -84,7 +92,10 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['social_stats_all', user?.id],
-    staleTime: CACHE_TTL, // Don't refetch while cache is fresh
+    staleTime: 0,
+    initialData: loadCache,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       if (!user) return null;
       
@@ -115,12 +126,12 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           .select('id, platform, status, content, recipient_name, recipient_phone, created_at, metadata')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(500)),
+          .limit(50)),
         run(supabase
           .from('scheduled_posts')
           .select('platforms, status')
           .eq('user_id', user.id)
-          .limit(500)),
+          .limit(50)),
         run(supabase
           .from('audience_demographics')
           .select('*')
@@ -159,7 +170,11 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       
       (messagesRes.data || []).forEach((m: any) => {
         const p = (m.platform || 'unknown').toLowerCase().trim();
-        const isBot = m.metadata?.integration_type === 'bot';
+        // For WhatsApp: messages with status='sent' were sent via bot API
+        // For other platforms: check metadata.integration_type === 'bot'
+        const isBot = p === 'whatsapp'
+          ? (m.status === 'sent' || m.metadata?.bot_reply === true || m.metadata?.integration_type === 'bot')
+          : (m.metadata?.integration_type === 'bot');
         if (isBot) botActionCounts[p] = (botActionCounts[p] || 0) + 1;
         else actionCounts[p] = (actionCounts[p] || 0) + 1;
 
@@ -217,7 +232,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         seenPlatformIds.add(dedupKey);
 
         const totalBotActions = botActionCounts[platformKey] || 0;
-        const apiPostsCount = Number(acc.posts_count ?? 0);
+        const apiPostsCount = Number(acc.posts_count ?? acc.metadata?.posts_count ?? 0);
         const publishedPostCount = publishedActions[platformKey] || 0;
         const effectivePosts = apiPostsCount > 0 ? apiPostsCount : publishedPostCount;
 
@@ -250,9 +265,17 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
 
       // Secondary dedup: merge accounts on same platform with identical username
       // (e.g. Instagram linked via both IG Business API and Facebook Pages API)
+      // NOTE: WhatsApp and Telegram are EXCLUDED from username-merge because each
+      // connection is a distinct profile with its own photo (page_name may repeat).
+      const SKIP_USERNAME_MERGE = new Set(['whatsapp', 'telegram']);
       const mergedByUsername: any[] = [];
       const userKeyMap = new Map<string, number>();
       dedupedAccounts.forEach(acc => {
+        // Platforms with per-connection photos must never be merged by username
+        if (SKIP_USERNAME_MERGE.has(acc.platform)) {
+          mergedByUsername.push({ ...acc });
+          return;
+        }
         if (!acc.username) { mergedByUsername.push(acc); return; }
         const ukey = `${acc.platform}-${acc.username}`;
         const existingIdx = userKeyMap.get(ukey);
@@ -275,10 +298,20 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       });
 
       // Build profile_picture fallback map from social accounts
+      // Index by platform+platform_user_id for per-connection accuracy,
+      // and also keep a platform-level fallback for channels without a specific match.
       const socialAccountPics: Record<string, string> = {};
+      const socialAccountPicsByUid: Record<string, string> = {};
       mergedByUsername.forEach(acc => {
-        if (acc.profile_picture && !socialAccountPics[acc.platform]) {
-          socialAccountPics[acc.platform] = acc.profile_picture;
+        if (acc.profile_picture) {
+          // Per-connection key: used by channels to find their specific photo
+          if (acc.platform_user_id) {
+            socialAccountPicsByUid[`${acc.platform}-${acc.platform_user_id}`] = acc.profile_picture;
+          }
+          // Platform-level fallback (first pic found)
+          if (!socialAccountPics[acc.platform]) {
+            socialAccountPics[acc.platform] = acc.profile_picture;
+          }
         }
       });
 
@@ -402,85 +435,112 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       return result;
     },
     enabled: !!user && (options.enabled !== false),
-    initialData: loadCache,
-    refetchOnMount: true,
   });
 
-  // Real-time subscription - Use unique channel name per instance to avoid collisions
   const [realtimeError, setRealtimeError] = useState(false);
+  const channelName = user ? `social-stats-realtime-${user.id}` : null;
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const invalidatingRef = useRef(false);
+
   useEffect(() => {
-    if (!user || options.enabled === false) return;
-    setRealtimeError(false);
-    
-    // Generate a unique channel name for this specific instance
-    const channelId = Math.random().toString(36).substring(7);
-    const channelName = `social-stats-realtime-${channelId}`;
-    
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let invalidating = false;
-    const debouncedInvalidate = () => {
-      if (invalidating) return;
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        invalidating = true;
-        queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] }).finally(() => {
-          invalidating = false;
-        });
-      }, 2000);
-    };
+    if (!channelName || options.enabled === false) return;
 
-    const channel = supabase
-      .channel(channelName)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'social_accounts',
-        filter: `user_id=eq.${user.id}`,
-      }, debouncedInvalidate)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'messaging_channels',
-        filter: `user_id=eq.${user.id}`,
-      }, debouncedInvalidate);
+    let entry = sharedChannels.get(channelName);
+    if (!entry) {
+      entry = { channel: null, refCount: 0, errorCount: 0 };
+      sharedChannels.set(channelName, entry);
 
-    // Subscribe with error handling
-    let lastErrorTime = 0;
-    channel.subscribe((status) => {
-      if (status === 'CHANNEL_ERROR') {
-        const now = Date.now();
-        if (now - lastErrorTime > 30000) {
-          console.debug('Realtime unavailable, using polling:', channelName);
+      const debouncedInvalidate = () => {
+        if (invalidatingRef.current) return;
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          invalidatingRef.current = true;
+          Promise.resolve().then(() =>
+            queryClient.invalidateQueries({ queryKey: ['social_stats_all', user!.id] })
+          ).finally(() => {
+            invalidatingRef.current = false;
+          });
+        }, 2000);
+      };
+
+      const channel = supabase
+        .channel(channelName)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'social_accounts',
+          filter: `user_id=eq.${user!.id}`,
+        }, debouncedInvalidate)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'messaging_channels',
+          filter: `user_id=eq.${user!.id}`,
+        }, debouncedInvalidate);
+
+      channel.subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          entry!.errorCount++;
+        } else if (status === 'SUBSCRIBED') {
+          entry!.errorCount = 0;
         }
-        lastErrorTime = now;
-        setRealtimeError(true);
-      } else if (status === 'SUBSCRIBED') {
-        setRealtimeError(false);
-      }
-    });
-    // Trigger a cache refetch on mount so data loads immediately
-    queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
+      });
+      entry.channel = channel;
+    }
+    entry.refCount++;
 
-    return () => { 
-      if (debounceTimer) clearTimeout(debounceTimer);
-      supabase.removeChannel(channel).catch(() => {});
+    setRealtimeError(entry.errorCount > 2);
+
+    const checkHandler = () => {
+      const e = sharedChannels.get(channelName);
+      if (e) setRealtimeError(e.errorCount > 2);
     };
-  }, [user, queryClient, options.enabled]);
+    const checkInterval = setInterval(checkHandler, 15000);
+
+    return () => {
+      clearInterval(checkInterval);
+      const e = sharedChannels.get(channelName);
+      if (!e) return;
+      e.refCount--;
+      if (e.refCount <= 0) {
+        if (e.channel) supabase.removeChannel(e.channel).catch(() => {});
+        sharedChannels.delete(channelName);
+      }
+    };
+  }, [channelName, options.enabled, queryClient, user]);
 
   useEffect(() => {
-    if (!user || options.enabled === false || !realtimeError) return;
+    if (!channelName || options.enabled === false || !realtimeError) return;
     let isRunning = false;
-    const interval = setInterval(async () => {
+    let failCount = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const BASE = 120000;
+    const tick = () => {
       if (isRunning || !navigator.onLine) return;
+      const entry = sharedChannels.get(channelName);
+      if (!entry) return;
       isRunning = true;
-      try {
-        await queryClient.invalidateQueries({ queryKey: ['social_stats_all', user.id] });
-      } finally {
-        isRunning = false;
-      }
-    }, 120000);
-    return () => clearInterval(interval);
-  }, [user, queryClient, options.enabled, realtimeError]);
+      const delay = BASE * Math.min(failCount + 1, 4);
+      timer = setTimeout(tick, delay);
+      Promise.resolve().then(() => {
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(() => {
+            queryClient.invalidateQueries({ queryKey: ['social_stats_all', user!.id] })
+              .then(() => { failCount = 0; })
+              .catch(() => { failCount++; })
+              .finally(() => { isRunning = false; });
+          }, { timeout: 3000 });
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['social_stats_all', user!.id] })
+            .then(() => { failCount = 0; })
+            .catch(() => { failCount++; })
+            .finally(() => { isRunning = false; });
+        }
+      });
+    };
+    timer = setTimeout(tick, BASE);
+    return () => clearTimeout(timer);
+  }, [channelName, options.enabled, realtimeError, queryClient, user]);
 
   const MESSAGING_PLATFORMS = new Set(['whatsapp', 'telegram']);
   const emptyMessageStats = { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] };

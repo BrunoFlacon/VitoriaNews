@@ -123,6 +123,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
       let query = supabase
         .from('scheduled_posts')
         .select('id, content, platforms, media_type, published_at, status')
+        .eq('user_id', user!.id)
         .eq('status', 'published')
         .not('content', 'is', null)
         .order('published_at', { ascending: false })
@@ -174,6 +175,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
       let query = supabase
         .from('scheduled_posts')
         .select('id, platforms, scheduled_at, published_at, status')
+        .eq('user_id', user!.id)
         .in('status', ['published', 'scheduled'])
         .or(`scheduled_at.gte.${sinceStr},published_at.gte.${sinceStr}`);
 
@@ -228,6 +230,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
       let query = supabase
         .from('scheduled_posts')
         .select('id, platforms, media_type, scheduled_at, published_at, status')
+        .eq('user_id', user!.id)
         .in('status', ['published', 'scheduled'])
         .not('media_type', 'is', null)
         .or(`scheduled_at.gte.${sinceStr},published_at.gte.${sinceStr}`);

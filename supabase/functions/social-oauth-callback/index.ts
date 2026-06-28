@@ -134,7 +134,7 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
   const meData = await meRes.json();
   const defaultProfileImageUrl = meData.picture?.data?.url || "";
 
-  const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?access_token=${accessToken}`);
+  const pagesRes = await fetch(`https://graph.facebook.com/v21.0/me/accounts?fields=id,name,access_token,picture.width(200).height(200)&access_token=${accessToken}`);
   const pagesData = await pagesRes.json();
   const pages = pagesData.data || [];
 
@@ -146,7 +146,8 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
       const igData = await igRes.json();
       if (igData.instagram_business_account?.id) {
         const platformUserId = igData.instagram_business_account.id;
-        let profileImageUrl = defaultProfileImageUrl;
+        const pagePic = page.picture?.data?.url || defaultProfileImageUrl;
+        let profileImageUrl = pagePic;
         let pageName = "";
         try {
           const igProfileRes = await fetch(`https://graph.facebook.com/v21.0/${platformUserId}?fields=profile_picture_url,username&access_token=${accessToken}`);
@@ -163,18 +164,52 @@ async function exchangeMeta(code: string, redirectUri: string, platform: string,
       const waData = await waRes.json();
       if (waData.data) {
         for (const biz of waData.data) {
-          results.push({ accessToken, refreshToken: "", expiresIn, platformUserId: biz.id, pageName: biz.name, pageId: "", profileImageUrl: defaultProfileImageUrl });
+          let profileImageUrl = "";
+          let bizName = biz.name;
+          let wabaId = biz.id;
+          let resolvedPhoneId = "";
+          // Resolve real WABA ID from Business Manager
+          try {
+            const wabaRes = await fetch(`https://graph.facebook.com/v21.0/${biz.id}/owned_whatsapp_business_accounts?access_token=${accessToken}`);
+            const wabaData = await wabaRes.json();
+            if (wabaData.data && wabaData.data.length > 0) {
+              wabaId = wabaData.data[0].id;
+              // Get phone numbers with profile_photo_url from the real WABA
+              const phoneRes = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/phone_numbers?fields=id,display_phone_number,profile_photo_url,verified_name&access_token=${accessToken}`);
+              const phoneData = await phoneRes.json();
+              if (phoneData.data && phoneData.data.length > 0) {
+                const phone = phoneData.data[0];
+                resolvedPhoneId = phone.id || "";
+                if (phone.profile_photo_url) profileImageUrl = phone.profile_photo_url;
+                if (phone.verified_name) bizName = phone.verified_name;
+              }
+              console.log(`[OAUTH] WhatsApp: resolved WABA=${wabaId}, phones=${phoneData?.data?.length || 0}, photo=${profileImageUrl ? "YES" : "NO"}`);
+            }
+          } catch (e) {
+            console.error(`Error resolving WABA for WhatsApp:`, e);
+          }
+          results.push({ accessToken, refreshToken: "", expiresIn, platformUserId: wabaId, pageName: bizName, pageId: "", profileImageUrl });
+          // Store resolved phone_number_id for downstream update
+          if (resolvedPhoneId) {
+            (results[results.length - 1] as any)._phoneNumberId = resolvedPhoneId;
+          }
         }
       }
-    } catch { /* fallback */ }
+    } catch (e) { console.error("Error fetching WhatsApp businesses:", e); }
   } else {
     for (const page of pages) {
-      results.push({ accessToken: page.access_token, refreshToken: "", expiresIn, platformUserId: page.id, pageName: page.name, pageId: page.id, profileImageUrl: defaultProfileImageUrl });
+      const pagePic = `https://graph.facebook.com/v21.0/${page.id}/picture?type=large`;
+      results.push({ accessToken: page.access_token, refreshToken: "", expiresIn, platformUserId: page.id, pageName: page.name, pageId: page.id, profileImageUrl: pagePic });
     }
   }
 
   if (results.length === 0) {
-    results.push({ accessToken, refreshToken: "", expiresIn, platformUserId: meData.id, pageName: meData.name, pageId: "", profileImageUrl: defaultProfileImageUrl });
+    if (platform === "whatsapp") {
+      // WhatsApp sem WABA — não usar foto do Facebook pessoal
+      return results;
+    }
+    const personalPic = `https://graph.facebook.com/v21.0/${meData.id}/picture?type=large`;
+    results.push({ accessToken, refreshToken: "", expiresIn, platformUserId: meData.id, pageName: meData.name, pageId: "", profileImageUrl: personalPic });
   }
 
   return results;
@@ -327,6 +362,91 @@ async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: 
 }
 
 
+async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
+  const clientId = creds.app_id || creds.client_id || Deno.env.get("LINKEDIN_CLIENT_ID");
+  const clientSecret = creds.app_secret || creds.client_secret || Deno.env.get("LINKEDIN_CLIENT_SECRET");
+  if (!clientId || !clientSecret) throw new Error("Configuração LinkedIn incompleta.");
+
+  const payload = {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    client_id: clientId,
+    client_secret: clientSecret
+  };
+
+  const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(payload)
+  });
+
+  const data = await res.json();
+  await logOAuth(supabase, { user_id: userId, provider: "linkedin", stage: "exchange" });
+  if (data.error) throw new Error(data.error_description || data.error);
+
+  const accessToken = data.access_token;
+  const expiresIn = data.expires_in || 5184000;
+
+  const meRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const meData = await meRes.json();
+
+  return [{
+    accessToken,
+    refreshToken: data.refresh_token || "",
+    expiresIn,
+    platformUserId: meData.sub,
+    pageName: meData.name || meData.given_name || "",
+    pageId: "",
+    profileImageUrl: meData.picture || ""
+  }];
+}
+
+async function exchangeTikTok(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
+  const clientKey = creds.app_id || creds.client_id || Deno.env.get("TIKTOK_CLIENT_KEY");
+  const clientSecret = creds.app_secret || creds.client_secret || Deno.env.get("TIKTOK_CLIENT_SECRET");
+  if (!clientKey || !clientSecret) throw new Error("Configuração TikTok incompleta.");
+
+  const payload = {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    client_key: clientKey,
+    client_secret: clientSecret
+  };
+
+  const res = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(payload)
+  });
+
+  const data = await res.json();
+  await logOAuth(supabase, { user_id: userId, provider: "tiktok", stage: "exchange" });
+  if (data.error) throw new Error(data.error_description || data.error?.message || "Erro TikTok OAuth");
+
+  const accessToken = data.access_token;
+  const expiresIn = data.expires_in || 86400;
+
+  const userRes = await fetch("https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,avatar_url_100,display_name", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const userData = await userRes.json();
+  const user = userData?.data?.user || {};
+
+  return [{
+    accessToken,
+    refreshToken: data.refresh_token || "",
+    expiresIn,
+    platformUserId: user.open_id || user.union_id || "",
+    pageName: user.display_name || "",
+    pageId: "",
+    profileImageUrl: user.avatar_url_100 || user.avatar_url || ""
+  }];
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -400,24 +520,53 @@ serve(async (req: Request) => {
       case "threads": results = await exchangeThreads(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
       case "twitter": results = await exchangeTwitter(code, oauthState.redirect_uri, oauthState.code_verifier || "", formattedCreds, supabase, user.id); break;
       case "reddit": results = await exchangeReddit(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
+      case "linkedin": results = await exchangeLinkedIn(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
+      case "tiktok": results = await exchangeTikTok(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
       default:
-        // Mantém as outras (Twitter, LinkedIn, etc) se necessário, ou lança erro
-        throw new Error(`Troca de token para plataforma '${platform}' não implementada nesta refatoração.`);
+        throw new Error(`Troca de token para plataforma '${platform}' não implementada.`);
     }
 
     // Upsert connections
     for (const result of results) {
        const expiresAt = new Date(Date.now() + result.expiresIn * 1000).toISOString();
-       await supabase.from("social_connections").upsert({
+       const phoneNumberId = (result as any)._phoneNumberId || "";
+       const upsertData: any = {
          user_id: user.id, platform, access_token: result.accessToken, refresh_token: result.refreshToken || null,
          token_expires_at: expiresAt, platform_user_id: result.platformUserId, page_name: result.pageName,
-         page_id: result.pageId || null, profile_image_url: result.profileImageUrl || null, is_connected: true, updated_at: new Date().toISOString(),
-       }, { onConflict: "user_id,platform,platform_user_id" });
+         page_id: platform === "whatsapp" ? null : (result.pageId || null),
+         profile_image_url: result.profileImageUrl || null, is_connected: true, updated_at: new Date().toISOString(),
+       };
+       if (phoneNumberId) upsertData.phone_number_id = phoneNumberId;
+       if (result.platformUserId) upsertData.waba_id = result.platformUserId;
+       await supabase.from("social_connections").upsert(upsertData, { onConflict: "user_id,platform,platform_user_id" });
 
        await supabase.from("social_accounts").upsert({
          user_id: user.id, platform, platform_user_id: result.platformUserId, username: result.username || result.pageName,
          page_name: result.pageName, profile_picture: result.profileImageUrl, is_connected: true, updated_at: new Date().toISOString(),
        }, { onConflict: "user_id,platform,platform_user_id" });
+
+       // Sync WhatsApp tokens to api_credentials for downstream functions
+        if (platform === "whatsapp" && result.accessToken && result.platformUserId) {
+          const { data: existing } = await supabase
+            .from("api_credentials")
+            .select("credentials")
+            .eq("user_id", user.id)
+            .eq("platform", "whatsapp")
+            .maybeSingle();
+          const existingCreds = (existing?.credentials as Record<string, any>) || {};
+          await supabase.from("api_credentials").upsert({
+            user_id: user.id,
+            platform: "whatsapp",
+            credentials: {
+              app_id: formattedCreds.app_id || existingCreds.app_id || "",
+              access_token: result.accessToken,
+              phone_number_id: phoneNumberId || existingCreds.phone_number_id || "",
+              waba_id: result.platformUserId,
+              profile_image_url: result.profileImageUrl || existingCreds.profile_image_url || "",
+            },
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "user_id,platform" });
+        }
     }
 
     await supabase.from("oauth_states").delete().eq("id", oauthState.id);

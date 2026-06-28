@@ -9,7 +9,6 @@ import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { SystemFooter } from "@/components/SystemFooter";
-import { useSystem } from "@/hooks/useSystem";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -31,8 +30,6 @@ const Login = () => {
   const { login, user, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { settings } = useSystem();
-
   useEffect(() => {
     if (user) {
       navigate("/dashboard", { replace: true });
@@ -122,15 +119,14 @@ const Login = () => {
           <div className="glass-card rounded-3xl border border-border p-8">
             {/* Logo */}
             <div className="flex items-center justify-center gap-3 mb-8">
-              {settings?.logo_url ? (
-                <img src={settings.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-xl bg-background/50" />
-              ) : (
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                  <Share2 className="w-6 h-6 text-primary-foreground" />
-                </div>
-              )}
-              <span className="font-display font-bold text-2xl gradient-text truncate">
-                {settings?.platform_name || "Vitória Net"}
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#4F8AFF] to-[#8B5CF6] flex items-center justify-center shadow-lg shrink-0">
+                <svg viewBox="0 0 64 64" className="w-[95%] h-[95%] text-black fill-current">
+                  <path d="M45.9,26.4l5.2-5.2c-11.8-11.7-26.4-11.7-38.1,0l5.2,5.2C27.1,17.5,37,17.5,45.9,26.4L45.9,26.4z"/>
+                  <path d="M44.2,38.1L32,26l-12.1,12L7.7,26l-5.2,5.2l17.3,17.2l12.1-12l12.1,12l17.3-17.2L56.3,26L44.2,38.1z"/>
+                </svg>
+              </div>
+              <span className="font-display font-bold text-4xl gradient-text tracking-tighter truncate">
+                Vitória News
               </span>
             </div>
 

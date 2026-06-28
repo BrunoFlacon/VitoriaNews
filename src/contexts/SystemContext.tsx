@@ -53,17 +53,33 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
+  const CACHE_KEY = 'sc_system_settings';
+  const CACHE_NAV_KEY = 'sc_system_nav';
+  const CACHE_PERMS_KEY = 'sc_system_perms';
+
+  const loadFromCache = useCallback(() => {
+    try {
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setSettings(parsed);
+        applyThemeStyles(parsed);
+      }
+      const navCached = localStorage.getItem(CACHE_NAV_KEY);
+      if (navCached) setNavSettings(JSON.parse(navCached));
+      const permsCached = localStorage.getItem(CACHE_PERMS_KEY);
+      if (permsCached) setSectionPermissions(JSON.parse(permsCached));
+    } catch {}
+  }, [applyThemeStyles]);
+
   const fetchSettings = useCallback(async () => {
     try {
-      // PERFORMANCE: Consolidando em uma única chamada ao banco
-      // select("*") é resiliente pois traz o que existir, sem dar erro 400 por colunas específicas
       const { data: allData, error } = await (supabase as any)
         .from("system_settings")
         .select("*");
 
       if (error) {
-        console.error("Error fetching system settings:", error);
-        // Mesmo com erro, mantemos o loading false para mostrar fallbacks locais
+        throw error;
       }
 
       const rows = (allData || []) as any[];
@@ -96,24 +112,24 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
       if (generalData) {
         setSettings(generalData);
         applyThemeStyles(generalData);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(generalData));
       }
-      
       if (navItems.length > 0) {
         setNavSettings(navItems.sort((a, b) => (a.order_index || 0) - (b.order_index || 0)));
+        localStorage.setItem(CACHE_NAV_KEY, JSON.stringify(navItems));
       }
-
       setSectionPermissions(permsMap);
+      localStorage.setItem(CACHE_PERMS_KEY, JSON.stringify(permsMap));
 
     } catch (e) {
-      console.error("SystemContext Critical Error:", e);
+      if (import.meta.env.DEV) console.warn("SystemContext fetch error - usando cache local");
+      loadFromCache();
     } finally {
       setLoading(false);
     }
-  }, [applyThemeStyles]);
+  }, [applyThemeStyles, loadFromCache]);
 
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
+  useEffect(() => { loadFromCache(); fetchSettings(); }, [fetchSettings, loadFromCache]);
 
   const refreshSettings = async () => {
     await fetchSettings();

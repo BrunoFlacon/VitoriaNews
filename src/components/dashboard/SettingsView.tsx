@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   User, Bell, Key, Shield, Globe, Save, Camera, Check, AlertCircle, Loader2, Unplug, Info,
@@ -32,26 +32,13 @@ import { APITab } from "./settings/APITab";
 import { BrandsTab } from "./BrandsTab";
 import { useSystem } from "@/hooks/useSystem";
 import { useSocialStats } from "@/hooks/useSocialStats";
-import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, YoutubeIcon, AdsIcon, AnalyticsIcon, PeopleIcon, GoogleNewsIcon } from "@/components/icons/SocialIcons";
+import { 
+  GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, YoutubeIcon, AdsIcon, 
+  AnalyticsIcon, PeopleIcon, GoogleNewsIcon, InstagramIcon, XIcon, LinkedinIcon, 
+  TikTokIcon, WhatsappIcon, TelegramIcon, PinterestIcon, SnapchatIcon, ThreadsIcon, 
+  KwaiIcon, RumbleIcon, TruthSocialIcon, GettrIcon, SpotifyIcon, GiphyIcon 
+} from "@/components/icons/SocialIcons";
 
-
-
-
-interface SocialAccountStats {
-  id: string;
-  platform: string;
-  platform_user_id?: string;
-  username: string;
-  profile_picture: string;
-  followers_count: number;
-  metadata?: { posts_count?: number };
-  views: number;
-  likes: number;
-  shares: number;
-  page_name: string;
-}
-
-// Official Multi-Colored SVGs mapped to user's precise graphical assets
 const renderApiAsset = (src: string, isActive: boolean, className: string) => {
   return (
     <svg viewBox="0 0 100 100" className={className} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: isActive ? 'none' : 'grayscale(100%) brightness(0.7) opacity(0.6)' }}>
@@ -62,6 +49,186 @@ const renderApiAsset = (src: string, isActive: boolean, className: string) => {
 
 const PLATFORM_CONFIGS = [
   {
+    id: 'facebook',
+    name: 'Facebook Developers App',
+    icon: FacebookIcon,
+    color: "bg-[#1877F2]",
+    textColor: "text-[#1877F2]",
+    gradient: "from-[#1877F2] to-[#0D65D9]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'instagram',
+    name: 'Instagram Graph API',
+    icon: InstagramIcon,
+    color: "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
+    textColor: "text-[#DD2A7B]",
+    gradient: "from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'threads',
+    name: 'Threads API',
+    icon: ThreadsIcon,
+    color: "bg-black",
+    textColor: "text-foreground",
+    gradient: "from-[#1a1a1a] to-black",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp Business Cloud API',
+    icon: WhatsappIcon,
+    color: "bg-[#25D366]",
+    textColor: "text-[#25D366]",
+    gradient: "from-[#25D366] to-[#128C7E]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'twitter',
+    name: 'X (Twitter) Developer Portal',
+    icon: XIcon,
+    color: "bg-black",
+    textColor: "text-foreground",
+    gradient: "from-zinc-800 to-black",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn Developer Center',
+    icon: LinkedinIcon,
+    color: "bg-[#0A66C2]",
+    textColor: "text-[#0A66C2]",
+    gradient: "from-[#0A66C2] to-[#004182]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'youtube',
+    name: 'YouTube API v3 & Channel',
+    icon: YoutubeIcon,
+    color: "bg-[#FF0000]",
+    textColor: "text-[#FF0000]",
+    gradient: "from-[#FF0000] to-[#CC0000]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'tiktok',
+    name: 'TikTok for Developers',
+    icon: TikTokIcon,
+    color: "bg-black",
+    textColor: "text-[#00F2EA]",
+    gradient: "from-zinc-900 to-black",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'pinterest',
+    name: 'Pinterest Developers',
+    icon: PinterestIcon,
+    color: "bg-[#E60023]",
+    textColor: "text-[#E60023]",
+    gradient: "from-[#E60023] to-[#BD001A]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'telegram',
+    name: 'Telegram Bot API',
+    icon: TelegramIcon,
+    color: "bg-[#0088CC]",
+    textColor: "text-[#0088CC]",
+    gradient: "from-[#0088CC] to-[#006699]",
+    oauthSupported: false,
+    type: 'social'
+  },
+  {
+    id: 'snapchat',
+    name: 'Snap Kit (Snapchat)',
+    icon: SnapchatIcon,
+    color: "bg-[#FFFC00]",
+    textColor: "text-foreground",
+    gradient: "from-[#FFFC00] to-[#FFE600]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'spotify',
+    name: 'Spotify Web API',
+    icon: SpotifyIcon,
+    color: "bg-[#1DB954]",
+    textColor: "text-[#1DB954]",
+    gradient: "from-[#1DB954] to-zinc-900",
+    oauthSupported: true,
+    type: 'tool'
+  },
+  {
+    id: 'kwai',
+    name: 'Kwai Open Platform',
+    icon: KwaiIcon,
+    color: "bg-[#FF5000]",
+    textColor: "text-[#FF5000]",
+    gradient: "from-[#FF5000] to-[#FF8000]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'rumble',
+    name: 'Rumble Video API',
+    icon: RumbleIcon,
+    color: "bg-[#85C742]",
+    textColor: "text-[#85C742]",
+    gradient: "from-[#85C742] to-[#6BA336]",
+    oauthSupported: false,
+    type: 'social'
+  },
+  {
+    id: 'truthsocial',
+    name: 'Truth Social API',
+    icon: TruthSocialIcon,
+    color: "bg-[#00AEEF]",
+    textColor: "text-[#00AEEF]",
+    gradient: "from-[#00AEEF] to-[#0089C2]",
+    oauthSupported: true,
+    type: 'social'
+  },
+  {
+    id: 'gettr',
+    name: 'Gettr API',
+    icon: GettrIcon,
+    color: "bg-[#E11A27]",
+    textColor: "text-[#E11A27]",
+    gradient: "from-[#E11A27] to-[#B0141E]",
+    oauthSupported: false,
+    type: 'social'
+  },
+  {
+    id: 'googlenews',
+    name: 'Google News Search API',
+    icon: GoogleNewsIcon,
+    color: "bg-[#4285F4]",
+    textColor: "text-[#4285F4]",
+    gradient: "from-[#4285F4] to-zinc-900",
+    oauthSupported: false,
+    type: 'social'
+  },
+  {
+    id: 'giphy',
+    name: 'Giphy API Developers',
+    icon: GiphyIcon,
+    color: "bg-black",
+    textColor: "text-foreground",
+    gradient: "from-zinc-800 to-black",
+    oauthSupported: false,
+    type: 'tool'
+  },
+  {
     id: 'google_cloud',
     name: 'Google Cloud (Maps, YouTube, Ads, News)',
     icon: GoogleIcon,
@@ -71,10 +238,20 @@ const PLATFORM_CONFIGS = [
     oauthSupported: false,
     type: 'tool'
   },
-  { id: 'meta_ads', name: 'Meta Marketing & Ads API', icon: MetaIcon, color: "bg-[#1877F210]", textColor: "text-[#1877F2]", gradient: "from-blue-500 to-indigo-500", oauthSupported: false, showPixels: true, type: 'tool' },
-  { id: 'newsapi', name: 'NewsAPI.org (Global News)', icon: NewsapiIcon, color: "bg-[#00000010]", textColor: "text-foreground", gradient: "from-gray-500 to-black", oauthSupported: false, type: 'tool' },
-  { id: 'resend', name: 'Resend (Email Automation)', icon: Mail, color: "bg-[#00000010]", textColor: "text-foreground", gradient: "from-slate-700 to-black", oauthSupported: false, type: 'tool' },
-  { id: 'ai_config', name: 'Inteligência Artificial (Texto, Imagem, Áudio)', icon: Sparkles, color: "bg-purple-500/10", textColor: "text-purple-500", gradient: "from-purple-500 to-pink-500", oauthSupported: false, type: 'tool' }
+  { id: 'meta_ads', name: 'Meta Marketing & Ads API', icon: MetaIcon, color: "bg-[#1877F2]", textColor: "text-[#1877F2]", gradient: "from-blue-500 to-indigo-500", oauthSupported: false, showPixels: true, type: 'tool' },
+  { id: 'newsapi', name: 'NewsAPI.org (Global News)', icon: NewsapiIcon, color: "bg-black", textColor: "text-foreground", gradient: "from-gray-500 to-black", oauthSupported: false, type: 'tool' },
+  { id: 'resend', name: 'Resend (Email Automation)', icon: Mail, color: "bg-black", textColor: "text-foreground", gradient: "from-slate-700 to-black", oauthSupported: false, type: 'tool' },
+  { id: 'ai_config', name: 'Inteligência Artificial (Texto, Imagem, Áudio)', icon: Sparkles, color: "bg-purple-500", textColor: "text-purple-500", gradient: "from-purple-500 to-pink-500", oauthSupported: false, type: 'tool' },
+  {
+    id: 'google',
+    name: 'Google Workspace / OAuth Client',
+    icon: GoogleIcon,
+    color: "bg-white",
+    textColor: "text-[#4285F4]",
+    gradient: "from-white to-slate-100",
+    oauthSupported: true,
+    type: 'tool'
+  }
 ];
 
 
@@ -85,25 +262,32 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const { user, profile, updateProfile, isOnline, toggleOnline } = useAuth();
   const { can } = usePermissions();
   const { toast } = useToast();
-  const [activeSettingsTab, setActiveSettingsTab] = useState(defaultTab || 'profile');
+  const [activeSettingsTab, setActiveSettingsTabRaw] = useState(defaultTab || 'profile');
+  const [isPending, startTransition] = useTransition();
+  const setActiveSettingsTab = (tab: string) => startTransition(() => setActiveSettingsTabRaw(tab));
+
+  // Only run heavy hooks when their tab is active — cuts 375ms INP on first interaction
+  const apiTabActive = activeSettingsTab === 'api';
+  const { connections, loading: connectionsLoading, initiateOAuth, disconnect, setPrimary, refetch: refetchConnections } = useSocialConnections({ enabled: apiTabActive });
+  const { credentials, loading: credsLoading, saving, saveCredentials, deleteCredentials, hasCredentials } = useApiCredentials();
+  
+  const { stats: socialStats, audienceBreakdown, loading: statsLoading, refresh: refreshStats } = useSocialStats({ enabled: apiTabActive });
+  const { settings: systemSettings, updateSettingsOptimistic } = useSystem();
 
   // Sync when defaultTab prop changes from parent (e.g. Header dropdown navigation)
   useEffect(() => {
     if (defaultTab === 'profile_photo') {
-      setActiveSettingsTab('profile');
-      setTimeout(() => {
+      setActiveSettingsTabRaw('profile');
+      const id = setTimeout(() => {
         fileInputRef.current?.click();
       }, 300);
+      return () => clearTimeout(id);
     } else if (defaultTab) {
-      setActiveSettingsTab(defaultTab);
+      setActiveSettingsTabRaw(defaultTab);
     }
   }, [defaultTab]);
-  const { connections, loading: connectionsLoading, initiateOAuth, disconnect } = useSocialConnections();
-  const { credentials, loading: credsLoading, saving, saveCredentials, deleteCredentials, hasCredentials } = useApiCredentials();
-  
-  const { stats: socialStats, audienceBreakdown, loading: statsLoading, refresh: refreshStats } = useSocialStats();
-  const { settings: systemSettings, updateSettingsOptimistic } = useSystem();
   const [manualSyncLoading, setManualSyncLoading] = useState(false);
+  const [syncingPlatform, setSyncingPlatform] = useState<string | null>(null);
 
   const getBrandLogo = (id: string, isActive: boolean) => {
     const className = "w-8 h-8 rounded-lg transition-all duration-500 overflow-hidden bg-background/50 flex items-center justify-center p-1 border border-border/40 shadow-sm group-hover:scale-110";
@@ -138,14 +322,27 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
     }
   };
-  const syncSocialStats = async (platformId?: string) => {
+  const syncSocialStats = async (platformId?: string, isAuto = false) => {
     if (!user) return;
     const now = Date.now();
-    if (now - syncCooldownRef.current < 60000) {
+    
+    // Only check cooldown for manual clicks, and reduce it to 10 seconds
+    if (!isAuto && now - syncCooldownRef.current < 10000) {
+      const remainingSeconds = Math.ceil((10000 - (now - syncCooldownRef.current)) / 1000);
+      toast({
+        title: "Aguarde um momento",
+        description: `O sistema de sincronização possui um intervalo de segurança. Por favor, aguarde ${remainingSeconds} segundos.`,
+        variant: "destructive"
+      });
       return;
     }
+    
+    setSyncingPlatform(platformId || "global");
     setManualSyncLoading(true);
-    syncCooldownRef.current = now;
+    if (!isAuto) {
+      syncCooldownRef.current = now;
+    }
+    
     try {
       const session = (await supabase.auth.getSession()).data.session;
       if (!session) return;
@@ -201,14 +398,24 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       });
     } catch (e: any) {
       console.error("Error syncing stats:", e);
+      toast({
+        title: "Erro na Sincronização",
+        description: `Não foi possível atualizar os dados: ${e.message || 'Erro desconhecido'}`,
+        variant: "destructive"
+      });
     } finally {
-      await refreshStats();
+      await Promise.all([
+        refreshStats(),
+        refetchConnections()
+      ]);
+      setSyncingPlatform(null);
       setManualSyncLoading(false);
     }
   };
 
   const hasSyncedRef = useRef(false);
   const syncCooldownRef = useRef(0);
+  const whatsAppTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     refreshStats();
@@ -220,7 +427,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       hasSyncedRef.current = true;
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (!session) return;
-        syncSocialStats().catch(() => {});
+        syncSocialStats(undefined, true).catch(() => {});
       });
     }
   }, [connections]);
@@ -285,10 +492,10 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     if (digits.length === 10 || digits.length === 11) {
       setIsWhatsAppValid(null);
       setIsValidatingWhatsApp(true);
-      // Simulate API WhatsApp check
-      setTimeout(() => {
+      clearTimeout(whatsAppTimerRef.current);
+      whatsAppTimerRef.current = setTimeout(() => {
         setIsValidatingWhatsApp(false);
-        setIsWhatsAppValid(true); // Always valid in simulation for now
+        setIsWhatsAppValid(true);
       }, 1500);
     } else {
       setIsWhatsAppValid(null);
@@ -576,7 +783,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     try {
       const { error } = await supabase
         .from('system_settings')
-        .upsert({ key: 'wa_bot_active', value: active ? 'true' : 'false', group: 'general' }, { onConflict: 'key' });
+        .upsert({ key: 'wa_bot_active', value: active ? 'true' : 'false', group: 'features' }, { onConflict: 'key' });
       if (error) throw error;
     } catch (e) {
       console.error('Error toggling bot:', e);
@@ -586,7 +793,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
   const handleDisconnectCustom = async (platformId: string, connectionId: string) => {
     try {
-      await disconnect(connectionId);
+      await disconnect(`${platformId}|${connectionId}`);
       toast({ title: "Desconectado", description: `Conexão ${platformId} removida.` });
     } catch (e) {
       console.error('Error disconnecting:', e);
@@ -755,6 +962,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
               handleDisconnectCustom={handleDisconnectCustom}
               user={user}
               saving={saving}
+              onSetPrimary={setPrimary}
             />
 
           </motion.div>

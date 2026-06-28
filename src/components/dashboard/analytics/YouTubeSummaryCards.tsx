@@ -23,8 +23,8 @@ export const YouTubeSummaryCards = ({ data }: YouTubeSummaryCardsProps) => {
   const getValue = (key: string): string => {
     if (!data) return "—";
     switch (key) {
-      case "newSubscribers": return `+ ${data.newSubscribers?.toLocaleString() ?? "—"}`;
-      case "views": return data.views?.toLocaleString() ?? "—";
+      case "newSubscribers": return `+ ${data.newSubscribers?.toLocaleString('pt-BR') ?? "—"}`;
+      case "views": return data.views?.toLocaleString('pt-BR') ?? "—";
       case "ctr": return data.ctr != null ? `${data.ctr}%` : "—";
       case "watchTimeHours": return data.watchTimeHours ? `${data.watchTimeHours}h` : "—";
       default: return "—";

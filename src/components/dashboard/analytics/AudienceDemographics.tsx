@@ -29,7 +29,7 @@ const MiniBar = ({ value, max, label, pct }: { value: number; max: number; label
           style={{ width: `${Math.min(barWidth, 100)}%` }}
         />
       </div>
-      <span className="w-14 text-right text-xs font-bold text-white tabular-nums shrink-0">{value.toLocaleString()}</span>
+      <span className="w-14 text-right text-xs font-bold text-white tabular-nums shrink-0">{value.toLocaleString('pt-BR')}</span>
       {pct !== undefined && (
         <span className="w-10 text-right text-[10px] text-muted-foreground/60 shrink-0">{pct}%</span>
       )}

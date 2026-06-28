@@ -23,7 +23,7 @@ function formatValue(value: number | null | undefined, format: "number" | "perce
       return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
     }
     default:
-      return Number(value).toLocaleString();
+      return Number(value).toLocaleString('pt-BR');
   }
 }
 

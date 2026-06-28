@@ -116,7 +116,7 @@ export const EngagementChart = React.memo(({ chartData, totalFollowers = 0 }: En
               <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cfg.color }} />
               <span className="text-[11px] text-muted-foreground font-medium">{cfg.label}</span>
               <span className="text-[10px] font-black text-foreground tabular-nums">
-                {val.toLocaleString()}
+                {val.toLocaleString('pt-BR')}
               </span>
             </button>
           );

@@ -2,7 +2,9 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_URL = import.meta.env.DEV
+  ? `${window.location.origin}/supabase`
+  : import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const fetchWithTimeout: typeof fetch = (url, options) => {
@@ -10,7 +12,7 @@ const fetchWithTimeout: typeof fetch = (url, options) => {
     return fetch(url, options);
   }
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new DOMException('Timeout', 'TimeoutError')), 60000);
+  const timeout = setTimeout(() => controller.abort(new DOMException('Timeout', 'TimeoutError')), 120000);
   return fetch(url, { ...options, signal: controller.signal })
     .finally(() => clearTimeout(timeout));
 };
@@ -27,7 +29,23 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 export const SUPABASE_ANON_KEY = SUPABASE_PUBLISHABLE_KEY;
 export const SUPABASE_PROJECT_URL = SUPABASE_URL;
 
+const AUTH_STORAGE_KEY = `sb-${SUPABASE_URL.replace(/[^a-zA-Z0-9]/g, '-')}-auth-token`;
+
 export function clearSupabaseSession(): void {
-  const AUTH_STORAGE_KEY = `sb-${SUPABASE_URL.replace(/[^a-zA-Z0-9]/g, '-')}-auth-token`;
   try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch {}
 }
+
+function clearStaleSession(): void {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed?.expires_at && Date.now() > parsed.expires_at * 1000 + 3600000) {
+      clearSupabaseSession();
+    }
+  } catch {
+    clearSupabaseSession();
+  }
+}
+
+clearStaleSession();

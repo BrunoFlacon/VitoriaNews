@@ -37,10 +37,26 @@ const queryClient = new QueryClient({
   },
 });
 
-// Instant skeleton screen matching the dashboard layout - no spinner
+// Dashboard-matching skeleton layout to prevent CLS on auth load
 const LoadingFallback = () => (
-  <div className="min-h-screen bg-[hsl(222,47%,6%)] flex items-center justify-center">
-    <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+  <div className="min-h-screen bg-[hsl(222,47%,6%)] p-4 md:p-6 space-y-6">
+    <div className="flex items-center justify-between mb-8">
+      <div className="space-y-2">
+        <div className="h-8 w-64 rounded-lg bg-muted/20 animate-pulse" />
+        <div className="h-4 w-48 rounded bg-muted/10 animate-pulse" />
+      </div>
+      <div className="h-10 w-10 rounded-xl bg-muted/20 animate-pulse" />
+    </div>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <div key={i} className="h-28 rounded-2xl bg-muted/15 animate-pulse" style={{ animationDelay: `${i * 100}ms` }} />
+      ))}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 h-[300px] rounded-2xl bg-muted/15 animate-pulse" />
+      <div className="h-[300px] rounded-2xl bg-muted/10 animate-pulse" />
+    </div>
+    <div className="h-[200px] rounded-2xl bg-muted/10 animate-pulse" />
   </div>
 );
 

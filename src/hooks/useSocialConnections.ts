@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { safeInvoke } from '@/utils/supabase-utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+
+const sharedChannels = new Map<string, {
+  channel: RealtimeChannel | null;
+  refCount: number;
+  errorCount: number;
+}>();
 
 export interface SocialConnection {
   id: string;
@@ -97,7 +104,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           const byUserId = accounts.find(a => a.platform === conn.platform && a.platform_user_id === conn.platform_user_id);
           if (byUserId) return byUserId;
         }
-        return accounts.find(a => a.platform === conn.platform) || null;
+        return null;
       };
 
       const computeExpiry = (expiresAt: string | null): { isExpiringSoon: boolean; daysUntilExpiry: number } => {
@@ -124,18 +131,27 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       const enrichedConnections: SocialConnection[] = dedupedOAuth.map(conn => {
         const acc = findAccount(conn);
-        if (!acc) return { ...conn, ...computeExpiry(conn.token_expires_at) };
-        const cachedPic         = acc.profile_picture || null;
-        const enrichedFollowers = acc.followers_count || (acc as { followers?: number | null }).followers || conn.followers_count;
-        const enrichedPosts     = acc.posts_count || conn.posts_count;
-        const enrichedPageName  = conn.page_name || acc.page_name || acc.username || null;
+        const cachedPic         = acc?.profile_picture ?? null;
+        
+        let enrichedFollowers = conn.followers_count;
+        if (acc) {
+          const accFollowers = acc.followers_count ?? (acc as any).followers;
+          if (typeof accFollowers === 'number') enrichedFollowers = accFollowers;
+        }
+
+        let enrichedPosts = conn.posts_count;
+        if (acc && typeof acc.posts_count === 'number') {
+          enrichedPosts = acc.posts_count;
+        }
+
+        const enrichedPageName  = conn.page_name || acc?.page_name || acc?.username || null;
         return {
           ...conn,
           ...computeExpiry(conn.token_expires_at),
-          profile_image_url: cachedPic || conn.profile_image_url || null,
-          profile_picture:   cachedPic || conn.profile_picture   || null,
-          followers_count:   enrichedFollowers || conn.followers_count,
-          posts_count:       enrichedPosts     || conn.posts_count,
+          profile_image_url: conn.profile_image_url || conn.profile_picture || cachedPic || null,
+          profile_picture:   conn.profile_picture || conn.profile_image_url || cachedPic || null,
+          followers_count:   enrichedFollowers,
+          posts_count:       enrichedPosts,
           page_name:         enrichedPageName,
         };
       });
@@ -223,61 +239,94 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
     },
     enabled: !!user && (options.enabled !== false),
     staleTime: 60 * 1000,
+    refetchOnMount: false,
   });
 
   const [realtimeError, setRealtimeError] = useState(false);
+  const channelName = user ? `connections-realtime-${user.id}` : null;
+
   useEffect(() => {
-    if (!user || options.enabled === false) return;
-    setRealtimeError(false);
-    
-    // Generate unique channel ID to avoid collisions
-    const channelId = Math.random().toString(36).substring(7);
-    const channelName = `connections-realtime-${channelId}`;
-    
-    const connectionsChannel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'social_connections' }, () =>
-        queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, () =>
-        queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] }));
-    
-    let hasReportedError = false;
-    connectionsChannel.subscribe((status) => {
-      if (status === 'CHANNEL_ERROR') {
-        if (!hasReportedError) {
-          console.debug('Realtime unavailable (falling back to polling):', channelName);
+    if (!channelName || options.enabled === false) return;
+
+    let entry = sharedChannels.get(channelName);
+    if (!entry) {
+      entry = { channel: null, refCount: 0, errorCount: 0 };
+      sharedChannels.set(channelName, entry);
+
+      const invalidateConnections = () => {
+        Promise.resolve().then(() =>
+          queryClient.invalidateQueries({ queryKey: ['social_connections_all', user!.id] })
+        );
+      };
+
+      const channel = supabase
+        .channel(channelName)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'social_connections' }, invalidateConnections)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, invalidateConnections);
+
+      channel.subscribe((status) => {
+        if (status === 'CHANNEL_ERROR') {
+          entry!.errorCount++;
+        } else if (status === 'SUBSCRIBED') {
+          entry!.errorCount = 0;
         }
-        hasReportedError = true;
-        setRealtimeError(true);
-      } else if (status === 'SUBSCRIBED') {
-        hasReportedError = false;
-        setRealtimeError(false);
-      }
-    });
-    // Trigger a cache refetch on mount so data loads immediately
-    queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] });
+      });
+      entry.channel = channel;
+    }
+    entry.refCount++;
 
-    return () => { 
-      supabase.removeChannel(connectionsChannel).catch(() => {}); 
+    setRealtimeError(entry.errorCount > 2);
+
+    const checkHandler = () => {
+      const e = sharedChannels.get(channelName);
+      if (e) setRealtimeError(e.errorCount > 2);
     };
-  }, [user, queryClient, options.enabled]);
+    const checkInterval = setInterval(checkHandler, 15000);
 
-  // Polling fallback when Realtime is unavailable
-  useEffect(() => {
-    if (!user || options.enabled === false) return;
-    if (!realtimeError) return;
-    let isRunning = false;
-    const interval = setInterval(async () => {
-      if (isRunning || !navigator.onLine) return;
-      isRunning = true;
-      try {
-        await queryClient.invalidateQueries({ queryKey: ['social_connections_all', user.id] });
-      } finally {
-        isRunning = false;
+    return () => {
+      clearInterval(checkInterval);
+      const e = sharedChannels.get(channelName);
+      if (!e) return;
+      e.refCount--;
+      if (e.refCount <= 0) {
+        if (e.channel) supabase.removeChannel(e.channel).catch(() => {});
+        sharedChannels.delete(channelName);
       }
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [user, queryClient, options.enabled, realtimeError]);
+    };
+  }, [channelName, options.enabled, queryClient]);
+
+  useEffect(() => {
+    if (!channelName || options.enabled === false || !realtimeError) return;
+    let isRunning = false;
+    let failCount = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const BASE = 120000;
+    const tick = () => {
+      if (isRunning || !navigator.onLine) return;
+      const entry = sharedChannels.get(channelName);
+      if (!entry) return;
+      isRunning = true;
+      const delay = BASE * Math.min(failCount + 1, 4);
+      timer = setTimeout(tick, delay);
+      Promise.resolve().then(() => {
+        if (typeof requestIdleCallback === 'function') {
+          requestIdleCallback(() => {
+            queryClient.invalidateQueries({ queryKey: ['social_connections_all', user!.id] })
+              .then(() => { failCount = 0; })
+              .catch(() => { failCount++; })
+              .finally(() => { isRunning = false; });
+          }, { timeout: 3000 });
+        } else {
+          queryClient.invalidateQueries({ queryKey: ['social_connections_all', user!.id] })
+            .then(() => { failCount = 0; })
+            .catch(() => { failCount++; })
+            .finally(() => { isRunning = false; });
+        }
+      });
+    };
+    timer = setTimeout(tick, BASE);
+    return () => clearTimeout(timer);
+  }, [channelName, options.enabled, realtimeError, queryClient, user]);
 
   // ---------------------------------------------------------------------------
   // Busca o app_id Meta percorrendo múltiplas plataformas no banco.
@@ -482,84 +531,90 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       const localOrigin = window.location.origin;
       const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
 
-      const handleMessage = async (event: MessageEvent) => {
-        if (event.origin !== localOrigin && !(isLocalDev && (event.origin === 'https://webradiovitoria.com.br' || event.origin === 'https://ghtkdkauseesambzqfrd.supabase.co'))) return;
-        if (!event.data || typeof event.data !== 'object') return;
-        if (event.data?.type !== 'oauth-complete' && event.data?.type !== 'oauth-callback') return;
-        
-        try {
-          clearInterval(pollInterval);
-
-          if (event.data?.type === "oauth-complete") {
-            isFinalized = true;
-            window.removeEventListener("message", handleMessage);
+      const handleOAuthEvent = async (msgData: any, msgEvent: MessageEvent) => {
+          try {
             clearInterval(pollInterval);
-            await finalize(true);
-            toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
-            return;
-          }
 
-          if (event.data?.type === "oauth-callback" && event.data?.url) {
-            isFinalized = true;
-            window.removeEventListener("message", handleMessage);
-            clearInterval(pollInterval);
-            
-            try {
-              const url = new URL(event.data.url);
-              const code = url.searchParams.get("code");
-              const state = url.searchParams.get("state");
+            if (msgData.type === "oauth-complete") {
+              isFinalized = true;
+              window.removeEventListener("message", handleMessage);
+              clearInterval(pollInterval);
+              await finalize(true);
+              toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
+              return;
+            }
+
+            if (msgData.type === "oauth-callback" && msgData.url) {
+              isFinalized = true;
+              window.removeEventListener("message", handleMessage);
+              clearInterval(pollInterval);
               
-              if (!code) {
-                console.error("[OAUTH CALLBACK] Código não encontrado na URL:", event.data.url);
-                throw new Error("Código de autorização não encontrado na URL de retorno.");
-              }
+              try {
+                const url = new URL(msgEvent.data.url);
+                const code = url.searchParams.get("code");
+                const state = url.searchParams.get("state");
+                
+                if (!code) {
+                  console.error("[OAUTH CALLBACK] Código não encontrado na URL:", msgEvent.data.url);
+                  throw new Error("Código de autorização não encontrado na URL de retorno.");
+                }
 
-              toast({ title: "Finalizando conexão...", description: "Trocando código por token de acesso." });
+                toast({ title: "Finalizando conexão...", description: "Trocando código por token de acesso." });
 
-              const { data: cbData, error: cbErr } = await supabase.functions.invoke('social-oauth-callback', {
-                body: { code, state, platform, redirect_uri: redirectUri }
-              });
+                const { data: cbData, error: cbErr } = await supabase.functions.invoke('social-oauth-callback', {
+                  body: { code, state, platform, redirect_uri: redirectUri }
+                });
 
-              if (cbErr) {
-                let errorMsg = cbErr.message;
-                try {
-                  if (cbErr instanceof Error && 'context' in cbErr) {
-                    interface ErrorContext { context?: { json?: () => Promise<{ error?: string }> } }
-                    const context = (cbErr as Error & ErrorContext).context;
-                    if (context && typeof context.json === 'function') {
-                      const body = await context.json();
+                if (cbErr) {
+                  let errorMsg = cbErr.message;
+                  try {
+                    const cbErrAny = cbErr as any;
+                    if (cbErrAny && cbErrAny.context && typeof cbErrAny.context.json === 'function') {
+                      const body = await cbErrAny.context.json();
                       errorMsg = body.error || errorMsg;
                     }
+                  } catch (e) {
                   }
-                } catch (e) {
-                }
 
-                // If the state was already processed by the callback page's direct call, treat as success
-                if (errorMsg.includes("Invalid or expired OAuth state")) {
-                  await finalize(true);
-                  toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
-                  return;
-                }
+                  if (errorMsg.includes("Invalid or expired OAuth state")) {
+                    await finalize(true);
+                    toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
+                    return;
+                  }
 
-                console.error("[OAUTH CALLBACK ERROR] Erro detalhado:", errorMsg);
-                throw new Error(errorMsg);
+                  console.error("[OAUTH CALLBACK ERROR] Erro detalhado:", errorMsg);
+                  throw new Error(errorMsg);
+                }
+                
+                await finalize(true);
+                toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
+              } catch (err: unknown) {
+                // Even if the callback edge function fails here,
+                // the webradio bridge/server may have already processed it.
+                // Always refetch to pick up any changes.
+                console.error("[OAUTH CALLBACK CRITICAL ERROR]", err);
+                window.removeEventListener("message", handleMessage);
+                clearInterval(pollInterval);
+                isFinalized = false;
+                await refetch();
+                toast({ 
+                  title: "Erro na finalização", 
+                  description: (err instanceof Error ? err.message : undefined) || "Não foi possível completar a troca de tokens.",
+                  variant: "destructive" 
+                });
               }
-              
-              await finalize(true);
-              toast({ title: "Sucesso!", description: `${platform} conectado com sucesso.` });
-            } catch (err: unknown) {
-              console.error("[OAUTH CALLBACK CRITICAL ERROR]", err);
-              toast({ 
-                title: "Erro na finalização", 
-                description: (err instanceof Error ? err.message : undefined) || "Não foi possível completar a troca de tokens.",
-                variant: "destructive" 
-              });
-              await finalize(false);
             }
+          } catch (err: unknown) {
+            console.error("[OAUTH MESSAGE HANDLER ERROR]", err);
           }
-        } catch (err: unknown) {
-          console.error("[OAUTH MESSAGE HANDLER ERROR]", err);
-        }
+      };
+
+      const handleMessage = (event: MessageEvent) => {
+        if (event.source !== popup) return;
+        const d = event.data;
+        if (!d || typeof d !== 'object') return;
+        if (d.type !== 'oauth-complete' && d.type !== 'oauth-callback') return;
+        setTimeout(() => handleOAuthEvent(d, event), 0);
       };
 
       window.addEventListener("message", handleMessage);
@@ -581,18 +636,23 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         if (!fromMessage) showToastForPlatform();
       };
 
-      let coopBlocked = false;
-      const pollInterval = setInterval(async () => {
-        if (coopBlocked) { clearInterval(pollInterval); return; }
-        let isClosed = false;
+      let pendingCloseCheck = false;
+      const pollInterval = setInterval(() => {
+        if (pendingCloseCheck) return;
+        pendingCloseCheck = true;
         try {
-          isClosed = popup ? popup.closed : true;
-        } catch {
-          coopBlocked = true;
-          clearInterval(pollInterval);
-          return;
+          if (!popup || popup.closed) {
+            clearInterval(pollInterval);
+            finalize().catch(() => {});
+            return;
+          }
+        } catch (e) {
+          // Accessing popup.closed can throw a SecurityError if the popup is on a different origin
+          // with COOP (Cross-Origin-Opener-Policy). This means the popup is still open.
+          // Do not clear the interval or finalize yet. Keep polling.
+        } finally {
+          pendingCloseCheck = false;
         }
-        if (isClosed) { clearInterval(pollInterval); await finalize(); }
       }, 4000);
 
       setTimeout(() => finalize(), 300000);
@@ -667,6 +727,20 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         ]);
         await refetch();
         toast({ title: "Telegram desconectado", description: "Bot Token removido com sucesso." });
+        return;
+      }
+
+      if (platform === 'whatsapp' && connectionId && connectionId.startsWith('whatsapp-api-')) {
+        await supabase.from('api_credentials').delete().eq('user_id', user.id).eq('platform', 'whatsapp');
+        await supabase.from('social_connections').update({
+          is_connected: false,
+          is_primary: false,
+          access_token: null,
+          refresh_token: null,
+          updated_at: new Date().toISOString(),
+        }).eq('user_id', user.id).eq('platform', 'whatsapp');
+        await refetch();
+        toast({ title: "WhatsApp desconectado", description: "Conta WhatsApp removida com sucesso." });
         return;
       }
 

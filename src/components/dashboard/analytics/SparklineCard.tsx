@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 
 interface SparklineCardProps {
   data: number[];
@@ -18,6 +18,7 @@ export const SparklineCard = ({
   const id = React.useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const rafRef = useRef<number | null>(null);
 
   if (!Array.isArray(data) || data.length < 2) return null;
 
@@ -35,13 +36,20 @@ export const SparklineCard = ({
   const areaD = `${pathD} L${width},${height + 2} L0,${height + 2} Z`;
 
   const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    const svg = e.currentTarget;
-    const rect = svg.getBoundingClientRect();
-    const svgX = ((e.clientX - rect.left) / rect.width) * width;
-    const idx = Math.round((svgX / width) * (data.length - 1));
-    const clamped = Math.max(0, Math.min(data.length - 1, idx));
-    setHoverIndex(clamped);
-    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    if (rafRef.current !== null) return;
+    const target = e.currentTarget;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      const svgX = ((clientX - rect.left) / rect.width) * width;
+      const idx = Math.round((svgX / width) * (data.length - 1));
+      const clamped = Math.max(0, Math.min(data.length - 1, idx));
+      setHoverIndex(clamped);
+      setTooltipPos({ x: clientX - rect.left, y: clientY - rect.top });
+    });
   }, [data.length, width]);
 
   const handleMouseLeave = useCallback(() => {
@@ -84,7 +92,7 @@ export const SparklineCard = ({
         >
           <div className="bg-[#0f172a] border border-border/60 rounded-md px-2 py-1 shadow-xl backdrop-blur-sm">
             <p className="text-xs font-bold text-white whitespace-nowrap">
-              {data[hoverIndex].toLocaleString()}
+              {data[hoverIndex].toLocaleString('pt-BR')}
             </p>
             {labels?.[hoverIndex] && (
               <p className="text-[9px] text-muted-foreground whitespace-nowrap">

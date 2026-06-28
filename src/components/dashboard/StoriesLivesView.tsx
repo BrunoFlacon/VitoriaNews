@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
+import { loadSelectedAccounts } from "@/utils/mediaUtils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -112,7 +113,7 @@ export const StoriesLivesView = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createType, setCreateType] = useState<"story" | "live">("story");
   const [formTitle, setFormTitle] = useState("");
-  const [formPlatforms, setFormPlatforms] = useState<string[]>([]);
+  const [formPlatforms, setFormPlatforms] = useState<string[]>(() => loadSelectedAccounts());
   const [formContent, setFormContent] = useState("");
   const [formScheduledAt, setFormScheduledAt] = useState("");
   const [publishToStories, setPublishToStories] = useState(false);

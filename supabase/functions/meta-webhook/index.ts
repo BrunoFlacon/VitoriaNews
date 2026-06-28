@@ -86,6 +86,17 @@ serve(async (req: Request) => {
             const contacts = change.value.contacts || [];
             const contact = contacts.find((c: any) => c.wa_id === msg.from);
             
+            // Extract WhatsApp media info from the type-specific payload field
+            let mediaId: string | undefined;
+            let mimeType: string | undefined;
+            let filename: string | undefined;
+            if (msg.type && msg.type !== "text" && msg.type !== "echo" && msg[msg.type]) {
+              const mediaPayload = msg[msg.type];
+              mediaId = mediaPayload?.id;
+              mimeType = mediaPayload?.mime_type;
+              filename = mediaPayload?.filename;
+            }
+
             const normalized: NormalizedMessage = {
               platform: "whatsapp",
               chatId: msg.from,
@@ -96,6 +107,9 @@ serve(async (req: Request) => {
               isGroup: msg.from.includes("@g.us") || msg.from.length > 15,
               isComment: false,
               mediaType: msg.type !== "text" ? msg.type : undefined,
+              mediaId,
+              mimeType,
+              filename,
               rawPayload: msg
             };
 

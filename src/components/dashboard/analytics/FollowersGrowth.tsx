@@ -142,7 +142,7 @@ export const FollowersGrowth = ({
                </div>
                
                <p className="text-2xl font-bold text-white">
-                  {(totalCount || 0).toLocaleString()}
+                  {(totalCount || 0).toLocaleString('pt-BR')}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {platformInfo.id === 'youtube' ? "inscritos" : "seguidores"} {displayedProfile ? "no perfil" : "totais"}
@@ -194,7 +194,7 @@ export const FollowersGrowth = ({
                  >
                     <div className="flex justify-between items-center text-[10px]">
                        <span className="text-muted-foreground">Posts Totais</span>
-                       <span className="font-bold text-white">{(displayedProfile.postsCount || 0).toLocaleString()}</span>
+                       <span className="font-bold text-white">{(displayedProfile.postsCount || 0).toLocaleString('pt-BR')}</span>
                     </div>
                     <div className="flex justify-between items-center text-[10px]">
                        <span className="text-muted-foreground">Engajamento Médio</span>

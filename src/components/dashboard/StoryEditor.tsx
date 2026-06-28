@@ -1307,21 +1307,24 @@ const SelectionWrapper = ({ children, onTransform, transform, onRemove, fullSize
             className="absolute -top-10 left-1/2 -translate-x-1/2 w-8 h-8 bg-white rounded-full border-2 border-primary shadow-xl flex items-center justify-center cursor-alias pointer-events-auto active:scale-90 transition-transform"
             onPointerDown={(e) => {
               e.stopPropagation();
-              const rect = containerRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              const centerX = rect.left + rect.width / 2;
-              const centerY = rect.top + rect.height / 2;
-              
-              const handleRotate = (moveEvent: PointerEvent) => {
-                const angle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) * (180 / Math.PI);
-                onTransform({ rotation: angle + 90 });
-              };
-              const handleUp = () => {
-                window.removeEventListener("pointermove", handleRotate);
-                window.removeEventListener("pointerup", handleUp);
-              };
-              window.addEventListener("pointermove", handleRotate);
-              window.addEventListener("pointerup", handleUp);
+              const target = containerRef.current;
+              requestAnimationFrame(() => {
+                const rect = target?.getBoundingClientRect();
+                if (!rect) return;
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                
+                const handleRotate = (moveEvent: PointerEvent) => {
+                  const angle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) * (180 / Math.PI);
+                  onTransform({ rotation: angle + 90 });
+                };
+                const handleUp = () => {
+                  window.removeEventListener("pointermove", handleRotate);
+                  window.removeEventListener("pointerup", handleUp);
+                };
+                window.addEventListener("pointermove", handleRotate);
+                window.addEventListener("pointerup", handleUp);
+              });
             }}
           >
             <RotateCw className="w-4 h-4 text-primary" />

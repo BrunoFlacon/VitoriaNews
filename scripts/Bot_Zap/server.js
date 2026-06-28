@@ -13,7 +13,7 @@ const QRCode = require("qrcode");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const OpenAI = require("openai");
 const { createSilencio } = require("./silencio_whatsapp");
-const silencio = createSilencio(__dirname);
+const silencio = createSilencio(__dirname, () => config);
 
 // =====================================
 // CONFIGURAÇÃO
@@ -76,6 +76,22 @@ function saveConfig(config) {
 }
 
 let config = loadConfig();
+
+// Initial load of silenced chats from Supabase
+if (silencio && typeof silencio.reload === "function") {
+  silencio.reload().catch(err => {
+    console.warn("[SILÊNCIO] Erro ao carregar silêncios iniciais:", err.message);
+  });
+}
+
+// Poll and refresh active silences from Supabase periodically (every 30 seconds)
+setInterval(() => {
+  if (silencio && typeof silencio.reload === "function") {
+    silencio.reload().catch(err => {
+      console.warn("[SILÊNCIO] Erro no polling de recarregamento:", err.message);
+    });
+  }
+}, 30000);
 
 // =====================================
 // SUPABASE BRIDGE
@@ -205,11 +221,15 @@ app.get("/api/config/full", (req, res) => {
 app.get("/api/silencio-chats", (req, res) => {
   res.json({ ok: true, chats: silencio.listar() });
 });
-app.post("/api/silencio-chats", (req, res) => {
+app.post("/api/silencio-chats", async (req, res) => {
   const chatId = (req.body && req.body.chatId) ? String(req.body.chatId).trim() : "";
   const remover = !!(req.body && req.body.remover);
   if (!chatId) return res.status(400).json({ ok: false, erro: "chatId obrigatório" });
-  if (remover) silencio.desilenciarChat(chatId);
+  if (remover) {
+    await silencio.desilenciarChat(chatId);
+  } else {
+    await silencio.silenciarChat(chatId);
+  }
   res.json({ ok: true, chats: silencio.listar() });
 });
 

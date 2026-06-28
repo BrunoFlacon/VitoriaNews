@@ -1,8 +1,9 @@
-import { useState, memo, useMemo, useCallback } from "react";
+import { useState, useEffect, memo, useMemo, useCallback } from "react";
 import {
   X, Instagram, Facebook, Twitter, Linkedin, MessageCircle,
   Heart, MessageSquare, Share2, Bookmark, Send, MoreHorizontal,
-  ChevronLeft, ChevronRight, CheckCircle2, Clock, Calendar
+  ChevronLeft, ChevronRight, CheckCircle2, Clock, Calendar,
+  BarChart3, DollarSign, TrendingUp, Tv, Coins
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
@@ -39,14 +40,14 @@ function formatMetric(n: number | undefined): string {
 }
 
 /** Selo de Verificação Universal */
-const VerifiedBadge = ({ className = "w-4 h-4 text-[#1d9bf0]" }: { className?: string }) => (
+const VerifiedBadge = memo(({ className = "w-4 h-4 text-[#1d9bf0]" }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={cn("fill-current shrink-0 inline-block align-middle ml-1", className)} aria-label="Conta verificada">
     <path d="M22.5 12.5c0-1.58-.8-2.47-1.24-3.23.96-1.88.77-2.54.58-3.04-.31-.82-1.37-1.31-2.22-1.21-1.01.12-1.61-.31-2.4-1.01C15.65 2.62 14.61 2 13.51 2c-1.1 0-2.14.62-3.71 1.99-.79.7-1.39 1.13-2.4 1.01-.85-.1-1.91.39-2.22 1.21-.19-.5-.38 1.16.58 3.04-.44.76-1.24 1.65-1.24 3.23 0 1.58.8 2.47 1.24 3.23-.96 1.88-.77 2.54-.58 3.04.31.82 1.37 1.31 2.22 1.21 1.01-.12 1.61.31 2.4 1.01C11.35 21.38 12.39 22 13.51 22c1.1 0 2.14-.62 3.71-1.99.79-.7 1.39-1.13 2.4-1.01.85.1 1.91-.39 2.22-1.21.19-.5.38-1.16-.58-3.04.44-.76 1.24-1.65 1.24-3.23zM9.93 17.58l-3.78-3.78 1.41-1.41 2.37 2.37 6.47-6.47 1.41 1.41-7.88 7.88z" />
   </svg>
-);
+));
 
 /** Carrossel com slide CSS — sem tela preta, sem reflow */
-function SlideCarousel({
+const SlideCarousel = memo(({
   urls,
   aspectClass = 'aspect-square',
   dotsClass = '',
@@ -54,7 +55,7 @@ function SlideCarousel({
   urls: (string | null)[];
   aspectClass?: string;
   dotsClass?: string;
-}) {
+}) => {
   const [idx, setIdx] = useState(0);
   const validUrls = useMemo(() => urls.filter((u): u is string => !!u), [urls]);
   const count = validUrls.length;
@@ -138,7 +139,7 @@ function SlideCarousel({
       )}
     </div>
   );
-}
+});
 
 interface FeedPreviewProps {
   post: ScheduledPost;
@@ -151,7 +152,7 @@ function parsePlatform(pId: string): { platformId: string; accountId?: string } 
   return { platformId, accountId };
 }
 
-export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
+export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) => {
   const platformEntries = useMemo(() =>
     post.platforms.map(pId => {
       const { platformId, accountId } = parsePlatform(pId);
@@ -163,6 +164,14 @@ export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
 
   const [selectedIdx, setSelectedIdx] = useState(0);
   const selectedEntry = platformEntries[selectedIdx] || platformEntries[0];
+
+  const [activeTab, setActiveTab] = useState<'details' | 'metrics'>('details');
+
+  useEffect(() => {
+    if (post.status !== 'published') {
+      setActiveTab('details');
+    }
+  }, [post.status]);
 
   const { byPlatform } = useSocialStats();
   const { connections } = useSocialConnections();
@@ -327,58 +336,209 @@ export const FeedPreview = ({ post, isOpen, onClose }: FeedPreviewProps) => {
 
           {/* Info Side Panel */}
           <div className="w-80 border-l border-border/40 p-6 hidden lg:block bg-muted/10 overflow-y-auto">
-            <h3 className="font-display font-bold text-lg mb-4">Detalhes do Post</h3>
-            <div className="space-y-6">
-              <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Status</p>
-                <div className="flex items-center gap-2">
-                  <div className={cn("w-2 h-2 rounded-full", post.status === 'published' ? "bg-green-500" : "bg-yellow-500")} />
-                  <span className="text-sm font-medium capitalize">{post.status}</span>
-                </div>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Conteúdo Original</p>
-                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{post.content}</p>
-              </div>
-
-              <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Agenda</p>
-                <p className="text-sm">
-                  {post.published_at
-                    ? `Publicado em: ${new Date(post.published_at).toLocaleString()}`
-                    : post.scheduled_at
-                    ? `Agendado para: ${new Date(post.scheduled_at).toLocaleString()}`
-                    : "Publicação Imediata"}
-                </p>
-              </div>
-
-              {post.media_urls?.length > 0 && (
-                <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                    Mídias ({post.media_urls?.length || post.media_ids.length})
-                    {post.media_type === 'carousel' && <span className="ml-1 text-primary">• Carrossel</span>}
-                  </p>
-                  {post.media_urls.length > 1 ? (
-                    // Mini carrossel para múltiplas mídias
-                    <SidebarCarousel urls={post.media_urls.filter((u): u is string => !!u)} />
-                  ) : (
-                    <div className="aspect-square rounded-lg overflow-hidden bg-muted border border-border/50">
-                      <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover" />
-                    </div>
+            {post.status === 'published' && (
+              <div className="flex bg-muted/30 rounded-xl p-1 mb-6 border border-border/20">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('details')}
+                  className={cn(
+                    "flex-1 text-xs font-bold py-2 rounded-lg transition-all cursor-pointer border-0",
+                    activeTab === 'details'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground bg-transparent"
                   )}
+                >
+                  Detalhes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('metrics')}
+                  className={cn(
+                    "flex-1 text-xs font-bold py-2 rounded-lg transition-all cursor-pointer border-0",
+                    activeTab === 'metrics'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground bg-transparent"
+                  )}
+                >
+                  Métricas
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'details' ? (
+              <div className="space-y-6">
+                <div>
+                  <h3 className="font-display font-bold text-lg mb-4">Detalhes do Post</h3>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Status</p>
+                  <div className="flex items-center gap-2">
+                    <div className={cn("w-2 h-2 rounded-full", post.status === 'published' ? "bg-green-500" : "bg-yellow-500")} />
+                    <span className="text-sm font-medium capitalize">{post.status}</span>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Conteúdo Original</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{post.content}</p>
+                </div>
+
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Agenda</p>
+                  <p className="text-sm">
+                    {post.published_at
+                      ? `Publicado em: ${new Date(post.published_at).toLocaleString()}`
+                      : post.scheduled_at
+                      ? `Agendado para: ${new Date(post.scheduled_at).toLocaleString()}`
+                      : "Publicação Imediata"}
+                  </p>
+                </div>
+
+                {post.media_urls && post.media_urls.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                      Mídias ({post.media_urls.length})
+                      {post.media_type === 'carousel' && <span className="ml-1 text-primary">• Carrossel</span>}
+                    </p>
+                    {post.media_urls.length > 1 ? (
+                      <SidebarCarousel urls={post.media_urls.filter((u): u is string => !!u)} />
+                    ) : (
+                      <div className="aspect-square rounded-lg overflow-hidden bg-muted border border-border/50">
+                        <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary" />
+                  <h3 className="font-display font-bold text-base">Desempenho Geral</h3>
+                </div>
+                
+                {/* Visual Chart Comparison */}
+                {post.platform_metrics && post.platform_metrics.length > 0 ? (
+                  <div className="bg-card border border-border/50 rounded-2xl p-4 space-y-3 shadow-sm">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block mb-2">Visualizações por Canal</span>
+                    <div className="space-y-3">
+                      {post.platform_metrics.map((m) => {
+                        const platform = socialPlatforms.find(sp => sp.id === m.platform);
+                        const totalViews = post.platform_metrics?.reduce((sum, item) => sum + (item.views || 0), 0) || 1;
+                        const percent = Math.round(((m.views || 0) / totalViews) * 100);
+                        return (
+                          <div key={`${m.platform}-${m.social_account_id}`} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs font-medium">
+                              <span className="capitalize">{platform?.name || m.platform}</span>
+                              <span className="text-muted-foreground">{(m.views || 0).toLocaleString('pt-BR')} ({percent}%)</span>
+                            </div>
+                            <div className="w-full bg-muted/40 h-2 rounded-full overflow-hidden">
+                              <div className={cn("h-full", platform?.color || "bg-primary")} style={{ width: `${percent}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground p-4 bg-muted/20 border border-border/40 rounded-xl text-center">
+                    Aguardando sincronização de dados das plataformas.
+                  </div>
+                )}
+
+                {/* Per Platform Metrics breakdown */}
+                <div className="space-y-4">
+                  <h4 className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Detalhado por Rede e Perfil</h4>
+                  {post.platform_metrics?.map((m) => {
+                    const platform = socialPlatforms.find(sp => sp.id === m.platform);
+                    const account = connections.find(c => c.id === m.social_account_id || c.platform === m.platform);
+                    const Icon = platform?.icon || BarChart3;
+
+                    // Compute monetization and watch details
+                    const earnings = m.earnings || 0;
+                    const adRevenue = m.ad_revenue || 0;
+                    const totalProfit = earnings + adRevenue;
+                    const watchTime = m.breakdown?.watch_time || m.breakdown?.watchTime || "0h";
+                    const engRate = m.breakdown?.engagement_rate || m.breakdown?.engagementRate || 
+                      (m.reach > 0 ? ((m.likes + m.comments + m.shares) / m.reach * 100).toFixed(1) + "%" : "0.0%");
+
+                    return (
+                      <div key={`${m.platform}-${m.social_account_id}`} className="bg-card border border-border/50 rounded-2xl p-4 space-y-4 shadow-sm hover:border-primary/20 transition-all">
+                        {/* Header Account */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-white", platform?.color || "bg-primary")}>
+                              <Icon className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold leading-none">{account?.page_name || account?.username || platform?.name || m.platform}</span>
+                              <span className="text-[9px] text-muted-foreground mt-0.5">@{account?.username || 'canal'}</span>
+                            </div>
+                          </div>
+                          <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 border border-green-500/20">Ativo</span>
+                        </div>
+
+                        {/* Basic Stats Grid */}
+                        <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/40">
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-muted-foreground uppercase font-bold">Curtidas</span>
+                            <span className="text-xs font-black">{(m.likes || 0).toLocaleString('pt-BR')}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-muted-foreground uppercase font-bold">Comentários</span>
+                            <span className="text-xs font-black">{(m.comments || 0).toLocaleString('pt-BR')}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-muted-foreground uppercase font-bold">Compartilhados</span>
+                            <span className="text-xs font-black">{(m.shares || 0).toLocaleString('pt-BR')}</span>
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-muted-foreground uppercase font-bold">Visualizações</span>
+                            <span className="text-xs font-black">{(m.views || 0).toLocaleString('pt-BR')}</span>
+                          </div>
+                        </div>
+
+                        {/* Advanced Stats Section */}
+                        <div className="space-y-2 pt-3 border-t border-border/40">
+                          <div className="flex items-center justify-between text-xs font-medium">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <TrendingUp className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                              <span>Engajamento</span>
+                            </div>
+                            <span className="font-bold">{engRate}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs font-medium">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <Clock className="w-3.5 h-3.5 text-sky-500" />
+                              <span>Tempo Assistido</span>
+                            </div>
+                            <span className="font-bold">{watchTime}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs font-medium">
+                            <div className="flex items-center gap-1.5 text-muted-foreground">
+                              <DollarSign className="w-3.5 h-3.5 text-amber-500" />
+                              <span>Monetização</span>
+                            </div>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              {totalProfit > 0 ? `R$ ${totalProfit.toFixed(2)}` : "R$ 0,00"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </DialogContent>
     </Dialog>
   );
-};
+});
 
 /* Mini carousel for sidebar — reutiliza SlideCarousel com dots escuros */
-function SidebarCarousel({ urls }: { urls: string[] }) {
+const SidebarCarousel = memo(({ urls }: { urls: string[] }) => {
   return (
     <div className="rounded-lg overflow-hidden bg-muted border border-border/50">
       <SlideCarousel
@@ -388,7 +548,7 @@ function SidebarCarousel({ urls }: { urls: string[] }) {
       />
     </div>
   );
-}
+});
 
 /* Platform Specific Mini-Previews */
 

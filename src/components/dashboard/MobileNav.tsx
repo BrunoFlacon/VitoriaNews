@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { 
   LayoutDashboard, 
   PenSquare, 
@@ -24,10 +23,8 @@ export const MobileNav = ({ activeTab, setActiveTab }: MobileNavProps) => {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-[100] md:hidden px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-2 bg-gradient-to-t from-background via-background/80 to-transparent">
-      <motion.nav 
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="glass-card border border-white/20 rounded-2xl h-16 flex items-center justify-around px-2 shadow-2xl relative overflow-hidden"
+      <nav 
+        className="glass-card border border-white/20 rounded-2xl h-16 flex items-center justify-around px-2 shadow-2xl relative overflow-hidden animate-fade-in-up"
       >
         {/* Glow effect */}
         <div className="absolute inset-0 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
@@ -84,15 +81,14 @@ export const MobileNav = ({ activeTab, setActiveTab }: MobileNavProps) => {
               </span>
               
               {isActive && (
-                <motion.div 
-                  layoutId="mobileActiveIndicator"
+                <div 
                   className="absolute -bottom-1 w-1 h-1 rounded-full bg-primary"
                 />
               )}
             </button>
           );
         })}
-      </motion.nav>
+      </nav>
     </div>
   );
 };

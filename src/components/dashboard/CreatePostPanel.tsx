@@ -55,7 +55,7 @@ import {
   XLikeCard, 
   LinkedInCard
 } from "@/components/dashboard/PostPreview";
-import { getMediaUrl } from "@/utils/mediaUtils";
+import { getMediaUrl, saveSelectedAccounts } from "@/utils/mediaUtils";
 import { PostsFeedView } from "@/components/dashboard/PostsFeedView";
 import { ScheduledPost, CreatePostInput } from "@/hooks/useScheduledPosts";
 import { useNotifications } from "@/contexts/NotificationContext";
@@ -377,6 +377,10 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
       prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
   };
+
+  useEffect(() => {
+    saveSelectedAccounts(selectedPlatforms);
+  }, [selectedPlatforms]);
 
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -826,59 +830,6 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
         </div>
       ) : (
       <div className="p-4 md:p-6 space-y-6">
-
-        {/* ⚡ Quick Templates Bar — acesso rápido sem abrir menus */}
-        {!isEditing && (
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <Zap className="w-3 h-3 text-yellow-400" />
-                Templates Rápidos
-              </span>
-              {/* Próximo melhor horário */}
-              {selectedPlatforms.length > 0 && (() => {
-                const firstPlatformId = selectedPlatforms[0]?.split('|')[0] as SocialPlatformId;
-                const times = firstPlatformId ? bestPostingTimes[firstPlatformId] : undefined;
-                const nextTime = times?.[0];
-                return nextTime ? (
-                  <button
-                    type="button"
-                    onClick={() => applyBestTime(nextTime.day, nextTime.time)}
-                    className="flex items-center gap-1.5 text-[10px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full transition-all"
-                    title="Aplicar melhor horário automaticamente"
-                  >
-                    <Clock className="w-3 h-3" />
-                    {nextTime.day} {nextTime.time.split('-')[0]}
-                  </button>
-                ) : null;
-              })()}
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              {postTemplates.map((tpl) => (
-                <button
-                  key={tpl.name}
-                  type="button"
-                  onClick={() => setContent(tpl.content)}
-                  className="group flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/60 bg-muted/30 hover:bg-primary/10 hover:border-primary/40 transition-all text-xs font-semibold text-muted-foreground hover:text-primary"
-                  title={tpl.description}
-                >
-                  <span>{tpl.name}</span>
-                </button>
-              ))}
-              {content.trim().length > 10 && (
-                <button
-                  type="button"
-                  onClick={() => setContent("")}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/60 bg-red-500/5 hover:bg-red-500/10 border-red-500/20 transition-all text-xs font-semibold text-red-400 hover:text-red-300"
-                  title="Limpar conteúdo"
-                >
-                  <X className="w-3 h-3" />
-                  Limpar
-                </button>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Platform Selection */}
         <div>
@@ -1343,7 +1294,10 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
               Conteúdo da Publicação
             </label>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mr-1">Modelos Rápidos:</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1 mr-1">
+                <Zap className="w-3 h-3 text-yellow-400" />
+                Modelos Rápidos:
+              </span>
               {postTemplates.map((t, idx) => (
                 <button
                   key={idx}
@@ -1358,6 +1312,35 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                   {t.name}
                 </button>
               ))}
+              {/* Melhor Horário Automático */}
+              {selectedPlatforms.length > 0 && (() => {
+                const firstPlatformId = selectedPlatforms[0]?.split('|')[0] as SocialPlatformId;
+                const times = firstPlatformId ? bestPostingTimes[firstPlatformId] : undefined;
+                const nextTime = times?.[0];
+                return nextTime ? (
+                  <button
+                    type="button"
+                    onClick={() => applyBestTime(nextTime.day, nextTime.time)}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/20 rounded-lg transition-all"
+                    title={`Aplicar melhor horário: ${nextTime.day} ${nextTime.time}`}
+                  >
+                    <Clock className="w-3 h-3" />
+                    {nextTime.day} {nextTime.time.split('-')[0]}
+                  </button>
+                ) : null;
+              })()}
+              {/* Botão Limpar */}
+              {content.trim().length > 10 && (
+                <button
+                  type="button"
+                  onClick={() => setContent("")}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-red-400 bg-red-500/5 hover:bg-red-500/15 border border-red-500/20 rounded-lg transition-all"
+                  title="Limpar conteúdo"
+                >
+                  <X className="w-3 h-3" />
+                  Limpar
+                </button>
+              )}
             </div>
           </div>
           <Textarea

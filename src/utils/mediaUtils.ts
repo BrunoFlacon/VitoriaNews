@@ -1,15 +1,53 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export const getMediaUrl = (path: string) => {
-  if (!path) return "";
-  if (path.startsWith("http") || path.startsWith("blob:") || path.startsWith("data:")) return path;
-  
+const SELECTED_ACCOUNTS_KEY = "dashboard_selected_accounts";
+
+export const saveSelectedAccounts = (platforms: string[]) => {
   try {
-    const { data } = supabase.storage.from("media").getPublicUrl(path);
+    const map: Record<string, string> = {};
+    platforms.forEach(p => {
+      const [pid, accId] = p.split("|");
+      map[pid] = accId || "all";
+    });
+    localStorage.setItem(SELECTED_ACCOUNTS_KEY, JSON.stringify(map));
+  } catch { /* localStorage may be full */ }
+};
+
+export const loadSelectedAccounts = (): string[] => {
+  try {
+    const saved = localStorage.getItem(SELECTED_ACCOUNTS_KEY);
+    if (saved) {
+      const selected = JSON.parse(saved) as Record<string, string>;
+      return Object.entries(selected)
+        .filter(([_, accountId]) => accountId && accountId !== "all")
+        .map(([platform, accountId]) => `${platform}|${accountId}`);
+    }
+  } catch { /* ignore */ }
+  return [];
+};
+
+export const getMediaUrl = (raw: string) => {
+  if (!raw) return "";
+
+  // Signed URLs expiradas — extrair o path e gerar public URL fresca
+  if (raw.includes("/object/sign/")) {
+    try {
+      const url = new URL(raw);
+      const m = url.pathname.match(/\/object\/sign\/([^/]+)\/(.+)/);
+      if (m) {
+        const { data } = supabase.storage.from(m[1]).getPublicUrl(m[2]);
+        return data.publicUrl;
+      }
+    } catch { /* fall through */ }
+  }
+
+  if (raw.startsWith("http") || raw.startsWith("blob:") || raw.startsWith("data:")) return raw;
+
+  try {
+    const { data } = supabase.storage.from("media").getPublicUrl(raw);
     return data.publicUrl;
-  } catch (error) {
-    console.error("Error getting public URL:", error);
-    return path;
+  } catch {
+    return raw;
   }
 };
 

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Plus, Trash2, ArrowLeft, GripVertical,
   Image as ImageIcon, Send, Loader2, Check, ChevronLeft, ChevronRight,
@@ -40,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { useBrands } from "@/hooks/useBrands";
 import type { Brand } from "@/hooks/useBrands";
+import { getMediaUrl, loadSelectedAccounts } from "@/utils/mediaUtils";
 
 interface SlideTransform {
   scale: number;
@@ -88,6 +88,7 @@ function PreviewCarousel({ urls, carouselId, previewIdx, setPreviewIdx, previewT
   previewTimers: React.MutableRefObject<Record<string, ReturnType<typeof setInterval>>>;
   onOpen?: () => void;
 }) {
+  const [loadedIdx, setLoadedIdx] = useState<number>(-1);
   const [playing, setPlaying] = useState(true);
   const count = urls.length;
 
@@ -117,6 +118,14 @@ function PreviewCarousel({ urls, carouselId, previewIdx, setPreviewIdx, previewT
 
   const curIdx = previewIdx[carouselId] ?? 0;
 
+  useEffect(() => {
+    if (!count) return;
+    urls.forEach(url => {
+      const img = new Image();
+      img.src = url;
+    });
+  }, [count, urls]);
+
   if (!count) {
     return (
       <div className="w-full aspect-[9/13] bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
@@ -131,21 +140,18 @@ function PreviewCarousel({ urls, carouselId, previewIdx, setPreviewIdx, previewT
       onMouseLeave={() => setPlaying(true)}
       onClick={onOpen}
     >
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={curIdx}
-          className="absolute inset-0 w-full h-full"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          <SafeImage
-            src={urls[curIdx]}
-            className="w-full h-full object-cover"
-          />
-        </motion.div>
-      </AnimatePresence>
+      <img
+        src={urls[curIdx]}
+        alt=""
+        className={cn(
+          "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
+          loadedIdx === curIdx ? "opacity-100" : "opacity-0"
+        )}
+        onLoad={() => setLoadedIdx(curIdx)}
+        onError={() => setLoadedIdx(curIdx)}
+        loading="eager"
+        decoding="async"
+      />
 
       {/* Gradient overlay */}
       <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/60 to-transparent" />
@@ -227,7 +233,10 @@ export const CarrosselView = () => {
   const [caption, setCaption] = useState("");
   const [slides, setSlides] = useState<CarouselSlide[]>([]);
   const [currentSlideIdx, setCurrentSlideIdx] = useState(0);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["instagram"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(() => {
+    const saved = loadSelectedAccounts();
+    return saved.length > 0 ? saved : ["instagram"];
+  });
   const [saving, setSaving] = useState(false);
   const [slideTransforms, setSlideTransforms] = useState<Record<string, SlideTransform>>({});
   const [showSchedulePicker, setShowSchedulePicker] = useState<CarouselPost | null>(null);
@@ -267,7 +276,7 @@ export const CarrosselView = () => {
             });
             const urlsMap: Record<string, string[]> = {};
             posts.forEach((p: any) => {
-              urlsMap[p.id] = (p.media_ids || []).map((id: string) => mediaMap[id]).filter(Boolean);
+              urlsMap[p.id] = (p.media_ids || []).map((id: string) => getMediaUrl(mediaMap[id])).filter(Boolean);
             });
             setMediaUrlsMap(urlsMap);
           }
@@ -288,8 +297,7 @@ export const CarrosselView = () => {
           }
         })(),
       ]);
-    } catch (err: any) {
-      console.error("Erro ao buscar carrosseis:", err);
+    } catch {
     } finally {
       setLoading(false);
       setInitialLoading(false);
@@ -454,9 +462,7 @@ export const CarrosselView = () => {
     }
   };
 
-  const resolveMediaUrl = (fileUrl: string) => {
-    return fileUrl;
-  };
+  const resolveMediaUrl = (fileUrl: string) => getMediaUrl(fileUrl);
 
   const handlePublish = async (carousel: CarouselPost) => {
     const { data: mediaItems } = await (supabase as any)
@@ -767,11 +773,8 @@ export const CarrosselView = () => {
                   </div>
                 ) : (
                   slides.map((slide, idx) => (
-                    <motion.div
+                    <div
                       key={slide.id + idx}
-                      layout
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
                       className={cn(
                         "flex items-center gap-3 p-2 rounded-xl border transition-all",
                         idx === currentSlideIdx
@@ -810,7 +813,7 @@ export const CarrosselView = () => {
                       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive" onClick={() => removeSlide(idx)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
-                    </motion.div>
+                    </div>
                   ))
                 )}
               </div>
@@ -901,7 +904,7 @@ export const CarrosselView = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {carousels.map((carousel) => (
-            <motion.div key={carousel.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div key={carousel.id}>
               <Card className="glass-card hover:shadow-xl hover:shadow-primary/5 transition-all group border-border/40 overflow-hidden">
                 {/* Mini carousel preview */}
                 <PreviewCarousel
@@ -966,27 +969,27 @@ export const CarrosselView = () => {
                       <div className="flex flex-wrap gap-2 pt-1">
                         {totals.impressions > 0 && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <Eye className="w-3 h-3" /> {totals.impressions.toLocaleString()}
+                            <Eye className="w-3 h-3" /> {totals.impressions.toLocaleString('pt-BR')}
                           </span>
                         )}
                         {totals.reach > 0 && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <Send className="w-3 h-3" /> {totals.reach.toLocaleString()}
+                            <Send className="w-3 h-3" /> {totals.reach.toLocaleString('pt-BR')}
                           </span>
                         )}
                         {totals.likes > 0 && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <Heart className="w-3 h-3" /> {totals.likes.toLocaleString()}
+                            <Heart className="w-3 h-3" /> {totals.likes.toLocaleString('pt-BR')}
                           </span>
                         )}
                         {totals.comments > 0 && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <MessageCircle className="w-3 h-3" /> {totals.comments.toLocaleString()}
+                            <MessageCircle className="w-3 h-3" /> {totals.comments.toLocaleString('pt-BR')}
                           </span>
                         )}
                         {totals.shares > 0 && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                            <Share2 className="w-3 h-3" /> {totals.shares.toLocaleString()}
+                            <Share2 className="w-3 h-3" /> {totals.shares.toLocaleString('pt-BR')}
                           </span>
                         )}
                       </div>
@@ -1030,7 +1033,7 @@ export const CarrosselView = () => {
                   </Button>
                 </div>
               </Card>
-            </motion.div>
+            </div>
           ))}
         </div>
       )}

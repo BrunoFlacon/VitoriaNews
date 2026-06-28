@@ -61,11 +61,7 @@ serve(async (req: Request) => {
     if (req.method === 'POST') {
       try {
         body = await req.json();
-        if (body.path && (!path || path === 'radar-api')) {
-=======
-        // If 'path' is in the body, it takes precedence
         if (body.path) {
-
           path = body.path;
         }
       } catch (e) {
@@ -78,12 +74,7 @@ serve(async (req: Request) => {
 
     switch (path) {
       case 'sync-intelligence':
-      case 'radar-api': { 
-          const { discoverTrends } = await import('../_shared/automation/trend-discovery.ts');
-          const effectiveUserId = user?.id || body.userId || 'system-automatic-sync';
-          data = await discoverTrends(supabaseClient, effectiveUserId);
-=======
-          
+      case 'radar-api': {
           const authHeader = req.headers.get('Authorization') || '';
           const token = authHeader.replace('Bearer ', '');
           
@@ -97,7 +88,6 @@ serve(async (req: Request) => {
           let targetUserId: string | null = null;
           
           if (token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
-              // Service role bypass - find a user to act on behalf of
               const { data: firstProfile } = await supabaseClient.from('profiles').select('id').limit(1).maybeSingle();
               targetUserId = firstProfile?.id || null;
               
@@ -120,7 +110,6 @@ serve(async (req: Request) => {
 
           await discoverTrends(supabaseClient, targetUserId);
           
-          // After discovery, fetch the latest trends to return to the UI
           const { data: trends, error: fetchError } = await supabaseClient
             .from('trends')
             .select('*')

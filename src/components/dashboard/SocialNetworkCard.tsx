@@ -36,6 +36,20 @@ interface SocialNetworkCardProps {
   onSetPrimary?: (connectionId: string) => void;
 }
 
+const platformColors: Record<string, { border: string; bg: string; text: string }> = {
+  facebook: { border: "border-[#1877F2]/30", bg: "bg-[#1877F2]/5", text: "text-[#1877F2]" },
+  instagram: { border: "border-[#DD2A7B]/30", bg: "bg-[#DD2A7B]/5", text: "text-[#DD2A7B]" },
+  twitter: { border: "border-white/20", bg: "bg-white/5", text: "text-white" },
+  linkedin: { border: "border-[#0A66C2]/30", bg: "bg-[#0A66C2]/5", text: "text-[#0A66C2]" },
+  youtube: { border: "border-[#FF0000]/30", bg: "bg-[#FF0000]/5", text: "text-[#FF0000]" },
+  tiktok: { border: "border-white/20", bg: "bg-white/5", text: "text-white" },
+  whatsapp: { border: "border-[#25D366]/30", bg: "bg-[#25D366]/5", text: "text-[#25D366]" },
+  telegram: { border: "border-[#0088CC]/30", bg: "bg-[#0088CC]/5", text: "text-[#0088CC]" },
+  pinterest: { border: "border-[#E60023]/30", bg: "bg-[#E60023]/5", text: "text-[#E60023]" },
+  snapchat: { border: "border-[#FFFC00]/30", bg: "bg-[#FFFC00]/5", text: "text-[#FFFC00]" },
+  threads: { border: "border-white/20", bg: "bg-white/5", text: "text-white" },
+};
+
 export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCardProps>(
   ({
     platform,
@@ -59,13 +73,15 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
 
     const handleGearClick = (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (gearBtnRef.current) {
-        const rect = gearBtnRef.current.getBoundingClientRect();
-        setDropdownPos({
-          top: rect.bottom + window.scrollY + 6,
-          right: window.innerWidth - rect.right + window.scrollX,
-        });
-      }
+      requestAnimationFrame(() => {
+        if (gearBtnRef.current) {
+          const rect = gearBtnRef.current.getBoundingClientRect();
+          setDropdownPos({
+            top: rect.bottom + window.scrollY + 6,
+            right: window.innerWidth - rect.right + window.scrollX,
+          });
+        }
+      });
       setGearOpen((v) => !v);
     };
 
@@ -93,7 +109,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
         className={cn(
           "glass-card rounded-2xl p-5 border transition-all duration-300 cursor-pointer group relative",
           isConnected
-            ? "border-green-500/30 bg-green-500/5"
+            ? `${platformColors[platform.id]?.border || "border-green-500/30"} ${platformColors[platform.id]?.bg || "bg-green-500/5"}`
             : "border-border hover:border-primary/30"
         )}
         onClick={() => (isConnected ? onDisconnect() : onConnect())}
@@ -115,10 +131,11 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
             >
               {isConnected && selectedAccount?.profile_image_url ? (
                 <>
-                  <SafeImage
+                  <img
                     src={selectedAccount.profile_image_url}
                     alt={selectedAccount.page_name || platform.name}
                     className="w-full h-full rounded-2xl object-cover"
+                    referrerPolicy="no-referrer"
                   />
                   <div
                     className={cn(
@@ -132,6 +149,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
               ) : (
                 <Icon
                   className={cn("w-8 h-8", isConnected ? "text-white" : "text-muted-foreground")}
+                  data-active={isConnected}
                   style={{
                     filter: "drop-shadow(3px 4px 3px rgba(0,0,0,0.50))",
                   }}
@@ -151,16 +169,16 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
               {isConnected && selectedAccount && (
                 <div className="flex items-center gap-3 mt-1.5">
                   <div className="flex flex-col">
-                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Seguidores</span>
+                    <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">{platform.id === 'whatsapp' || platform.id === 'telegram' ? 'Membros' : 'Seguidores'}</span>
                     <span className="text-xs font-black font-mono text-foreground leading-none">
-                      {Number(selectedAccount.followers_count || 0).toLocaleString()}
+                      {Number(selectedAccount.followers_count || 0).toLocaleString('pt-BR')}
                     </span>
                   </div>
                   <div className="w-px h-5 bg-border/40" />
                   <div className="flex flex-col">
                     <span className="text-[9px] text-muted-foreground uppercase font-bold tracking-tighter">Posts</span>
                     <span className="text-xs font-black font-mono text-foreground leading-none">
-                      {Number(selectedAccount.posts_count || 0).toLocaleString()}
+                      {Number(selectedAccount.posts_count || 0).toLocaleString('pt-BR')}
                     </span>
                   </div>
                   {selectedAccount.isExpiringSoon && selectedAccount.daysUntilExpiry != null && (
@@ -193,7 +211,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
               isConnecting
                 ? "bg-muted text-muted-foreground"
                 : isConnected
-                  ? "bg-green-500 text-white"
+                  ? `${platformColors[platform.id]?.bg || "bg-green-500/10"} ${platformColors[platform.id]?.text || "text-green-500"}`
                   : "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground"
             )}>
               {isConnecting ? (

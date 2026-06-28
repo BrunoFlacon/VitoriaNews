@@ -158,11 +158,11 @@ export const AnalyticsDetailedReports = ({
                 <div className="flex items-center gap-5">
                   <div className="flex items-center gap-1.5 text-blue-400">
                     <Eye className="w-3.5 h-3.5" />
-                    <span className="text-xs font-bold">{(item.views || 0).toLocaleString()}</span>
+                    <span className="text-xs font-bold">{(item.views || 0).toLocaleString('pt-BR')}</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-purple-400">
                     <Heart className="w-3.5 h-3.5" />
-                    <span className="text-xs font-bold">{(item.engagement || 0).toLocaleString()}</span>
+                    <span className="text-xs font-bold">{(item.engagement || 0).toLocaleString('pt-BR')}</span>
                   </div>
                 </div>
               </div>
@@ -218,11 +218,11 @@ export const AnalyticsDetailedReports = ({
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-green-500/5 border border-green-500/10">
                 <p className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Confirmadas</p>
-                <p className="text-2xl font-bold text-green-400">{(messageStats?.totalSent || 0).toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-400">{(messageStats?.totalSent || 0).toLocaleString('pt-BR')}</p>
               </div>
               <div className="p-4 rounded-xl bg-red-500/5 border border-red-500/10">
                 <p className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Falhas</p>
-                <p className="text-2xl font-bold text-red-500">{(messageStats?.totalFailed || 0).toLocaleString()}</p>
+                <p className="text-2xl font-bold text-red-500">{(messageStats?.totalFailed || 0).toLocaleString('pt-BR')}</p>
               </div>
             </div>
           </div>

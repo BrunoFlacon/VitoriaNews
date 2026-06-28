@@ -88,7 +88,7 @@ export const StatsGrid = ({ engagement, overview, messageStats, chartData, dataS
     { label: "Compartilhados", value: engagement.shares, icon: Share2, color: "text-orange-400", bg: "bg-orange-500/10", sparkField: 'shares' as const },
   ];
 
-  const fmt = (v: number) => isDemo && v === 0 ? "—" : v.toLocaleString();
+  const fmt = (v: number) => isDemo && v === 0 ? "—" : v.toLocaleString('pt-BR');
 
   return (
     <div className="space-y-4">

@@ -145,16 +145,16 @@ export const PlatformPostsTable = memo(({ platformId, posts, loading }: Platform
                     </span>
                   )}
                   <span className="flex items-center gap-1">
-                    <Eye className="w-3 h-3" /> {(post.views || 0).toLocaleString()}
+                    <Eye className="w-3 h-3" /> {(post.views || 0).toLocaleString('pt-BR')}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Heart className="w-3 h-3" /> {(post.likes || 0).toLocaleString()}
+                    <Heart className="w-3 h-3" /> {(post.likes || 0).toLocaleString('pt-BR')}
                   </span>
                   <span className="flex items-center gap-1">
-                    <MessageSquare className="w-3 h-3" /> {(post.comments || 0).toLocaleString()}
+                    <MessageSquare className="w-3 h-3" /> {(post.comments || 0).toLocaleString('pt-BR')}
                   </span>
                   <span className="flex items-center gap-1">
-                    <Share2 className="w-3 h-3" /> {(post.shares || 0).toLocaleString()}
+                    <Share2 className="w-3 h-3" /> {(post.shares || 0).toLocaleString('pt-BR')}
                   </span>
                   {post.published_at && (
                     <span className="flex items-center gap-1">

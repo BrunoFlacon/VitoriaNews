@@ -54,7 +54,7 @@ export const TrendCard = ({ trend }: TrendCardProps) => {
         <div className="flex items-center gap-4">
           <div className="flex flex-col">
             <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-tighter">Menções</span>
-            <span className="text-xl font-black text-white">{(trend.mentions || 0).toLocaleString()}</span>
+            <span className="text-xl font-black text-white">{(trend.mentions || 0).toLocaleString('pt-BR')}</span>
           </div>
           <div className="h-8 w-[1px] bg-white/5" />
           <div className="flex flex-col">

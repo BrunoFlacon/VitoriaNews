@@ -522,7 +522,8 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
                 const dayPosts = day ? postsByDay[day] : undefined;
                 const dayExtra = day ? extraItemsByDay[day] : undefined;
                 const isSelected = day === selectedDay;
-                const isToday = day === new Date().getDate() && month === new Date().getMonth() && year === new Date().getFullYear();
+                const today = new Date();
+                const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
 
                 return (
                   <motion.div

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { 
   Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, 
   ThumbsUp, Repeat2, Eye, Play, Check, CheckCheck, Send,
@@ -17,7 +17,6 @@ import "./PostPreview.css";
 import { useSocialStats } from "@/hooks/useSocialStats";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { formatNum, getMediaUrl } from "@/utils/mediaUtils";
-import { useResolvedMediaUrl } from "@/hooks/useResolvedMediaUrl";
 
 interface UploadedMedia {
   id: string;
@@ -42,7 +41,7 @@ interface PostPreviewProps {
 }
 
 const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, controls, videoRef, playing, setPlaying }: any) {
-  const resolvedUrl = useResolvedMediaUrl(fileUrl);
+  const resolvedUrl = getMediaUrl(fileUrl);
   const handleClick = useCallback(() => {
     if (videoRef?.current) {
       if (playing) videoRef.current.pause();
@@ -66,14 +65,18 @@ const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, co
 });
 
 const ResolvedAudio = React.memo(function ResolvedAudio({ fileUrl, className, audioRef, onEnded }: any) {
-  const resolvedUrl = useResolvedMediaUrl(fileUrl);
+  const resolvedUrl = getMediaUrl(fileUrl);
   if (!resolvedUrl) return <div className="w-full h-10 bg-zinc-800 animate-pulse rounded" />;
   return <audio ref={audioRef} src={resolvedUrl} className={className} onEnded={onEnded} />;
 });
 
-const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, className: _outerClassName, isStory = false }: any) => {
-  if (!media || media.length === 0) return null;
+const MediaWrapper = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <div className={cn("relative w-full overflow-hidden", className)} style={{ minHeight: '50px' }}>
+    {children}
+  </div>
+);
 
+const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, className: _outerClassName, isStory = false }: any) => {
   const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -85,20 +88,22 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
     return () => { carouselApi.off("select", onSelect); };
   }, [carouselApi]);
 
-  const renderImage = (fileUrl: string, idx: number) => (
+  if (!media || media.length === 0) return null;
+
+  const renderImage = (fileUrl: string, idx: number, absolute = false) => (
     <SafeImage
       src={fileUrl}
-      className="absolute inset-0"
+      className={absolute ? "absolute inset-0" : "w-full h-full object-cover"}
       alt=""
       loading="eager"
       fetchPriority={idx === 0 ? "high" : "auto"}
     />
   );
 
-  const renderVideo = (fileUrl: string, idx: number) => (
+  const renderVideo = (fileUrl: string, idx: number, absolute = false) => (
     <ResolvedVideo
       fileUrl={fileUrl}
-      className="absolute inset-0"
+      className={absolute ? "absolute inset-0" : "w-full h-full object-cover"}
       videoRef={idx === 0 ? videoRef : undefined}
       playing={playing}
       setPlaying={setPlaying}
@@ -122,7 +127,7 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
       return (
         <ResolvedVideo
           fileUrl={m.file_url}
-          className="absolute inset-0"
+          className="w-full h-full object-cover"
           videoRef={videoRef}
           playing={playing}
           setPlaying={setPlaying}
@@ -134,53 +139,55 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
   }
 
   return (
-    <Carousel className="absolute inset-0" setApi={setCarouselApi} opts={{ watchDrag: true }}>
-      <CarouselContent className="h-full ml-0">
-        {media.map((m: any, idx: number) => (
-          <CarouselItem key={m?.id ?? `media-${idx}`} className="h-full pl-0 relative">
-            {m.file_type?.startsWith("image/") ? renderImage(m.file_url, idx) :
-             m.file_type?.startsWith("video/") ? renderVideo(m.file_url, idx) :
-             m.file_type?.startsWith("audio/") ? renderAudio(m.file_url) :
-             <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
-               <ImageIcon className="w-12 h-12 text-zinc-600" />
-             </div>}
-          </CarouselItem>
-        ))}
-      </CarouselContent>
+    <MediaWrapper>
+      <Carousel className="absolute inset-0" setApi={setCarouselApi} opts={{ watchDrag: true }}>
+        <CarouselContent className="h-full ml-0">
+          {media.map((m: any, idx: number) => (
+            <CarouselItem key={m?.id ?? `media-${idx}`} className="h-full pl-0 relative">
+              {m.file_type?.startsWith("image/") ? renderImage(m.file_url, idx, true) :
+               m.file_type?.startsWith("video/") ? renderVideo(m.file_url, idx, true) :
+               m.file_type?.startsWith("audio/") ? renderAudio(m.file_url) :
+               <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
+                 <ImageIcon className="w-12 h-12 text-zinc-600" />
+               </div>}
+            </CarouselItem>
+          ))}
+        </CarouselContent>
 
-      {media.length > 1 && (
-        <>
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
-            {media.map((_: any, idx: number) => (
+        {media.length > 1 && (
+          <>
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+              {media.map((_: any, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={(e) => { e.stopPropagation(); carouselApi?.scrollTo(idx); }}
+                  className={cn(
+                    "rounded-full transition-all cursor-pointer border-0",
+                    idx === currentSlide
+                      ? "bg-white w-2 h-2 scale-110"
+                      : "bg-white/40 hover:bg-white/60 w-1.5 h-1.5"
+                  )}
+                />
+              ))}
+            </div>
+            {currentSlide > 0 && (
               <button
-                key={idx}
-                onClick={(e) => { e.stopPropagation(); carouselApi?.scrollTo(idx); }}
-                className={cn(
-                  "rounded-full transition-all cursor-pointer border-0",
-                  idx === currentSlide
-                    ? "bg-white w-2 h-2 scale-110"
-                    : "bg-white/40 hover:bg-white/60 w-1.5 h-1.5"
-                )}
+                onClick={(e) => { e.stopPropagation(); carouselApi?.scrollPrev(); }}
+                className="absolute left-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer"
+                aria-label="Previous"
               />
-            ))}
-          </div>
-          {currentSlide > 0 && (
-            <button
-              onClick={(e) => { e.stopPropagation(); carouselApi?.scrollPrev(); }}
-              className="absolute left-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer"
-              aria-label="Previous"
-            />
-          )}
-          {currentSlide < media.length - 1 && (
-            <button
-              onClick={(e) => { e.stopPropagation(); carouselApi?.scrollNext(); }}
-              className="absolute right-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer"
-              aria-label="Next"
-            />
-          )}
-        </>
-      )}
-    </Carousel>
+            )}
+            {currentSlide < media.length - 1 && (
+              <button
+                onClick={(e) => { e.stopPropagation(); carouselApi?.scrollNext(); }}
+                className="absolute right-0 top-0 bottom-0 w-1/4 z-10 cursor-pointer"
+                aria-label="Next"
+              />
+            )}
+          </>
+        )}
+      </Carousel>
+    </MediaWrapper>
   );
 };
 
@@ -239,7 +246,7 @@ export const XLikeCard = memo(function XLikeCardRenderer({ content, media, autho
           </div>
           <div className="x-text text-[15px] leading-normal mb-3 whitespace-pre-wrap">{content || "Explorando as novas fronteiras da comunicacao inteligente."}</div>
           {media.length > 0 && (
-            <div className="media-wrapper rounded-2xl border border-white border-opacity-10 overflow-hidden mb-3 shadow-inner bg-zinc-900">
+            <div className="media-wrapper rounded-2xl border border-white border-opacity-10 overflow-hidden mb-3 shadow-inner bg-zinc-900 aspect-video">
               <MultimodalMedia 
                 media={media} 
                 playing={playing} 
@@ -313,7 +320,7 @@ export const TruthSocialCard = memo(function TruthSocialCardRenderer({ content, 
           <div className="text-[15px] leading-snug mb-3 whitespace-pre-wrap">{content || "Explorando a liberdade de expressão com novas ideias."}</div>
           
           {media.length > 0 && (
-            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden mb-3 bg-zinc-100 dark:bg-zinc-900">
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden mb-3 bg-zinc-100 dark:bg-zinc-900 aspect-video">
               <MultimodalMedia 
                 media={media} 
                 playing={playing} 
@@ -382,7 +389,7 @@ export const GettrCard = memo(function GettrCardRenderer({ content, media, autho
           <div className="text-[15px] leading-snug mb-3 whitespace-pre-wrap">{content || "Notícias sem censura na plataforma."}</div>
           
           {media.length > 0 && (
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden mb-3">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 overflow-hidden mb-3 aspect-video">
               <MultimodalMedia 
                 media={media} 
                 playing={playing} 
@@ -745,7 +752,7 @@ export const RedditCard = memo(function RedditCardRenderer({ content, media, aut
         <h3 className="text-lg font-black text-white mb-3 leading-tight">{content?.split('\n')[0] || "O Futuro da Inteligência de Conteúdo em 2026"}</h3>
         <div className="text-sm text-zinc-300 leading-relaxed mb-4 whitespace-pre-wrap">{content || "Estamos testemunhando uma mudança radical no modo como a informação é processada e distribuída..."}</div>
         {media.length > 0 && (
-          <div className="rounded-lg overflow-hidden border border-white border-opacity-10 mb-4 shadow-inner bg-black flex items-center justify-center min-h-[200px]">
+          <div className="rounded-lg overflow-hidden border border-white border-opacity-10 mb-4 shadow-inner bg-black flex items-center justify-center aspect-video">
              <MultimodalMedia 
                media={media} 
                playing={playing} 
@@ -872,7 +879,7 @@ export const TelegramCard = memo(function TelegramCardRenderer({ content, media,
     <div className="preview-card tg-frame p-6 bg-[#0e1621] rounded-3xl shadow-2xl min-h-[450px] border border-white border-opacity-5">
       <div className="tg-msg max-w-[85%] bg-[#182533] p-1 rounded-2xl shadow-xl overflow-hidden border border-white border-opacity-5">
         {media.length > 0 && (
-          <div className="rounded-xl overflow-hidden mb-1 relative group cursor-pointer shadow-inner">
+          <div className="rounded-xl overflow-hidden mb-1 relative group cursor-pointer shadow-inner aspect-video">
             <MultimodalMedia 
               media={media} 
               playing={playing} 
@@ -909,7 +916,7 @@ export const WhatsAppCard = memo(function WhatsAppCardRenderer({ content, media,
     <div className="preview-card wa-chat-bg p-6 bg-[#0b141a] rounded-3xl shadow-2xl min-h-[450px] border border-white border-opacity-5">
       <div className="sent float-right max-w-[85%] bg-[#005c4b] p-2 rounded-2xl shadow-xl border border-white border-opacity-5 relative">
         {media.length > 0 && (
-          <div className="rounded-xl overflow-hidden mb-2 relative group cursor-pointer shadow-inner">
+          <div className="rounded-xl overflow-hidden mb-2 relative group cursor-pointer shadow-inner aspect-video">
             <MultimodalMedia 
               media={media} 
               playing={playing} 
@@ -961,7 +968,7 @@ export const SpotifyCard = memo(function SpotifyCardRenderer({ media, authorName
         </div>
         <Heart className="w-7 h-7 text-spotify-green fill-current cursor-pointer hover:scale-125 active:scale-95 transition-all drop-shadow-[0_0_10px_rgba(29,185,84,0.3)]" />
       </div>
-      <div className="sp-progress-area group cursor-pointer mb-3" onClick={(e) => { const rect = e.currentTarget.getBoundingClientRect(); const x = e.clientX - rect.left; setProgress((x / rect.width) * 100); }}>
+      <div className="sp-progress-area group cursor-pointer mb-3" onClick={(e) => { const clientX = e.clientX; const target = e.currentTarget; requestAnimationFrame(() => { const rect = target.getBoundingClientRect(); const x = clientX - rect.left; setProgress((x / rect.width) * 100); }); }}>
         <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden shadow-inner"><div className="h-full bg-white group-hover:bg-spotify-green transition-all duration-300 relative" style={{ width: `${progress}%` }}><div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 shadow-xl transition-opacity" /></div></div>
       </div>
       <div className="flex justify-between text-[11px] text-zinc-500 font-black tracking-widest mb-8 opacity-80"><span>0:{Math.floor(progress * 0.4).toString().padStart(2, '0')}</span><span>3:20</span></div>
@@ -1271,45 +1278,39 @@ export const PostPreview = memo(function PostPreview({ content, selectedPlatform
                  const isActive = activeTabIdx === idx;
                  return (
                    <button
-                      key={pId}
-                      onClick={() => setActiveTabIdx(idx)}
-                      className={cn(
-                        "w-12 h-12 rounded-xl flex items-center justify-center transition-all shrink-0 border relative",
-                         isActive ? "border-primary bg-primary/10 text-primary scale-105 shadow-lg" : "border-white/10 bg-black text-zinc-500 hover:bg-zinc-900"
-                      )}
-                      title={plat.name}
-                   >
-                      <Icon className="w-6 h-6" />
-                      {isActive && (
-                         <motion.div layoutId="active-tab-preview" className="absolute -bottom-1 w-4 h-1 bg-primary rounded-full" />
-                      )}
+                       key={pId}
+                       onClick={() => setActiveTabIdx(idx)}
+                       className={cn(
+                         "w-12 h-12 rounded-xl flex items-center justify-center transition-all shrink-0 border relative",
+                          isActive ? "border-primary bg-primary/10 text-primary scale-105 shadow-lg" : "border-white/10 bg-black text-zinc-500 hover:bg-zinc-900"
+                       )}
+                       title={plat.name}
+                    >
+                       <Icon className="w-6 h-6" />
+                       {isActive && (
+                           <div className="absolute -bottom-1 w-4 h-1 bg-primary rounded-full" />
+                        )}
                    </button>
                  );
               })}
             </div>
 
-            <AnimatePresence mode="wait">
-              {previewItems[activeTabIdx] && (
-                <motion.div 
-                  key={previewItems[activeTabIdx].pId}
-                  initial={{ opacity: 0, y: 10 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className={`platform-${previewItems[activeTabIdx].platform}`}
-                >
+            {previewItems[activeTabIdx] && (() => {
+              const item = previewItems[activeTabIdx];
+              return (
+                <div key={item.pId} className={`platform-${item.platform}`}>
                   <div className="mb-2 flex items-center justify-between px-1">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 flex items-center gap-2">
-                      {socialPlatforms.find(p => p.id === previewItems[activeTabIdx].platform)?.name || previewItems[activeTabIdx].platform}
+                      {socialPlatforms.find(p => p.id === item.platform)?.name || item.platform}
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                     </span>
                   </div>
                   <div className={cn("designer-black-frame border border-white border-opacity-5 rounded-2xl overflow-hidden shadow-2xl bg-black", previewMode === "mobile" && "ring-4 ring-zinc-900 shadow-[0_0_100px_rgba(0,0,0,0.5)]")}>
-                    {renderCard(previewItems[activeTabIdx].platform, previewItems[activeTabIdx].accountId, activeTabIdx)}
+                    {renderCard(item.platform, item.accountId, activeTabIdx)}
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="platform-generic designer-black-frame border border-white border-opacity-5 rounded-2xl overflow-hidden shadow-2xl bg-black">

@@ -411,6 +411,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
                 setEditingPost(null);
               }}
               onBackToCalendar={() => setActiveTab("calendar")}
+              onEditPost={handleEditPost}
               createPost={createPost}
               updatePost={updatePost}
               submitForApproval={submitForApproval}

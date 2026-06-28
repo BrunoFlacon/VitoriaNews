@@ -82,16 +82,6 @@ serve(async (req: Request) => {
         });
       }
 
-      // With API key only, we can't access GA4 data directly
-      // Return placeholder indicating OAuth is needed
-      return new Response(JSON.stringify({
-        success: false,
-        message: "GA4 API requires OAuth2 authentication. Please connect your Google account via OAuth in Settings.",
-        property_id: propertyId,
-        hint: "Go to Settings > APIs > Google > Connect with OAuth"
-      }), {
-        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-=======
       return new Response(JSON.stringify({ status: "skipped", message: "Google OAuth connection missing" }), {
         status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
@@ -195,21 +185,6 @@ serve(async (req: Request) => {
       }
     }
 
-    return new Response(JSON.stringify({
-      success: true,
-      property_id: propertyId,
-      synced: results.length,
-      results,
-      aggregated
-    }), {
-      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-    });
-
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error?.message || "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
-=======
     return new Response(JSON.stringify({
       success: true,
       property_id: propertyId,

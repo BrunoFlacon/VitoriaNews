@@ -253,10 +253,10 @@ export const DashboardHomeView = memo(({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}>
 <StatsCard 
               title="Total de Posts" 
-              value={platformTotalPosts.toLocaleString()} 
+              value={platformTotalPosts.toLocaleString('pt-BR')} 
               icon={TrendingUp} 
               trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : computeEngagementPerPost()} 
               trendLabel={metricGrowth?.engagement ? "cresc." : "por post"} 
@@ -266,7 +266,7 @@ export const DashboardHomeView = memo(({
             />
 <StatsCard 
               title="Visualizações" 
-              value={platformViews.toLocaleString()} 
+              value={platformViews.toLocaleString('pt-BR')} 
               icon={Eye} 
               trend={metricGrowth?.views ? Number(metricGrowth.views) : computeViewsPerFollower()} 
               trendLabel={metricGrowth?.views ? "cresc." : "por seguidor"} 
@@ -276,7 +276,7 @@ export const DashboardHomeView = memo(({
             />
 <StatsCard 
               title="Engajamento" 
-              value={platformEngagement.toLocaleString()} 
+              value={platformEngagement.toLocaleString('pt-BR')} 
               icon={Heart} 
               trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : computeEngagementRate()} 
               trendLabel={metricGrowth?.engagement ? "cresc." : "taxa"} 
@@ -286,7 +286,7 @@ export const DashboardHomeView = memo(({
             />
 <StatsCard 
               title="Seguidores" 
-              value={platformFollowers.toLocaleString()} 
+              value={platformFollowers.toLocaleString('pt-BR')} 
               icon={Users} 
               trend={metricGrowth?.followers ? Number(metricGrowth.followers) : (platformFollowers > 0 && platformEngagement > 0 ? Number(((platformEngagement / platformFollowers) * 100).toFixed(2)) : 0)} 
               trendLabel={metricGrowth?.followers ? "cresc." : "por seguidor"} 

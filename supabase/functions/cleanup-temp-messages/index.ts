@@ -8,12 +8,12 @@ serve(async (_req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
     const { data: toDelete } = await supabase
       .from("messages")
       .select("id")
-      .lt("created_at", twelveHoursAgo)
+      .lt("created_at", tenMinutesAgo)
       .filter("metadata->>is_system_log", "eq", "true");
 
     const ids = (toDelete || []).map(r => r.id);

@@ -82,11 +82,11 @@ export const WebhookStatusBadge = React.memo(({
   };
 
   const getBadgeContent = () => {
-    if (loading) return <Loader2 className="w-3 h-3 animate-spin" />;
-    if (error || !status) return <HelpCircle className="w-3 h-3" />;
-    if (status.healthy && status.configured) return <CheckCircle2 className="w-3 h-3 text-green-500" />;
-    if (status.configured && !status.healthy) return <AlertCircle className="w-3 h-3 text-destructive" />;
-    return <AlertCircle className="w-3 h-3 text-yellow-500" />;
+    if (loading) return <Loader2 className="w-3 h-3 animate-spin text-current" />;
+    if (error || !status) return <span className="w-1.5 h-1.5 rounded-full bg-red-500" />;
+    if (status.healthy && status.configured) return <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />;
+    if (status.configured && !status.healthy) return <span className="w-1.5 h-1.5 rounded-full bg-red-500" />;
+    return <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />;
   };
 
   const getBadgeLabel = () => {
@@ -94,7 +94,7 @@ export const WebhookStatusBadge = React.memo(({
     if (error || !status) return "Erro";
     if (status.healthy && status.configured) return "Webhook Ativo";
     if (status.configured && !status.healthy) return "Webhook com Erro";
-    return "Não Configurado";
+    return "Inativo";
   };
 
   if (compact) {
@@ -104,11 +104,11 @@ export const WebhookStatusBadge = React.memo(({
           <TooltipTrigger asChild>
             <span
               className={cn(
-                "inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-tighter cursor-pointer transition-colors",
-                getBadgeVariant() === "default" && "bg-green-600 text-primary-foreground border-green-600",
-                getBadgeVariant() === "destructive" && "bg-destructive text-destructive-foreground border-destructive",
-                getBadgeVariant() === "secondary" && "bg-secondary text-secondary-foreground border-secondary",
-                getBadgeVariant() === "outline" && "border-border text-muted-foreground",
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] font-black uppercase tracking-tighter cursor-pointer transition-colors shadow-sm",
+                getBadgeVariant() === "default" && "bg-transparent text-white border-green-500 hover:bg-green-500/10",
+                getBadgeVariant() === "destructive" && "bg-transparent text-red-500 border-red-500 hover:bg-red-500/10",
+                getBadgeVariant() === "secondary" && "bg-transparent text-yellow-500 border-yellow-500 hover:bg-yellow-500/10",
+                getBadgeVariant() === "outline" && "border-border bg-transparent text-muted-foreground",
                 loading && "opacity-50"
               )}
               onClick={() => { if (!loading) checkHealth(); }}

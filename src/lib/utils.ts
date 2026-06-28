@@ -18,6 +18,11 @@ export function normalizePlatform(platform: string | null | undefined): string {
   return value;
 }
 
+export function formatNumber(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "0";
+  return n.toLocaleString('pt-BR');
+}
+
 /**
  * Get display name for a normalized platform id.
  */
@@ -63,13 +68,20 @@ export function sanitizeHtml(input: string | null | undefined): string {
  * Ensures media URLs are correctly parsed, especially for Supabase and external proxies.
  * Centralizes proxy logic for WhatsApp/Instagram/Facebook CDN images that block direct hotlinking.
  */
+export function getWhatsAppMediaUrl(mediaId: string, userId: string): string | null {
+  if (!mediaId || !userId) return null;
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  if (!supabaseUrl) return null;
+  return `${supabaseUrl}/functions/v1/whatsapp-media-proxy?mediaId=${mediaId}&userId=${userId}`;
+}
+
 export function getProxyUrl(url: string | null | undefined): string {
   if (!url) return "";
   
   // If it's already a Supabase function proxy, don't double proxy
   if (url.includes('/functions/v1/proxy-media?url=')) return url;
   
-  // WhatsApp, Telegram, Facebook, Instagram CDNs block direct hotlinking — proxy via Supabase
+  // WhatsAapp, Telegram, Instagram CDNs block direct hotlinking — proxy via Supabase
   if (
     url.includes('pps.whatsapp.net') ||
     url.includes('scontent.whatsapp.net') ||
@@ -78,7 +90,6 @@ export function getProxyUrl(url: string | null | undefined): string {
     url.includes('t.me') ||
     url.includes('ui-avatars.com') ||
     url.includes('platform-lookaside.fbsbx.com') ||
-    url.includes('fbcdn.net') ||
     url.includes('cdninstagram.com')
   ) {
     const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "ghtkdkauseesambzqfrd";

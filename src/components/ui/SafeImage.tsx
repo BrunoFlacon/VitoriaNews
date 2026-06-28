@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { cn, getProxyUrl } from "@/lib/utils";
 import { getMediaUrl } from "@/utils/mediaUtils";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,10 @@ interface SafeImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>,
   fallbackLetter?: string;
   isWhatsAppImage?: boolean;
   fetchPriority?: "high" | "low" | "auto";
+  /** Explicit aspect ratio (e.g. "16/9", "1") to prevent CLS */
+  aspectRatio?: string;
+  /** Default container height when image is loading (CLS prevention) */
+  containerHeight?: number | string;
 }
 
 function base64UrlDecode(str: string): string {
@@ -56,7 +60,7 @@ function extractStoragePath(url: string): string | null {
   return null;
 }
 
-export const SafeImage = ({ 
+export const SafeImage = memo(({ 
   src: rawSrc, 
   fallback, 
   alt, 
@@ -68,6 +72,8 @@ export const SafeImage = ({
   isWhatsAppImage,
   fetchPriority: _fetchPriority,
   loading: imgLoading = "lazy",
+  aspectRatio,
+  containerHeight,
   ...props 
 }: SafeImageProps) => {
   const [error, setError] = useState(false);
@@ -161,6 +167,18 @@ export const SafeImage = ({
     onLoadSuccess?.();
   }, [onLoadSuccess]);
 
+  const containerStyle = useMemo(() => ({
+    contain: 'paint' as const,
+    aspectRatio: aspectRatio || undefined,
+    minHeight: containerHeight || undefined,
+  }), [aspectRatio, containerHeight]);
+
+  const imgClasses = useMemo(() => {
+    if (!className) return "object-cover";
+    const fits = className.split(' ').filter(c => c.startsWith('object-'));
+    return fits.length > 0 ? fits.join(' ') : "object-cover";
+  }, [className]);
+
   const shouldSkip = !resolvedSrc || error;
 
   if (shouldSkip) {
@@ -184,14 +202,8 @@ export const SafeImage = ({
     );
   }
 
-  const imgClasses = useMemo(() => {
-    if (!className) return "object-cover";
-    const fits = className.split(' ').filter(c => c.startsWith('object-'));
-    return fits.length > 0 ? fits.join(' ') : "object-cover";
-  }, [className]);
-
   return (
-    <div className={cn("relative overflow-hidden", className)} style={{ contain: 'paint' }}>
+    <div className={cn("relative overflow-hidden", className)} style={containerStyle}>
       {isLoading && (
         <div className="absolute inset-0 bg-muted animate-pulse" />
       )}
@@ -208,13 +220,12 @@ export const SafeImage = ({
         onLoad={handleLoad}
         decoding="async"
         referrerPolicy="no-referrer"
-        crossOrigin="anonymous"
         fetchpriority={fetchpriority}
         loading={imgLoading}
         {...props}
       />
     </div>
   );
-};
+});
 
 export default SafeImage;

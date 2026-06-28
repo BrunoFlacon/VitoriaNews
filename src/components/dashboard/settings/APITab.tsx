@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, RefreshCw, ChevronUp, ChevronDown, X, Globe, 
   Unplug, Link2, Loader2, Plug, Save, FileText, MessageSquare,
-  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2
+  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2, Star
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +52,7 @@ interface APITabProps {
   user: any;
   saving?: string | null;
   handleDeleteCreds?: (id: string) => void;
+  onSetPrimary?: (connectionId: string) => void;
 }
 
 export const APITab = memo(({
@@ -88,7 +89,8 @@ export const APITab = memo(({
   handleDisconnectCustom,
   user,
   saving,
-  handleDeleteCreds = (id) => { deleteCredentials(id); }
+  handleDeleteCreds = (id) => { deleteCredentials(id); },
+  onSetPrimary
 }: APITabProps) => {
   const toggleExpand = (id: string) => {
     setExpandedPlatform(expandedPlatform === id ? null : id);
@@ -447,12 +449,11 @@ export const APITab = memo(({
                                     .filter(conn => config.id !== 'telegram' || (conn.username && conn.username.toLowerCase().endsWith('bot')))
                                     .map(conn => {
                                       const stats = socialStats.find(s =>
-                                      s.platform === config.id && (
-                                        (s.platform_user_id && conn.platform_user_id && s.platform_user_id === conn.platform_user_id) ||
-                                        (s.username && conn.username && s.username === conn.username) ||
-                                        s.id === conn.id
-                                      )
-                                    );
+                                        s.platform === config.id && (
+                                          (conn.page_id && s.platform_user_id === conn.page_id) ||
+                                          (conn.platform_user_id && s.platform_user_id === conn.platform_user_id)
+                                        )
+                                      );
 
                                     // Special case for Meta Ads: Show profile of related FB/IG account
                                     const metaAdsProfile = config.id === 'meta_ads'
@@ -460,7 +461,8 @@ export const APITab = memo(({
                                       : null;
 
                                     const displayPhoto = stats?.profile_picture || conn.profile_image_url || conn.profile_picture || "";
-                                    const displayName = stats?.username || conn.page_name || conn.username || "Conta Conectada";
+                                    // Use page_name from connection as primary display name (most accurate for WA)
+                                    const displayName = conn.page_name || stats?.username || conn.username || "Conta Conectada";
 
                                     // For Telegram/WhatsApp: sum ONLY channels matching THIS platform strictly
                                     const totalPlatformMembers = (config.id === 'telegram' || config.id === 'whatsapp')
@@ -469,17 +471,18 @@ export const APITab = memo(({
                                         .reduce((sum, ch) => sum + (ch.members_count || 0), 0)
                                       : 0;
 
+                                    // WhatsApp metrics are independent from Facebook — use only WA-native data
                                     const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
                                       ? (totalPlatformMembers || Number(stats?.followers_count ?? 0))
                                       : Number(stats?.followers_count ?? conn.followers_count ?? 0);
 
-                                    // Statistics for WhatsApp (Official vs Bot)
+                                    // Statistics for WhatsApp (Bot messages sent / posts via bot)
                                     const waMetadata = (stats?.metadata as any) || {};
                                     const displayPosts = config.id === 'whatsapp'
-                                      ? Number(waMetadata.official_posts_count ?? stats?.posts_count ?? 0)
+                                      ? Number(waMetadata.official_posts_count ?? waMetadata.bot_posts_count ?? stats?.posts_count ?? conn.posts_count ?? 0)
                                       : (config.id === 'youtube')
                                         ? Number(stats?.posts_count ?? stats?.metadata?.video_count ?? 0)
-                                        : Number(stats?.posts_count ?? (conn.metadata as any)?.posts_count ?? 0);
+                                        : Number(stats?.posts_count ?? conn.posts_count ?? 0);
 
                                     return (
                                       <div key={conn.id} className="space-y-4">
@@ -502,6 +505,9 @@ export const APITab = memo(({
                                             <div className="min-w-0 flex-1">
                                               <div className="flex items-center gap-2 mb-2">
                                                 <p className="font-black text-[17px] text-white tracking-tight">{displayName}</p>
+                                                {conn.is_primary && (
+                                                  <Badge className="bg-yellow-500/20 text-yellow-500 border-yellow-500/30 text-[9px] font-black uppercase tracking-tighter">Padrão</Badge>
+                                                )}
                                                 <Badge className="bg-green-500/20 text-green-500 border-green-500/30 text-[9px] font-black uppercase tracking-tighter">Oficial</Badge>
                                               </div>
 
@@ -547,7 +553,7 @@ export const APITab = memo(({
                                                   </span>
                                                   <div className="flex items-center gap-2">
                                                     <Users className="w-4 h-4 text-blue-500/80" />
-                                                    <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayFollowers.toLocaleString()}</span>
+                                                    <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayFollowers.toLocaleString('pt-BR')}</span>
                                                   </div>
                                                 </div>
 
@@ -560,21 +566,34 @@ export const APITab = memo(({
                                                   </span>
                                                   <div className="flex items-center gap-2">
                                                     <FileText className="w-4 h-4 text-blue-500/80" />
-                                                    <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayPosts.toLocaleString('en-US', { minimumIntegerDigits: 2 })}</span>
+                                                    <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{displayPosts.toLocaleString('pt-BR', { minimumIntegerDigits: 2 })}</span>
                                                   </div>
                                                 </div>
                                               </div>
                                             </div>
                                           </div>
-                                          <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="relative overflow-hidden bg-slate-900 border-border/30 text-slate-300 font-black uppercase tracking-[0.15em] text-[9px] h-11 px-6 hover:text-red-400 hover:bg-slate-900 focus:ring-0 active:scale-95 transition-all shrink-0 w-full sm:w-auto mt-3 sm:mt-0 rounded-xl"
-                                            onClick={() => handleDisconnectCustom(config.id, conn.id || 'all')}
-                                          >
-                                            <Unplug className="w-4 h-4 mr-2" />
-                                            Desconectar
-                                          </Button>
+                                          <div className="flex gap-2 w-full sm:w-auto mt-3 sm:mt-0 shrink-0">
+                                            {onSetPrimary && !conn.is_primary && (
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="bg-slate-900 border-border/30 text-slate-300 font-black uppercase tracking-[0.15em] text-[9px] h-11 px-6 hover:text-yellow-400 hover:bg-slate-900 focus:ring-0 active:scale-95 transition-all rounded-xl"
+                                                onClick={(e) => { e.stopPropagation(); onSetPrimary(conn.id); }}
+                                              >
+                                                <Star className="w-4 h-4 mr-2" />
+                                                Definir como Padrão
+                                              </Button>
+                                            )}
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="bg-slate-900 border-border/30 text-slate-300 font-black uppercase tracking-[0.15em] text-[9px] h-11 px-6 hover:text-red-400 hover:bg-slate-900 focus:ring-0 active:scale-95 transition-all rounded-xl"
+                                              onClick={() => handleDisconnectCustom(config.id, conn.id || 'all')}
+                                            >
+                                              <Unplug className="w-4 h-4 mr-2" />
+                                              Desconectar
+                                            </Button>
+                                          </div>
                                         </div>
                                       </div>
                                     );
@@ -584,7 +603,9 @@ export const APITab = memo(({
                                   {config.id === 'whatsapp' && (() => {
                                     const whatsappStats = socialStats.find(s => s.platform === 'whatsapp');
                                     const waMetadata = (whatsappStats?.metadata as any) || {};
-                                    const botPosts = Number(waMetadata.bot_posts_count ?? 0);
+                                    // Fallback: sum posts_count from WhatsApp connections when social_accounts is missing data
+                                    const connPostTotal = platformConnections.reduce((sum, c) => sum + (Number(c.posts_count) || 0), 0);
+                                    const botPosts = Number(waMetadata.bot_posts_count ?? connPostTotal ?? 0);
                                     const botAnswers = Number(waMetadata.bot_answers_count ?? 0);
                                     const isBotOn = localBotActive !== null ? localBotActive : waMetadata.is_active === true;
                                     
@@ -619,7 +640,7 @@ export const APITab = memo(({
                                                 </span>
                                                 <div className="flex items-center gap-2">
                                                   <FileText className="w-4 h-4 text-green-500/80" />
-                                                  <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botPosts.toLocaleString('en-US', { minimumIntegerDigits: 2 })}</span>
+                                                  <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botPosts.toLocaleString('pt-BR', { minimumIntegerDigits: 2 })}</span>
                                                 </div>
                                               </div>
 
@@ -632,7 +653,7 @@ export const APITab = memo(({
                                                 </span>
                                                 <div className="flex items-center gap-2">
                                                   <MessageSquare className="w-4 h-4 text-green-500/80" />
-                                                  <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botAnswers.toLocaleString('en-US', { minimumIntegerDigits: 2 })}</span>
+                                                  <span className="text-[17px] font-black text-white/90 font-mono tracking-tighter">{botAnswers.toLocaleString('pt-BR', { minimumIntegerDigits: 2 })}</span>
                                                 </div>
                                               </div>
                                             </div>
@@ -803,7 +824,7 @@ export const APITab = memo(({
                                               {pixelId && (
                                                 <div className="flex flex-col items-end gap-0.5">
                                                   <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Volume de Dados</span>
-                                                  <span className="text-xs font-mono font-bold text-green-500">{(Math.floor(Math.random() * 5000 + 1200)).toLocaleString()} Hits</span>
+                                                  <span className="text-xs font-mono font-bold text-green-500">{(Math.floor(Math.random() * 5000 + 1200)).toLocaleString('pt-BR')} Hits</span>
                                                 </div>
                                               )}
                                             </div>

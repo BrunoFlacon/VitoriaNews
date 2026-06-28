@@ -663,11 +663,11 @@ export const MessagingView = () => {
     };
   }, [user]);
 
-  // Auto-cleanup system messages every 60s
+  // Auto-cleanup system messages every 5min
   useEffect(() => {
     if (!user) return;
     cleanupSystemMessages();
-    const interval = setInterval(cleanupSystemMessages, 60_000);
+    const interval = setInterval(cleanupSystemMessages, 300_000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -1226,10 +1226,14 @@ export const MessagingView = () => {
       old?.filter(m => m.recipient_phone !== actualId && m.recipient_name !== actualId && m.channel_id !== actualId) || []
     );
 
+    const deleteFilters = [`recipient_phone.eq.${actualId}`,`recipient_name.eq.${actualId}`];
+    const isUUID = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(actualId);
+    if (isUUID) deleteFilters.push(`channel_id.eq.${actualId}`);
+
     const { error } = await supabase
       .from("messages")
       .delete()
-      .or(`recipient_phone.eq.${actualId},recipient_name.eq.${actualId},channel_id.eq.${actualId}`);
+      .or(deleteFilters.join(','));
 
     if (error) {
       console.error("[DELETE CONVERSATION] Error:", error);

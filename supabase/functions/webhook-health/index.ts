@@ -55,11 +55,11 @@ serve(async (req: Request) => {
             const lastErrorDate = data.result.last_error_date;
             const lastErrorMessage = data.result.last_error_message || "";
             let healthy = hasUrl;
-            if (hasUrl && lastErrorDate && pending > 0) {
-              healthy = false;
-            } else if (hasUrl && lastErrorDate) {
-              const cincoMinAtras = Math.floor(Date.now() / 1000) - 300;
-              if (lastErrorDate > cincoMinAtras) healthy = false;
+            if (hasUrl && pending > 0) {
+              if (lastErrorDate) {
+                const cincoMinAtras = Math.floor(Date.now() / 1000) - 300;
+                if (lastErrorDate > cincoMinAtras) healthy = false;
+              }
             }
             webhookStatuses["telegram"] = {
               configured: hasUrl,

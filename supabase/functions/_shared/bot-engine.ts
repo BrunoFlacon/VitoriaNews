@@ -80,6 +80,25 @@ export async function getSmartResponse(config: BotEngineConfig) {
       console.log(`[BOT-ENGINE] [${platform}] Human recently replied (${lastHumanMsg.sent_at}). Bot SILENCED for ${silenceHours}h.`);
       return { error: `Silêncio Inteligente Ativo: Você respondeu recentemente (${new Date(lastHumanMsg.sent_at).toLocaleTimeString()}).` };
     }
+
+    // Também verifica silencio_chats (silêncio manual/persistente)
+    const { data: silenced } = await supabase
+      .from('silencio_chats')
+      .select('id, silenced_at, expires_at')
+      .eq('user_id', userId)
+      .eq('platform', platform)
+      .eq('chat_id', chatId)
+      .maybeSingle();
+
+    if (silenced) {
+      if (silenced.expires_at && new Date(silenced.expires_at) < new Date()) {
+        // Expirado — limpar
+        await supabase.from('silencio_chats').delete().eq('id', silenced.id);
+      } else {
+        console.log(`[BOT-ENGINE] [${platform}] Chat ${chatId} manually SILENCED (${silenced.silenced_at}).`);
+        return { error: "Este chat está silenciado no painel." };
+      }
+    }
   }
 
   // 3. Fluxos Fixos

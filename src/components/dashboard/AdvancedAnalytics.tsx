@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect, startTransition } from "react";
+import React, { memo, useState, useMemo, useCallback, useRef, useEffect, startTransition } from "react";
 import { motion } from "framer-motion";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -61,7 +61,7 @@ interface IntegrationCardProps {
   onConnect?: () => void;
 }
 
-const IntegrationCard = ({ title, icon: Icon, color, bg, stats, statLabels, formatValue, onConnect }: IntegrationCardProps) => {
+const IntegrationCard = memo(({ title, icon: Icon, color, bg, stats, statLabels, formatValue, onConnect }: IntegrationCardProps) => {
   const hasPositiveValue = stats && Object.values(stats).some(v => v > 0);
   return (
     <div className="p-4 rounded-xl bg-card border border-border/50 hover:border-border transition-all">
@@ -80,7 +80,7 @@ const IntegrationCard = ({ title, icon: Icon, color, bg, stats, statLabels, form
             const val = stats[key] ?? 0;
             return (
               <div key={key}>
-                <p className="text-lg font-bold text-white">{formatValue ? formatValue(key, val) : val.toLocaleString()}</p>
+                <p className="text-lg font-bold text-white">{formatValue ? formatValue(key, val) : val.toLocaleString('pt-BR')}</p>
                 <p className="text-[10px] text-muted-foreground font-medium uppercase">{label}</p>
               </div>
             );
@@ -94,7 +94,7 @@ const IntegrationCard = ({ title, icon: Icon, color, bg, stats, statLabels, form
       </div>
     </div>
   );
-};
+});
 
 const PERIOD_OPTIONS = [
   { value: '24h', label: 'Últimas 24 horas' },
@@ -470,7 +470,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                 bg="bg-blue-500/10"
                 stats={data.adsStats ? { impressions: data.adsStats.impressions, clicks: data.adsStats.clicks, spend: data.adsStats.spend } : undefined}
                 statLabels={{ impressions: 'Impressões', clicks: 'Cliques', spend: 'Gasto' }}
-                formatValue={(k, v) => k === 'spend' ? `R$ ${v.toLocaleString()}` : v.toLocaleString()}
+                formatValue={(k, v) => k === 'spend' ? `R$ ${v.toLocaleString('pt-BR')}` : v.toLocaleString('pt-BR')}
                 onConnect={() => onNavigate?.('settings', 'api')}
               />
               <IntegrationCard
@@ -533,11 +533,11 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-4">
                       <div className="text-center">
-                        <p className="text-lg font-bold">{data.adsStats!.impressions.toLocaleString()}</p>
+                        <p className="text-lg font-bold">{data.adsStats!.impressions.toLocaleString('pt-BR')}</p>
                         <p className="text-[10px] text-muted-foreground">Impressões</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-lg font-bold">{data.adsStats!.clicks.toLocaleString()}</p>
+                        <p className="text-lg font-bold">{data.adsStats!.clicks.toLocaleString('pt-BR')}</p>
                         <p className="text-[10px] text-muted-foreground">Cliques</p>
                       </div>
                     </div>

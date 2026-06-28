@@ -49,7 +49,7 @@ export const PlatformProfileHeader = memo(({
           {followerCount !== undefined && (
             <span className="flex items-center gap-1">
               <Users className="w-3 h-3" />
-              {followerCount.toLocaleString()} seguidores
+              {followerCount.toLocaleString('pt-BR')} seguidores
             </span>
           )}
           {postCount !== undefined && (

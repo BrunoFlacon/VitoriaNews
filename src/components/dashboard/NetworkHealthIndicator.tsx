@@ -36,7 +36,8 @@ export const NetworkHealthIndicator = () => {
 
   useEffect(() => {
     checkHealth();
-    const interval = setInterval(checkHealth, 30000); // Check every 30s
+    if (!window.navigator.onLine) return;
+    const interval = setInterval(checkHealth, 300000); // Check every 5min
     return () => clearInterval(interval);
   }, []);
 

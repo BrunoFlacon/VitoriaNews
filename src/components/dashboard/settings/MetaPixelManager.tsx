@@ -102,7 +102,7 @@ export const MetaPixelManager = ({
                 {pixelId && (
                   <div className="flex flex-col items-end gap-0.5">
                     <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Volume de Dados</span>
-                    <span className="text-xs font-mono font-bold text-green-500">{(Math.floor(Math.random() * 5000 + 1200)).toLocaleString()} Hits</span>
+                    <span className="text-xs font-mono font-bold text-green-500">{(Math.floor(Math.random() * 5000 + 1200)).toLocaleString('pt-BR')} Hits</span>
                   </div>
                 )}
               </div>

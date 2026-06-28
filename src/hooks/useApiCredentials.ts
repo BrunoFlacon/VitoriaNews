@@ -97,6 +97,7 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Google News API Key", key: "api_key", masked: true },
   ],
   newsapi: [
+    { label: "NewsAPI.org API Key", key: "api_key", masked: true, placeholder: "Cole sua chave de API do newsapi.org" },
   ],
   resend: [
     { label: "Resend API Key (Email)", key: "api_key", masked: true, placeholder: "re_..." },
@@ -326,7 +327,12 @@ export function useApiCredentials() {
   const hasCredentials = (platform: string) => {
     const creds = credentials[platform];
     if (!creds) return false;
-    return Object.values(creds).some(v => v && v.trim() !== "");
+    return Object.values(creds).some(v => {
+      if (v === null || v === undefined) return false;
+      if (typeof v === 'string') return v.trim() !== "";
+      if (Array.isArray(v)) return v.length > 0;
+      return !!v;
+    });
   };
 
   return { credentials, loading, saving, saveCredentials, deleteCredentials, hasCredentials, refetch: fetchCredentials };
