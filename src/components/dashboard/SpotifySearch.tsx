@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Music, X, Loader2, Play, Pause, Headphones, Disc, TrendingUp, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SpotifySearchProps {
   onSelect: (track: { name: string; artist: string; url: string; image: string }) => void;
@@ -18,9 +19,11 @@ export const SpotifySearch = ({ onSelect, onClose }: SpotifySearchProps) => {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const tokenFetched = useRef(false);
   const { toast } = useToast();
 
-  // Dados demonstrativos — imagens de capas via fontes públicas abertas (sem token)
+  // Dados demonstrativos — fallback quando não há token
   const mockTracks = [
     { id: "1", name: "Stay With Me", artist: "Sam Smith", image: "https://upload.wikimedia.org/wikipedia/en/e/ef/Sam_Smith_-_In_the_Lonely_Hour.png", url: "https://open.spotify.com/track/5Nm9ERjZ9Z6O8G90IqOq4M" },
     { id: "2", name: "Blinding Lights", artist: "The Weeknd", image: "https://upload.wikimedia.org/wikipedia/en/e/e6/The_Weeknd_-_Blinding_Lights.png", url: "https://open.spotify.com/track/0VjIj9H9t3YvWpSTU4kYsy" },
@@ -30,28 +33,106 @@ export const SpotifySearch = ({ onSelect, onClose }: SpotifySearchProps) => {
     { id: "6", name: "Anti-Hero", artist: "Taylor Swift", image: "https://upload.wikimedia.org/wikipedia/en/6/6a/Midnights_-_Taylor_Swift.png", url: "https://open.spotify.com/track/0V3wNcy0pduRS896L68zG2" },
   ];
 
-  const handleSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!searchTerm.trim()) {
-      setResults(mockTracks);
+  useEffect(() => {
+    const fetchToken = async () => {
+      if (tokenFetched.current) return;
+      tokenFetched.current = true;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setResults(mockTracks);
+          return;
+        }
+        const { data: conns } = await supabase
+          .from("social_connections")
+          .select("access_token, token_expires_at")
+          .eq("user_id", session.user.id)
+          .eq("platform", "spotify")
+          .eq("is_connected", true)
+          .maybeSingle();
+        if (conns?.access_token) {
+          const expired = conns.token_expires_at && new Date(conns.token_expires_at) < new Date();
+          if (!expired) setApiToken(conns.access_token);
+        }
+      } catch {}
+      if (!apiToken) setResults(mockTracks);
+    };
+    fetchToken();
+  }, []);
+
+  const searchSpotify = async (query: string) => {
+    if (!apiToken) {
+      const filtered = mockTracks.filter(t =>
+        t.name.toLowerCase().includes(query.toLowerCase()) ||
+        t.artist.toLowerCase().includes(query.toLowerCase())
+      );
+      setResults(filtered);
       return;
     }
 
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      const filtered = mockTracks.filter(t => 
-        t.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        t.artist.toLowerCase().includes(searchTerm.toLowerCase())
+    try {
+      const res = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=12&market=US`, {
+        headers: { Authorization: `Bearer ${apiToken}` }
+      });
+      const data = await res.json();
+      if (data.tracks?.items) {
+        setResults(data.tracks.items.map((t: any) => ({
+          id: t.id,
+          name: t.name,
+          artist: t.artists.map((a: any) => a.name).join(", "),
+          image: t.album?.images?.[0]?.url || "",
+          url: t.external_urls?.spotify || `https://open.spotify.com/track/${t.id}`,
+        })));
+      } else {
+        setResults(mockTracks);
+      }
+    } catch {
+      const filtered = mockTracks.filter(t =>
+        t.name.toLowerCase().includes(query.toLowerCase()) ||
+        t.artist.toLowerCase().includes(query.toLowerCase())
       );
       setResults(filtered);
-      setLoading(false);
-    }, 800);
+    }
+    setLoading(false);
+  };
+
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!searchTerm.trim()) {
+      if (apiToken) {
+        setLoading(true);
+        try {
+          const res = await fetch("https://api.spotify.com/v1/browse/new-releases?limit=12&market=US", {
+            headers: { Authorization: `Bearer ${apiToken}` }
+          });
+          const data = await res.json();
+          if (data.albums?.items) {
+            setResults(data.albums.items.map((a: any) => ({
+              id: a.id,
+              name: a.name,
+              artist: a.artists.map((ar: any) => ar.name).join(", "),
+              image: a.images?.[0]?.url || "",
+              url: a.external_urls?.spotify || "",
+            })));
+          }
+        } catch {}
+        setLoading(false);
+      } else {
+        setResults(mockTracks);
+      }
+      return;
+    }
+    await searchSpotify(searchTerm);
   };
 
   useEffect(() => {
-    setResults(mockTracks);
-  }, []);
+    if (apiToken) {
+      handleSearch();
+    } else if (results.length === 0) {
+      setResults(mockTracks);
+    }
+  }, [apiToken]);
 
   return (
     <div className="flex flex-col h-[550px] w-full bg-[#121212] border border-[#282828] rounded-3xl overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in fade-in zoom-in slide-in-from-bottom-4 duration-300">

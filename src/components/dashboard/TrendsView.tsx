@@ -48,7 +48,7 @@ export const TrendsView = () => {
         setActivePlatform(platforms[0]);
       }
     }
-  }, [trends, loading]);
+  }, [trends, loading, activePlatform]);
 
   useEffect(() => {
     const handleGlobalSearch = (e: any) => {
@@ -82,7 +82,7 @@ export const TrendsView = () => {
       .slice(0, 8)
       .map(t => ({
         name: (t.keyword || "").length > 20 ? (t.keyword || "").substring(0, 17) + "..." : (t.keyword || "Sem Título"),
-        score: t.score || 50,
+        score: t.score ?? 50,
         fullName: t.keyword || "Sem Título"
       }))
       .sort((a, b) => b.score - a.score);

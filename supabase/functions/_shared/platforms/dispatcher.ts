@@ -24,6 +24,7 @@ import { publishToRumble } from './rumble.ts';
 import { publishToTruthSocial } from './truthsocial.ts';
 import { publishToGettr } from './gettr.ts';
 import { publishToGoogleNews } from './googlenews.ts';
+import { publishToSpotify } from './spotify.ts';
 import { getMetaCredentials } from "../credentials.ts";
 
 export async function dispatchPost(supabase: any, payload: PublishPayload): Promise<any> {
@@ -46,6 +47,7 @@ export async function dispatchPost(supabase: any, payload: PublishPayload): Prom
     case 'truthsocial': return publishToTruthSocial(supabase, payload);
     case 'gettr': return publishToGettr(supabase, payload);
     case 'googlenews': return publishToGoogleNews(supabase, payload);
+    case 'spotify': return publishToSpotify(supabase, payload);
     default: throw new Error(`Platform ${platform} is not supported for publishing.`);
   }
 }

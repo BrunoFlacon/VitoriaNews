@@ -19,6 +19,7 @@ import { Sidebar } from "@/components/dashboard/Sidebar";
 import { Header } from "@/components/dashboard/Header";
 import { MobileNav } from "@/components/dashboard/MobileNav";
 import { DashboardHomeView } from "@/components/dashboard/DashboardHomeView";
+import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
 // Lazy load non-critical components
 const NotificationsPanel = lazy(() => import("@/components/dashboard/NotificationsPanel").then(m => ({ default: m.NotificationsPanel })));
@@ -385,6 +386,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
+        if (chartLoading) return <DashboardSkeleton />;
         return (
           <div className="min-h-[70vh] w-full contents">
 <ErrorBoundary><DashboardHomeView 
@@ -456,7 +458,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         return (
           <Suspense fallback={<ViewLoader />}>
             <ErrorBoundary>
-              <AdvancedAnalytics />
+              <AdvancedAnalytics onNavigate={(tab, subtab) => { setSettingsSubTab(subtab); handleTabChange(tab); }} />
             </ErrorBoundary>
           </Suspense>
         );

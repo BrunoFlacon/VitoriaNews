@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Eye, Heart, Share2, TrendingUp, Users, 
   Settings, Clock, Activity, AlertCircle, BarChart3,
-  Calendar, ArrowUpRight,
+  Calendar, ArrowUpRight, Search,
   RefreshCw, Check, MessageCircle, MessageSquare, Zap, Globe,
   FileDown, DollarSign
 } from "lucide-react";
@@ -41,7 +41,6 @@ import { YouTubeShortsInsights } from "./analytics/YouTubeShortsInsights";
 import { AnalyticsSkeleton } from "./analytics/AnalyticsSkeleton";
 
 import { socialPlatforms, getPlatformDetails } from "@/components/icons/platform-metadata";
-import { TrendsView } from "./TrendsView";
 import { PlatformDetailTab } from "./analytics/platform-detail/PlatformDetailTab";
 import { PlatformDetailInline } from "./analytics/PlatformDetailInline";
 import { VideoRetentionChart } from "./VideoRetentionChart";
@@ -59,9 +58,10 @@ interface IntegrationCardProps {
   statLabels: Record<string, string>;
   formatValue?: (key: string, value: number) => string;
   onConnect?: () => void;
+  subtitle?: string;
 }
 
-const IntegrationCard = memo(({ title, icon: Icon, color, bg, stats, statLabels, formatValue, onConnect }: IntegrationCardProps) => {
+const IntegrationCard = memo(({ title, icon: Icon, color, bg, stats, statLabels, formatValue, onConnect, subtitle }: IntegrationCardProps) => {
   const hasPositiveValue = stats && Object.values(stats).some(v => v > 0);
   return (
     <div className="p-4 rounded-xl bg-card border border-border/50 hover:border-border transition-all">
@@ -71,7 +71,7 @@ const IntegrationCard = memo(({ title, icon: Icon, color, bg, stats, statLabels,
         </div>
         <div>
           <p className="text-sm font-bold">{title}</p>
-          <p className="text-[10px] text-muted-foreground">{hasPositiveValue ? 'Com dados' : 'Configure nas APIs'}</p>
+          <p className="text-[10px] text-muted-foreground">{subtitle || (hasPositiveValue ? 'Com dados' : 'Configure nas APIs')}</p>
         </div>
       </div>
       {stats && (
@@ -159,7 +159,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
-  const [activeView, setActiveView] = useState<'analytics' | 'trends' | 'platform-detail'>('analytics');
+  const [activeView, setActiveView] = useState<'analytics' | 'platform-detail'>('analytics');
   const [isExporting, setIsExporting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [topContentFilter, setTopContentFilter] = useState<string>('all');
@@ -175,6 +175,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   const hasAdsData = !!(data.adsStats && (data.adsStats.impressions > 0 || data.adsStats.clicks > 0 || data.adsStats.spend > 0));
   const totalInteractions = data.engagement.likes + data.engagement.comments + data.engagement.shares;
   const totalFollowerCount = totalSocialFollowers + totalMessagingMembers;
+  const realSource = data.dataSource === 'real';
 
   const formatReachData = useMemo(() => {
     if (!data.platformBreakdown || Object.keys(data.platformBreakdown).length === 0) return undefined;
@@ -443,9 +444,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         </motion.div>
       )}
 
-      {activeView === 'trends' ? (
-        <TrendsView />
-      ) : activeView === 'platform-detail' ? (
+      {activeView === 'platform-detail' ? (
         <PlatformDetailTab initialPlatform={platform !== 'all' ? platform : undefined} dateRange={dateRange?.start && dateRange?.end ? { start: dateRange.start.toISOString(), end: dateRange.end.toISOString() } : null} />
       ) : (
         <div ref={reportRef} className="space-y-8 animate-in fade-in duration-500 p-0.5 md:p-1 overflow-x-hidden" style={{ contain: 'layout style' }}>
@@ -464,7 +463,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             <h3 className="font-bold text-sm uppercase text-muted-foreground px-1">Integrações Avançadas</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <IntegrationCard
-                title="Google Ads"
+                title="Meta Ads"
                 icon={Activity}
                 color="text-blue-400"
                 bg="bg-blue-500/10"
@@ -472,6 +471,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                 statLabels={{ impressions: 'Impressões', clicks: 'Cliques', spend: 'Gasto' }}
                 formatValue={(k, v) => k === 'spend' ? `R$ ${v.toLocaleString('pt-BR')}` : v.toLocaleString('pt-BR')}
                 onConnect={() => onNavigate?.('settings', 'api')}
+                subtitle={data.adsStats && !(data.adsStats.impressions > 0 || data.adsStats.clicks > 0 || data.adsStats.spend > 0) ? 'Conectado, sem dados' : undefined}
               />
               <IntegrationCard
                 title="YouTube Analytics"
@@ -481,6 +481,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                 stats={data.youtubeStats ? { views: data.youtubeStats.views, likes: data.youtubeStats.likes, comments: data.youtubeStats.comments } : undefined}
                 statLabels={{ views: 'Visualizações', likes: 'Curtidas', comments: 'Comentários' }}
                 onConnect={() => onNavigate?.('settings', 'api')}
+                subtitle={data.youtubeStats && !(data.youtubeStats.views > 0 || data.youtubeStats.likes > 0 || data.youtubeStats.comments > 0) ? 'Conectado, sem dados' : undefined}
               />
               <IntegrationCard
                 title="Google Analytics 4"
@@ -490,6 +491,29 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                 stats={data.gaStats ? { views: data.gaStats.views } : undefined}
                 statLabels={{ views: 'Page Views' }}
                 onConnect={() => onNavigate?.('settings', 'api')}
+                subtitle={data.gaStats && !(data.gaStats.views > 0) ? 'Conectado, sem dados' : undefined}
+              />
+              <IntegrationCard
+                title="Google Search Console"
+                icon={Search}
+                color="text-green-400"
+                bg="bg-green-500/10"
+                stats={data.searchConsoleStats ? { clicks: data.searchConsoleStats.clicks, impressions: data.searchConsoleStats.impressions, ctr: data.searchConsoleStats.ctr ? parseFloat(data.searchConsoleStats.ctr) : 0 } : undefined}
+                statLabels={{ clicks: 'Cliques', impressions: 'Impressões', ctr: 'CTR' }}
+                formatValue={(k, v) => k === 'ctr' ? `${v.toFixed(2)}%` : v.toLocaleString('pt-BR')}
+                onConnect={() => onNavigate?.('settings', 'api')}
+                subtitle={data.searchConsoleStats && !(data.searchConsoleStats.clicks > 0 || data.searchConsoleStats.impressions > 0) ? 'Conectado, sem dados' : undefined}
+              />
+              <IntegrationCard
+                title="Google Ads"
+                icon={DollarSign}
+                color="text-yellow-400"
+                bg="bg-yellow-500/10"
+                stats={data.googleAdsStats ? { impressions: data.googleAdsStats.impressions, clicks: data.googleAdsStats.clicks, cost: data.googleAdsStats.cost, conversions: data.googleAdsStats.conversions } : undefined}
+                statLabels={{ impressions: 'Impressões', clicks: 'Cliques', cost: 'Gasto (USD)', conversions: 'Conv.' }}
+                formatValue={(k, v) => k === 'cost' ? `$${v.toFixed(2)}` : v.toLocaleString('pt-BR')}
+                onConnect={() => onNavigate?.('settings', 'api')}
+                subtitle={data.googleAdsStats && !(data.googleAdsStats.impressions > 0 || data.googleAdsStats.clicks > 0 || data.googleAdsStats.cost > 0) ? 'Conectado, sem dados' : undefined}
               />
             </div>
           </div>

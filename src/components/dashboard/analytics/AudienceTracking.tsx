@@ -50,7 +50,16 @@ export const AudienceTracking = ({
     scrollRef.current?.scrollBy({ left: direction === 'left' ? -300 : 300, behavior: 'smooth' });
   };
 
-  if (!audienceBreakdown || audienceBreakdown.length === 0) return null;
+  if (!audienceBreakdown || audienceBreakdown.length === 0) {
+    return (
+      <div className="space-y-3">
+        <h3 className="font-bold text-sm uppercase text-muted-foreground">Tracking Real-Time</h3>
+        <div className="w-full text-center py-12 text-muted-foreground text-xs rounded-xl bg-card border border-border/50">
+          Nenhum chat detectado. Conecte canais de mensageria para ver dados em tempo real.
+        </div>
+      </div>
+    );
+  }
 
   const allChannels = audienceBreakdown.flatMap(b => b.channels || []);
   const availablePlatforms = [...new Set(allChannels.map(ch => ch.platform).filter(Boolean))] as string[];
@@ -79,7 +88,7 @@ export const AudienceTracking = ({
             {lastUpdated && (
               <span className="text-xs text-muted-foreground/50 flex items-center gap-1">
                  <RefreshCw className="w-3 h-3" />
-                 Sinc: {new Date(lastUpdated).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                 Sinc: {(() => { try { return new Date(lastUpdated).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } })()}
               </span>
             )}
             {globalPeakHour && (
@@ -146,7 +155,7 @@ export const AudienceTracking = ({
             const ch = origCh as any;
             const dispName = ch.channel_name || ch.page_name || ch.username || 'Chat Live';
             return (
-              <div key={idx} className="min-w-[280px] w-[280px] shrink-0 snap-center bg-card rounded-xl p-5 border border-border flex flex-col hover:border-primary/40 transition-colors group">
+              <div key={origCh.id || idx} className="min-w-[280px] w-[280px] shrink-0 snap-center bg-card rounded-xl p-5 border border-border flex flex-col hover:border-primary/40 transition-colors group">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="relative">

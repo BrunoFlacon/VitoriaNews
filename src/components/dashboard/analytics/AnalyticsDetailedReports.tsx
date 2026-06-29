@@ -85,7 +85,7 @@ export const AnalyticsDetailedReports = ({
               const pd = bt.platform ? getPlatformDetails(bt.platform) : null;
               const PIcon = pd?.icon || Activity;
               return (
-                <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50 hover:border-border transition-colors group">
+                <div key={bt.day + bt.time} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/50 hover:border-border transition-colors group">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500 font-bold text-sm relative">
                       {i + 1}
@@ -234,7 +234,7 @@ export const AnalyticsDetailedReports = ({
                 Object.entries(messageStats.platformStats).map(([platform, stats]: [string, any]) => {
                   const details = getPlatformDetails(platform);
                   const total = (messageStats.totalSent || 1);
-                  const percent = Math.round((stats.sent / total) * 100);
+                  const percent = Math.round(((stats.sent || 0) / total) * 100);
                   return (
                     <div key={platform} className="space-y-2">
                       <div className="flex justify-between items-center text-xs">

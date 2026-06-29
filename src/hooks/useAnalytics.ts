@@ -78,6 +78,9 @@ export interface AnalyticsData {
   adsStats?: { impressions: number; reach: number; clicks: number; spend: number };
   youtubeStats?: { views: number; likes: number; comments: number; subscribersGained?: number; watchTimeMinutes?: number; subscribers?: number };
   gaStats?: { views: number };
+  searchConsoleStats?: { clicks: number; impressions: number; ctr: string; avgPosition: string };
+  googleAdsStats?: { impressions: number; clicks: number; cost: number; conversions: number };
+  adsConfigured?: boolean;
   period: string;
   generatedAt: string;
   dataSource: 'real' | 'seeded' | 'demo';
@@ -136,7 +139,6 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       if (cached && result.chartData?.length && !result.chartData.some(d => d.views > 0 || d.engagement > 0 || d.likes > 0)) {
         const cachedHasData = cached.chartData?.some(d => d.views > 0 || d.engagement > 0);
         if (cachedHasData) {
-          console.log('[Analytics] Edge Function returned all zeros, keeping cached data');
           return cached;
         }
       }

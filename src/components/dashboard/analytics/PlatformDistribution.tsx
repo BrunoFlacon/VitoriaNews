@@ -68,7 +68,7 @@ export const PlatformDistribution = memo(({ platformBreakdown, COLORS, onPieSele
           key,
           name: getPlatformName(key),
           value,
-          fill: COLORS[entryIndex % COLORS.length],
+          fill: COLORS.length > 0 ? COLORS[entryIndex % COLORS.length] : '#3b82f6',
         };
       })
       .filter(d => d.value > 0);

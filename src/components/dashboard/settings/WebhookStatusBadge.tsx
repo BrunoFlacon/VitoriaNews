@@ -17,6 +17,7 @@ interface WebhookStatusBadgeProps {
   userId?: string;
   compact?: boolean;
   onRefresh?: () => void;
+  platformLabel?: string;
 }
 
 const WEBHOOK_PLATFORMS: Record<string, { label: string; docField: string }> = {
@@ -24,6 +25,7 @@ const WEBHOOK_PLATFORMS: Record<string, { label: string; docField: string }> = {
   whatsapp: { label: "WhatsApp", docField: "whatsapp" },
   facebook: { label: "Facebook", docField: "facebook" },
   instagram: { label: "Instagram", docField: "instagram" },
+  threads: { label: "Threads", docField: "threads" },
   tiktok: { label: "TikTok", docField: "tiktok" },
   linkedin: { label: "LinkedIn", docField: "linkedin" },
   twitter: { label: "X (Twitter)", docField: "twitter" },
@@ -35,6 +37,7 @@ export const WebhookStatusBadge = React.memo(({
   userId,
   compact = false,
   onRefresh,
+  platformLabel,
 }: WebhookStatusBadgeProps) => {
   const [status, setStatus] = useState<WebhookHealth | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +61,7 @@ export const WebhookStatusBadge = React.memo(({
       });
       if (fnErr) throw fnErr;
       const webhooks = data?.webhooks || {};
-      const key = platform === "meta" ? "meta" : platform;
+      const key = platform === "meta" || platform === "threads" ? "meta" : platform;
       const ws = webhooks[key] || webhooks["meta"] || null;
       setStatus(ws);
     } catch (err: any) {
@@ -118,7 +121,7 @@ export const WebhookStatusBadge = React.memo(({
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-xs text-xs">
-            <p className="font-semibold mb-1">{webhookInfo.label}</p>
+            <p className="font-semibold mb-1">{platformLabel || webhookInfo.label}</p>
             <p className="text-muted-foreground">
               {status?.details || error || "Verificando..."}
             </p>
@@ -135,7 +138,7 @@ export const WebhookStatusBadge = React.memo(({
     <div className="flex items-center gap-2 p-2 rounded-lg border border-border/30 bg-muted/10">
       <Webhook className="w-4 h-4 text-muted-foreground/70" />
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold">{webhookInfo.label}</p>
+        <p className="text-xs font-semibold">{platformLabel || webhookInfo.label}</p>
         <p className="text-[10px] text-muted-foreground truncate">
           {loading ? "Verificando..." : error ? error : status?.details || "Sem informações"}
         </p>

@@ -1,12 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Newspaper, Plus, Edit, Trash2, Globe, RefreshCw, TrendingUp, Loader2, Search } from "lucide-react";
+import { Newspaper, Plus, Edit, Trash2, Globe, RefreshCw, TrendingUp, Loader2, Search, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
+  AreaChart, Area
+} from 'recharts';
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { TrendDetailDrawer } from "./TrendDetailDrawer";
 import { PowerRadar } from "./PowerRadar";
+
+const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899', '#84cc16'];
 
 export const NewsPortal = () => {
   const { user } = useAuth();
@@ -31,7 +39,43 @@ export const NewsPortal = () => {
   const [selectedTrend, setSelectedTrend] = useState<TrendItem | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activePlatform, setActivePlatform] = useState("googlenews");
-  const { trends, syncTrends, isSyncing } = useTrends();
+  const { trends, syncTrends, isSyncing, syncError } = useTrends();
+
+  const filteredTrends = useMemo(() => {
+    let combined = [...trends];
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      combined = combined.filter(t =>
+        t.keyword?.toLowerCase().includes(lower) ||
+        t.source?.toLowerCase().includes(lower)
+      );
+    }
+    return combined.sort((a, b) => {
+      const dateA = new Date(a.detected_at || 0).getTime();
+      const dateB = new Date(b.detected_at || 0).getTime();
+      return (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
+    });
+  }, [trends, searchTerm]);
+
+  const topTrendsChartData = useMemo(() => {
+    return filteredTrends
+      .slice(0, 8)
+      .map(t => ({
+        name: (t.keyword || "").length > 20 ? (t.keyword || "").substring(0, 17) + "..." : (t.keyword || "Sem Título"),
+        score: t.score || 50,
+        fullName: t.keyword || "Sem Título"
+      }))
+      .sort((a, b) => b.score - a.score);
+  }, [filteredTrends]);
+
+  useEffect(() => {
+    if (!loading && trends.length > 0) {
+      const platforms = [...new Set(trends.map(t => (t.source || "Other").toLowerCase().replace(/\s+/g, '')))];
+      if (platforms.length > 0 && !platforms.includes(activePlatform)) {
+        setActivePlatform(platforms[0]);
+      }
+    }
+  }, [trends, loading]);
 
   const fetchArticles = async () => {
     if (!user) {
@@ -204,6 +248,7 @@ export const NewsPortal = () => {
 
         <TabsContent value="discovery">
           <div className="space-y-6">
+            {/* SECTION 1 — HEADER: Radar de Inteligência */}
             <div className="flex flex-col md:flex-row md:items-center justify-between bg-black/40 p-6 rounded-2xl border border-white/10 backdrop-blur-xl shadow-lg gap-4">
               <div className="flex items-center gap-4 flex-1">
                 <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 shrink-0">
@@ -213,7 +258,7 @@ export const NewsPortal = () => {
                   <h3 className="font-black text-2xl tracking-tight text-white uppercase">Radar de Inteligência</h3>
                   <p className="text-sm text-muted-foreground font-medium uppercase tracking-widest flex items-center gap-2">
                     <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    Monitoramento em Tempo Real
+                    Monitoramento em Tempo Real · <span className="font-bold text-primary">{filteredTrends.length} sinais ativos</span>
                   </p>
                 </div>
               </div>
@@ -240,125 +285,248 @@ export const NewsPortal = () => {
               </div>
             </div>
 
-            <Tabs value={activePlatform} onValueChange={setActivePlatform} className="w-full">
-              <div className="overflow-x-auto mb-6 -mx-1 px-1 flex [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                <TabsList className="bg-transparent h-auto p-0 gap-2 flex flex-nowrap w-max min-w-full">
-                  {Object.entries(
-                    trends.reduce((acc: any, trend) => {
-                      const id = (trend.source || "Other").toLowerCase().replace(/\s+/g, '');
-                      if (!acc[id]) acc[id] = { name: trend.source || "Other" };
-                      return acc;
-                    }, {
-                      'googlenews': { name: 'Google News' }
-                    })
-                  ).map(([id, info]: [string, any]) => {
-                    const platformMeta = socialPlatforms.find(p => p.id === id || p.name.toLowerCase() === info.name.toLowerCase());
-                    return (
-                      <TabsTrigger 
-                        key={id} 
-                        value={id}
-                        className={cn(
-                          "relative h-10 px-4 rounded-xl border border-white/5 bg-white/[0.02] text-xs font-bold uppercase tracking-wider transition-all",
-                          "data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-lg data-[state=active]:shadow-primary/20",
-                          "hover:bg-white/5 text-muted-foreground hover:text-white"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          {platformMeta && <platformMeta.icon className="w-4 h-4" />}
-                          {info.name}
-                        </div>
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
+            {syncError && (
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium flex items-start gap-3">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse mt-1 shrink-0" />
+                <div>
+                  <p className="font-bold uppercase text-[11px] tracking-widest">Erro de sincronização</p>
+                  <p className="text-red-400/80 text-xs mt-0.5">{syncError}</p>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 2 — ANALYTICS: Top Impulso Digital + Volume AI */}
+            {!loading && topTrendsChartData.length > 0 && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+                <Card className="p-4 md:p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[250px] md:h-[300px] rounded-xl md:rounded-[32px]" style={{ contain: "content" }}>
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-sm md:text-lg flex items-center gap-2 uppercase tracking-tight">
+                        <TrendingUp className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                        Top Impulso Digital
+                      </h3>
+                    </div>
+                  </div>
+                  <div className="flex-1 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={topTrendsChartData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" horizontal={false} vertical={true} stroke="#333" />
+                        <XAxis type="number" hide />
+                        <YAxis 
+                          dataKey="name" 
+                          type="category" 
+                          width={120} 
+                          axisLine={false} 
+                          tickLine={false} 
+                          fontSize={10}
+                          tick={{ fill: '#888', fontWeight: 'bold' }}
+                        />
+                        <RechartsTooltip 
+                          cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                          contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '12px', color: '#fff' }}
+                          formatter={(value) => [`${value}%`, 'Score']}
+                        />
+                        <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={20}>
+                          {topTrendsChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+
+                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                  <Card className="p-4 md:p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[250px] md:h-[300px] rounded-2xl md:rounded-[32px]" style={{ contain: "content" }}>
+                    <h3 className="font-black text-base md:text-lg mb-3 md:mb-4 flex items-center gap-2 uppercase tracking-tight">
+                      <Zap className="w-4 h-4 md:w-5 md:h-5 text-yellow-500" />
+                      Volume AI
+                    </h3>
+                    <div className="flex-1 w-full flex items-center justify-center relative">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={topTrendsChartData}>
+                          <defs>
+                            <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <Area type="monotone" dataKey="score" stroke="#3b82f6" fillOpacity={1} fill="url(#colorScore)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-6 md:p-10 text-center">
+                        <p className="text-2xl md:text-4xl font-black text-primary/10 tracking-tighter">AI LIVE</p>
+                        <p className="text-[9px] md:text-[10px] text-primary/40 font-black uppercase tracking-[0.2em] mt-1 md:mt-2">{filteredTrends.length} Ativos</p>
+                      </div>
+                    </div>
+                  </Card>
+
+                  <Card className="p-4 md:p-6 shadow-sm border-white/5 bg-[#000000] flex flex-col h-[250px] md:h-[300px] rounded-2xl md:rounded-[32px]" style={{ contain: "content" }}>
+                    <h3 className="font-black text-base md:text-lg mb-3 md:mb-4 flex items-center gap-2 uppercase tracking-tight">
+                      <Globe className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
+                      Distribuição por Fonte
+                    </h3>
+                    <div className="flex-1 w-full flex items-center justify-center">
+                      <div className="grid grid-cols-2 gap-3 w-full p-2">
+                        {Object.entries(
+                          trends.reduce((acc: any, t) => {
+                            const src = t.source || "Outros";
+                            acc[src] = (acc[src] || 0) + 1;
+                            return acc;
+                          }, {} as Record<string, number>)
+                        ).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([src, count], i) => (
+                          <div key={src} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[10px] font-bold text-white truncate">{src}</p>
+                              <p className="text-[9px] text-muted-foreground">{count} sinais</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* SECTION 3 — TRENDS: Listagem por Plataforma */}
+            <div>
+              <div className="flex items-center justify-between mb-4 px-1">
+                <h3 className="text-xs font-black uppercase tracking-[0.2em] text-white flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-primary" /> Tendências por Plataforma
+                </h3>
+                <Badge variant="outline" className="text-[9px] bg-primary/10 text-primary border-primary/20 font-black uppercase tracking-widest">
+                  {filteredTrends.length} resultados
+                </Badge>
               </div>
 
-              {Object.entries(
-                trends.reduce((acc: any, trend) => {
-                  const id = (trend.source || "Other").toLowerCase().replace(/\s+/g, '');
-                  if (!acc[id]) acc[id] = [];
-                  acc[id].push(trend);
-                  return acc;
-                }, { 'googlenews': [] })
-              ).map(([id, platformTrends]: [string, any]) => {
-                const searchLower = searchTerm.toLowerCase();
-                const filteredPlatformTrends = (platformTrends as TrendItem[]).filter(t => 
-                  !searchTerm || t.keyword.toLowerCase().includes(searchLower) || (t.description && t.description.toLowerCase().includes(searchLower))
-                );
+              <Tabs value={activePlatform} onValueChange={setActivePlatform} className="w-full">
+                <div className="overflow-x-auto mb-6 -mx-1 px-1 flex [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                  <TabsList className="bg-transparent h-auto p-0 gap-2 flex flex-nowrap w-max min-w-full">
+                    {Object.entries(
+                      trends.reduce((acc: any, trend) => {
+                        const id = (trend.source || "Other").toLowerCase().replace(/\s+/g, '');
+                        if (!acc[id]) acc[id] = { name: trend.source || "Other" };
+                        return acc;
+                      }, {
+                        'googlenews': { name: 'Google News' }
+                      })
+                    ).map(([id, info]: [string, any]) => {
+                      const platformMeta = socialPlatforms.find(p => p.id === id || p.name.toLowerCase() === info.name.toLowerCase());
+                      return (
+                        <TabsTrigger 
+                          key={id} 
+                          value={id}
+                          className={cn(
+                            "relative h-10 px-4 rounded-xl border border-white/5 bg-white/[0.02] text-xs font-bold uppercase tracking-wider transition-all",
+                            "data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-lg data-[state=active]:shadow-primary/20",
+                            "hover:bg-white/5 text-muted-foreground hover:text-white"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            {platformMeta && <platformMeta.icon className="w-4 h-4" />}
+                            {info.name}
+                          </div>
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+                </div>
 
-                return (
-                <TabsContent key={id} value={id} className="mt-0 focus-visible:outline-none">
-                  <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-xl backdrop-blur-xl">
-                    <div className="divide-y divide-white/5">
-                      {filteredPlatformTrends.length > 0 ? (
-                        filteredPlatformTrends
-                          .sort((a, b) => (b.score || 0) - (a.score || 0))
-                          .slice(0, 15)
-                          .map((trend) => (
-                          <div
-                            key={trend.id}
-                            onClick={() => {
-                              setSelectedTrend(trend);
-                              setIsDrawerOpen(true);
-                            }}
-                            className="group relative flex items-center justify-between p-4 px-5 hover:bg-white/[0.04] transition-all cursor-pointer"
-                          >
-                            <div className="relative z-10 flex items-start gap-4 flex-1 pr-4">
-                              <div className="w-12 h-12 rounded-xl overflow-hidden flex-shrink-0 border border-white/10 bg-white/5">
-                                <img 
-                                  src={trend.thumbnail_url || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 200 200'%3E%3Crect width='100%25' height='100%25' fill='%231a1a1a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='32' font-weight='bold' fill='%234a4a4a'%3ECapa%3C/text%3E%3C/svg%3E`} 
-                                  alt="" 
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    if (!target.dataset.fallback) {
-                                       target.dataset.fallback = 'true';
-                                       target.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 200 200'%3E%3Crect width='100%25' height='100%25' fill='%231a1a1a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='32' font-weight='bold' fill='%234a4a4a'%3ECapa%3C/text%3E%3C/svg%3E`;
-                                    }
-                                  }}
-                                  className="w-full h-full object-cover" 
-                                />
-                              </div>
-                              
-                              <div className="min-w-0">
-                                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block mb-0.5">
-                                  {(trend.category || 'Trending')} · {trend.metadata?.published_at ? `${new Date(trend.metadata.published_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${new Date(trend.metadata.published_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : `${new Date(trend.detected_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (Captação)`}
-                                </span>
-                                <h4 className="font-bold text-base leading-tight group-hover:text-primary transition-colors line-clamp-1">
-                                  {trend.keyword}
-                                </h4>
-                                <div className="flex items-center gap-3 mt-1.5">
-                                  <div className="flex items-center gap-1.5">
-                                    <TrendingUp className="w-3 h-3 text-primary" />
-                                    <span className="text-[10px] font-black text-primary tracking-tighter">{Math.floor(trend.score)}% de Engajamento</span>
+                {Object.entries(
+                  trends.reduce((acc: any, trend) => {
+                    const id = (trend.source || "Other").toLowerCase().replace(/\s+/g, '');
+                    if (!acc[id]) acc[id] = [];
+                    acc[id].push(trend);
+                    return acc;
+                  }, { 'googlenews': [] })
+                ).map(([id, platformTrends]: [string, any]) => (
+                  <TabsContent key={id} value={id} className="mt-0 focus-visible:outline-none">
+                    <div className="bg-black/40 border border-white/10 rounded-2xl overflow-hidden shadow-xl backdrop-blur-xl">
+                      <div className="divide-y divide-white/5">
+                        {(platformTrends as TrendItem[]).length > 0 ? (
+                          (platformTrends as TrendItem[])
+                            .sort((a, b) => (b.score || 0) - (a.score || 0))
+                            .slice(0, 20)
+                            .map((item) => (
+                            <motion.div
+                              key={item.id}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              onClick={() => {
+                                setSelectedTrend(item);
+                                setIsDrawerOpen(true);
+                              }}
+                              className="group relative flex items-center justify-between p-3 md:p-5 px-4 md:px-8 hover:bg-white/[0.04] transition-all cursor-pointer border-l-4 border-transparent hover:border-primary"
+                            >
+                              <div className="relative z-10 flex items-start gap-3 md:gap-5 flex-1 pr-4 min-w-0">
+                                <div className="w-10 h-10 md:w-14 md:h-14 rounded-lg md:rounded-xl overflow-hidden flex-shrink-0 border border-white/10 bg-white/5 shadow-xl">
+                                  <img 
+                                    src={item.thumbnail_url || `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 200 200'%3E%3Crect width='100%25' height='100%25' fill='%231a1a1a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='32' font-weight='bold' fill='%234a4a4a'%3ECapa%3C/text%3E%3C/svg%3E`} 
+                                    alt="" 
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      if (!target.dataset.fallback) {
+                                         target.dataset.fallback = 'true';
+                                         target.src = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25' viewBox='0 0 200 200'%3E%3Crect width='100%25' height='100%25' fill='%231a1a1a'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='32' font-weight='bold' fill='%234a4a4a'%3ECapa%3C/text%3E%3C/svg%3E`;
+                                      }
+                                    }}
+                                    className="w-full h-full object-cover transition-transform group-hover:scale-110" 
+                                  />
+                                </div>
+                                
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest bg-white/5 border-white/10 text-muted-foreground">
+                                      {item.category || 'Viral'}
+                                    </Badge>
+                                    <span className="text-[10px] font-bold text-muted-foreground/50 uppercase tracking-widest">
+                                      {item.metadata?.published_at ? `${new Date(item.metadata.published_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${new Date(item.metadata.published_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : `${new Date(item.detected_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} (Captação)`}
+                                    </span>
+                                  </div>
+                                  <h4 className="font-black text-base md:text-lg leading-tight group-hover:text-primary transition-colors line-clamp-1 text-white">
+                                    {item.keyword}
+                                  </h4>
+                                  <div className="flex items-center gap-4 mt-2">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                      <span className="text-[10px] font-black text-primary uppercase tracking-widest">{Math.floor(item.score)}% Relevância</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 grayscale opacity-40">
+                                      <Zap className="w-3 h-3 text-yellow-500" />
+                                      <span className="text-[10px] font-bold uppercase tracking-widest">Alta Velocidade</span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
 
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-9 w-9 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-primary/20 hover:text-primary border border-transparent hover:border-primary/20"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleProduceFromTrend(trend);
-                              }}
-                            >
-                              <Plus className="w-5 h-5" />
-                            </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-9 w-9 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-primary/20 hover:text-primary border border-transparent hover:border-primary/20 shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleProduceFromTrend(item);
+                                }}
+                              >
+                                <Plus className="w-5 h-5" />
+                              </Button>
+                            </motion.div>
+                          ))
+                        ) : (
+                          <div className="py-28 text-center flex flex-col items-center justify-center">
+                            <Globe className="w-12 h-12 text-muted-foreground/20 mb-4 animate-pulse" />
+                            <h3 className="text-muted-foreground font-black uppercase tracking-[0.2em]">Varredura em Curso</h3>
+                            <p className="text-xs text-muted-foreground/40 mt-1 uppercase font-bold tracking-widest">Aguardando sinais de {id}</p>
                           </div>
-                        ))
-                      ) : (
-                        <div className="py-20 text-center">
-                          <Globe className="w-10 h-10 mx-auto text-muted-foreground/20 mb-3 animate-pulse" />
-                          <p className="text-sm text-muted-foreground font-bold uppercase tracking-widest text-balance">Nenhum resultado de {id}</p>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </TabsContent>
-              );})}
-            </Tabs>
+                  </TabsContent>
+                ))}
+              </Tabs>
+            </div>
           </div>
         </TabsContent>
 

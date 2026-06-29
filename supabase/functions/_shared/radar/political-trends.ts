@@ -34,15 +34,9 @@ export async function monitorPoliticalTrends(supabaseClient: any) {
     console.error("Error fetching Political Trends:", err);
   }
 
-  // Falha silenciosa com dados de fallback se a API falhar
+  // Se a API falhar, retorna sem poluir o banco com dados falsos
   if (trendsToInsert.length === 0) {
-    trendsToInsert.push({
-      keyword: 'elections 2024 / fallback',
-      mentions: 5000,
-      sentiment: 'mixed',
-      velocity: 15.5,
-      detected_at: new Date().toISOString()
-    });
+    return { success: false, count: 0, reason: 'No political trends data available from RSS' };
   }
 
   for (const trend of trendsToInsert) {

@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveCorsOrigin } from "../_shared/cors.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
-const corsHeaders = (req) => ({
+const corsHeaders = (req: Request) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Max-Age": "86400",
 });
 
 async function getCredentials(supabase: any, userId: string, platform: string): Promise<Record<string, any>> {
@@ -57,19 +59,51 @@ serve(async (req: Request) => {
 
     const siteUrl = searchConsoleId.startsWith("sc-domain:") ? searchConsoleId : `https://${searchConsoleId}/`;
 
-    const { data: gaToken } = await supabase
-      .from("social_connections")
-      .select("access_token")
-      .eq("user_id", userId)
-      .eq("platform", "google")
-      .eq("is_connected", true)
-      .maybeSingle();
-
-    const accessToken = gaToken?.access_token;
+    let accessToken: string | null = null;
+    for (const p of ["google", "youtube"]) {
+      const { data: tok } = await supabase
+        .from("social_connections")
+        .select("access_token, refresh_token, token_expires_at")
+        .eq("user_id", userId)
+        .eq("platform", p)
+        .eq("is_connected", true)
+        .maybeSingle();
+      if (tok?.access_token) {
+        const expired = tok.token_expires_at && new Date(tok.token_expires_at) < new Date();
+        if (!expired) {
+          accessToken = tok.access_token;
+          break;
+        }
+        if (tok.refresh_token) {
+          try {
+            const refreshRes = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: creds?.client_id || Deno.env.get("GOOGLE_CLIENT_ID") || "",
+                client_secret: creds?.client_secret || Deno.env.get("GOOGLE_CLIENT_SECRET") || "",
+                refresh_token: tok.refresh_token,
+                grant_type: "refresh_token",
+              }),
+            });
+            const refreshData = await refreshRes.json();
+            if (refreshData.access_token) {
+              accessToken = refreshData.access_token;
+              await supabase.from("social_connections").update({
+                access_token: refreshData.access_token,
+                token_expires_at: new Date(Date.now() + (refreshData.expires_in || 3600) * 1000).toISOString(),
+                updated_at: new Date().toISOString(),
+              }).eq("user_id", userId).eq("platform", p);
+              break;
+            }
+          } catch (_e) { /* refresh failed */ }
+        }
+      }
+    }
 
     if (!accessToken) {
       return new Response(JSON.stringify({
-        error: "Google OAuth connection required for Search Console API",
+        error: "Google OAuth access token não encontrado ou expirado sem refresh. Reconecte sua conta Google em Redes Sociais.",
         hint: "Connect via OAuth in Settings > Google"
       }), {
         status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
@@ -77,12 +111,27 @@ serve(async (req: Request) => {
     }
 
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    // Sync incremental: buscar apenas desde a última data coletada
+    const { data: lastScData } = await supabase
+      .from("google_analytics_data")
+      .select("date")
+      .eq("user_id", userId)
+      .eq("property_id", siteUrl)
+      .eq("metric_name", "search_console")
+      .order("date", { ascending: false })
+      .limit(1);
+    const lastScDate = lastScData?.length > 0 ? new Date(lastScData[0].date) : null;
+    const thirtyDaysAgo = lastScDate
+      ? new Date(Math.max(lastScDate.getTime(), now.getTime() - 30 * 24 * 60 * 60 * 1000))
+      : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const results: any[] = [];
     let totalClicks = 0;
     let totalImpressions = 0;
+    let totalPosition = 0;
+    let totalPositionWeight = 0;
 
     const overallBody = {
       startDate: thirtyDaysAgo.toISOString().split("T")[0],
@@ -93,7 +142,7 @@ serve(async (req: Request) => {
     };
 
     try {
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `https://searchconsole.googleapis.com/v1/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
         {
           method: "POST",
@@ -113,8 +162,10 @@ serve(async (req: Request) => {
         for (const row of rows) {
           totalClicks += row.clicks || 0;
           totalImpressions += row.impressions || 0;
+          totalPosition += (row.position || 0) * (row.impressions || 1);
+          totalPositionWeight += row.impressions || 1;
 
-          await supabase.from("google_analytics_data").insert({
+          await supabase.from("google_analytics_data").upsert({
             user_id: userId,
             property_id: siteUrl,
             metric_name: "search_console",
@@ -130,7 +181,7 @@ serve(async (req: Request) => {
               position: row.position
             },
             created_at: new Date().toISOString()
-          });
+          }, { onConflict: "user_id,property_id,metric_name,date,dimension_value" });
         }
         results.push({ type: "overall", status: "synced", rows: rows.length });
       }
@@ -201,9 +252,7 @@ serve(async (req: Request) => {
     }
 
     const avgCtr = totalImpressions > 0 ? (totalClicks / totalImpressions * 100).toFixed(2) : "0";
-    const avgPosition = results[0]?.rows?.length > 0
-      ? (results[0].rows.reduce((s: number, r: any) => s + (r.position || 0), 0) / results[0].rows.length).toFixed(1)
-      : "0";
+    const avgPosition = totalPositionWeight > 0 ? (totalPosition / totalPositionWeight).toFixed(1) : "0";
 
     return new Response(JSON.stringify({
       success: true,

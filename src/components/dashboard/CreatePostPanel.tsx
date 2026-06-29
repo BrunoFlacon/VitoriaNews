@@ -85,11 +85,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-type MediaType = "image" | "video" | "document" | "story" | "live";
+type MediaType = "image" | "video" | "audio" | "document" | "story" | "live";
 
 const mediaTypes: { id: MediaType; icon: typeof ImageIcon; label: string; accept: string }[] = [
   { id: "image", icon: ImageIcon, label: "Imagem", accept: "image/*" },
-  { id: "video", icon: Video, label: "Vídeo / Áudio", accept: "video/*,audio/*" },
+  { id: "video", icon: Video, label: "Vídeo", accept: "video/*" },
+  { id: "audio", icon: Music, label: "Áudio", accept: "audio/*" },
 ];
 
 // Best posting times per platform (based on general research)
@@ -1176,7 +1177,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                         Arraste e solte ou clique para fazer upload
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {selectedMedia === "video" ? "Suporta: MP4, MOV, AVI, MP3, WAV, OGG" : "Suporta: JPG, PNG, GIF, WebP"}
+                        {selectedMedia === "video" ? "Suporta: MP4, MOV, AVI" : selectedMedia === "audio" ? "Suporta: MP3, WAV, OGG, FLAC" : "Suporta: JPG, PNG, GIF, WebP"}
                       </p>
                     </>
                   )}

@@ -73,6 +73,7 @@ serve(async (req: Request) => {
     let error: any = null;
 
     switch (path) {
+      case 'intelligence':
       case 'sync-intelligence':
       case 'radar-api': {
           const authHeader = req.headers.get('Authorization') || '';
@@ -108,6 +109,7 @@ serve(async (req: Request) => {
               targetUserId = user.id;
           }
 
+          const { discoverTrends } = await import('../_shared/automation/trend-discovery.ts');
           await discoverTrends(supabaseClient, targetUserId);
           
           const { data: trends, error: fetchError } = await supabaseClient

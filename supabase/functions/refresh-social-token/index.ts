@@ -1,14 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveCorsOrigin } from "../_shared/cors.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const corsHeaders = (req: Request) => ({
+  'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+  "Access-Control-Max-Age": "86400",
+});
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders(req) });
   }
 
   try {
@@ -16,7 +19,7 @@ serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Authorization required" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -29,7 +32,7 @@ serve(async (req: Request) => {
     if (authError || !user) {
       return new Response(
         JSON.stringify({ error: "Invalid authentication" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -46,14 +49,14 @@ serve(async (req: Request) => {
     if (connError || !connection) {
       return new Response(
         JSON.stringify({ error: `No connection found for ${platform}` }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     if (!connection.refresh_token) {
       return new Response(
         JSON.stringify({ error: "No refresh token available. Please reconnect." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -66,7 +69,7 @@ serve(async (req: Request) => {
         const googleClientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
         const googleClientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
         
-        const res = await fetch("https://oauth2.googleapis.com/token", {
+        const res = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({
@@ -86,7 +89,7 @@ serve(async (req: Request) => {
         const twitterKey = Deno.env.get("TWITTER_CONSUMER_KEY")!;
         const twitterSecret = Deno.env.get("TWITTER_CONSUMER_SECRET")!;
         
-        const res = await fetch("https://api.x.com/2/oauth2/token", {
+        const res = await fetchWithTimeout("https://api.x.com/2/oauth2/token", {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -106,7 +109,7 @@ serve(async (req: Request) => {
       default:
         return new Response(
           JSON.stringify({ error: `Token refresh not supported for ${platform}` }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
         );
     }
 
@@ -125,13 +128,13 @@ serve(async (req: Request) => {
     // console.log(`Token refreshed for ${platform}, user: ${user.id}`);
 
     return new Response(JSON.stringify({ success: true, expiresAt: newExpiresAt }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (error) {
     console.error("Error refreshing token:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });

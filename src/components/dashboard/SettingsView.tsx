@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useTransition } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   User, Bell, Key, Shield, Globe, Save, Camera, Check, AlertCircle, Loader2, Unplug, Info,
@@ -34,9 +34,10 @@ import { useSystem } from "@/hooks/useSystem";
 import { useSocialStats } from "@/hooks/useSocialStats";
 import { 
   GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, YoutubeIcon, AdsIcon, 
-  AnalyticsIcon, PeopleIcon, GoogleNewsIcon, InstagramIcon, XIcon, LinkedinIcon, 
+  AnalyticsIcon, PeopleIcon, InstagramIcon, XIcon, LinkedinIcon, 
   TikTokIcon, WhatsappIcon, TelegramIcon, PinterestIcon, SnapchatIcon, ThreadsIcon, 
-  KwaiIcon, RumbleIcon, TruthSocialIcon, GettrIcon, SpotifyIcon, GiphyIcon 
+  KwaiIcon, RumbleIcon, TruthSocialIcon, GettrIcon, SpotifyIcon, GiphyIcon,
+  MediumIcon, SubstackIcon, RedditIcon
 } from "@/components/icons/SocialIcons";
 
 const renderApiAsset = (src: string, isActive: boolean, className: string) => {
@@ -209,16 +210,6 @@ const PLATFORM_CONFIGS = [
     type: 'social'
   },
   {
-    id: 'googlenews',
-    name: 'Google News Search API',
-    icon: GoogleNewsIcon,
-    color: "bg-[#4285F4]",
-    textColor: "text-[#4285F4]",
-    gradient: "from-[#4285F4] to-zinc-900",
-    oauthSupported: false,
-    type: 'social'
-  },
-  {
     id: 'giphy',
     name: 'Giphy API Developers',
     icon: GiphyIcon,
@@ -241,17 +232,11 @@ const PLATFORM_CONFIGS = [
   { id: 'meta_ads', name: 'Meta Marketing & Ads API', icon: MetaIcon, color: "bg-[#1877F2]", textColor: "text-[#1877F2]", gradient: "from-blue-500 to-indigo-500", oauthSupported: false, showPixels: true, type: 'tool' },
   { id: 'newsapi', name: 'NewsAPI.org (Global News)', icon: NewsapiIcon, color: "bg-black", textColor: "text-foreground", gradient: "from-gray-500 to-black", oauthSupported: false, type: 'tool' },
   { id: 'resend', name: 'Resend (Email Automation)', icon: Mail, color: "bg-black", textColor: "text-foreground", gradient: "from-slate-700 to-black", oauthSupported: false, type: 'tool' },
+  { id: 'medium', name: 'Medium', icon: MediumIcon, color: "bg-black", textColor: "text-white", gradient: "from-zinc-800 to-black", oauthSupported: false, type: 'tool' },
+  { id: 'substack', name: 'Substack', icon: SubstackIcon, color: "bg-[#FF6719]", textColor: "text-[#FF6719]", gradient: "from-[#FF6719] to-[#E65C16]", oauthSupported: false, type: 'tool' },
+  { id: 'reddit', name: 'Reddit API', icon: RedditIcon, color: "bg-[#FF4500]", textColor: "text-[#FF4500]", gradient: "from-[#FF4500] to-[#CC3700]", oauthSupported: false, type: 'social' },
+  { id: 'site', name: 'Website API', icon: Globe, color: "bg-gradient-to-br from-primary to-accent", textColor: "text-primary", gradient: "from-primary to-accent", oauthSupported: false, type: 'social' },
   { id: 'ai_config', name: 'Inteligência Artificial (Texto, Imagem, Áudio)', icon: Sparkles, color: "bg-purple-500", textColor: "text-purple-500", gradient: "from-purple-500 to-pink-500", oauthSupported: false, type: 'tool' },
-  {
-    id: 'google',
-    name: 'Google Workspace / OAuth Client',
-    icon: GoogleIcon,
-    color: "bg-white",
-    textColor: "text-[#4285F4]",
-    gradient: "from-white to-slate-100",
-    oauthSupported: true,
-    type: 'tool'
-  }
 ];
 
 
@@ -386,6 +371,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         if (hasCredentials('google_cloud')) {
           syncTasks.push(invokeFn('collect-youtube-analytics').catch(e => console.warn('[YT]', e.message)));
           syncTasks.push(invokeFn('collect-google-analytics').catch(e => console.warn('[GA]', e.message)));
+          syncTasks.push(invokeFn('collect-search-console-data').catch(e => console.warn('[SC]', e.message)));
+          syncTasks.push(invokeFn('sync-google-contacts').catch(e => console.warn('[Contacts]', e.message)));
         }
         
         await Promise.all(syncTasks);
@@ -561,12 +548,11 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     setShowAddApiModal(false);
   };
 
-  const handleRemovePlatform = (e: React.MouseEvent, id: string) => {
+  const handleRemovePlatform = useCallback((e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setActivePlatformIds(prev => prev.filter(pId => pId !== id));
     if (expandedPlatform === id) setExpandedPlatform(null);
-  };
-
+  }, [expandedPlatform]);
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -705,7 +691,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     toast({ title: "Perfil atualizado" });
   };
 
-  const handleConnectApi = async (platform: string) => {
+  const handleConnectApi = useCallback(async (platform: string) => {
     if (platform === "threads") {
       const hasAppId = credentials["threads"]?.app_id || credentials["threads"]?.client_id;
       if (!hasAppId) {
@@ -724,24 +710,21 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     } finally {
       setConnectingPlatform(null);
     }
-  };
+  }, [credentials, toast, initiateOAuth]);
 
-
-  const updateFormField = (platform: string, key: string, value: string) => {
+  const updateFormField = useCallback((platform: string, key: string, value: string) => {
     setFormValues(prev => ({
       ...prev,
       [platform]: { ...(prev[platform] || {}), [key]: value }
     }));
-  };
-
-  const handleSaveCreds = async (platform: string) => {
-    const vals = formValues[platform] || {};
+  }, []);
+  const handleSaveCreds = useCallback(async (platform: string) => {
+    const vals = formValues[platform] || credentials[platform] || {};
     const success = await saveCredentials(platform, vals);
     if (success) {
       setFormValues(prev => ({ ...prev, [platform]: vals }));
     }
-  };
-
+  }, [formValues, credentials, saveCredentials]);
   const handleDeleteCreds = async (platform: string) => {
     const success = await deleteCredentials(platform);
     if (success) {
@@ -753,11 +736,10 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     }
   };
 
-  const toggleFieldVisibility = (fieldKey: string) => {
+  const toggleFieldVisibility = useCallback((fieldKey: string) => {
     setVisibleFields(prev => ({ ...prev, [fieldKey]: !prev[fieldKey] }));
-  };
-
-  const toggleExpand = (platform: string) => {
+  }, []);
+  const toggleExpand = useCallback((platform: string) => {
     if (expandedPlatform === platform) {
       setExpandedPlatform(null);
     } else {
@@ -769,16 +751,14 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         }));
       }
     }
-  };
-
-  const maskValue = (value: string) => {
+  }, [expandedPlatform, formValues, credentials]);
+  const maskValue = useCallback((value: string) => {
     if (!value || value.length <= 6) return "••••••";
     return value.slice(0, 3) + "••••••" + value.slice(-3);
-  };
-
+  }, []);
   const [localBotActive, setLocalBotActive] = useState<boolean | null>(null);
 
-  const handleToggleBot = async (active: boolean) => {
+  const handleToggleBot = useCallback(async (active: boolean) => {
     setLocalBotActive(active);
     try {
       const { error } = await supabase
@@ -789,9 +769,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       console.error('Error toggling bot:', e);
       setLocalBotActive(null);
     }
-  };
-
-  const handleDisconnectCustom = async (platformId: string, connectionId: string) => {
+  }, []);
+  const handleDisconnectCustom = useCallback(async (platformId: string, connectionId: string) => {
     try {
       await disconnect(`${platformId}|${connectionId}`);
       toast({ title: "Desconectado", description: `Conexão ${platformId} removida.` });
@@ -799,8 +778,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       console.error('Error disconnecting:', e);
       toast({ title: "Erro", description: "Falha ao desconectar.", variant: "destructive" });
     }
-  };
-
+  }, [disconnect, toast]);
   const calculateAge = (dob: string | undefined) => {
     if (!dob) return null;
     const diff = Date.now() - new Date(dob).getTime();
@@ -932,7 +910,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
               UNIQUE_PLATFORM_CONFIGS={UNIQUE_PLATFORM_CONFIGS}
               activePlatformIds={activePlatformIds}
               expandedPlatform={expandedPlatform}
-              setExpandedPlatform={setExpandedPlatform}
+              toggleExpand={toggleExpand}
               connections={connections}
               socialStats={socialStats}
               audienceBreakdown={audienceBreakdown}

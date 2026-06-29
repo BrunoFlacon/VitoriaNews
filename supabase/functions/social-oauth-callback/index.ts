@@ -362,6 +362,52 @@ async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: 
 }
 
 
+async function exchangeSpotify(code: string, redirectUri: string, pkceVerifier: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
+  const clientId = creds.client_id;
+  const clientSecret = creds.client_secret;
+  if (!clientId || !clientSecret) throw new Error("Configuração Spotify incompleta.");
+
+  const payload = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: redirectUri,
+    code_verifier: pkceVerifier
+  });
+
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`
+    },
+    body: payload.toString()
+  });
+
+  const data = await res.json();
+  await logOAuth(supabase, { user_id: userId, provider: "spotify", stage: "exchange" });
+  if (data.error) throw new Error(data.error_description || data.error);
+
+  const accessToken = data.access_token;
+  const refreshToken = data.refresh_token || "";
+  const expiresIn = data.expires_in || 3600;
+
+  const userRes = await fetch("https://api.spotify.com/v1/me", { headers: { Authorization: `Bearer ${accessToken}` } });
+  const userData = await userRes.json();
+
+  return [{
+    accessToken,
+    refreshToken,
+    expiresIn,
+    platformUserId: userData.id,
+    pageName: userData.display_name || userData.id,
+    pageId: "",
+    profileImageUrl: userData.images?.[0]?.url || "",
+    username: userData.id,
+    followers: userData.followers?.total || 0,
+    postsCount: 0,
+  }];
+}
+
 async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
   const clientId = creds.app_id || creds.client_id || Deno.env.get("LINKEDIN_CLIENT_ID");
   const clientSecret = creds.app_secret || creds.client_secret || Deno.env.get("LINKEDIN_CLIENT_SECRET");
@@ -497,6 +543,9 @@ serve(async (req: Request) => {
     if (platform === "twitter") {
       formattedCreds.client_id = raw.client_id || Deno.env.get("TWITTER_CLIENT_ID");
       formattedCreds.client_secret = raw.client_secret || Deno.env.get("TWITTER_CLIENT_SECRET");
+    } else if (platform === "spotify") {
+      formattedCreds.client_id = raw.client_id;
+      formattedCreds.client_secret = raw.client_secret;
     } else if (platform === "reddit") {
       formattedCreds.client_id = raw.client_id || Deno.env.get("REDDIT_CLIENT_ID");
       formattedCreds.client_secret = raw.client_secret || Deno.env.get("REDDIT_CLIENT_SECRET");
@@ -522,6 +571,7 @@ serve(async (req: Request) => {
       case "reddit": results = await exchangeReddit(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
       case "linkedin": results = await exchangeLinkedIn(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
       case "tiktok": results = await exchangeTikTok(code, oauthState.redirect_uri, formattedCreds, supabase, user.id); break;
+      case "spotify": results = await exchangeSpotify(code, oauthState.redirect_uri, oauthState.code_verifier || "", formattedCreds, supabase, user.id); break;
       default:
         throw new Error(`Troca de token para plataforma '${platform}' não implementada.`);
     }

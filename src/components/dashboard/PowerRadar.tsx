@@ -51,16 +51,22 @@ export const PowerRadar = () => {
   const [activeRadarTab, setActiveRadarTab] = useState<"overview" | "attacks" | "narratives">("overview");
   const [platformFilter, setPlatformFilter] = useState<string>("all");
 
-  // Data for the Influence Map (Scatter Chart)
+  // Data for the Influence Map (Scatter Chart) — mapeado de politicalTrends reais
   const influenceData = useMemo(() => {
-    return Array.from({ length: 20 }).map((_, i) => ({
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      z: Math.random() * 100,
-      name: `Influencer ${i + 1}`,
-      engagement: Math.floor(Math.random() * 100)
+    if (politicalTrends.length === 0) {
+      return [];
+    }
+    const maxMentions = Math.max(...politicalTrends.map(t => t.mentions), 1);
+    const maxVelocity = Math.max(...politicalTrends.map(t => t.velocity), 1);
+    return politicalTrends.map((t, i) => ({
+      x: (t.mentions / maxMentions) * 100,
+      y: Math.min((t.velocity / maxVelocity) * 100, 100),
+      z: Math.min((t.mentions / maxMentions) * 100 + (t.velocity / maxVelocity) * 50, 150),
+      name: t.keyword || `Trend ${i + 1}`,
+      engagement: Math.floor((t.mentions / maxMentions) * 100),
+      sentiment: t.sentiment
     }));
-  }, []);
+  }, [politicalTrends]);
 
   const handleApprove = (id: string) => {
     const sug = suggestions.find(s => s.id === id);
@@ -197,38 +203,56 @@ export const PowerRadar = () => {
                     </div>
                  </div>
               </CardHeader>
-              <CardContent className="p-8">
-                 <div className="h-[400px] w-full bg-black/40 rounded-[32px] border border-white/5 relative group p-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                       <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                          <XAxis type="number" dataKey="x" hide />
-                          <YAxis type="number" dataKey="y" hide />
-                          <ZAxis type="number" dataKey="z" range={[50, 400]} />
-                          <Tooltip 
-                            cursor={{ strokeDasharray: '3 3' }} 
-                            contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '12px' }}
-                            itemStyle={{ color: '#fff', fontSize: '10px', fontWeight: 'bold' }}
-                          />
-                          <Scatter name="Nós de Influência" data={influenceData} fill="#3b82f6">
-                             {influenceData.map((entry, index) => (
-                               <Cell 
-                                  key={`cell-${index}`} 
-                                  fill={entry.engagement > 80 ? '#3b82f6' : (entry.engagement > 40 ? '#8b5cf6' : '#6366f1')} 
-                                  fillOpacity={0.6}
-                                  stroke={entry.engagement > 80 ? '#fff' : 'none'}
-                                  strokeWidth={2}
-                                />
-                             ))}
-                          </Scatter>
-                       </ScatterChart>
-                    </ResponsiveContainer>
-                    <div className="absolute top-4 left-4 flex gap-2">
-                       <Badge className="bg-primary/20 text-primary border-primary/30 text-[9px] font-black uppercase">Forte</Badge>
-                       <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30 text-[9px] font-black uppercase">Médio</Badge>
-                       <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30 text-[9px] font-black uppercase">Difundido</Badge>
-                    </div>
-                 </div>
-              </CardContent>
+               <CardContent className="p-8">
+                  <div className="h-[400px] w-full bg-black/40 rounded-[32px] border border-white/5 relative group p-4">
+                     {influenceData.length > 0 ? (
+                       <>
+                         <ResponsiveContainer width="100%" height="100%">
+                            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                               <XAxis type="number" dataKey="x" hide />
+                               <YAxis type="number" dataKey="y" hide />
+                               <ZAxis type="number" dataKey="z" range={[50, 400]} />
+                               <Tooltip 
+                                 cursor={{ strokeDasharray: '3 3' }} 
+                                 contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '12px' }}
+                                 itemStyle={{ color: '#fff', fontSize: '10px', fontWeight: 'bold' }}
+                                 formatter={(value: number, name: string) => {
+                                   if (name === 'engagement') return [`${value}%`, 'Engajamento'];
+                                   if (name === 'z') return [value.toFixed(0), 'Impacto'];
+                                   return [value.toFixed(1), name];
+                                 }}
+                                 labelFormatter={(label: string) => `Tendência: ${label}`}
+                               />
+                               <Scatter name="Nós de Influência" data={influenceData} fill="#3b82f6">
+                                  {influenceData.map((entry, index) => (
+                                    <Cell 
+                                       key={`cell-${index}`} 
+                                       fill={entry.engagement > 80 ? '#3b82f6' : (entry.engagement > 40 ? '#8b5cf6' : '#6366f1')} 
+                                       fillOpacity={0.6}
+                                       stroke={entry.engagement > 80 ? '#fff' : 'none'}
+                                       strokeWidth={2}
+                                     />
+                                  ))}
+                               </Scatter>
+                            </ScatterChart>
+                         </ResponsiveContainer>
+                         <div className="absolute top-4 left-4 flex gap-2">
+                            <Badge className="bg-primary/20 text-primary border-primary/30 text-[9px] font-black uppercase">Forte</Badge>
+                            <Badge className="bg-indigo-500/20 text-indigo-400 border-indigo-500/30 text-[9px] font-black uppercase">Médio</Badge>
+                            <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30 text-[9px] font-black uppercase">Difundido</Badge>
+                         </div>
+                       </>
+                     ) : (
+                       <div className="flex items-center justify-center h-full">
+                         <div className="text-center">
+                           <Radio className="w-12 h-12 mx-auto text-muted-foreground/20 mb-3" />
+                           <p className="text-[10px] text-muted-foreground font-black uppercase tracking-widest">Nenhum dado de influência disponível</p>
+                           <p className="text-[9px] text-muted-foreground/40 font-bold uppercase tracking-wider mt-1">Sincronize o radar para gerar o mapa</p>
+                         </div>
+                       </div>
+                     )}
+                  </div>
+               </CardContent>
            </Card>
 
            {/* TENDÊNCIAS POLÍTICAS GRID */}

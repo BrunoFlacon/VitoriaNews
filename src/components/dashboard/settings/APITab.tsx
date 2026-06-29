@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, RefreshCw, ChevronUp, ChevronDown, X, Globe, 
   Unplug, Link2, Loader2, Plug, Save, FileText, MessageSquare,
-  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2, Star
+  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2, Star, Webhook, Tag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,15 +13,16 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
-import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, YoutubeIcon, AdsIcon, AnalyticsIcon, PeopleIcon, GoogleNewsIcon } from "@/components/icons/SocialIcons";
+import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, YoutubeIcon, AnalyticsIcon, PeopleIcon, GoogleNewsIcon, AdsIcon } from "@/components/icons/SocialIcons";
 
 import { PLATFORM_CREDENTIAL_FIELDS } from "@/hooks/useApiCredentials";
+import { WebhookStatusBadge } from "./WebhookStatusBadge";
 
 interface APITabProps {
   UNIQUE_PLATFORM_CONFIGS: any[];
   activePlatformIds: string[];
   expandedPlatform: string | null;
-  setExpandedPlatform: (id: string | null) => void;
+  toggleExpand: (id: string) => void;
   connections: any[];
   socialStats: any[];
   audienceBreakdown: any | null;
@@ -59,7 +60,7 @@ export const APITab = memo(({
   UNIQUE_PLATFORM_CONFIGS,
   activePlatformIds,
   expandedPlatform,
-  setExpandedPlatform,
+  toggleExpand,
   connections,
   socialStats,
   audienceBreakdown,
@@ -92,9 +93,7 @@ export const APITab = memo(({
   handleDeleteCreds = (id) => { deleteCredentials(id); },
   onSetPrimary
 }: APITabProps) => {
-  const toggleExpand = (id: string) => {
-    setExpandedPlatform(expandedPlatform === id ? null : id);
-  };
+  // toggleExpand is now received from parent to initialize formValues
   
   const [pixelList, updatePixels] = useState<string[]>(['']);
 
@@ -123,7 +122,7 @@ export const APITab = memo(({
   }, [credentials, saveCredentials]);
 
   return (
-    <div className="space-y-3">
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
               {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
                 const platformStats = socialStats.find(s => s.platform === config.id);
                 // isVerified = true if any Telegram entry has followers > 0 OR there's any bot entry saved
@@ -188,12 +187,17 @@ export const APITab = memo(({
                               </Badge>
                             )}
 
+                            {/* Webhook status badge inline */}
+                            {["facebook","instagram","threads","whatsapp","telegram","twitter","tiktok","linkedin","meta_ads"].includes(config.id) && (
+                              <WebhookStatusBadge platform={config.id === "meta_ads" || config.id === "threads" ? "meta" : config.id} userId={user?.id} compact platformLabel={config.id === "threads" ? "Threads" : undefined} />
+                            )}
+
                             {/* Credenciais Salvas (grey): has creds but not yet verified */}
                             {!isEffectivelyConnected && hasCreds && (() => {
                               let label = "Credenciais Salvas";
                               if (config.id === 'google_cloud') {
                                 const googleCreds = credentials['google_cloud'] || {};
-                                const serviceKeys = ['maps_api_key', 'news_api_key', 'youtube_api_key', 'ads_id', 'analytics_id', 'search_console_id'];
+                                const serviceKeys = ['maps_api_key', 'news_api_key', 'analytics_id', 'gtag_id', 'search_console_id', 'people_api_key', 'ads_id'];
                                 const activeServices = serviceKeys.filter(k => googleCreds[k]?.trim()).length;
                                 label = `Credencias Ativas (${activeServices} serviço${activeServices !== 1 ? 's' : ''})`;
                               }
@@ -273,6 +277,20 @@ export const APITab = memo(({
                             {/* Google Cloud services status */}
                             {config.id === 'google_cloud' && (
                               <div className="space-y-3">
+                                {(() => {
+                                  const hasOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
+                                  return !hasOAuth ? (
+                                    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 mb-2">
+                                      <AlertCircle className="w-4 h-4 text-yellow-400 shrink-0" />
+                                      <p className="text-xs text-yellow-300/90">
+                                        GA4, Search Console e YouTube precisam de conta Google conectada via OAuth. 
+                                        <button onClick={() => handleConnectApi('google')} className="ml-1 text-yellow-200 underline hover:text-yellow-100 font-medium">
+                                          Conectar Google →
+                                        </button>
+                                      </p>
+                                    </div>
+                                  ) : null;
+                                })()}
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
                                     <Globe className="w-4 h-4 text-muted-foreground" />
@@ -302,15 +320,26 @@ export const APITab = memo(({
                                 </div>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                   {[
-                                    { name: 'Maps API', key: 'maps_api_key', desc: 'Mapas e Geolocalização', icon: MapsIcon, syncFn: null },
-                                    { name: 'News API', key: 'news_api_key', desc: 'Google News Discovery', icon: GoogleNewsIcon, syncFn: 'radar-api', action: 'intelligence' },
-                                    { name: 'YouTube API', key: 'youtube_api_key', desc: 'Vídeos e Canal', icon: YoutubeIcon, syncFn: 'collect-youtube-analytics' },
-                                    { name: 'Google Ads', key: 'ads_id', desc: 'Campanhas e Anúncios', icon: AdsIcon, syncFn: 'collect-meta-ads-analytics' },
-                                    { name: 'Analytics', key: 'analytics_id', desc: 'Dados e Métricas', icon: AnalyticsIcon, syncFn: 'collect-google-analytics' },
-                                    { name: 'Search Console', key: 'search_console_id', desc: 'SEO e Buscas', icon: GoogleIcon, syncFn: 'collect-search-console-data' },
-                                    { name: 'People API', key: 'people_api_key', desc: 'Sincronização de Contatos', icon: PeopleIcon, syncFn: 'sync-google-contacts' },
-                                  ].map(svc => {
-                                    const isActive = !!credentials['google_cloud']?.[svc.key];
+                                      { name: 'Maps API', key: 'maps_api_key', desc: 'Mapas e Geolocalização', icon: MapsIcon, syncFn: 'validate-maps-key' },
+                                     { name: 'News API', key: 'news_api_key', desc: 'Google News Discovery', icon: GoogleNewsIcon, syncFn: 'radar-api', action: 'intelligence' },
+                                     { name: 'Analytics', key: 'analytics_id', desc: 'Dados e Métricas', icon: AnalyticsIcon, syncFn: 'collect-google-analytics' },
+                                     { name: 'Pixel ID', key: 'gtag_id', desc: 'G-TAG e Rastreio', icon: Tag, syncFn: 'validate-gtag' },
+                                     { name: 'Search Console', key: 'search_console_id', desc: 'SEO e Buscas', icon: GoogleIcon, syncFn: 'collect-search-console-data' },
+                                     { name: 'People API', key: 'people_api_key', desc: 'Sincronização de Contatos', icon: PeopleIcon, syncFn: 'sync-google-contacts' },
+                                      { name: 'Google Ads', key: 'ads_id', desc: 'Campanhas e Anúncios', icon: AdsIcon, syncFn: 'collect-google-ads' },
+                                     { name: 'Google Workspace', key: 'oauth', desc: 'OAuth Client', icon: GoogleIcon, syncFn: 'validate-google-oauth', isOAuth: true },
+                                   ].map(svc => {
+                                    const isOAuth = svc.isOAuth;
+                                    const hasOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
+                                    const needsOAuth = ['analytics_id', 'search_console_id', 'ads_id'].includes(svc.key);
+                                    const hasCred = !!credentials['google_cloud']?.[svc.key];
+                                    const isActive = isOAuth
+                                      ? hasOAuth
+                                      : svc.key === 'people_api_key'
+                                        ? hasCred || hasOAuth
+                                        : needsOAuth
+                                          ? hasCred && hasOAuth
+                                          : hasCred;
                                     const Icon = svc.icon;
                                     return (
                                       <div key={svc.name} className={cn(
@@ -338,9 +367,11 @@ export const APITab = memo(({
                                         {/* Status + Action */}
                                         <div className="flex items-center justify-between pt-2 border-t border-white/5">
                                           <div className="flex items-center gap-1.5">
-                                            {isActive
-                                              ? <Badge className="h-5 px-1.5 bg-green-500/20 text-green-400 border-green-500/20 text-[9px] font-black tracking-tighter uppercase">Ativo</Badge>
-                                              : <Badge variant="outline" className="h-5 px-1.5 border-muted-foreground/20 text-muted-foreground/40 text-[9px] font-bold tracking-tighter uppercase">Off</Badge>}
+                                            {needsOAuth && !hasOAuth && hasCred
+                                              ? <Badge variant="outline" className="h-5 px-1.5 border-yellow-500/30 text-yellow-500/70 text-[9px] font-bold tracking-tighter uppercase">Precisa OAuth</Badge>
+                                              : isActive
+                                                ? <Badge className="h-5 px-1.5 bg-green-500/20 text-green-400 border-green-500/20 text-[9px] font-black tracking-tighter uppercase">Ativo</Badge>
+                                                : <Badge variant="outline" className="h-5 px-1.5 border-muted-foreground/20 text-muted-foreground/40 text-[9px] font-bold tracking-tighter uppercase">Off</Badge>}
                                           </div>
                                           
                                           <div className="flex items-center gap-1">
@@ -359,6 +390,54 @@ export const APITab = memo(({
                                                     if (!session) throw new Error('Sessão expirada');
                                                     
                                                     // Specially handle radar-api which acts as a router and needs 'path' in the body
+                                                     if (svc.syncFn === 'validate-maps-key') {
+                                                          const apiKey = formValues['google_cloud']?.maps_api_key || credentials['google_cloud']?.maps_api_key;
+                                                          if (!apiKey) throw new Error('Maps API Key não configurada. Digite no campo abaixo e clique "Salvar Configuração" primeiro.');
+                                                         try {
+                                                           const testRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=test&key=${apiKey}`);
+                                                           const testData = await testRes.json();
+                                                           if (testData.status === 'REQUEST_DENIED') {
+                                                             toast({ title: 'Maps Key salva, Geocoding API desativada', description: 'Mapas funcionam, mas geolocalização precisa ativar Geocoding API + billing em console.cloud.google.com', variant: 'default' });
+                                                           } else {
+                                                             toast({ title: 'Maps API OK!', description: `Status: ${testData.status}` });
+                                                           }
+                                                         } catch (fetchErr: any) {
+                                                           if (fetchErr.message?.includes('CSP') || fetchErr.message?.includes('Content Security Policy') || fetchErr.name === 'TypeError') {
+                                                             toast({ title: 'Validação offline', description: 'Key salva. A validação online será feita no deploy.', variant: 'default' });
+                                                           } else {
+                                                             throw fetchErr;
+                                                           }
+                                                         }
+                                                         refreshStats();
+                                                         return;
+                                                       }
+
+                                                      if (svc.syncFn === 'validate-google-ads') {
+                                                         const adsId = (formValues['google_cloud']?.ads_id || credentials['google_cloud']?.ads_id || '').trim();
+                                                         if (!adsId) throw new Error('Google Ads Customer ID não configurado. Digite no campo abaixo e clique "Salvar Configuração" primeiro.');
+                                                         const cleaned = adsId.replace(/[\s\-_]/g, '');
+                                                         if (!/^\d{10}$/.test(cleaned)) throw new Error(`Formato inválido: "${adsId}". O Google Ads Customer ID tem 10 dígitos. Encontre em: Google Ads > Configuração > Faturamento > ID do cliente (ex: 123-456-7890)`);
+                                                         const formatted = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+                                                         toast({ title: 'Google Ads OK!', description: `ID ${formatted} válido.` });
+                                                         return;
+                                                       }
+
+                                                      if (svc.syncFn === 'validate-gtag') {
+                                                        const gtagId = (formValues['google_cloud']?.gtag_id || credentials['google_cloud']?.gtag_id || '').trim();
+                                                        if (!gtagId) throw new Error('Google Analytics Pixel ID (G-TAG) não configurado. Digite no campo abaixo e clique "Salvar Configuração" primeiro.');
+                                                        const cleaned = gtagId.replace(/[\s\-_]/g, '');
+                                                        if (!/^G[A-Z0-9]{6,}$/i.test(cleaned)) throw new Error(`Formato inválido: "${gtagId}". O G-TAG deve seguir o padrão G-XXXXXXXXXX (ex: G-ABCDEF1234)`);
+                                                        toast({ title: 'G-TAG OK!', description: `Pixel ID ${gtagId} válido.` });
+                                                        return;
+                                                      }
+
+                                                      if (svc.syncFn === 'validate-google-oauth') {
+                                                       const hasGoogleConn = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
+                                                       if (!hasGoogleConn) throw new Error('Nenhuma conta Google conectada via OAuth. Conecte em Redes Sociais.');
+                                                       toast({ title: 'Google OAuth OK!', description: 'Conta Google ativa e conectada.' });
+                                                       return;
+                                                     }
+
                                                     const invokeOptions: any = {
                                                       body: { userId: session.user.id },
                                                       headers: { Authorization: `Bearer ${session.access_token}` }
@@ -368,9 +447,17 @@ export const APITab = memo(({
                                                       invokeOptions.body.path = svc.action;
                                                     }
 
-                                                    await supabase.functions.invoke(svc.syncFn, invokeOptions);
+                                                    const syncResult = await supabase.functions.invoke(svc.syncFn, invokeOptions);
                                                     
-                                                    toast({ title: `${svc.name} Sincronizado!`, description: "Dados atualizados com sucesso." });
+                                                    if (syncResult?.data?.error) {
+                                                      throw new Error(syncResult.data.error);
+                                                    }
+                                                    if (syncResult?.data?.status === 'skipped') {
+                                                      const msg = syncResult?.data?.message || 'Sem dados para sincronizar';
+                                                      toast({ title: `${svc.name} ignorado`, description: msg, variant: msg.includes('OAuth') ? 'destructive' : 'default' });
+                                                    } else {
+                                                      toast({ title: `${svc.name} Sincronizado!`, description: "Dados atualizados com sucesso." });
+                                                    }
                                                     refreshStats();
                                                   } catch (err: any) {
                                                     toast({ title: "Erro na sincronização", description: err?.message || "Tente novamente.", variant: "destructive" });
@@ -396,15 +483,23 @@ export const APITab = memo(({
                                               onClick={(e) => {
                                                 e.preventDefault();
                                                 if (isActive) {
-                                                  const newCreds = { ...credentials['google_cloud'] };
-                                                  delete newCreds[svc.key];
-                                                  saveCredentials('google_cloud', newCreds);
+                                                  if (isOAuth) {
+                                                    handleDisconnectCustom('google', 'all');
+                                                  } else {
+                                                    const newCreds = { ...credentials['google_cloud'] };
+                                                    delete newCreds[svc.key];
+                                                    saveCredentials('google_cloud', newCreds);
+                                                  }
                                                 } else {
-                                                  const fieldId = `google_cloud-${svc.key}`;
-                                                  const input = document.getElementById(fieldId);
-                                                  if (input) {
-                                                    input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                    setTimeout(() => input.focus(), 500);
+                                                  if (isOAuth) {
+                                                    handleConnectApi('google');
+                                                  } else {
+                                                    const fieldId = `google_cloud-${svc.key}`;
+                                                    const input = document.getElementById(fieldId);
+                                                    if (input) {
+                                                      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                      setTimeout(() => input.focus(), 500);
+                                                    }
                                                   }
                                                 }
                                               }}
@@ -533,10 +628,6 @@ export const APITab = memo(({
                                                   <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
                                                     <GoogleNewsIcon data-active={isEffectivelyConnected} className="w-4 h-4" />
                                                     <span className={cn("text-[9px] font-bold", isEffectivelyConnected ? "text-white" : "text-slate-500")}>News</span>
-                                                  </div>
-                                                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
-                                                    <AdsIcon data-active={isEffectivelyConnected} className="w-4 h-4" />
-                                                    <span className={cn("text-[9px] font-bold", isEffectivelyConnected ? "text-white" : "text-slate-500")}>Ads</span>
                                                   </div>
                                                   <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5 border border-white/10">
                                                     <MapsIcon data-active={isEffectivelyConnected} className="w-4 h-4" />
@@ -692,12 +783,12 @@ export const APITab = memo(({
                                       </Badge>
                                     )}
                                   </div>
-                                  <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); handleSaveCreds(config.id); }}>
+                                  <div className="grid gap-3">
                                     {fields.map((field) => {
                                       const fieldId = `${config.id}-${field.key}`;
-                                      const isVisible = visibleFields[fieldId] || false;
+                                      const isVisible = visibleFields[fieldId] ?? false;
                                       const savedValue = credentials[config.id]?.[field.key];
-                                      const val = (formValues[config.id] || credentials[config.id] || {})[field.key] || "";
+                                      const val = formValues[config.id]?.[field.key] ?? credentials[config.id]?.[field.key] ?? "";
 
                                       return (
                                         <div key={field.key} className="space-y-1.5">
@@ -706,31 +797,29 @@ export const APITab = memo(({
                                           </label>
                                           <div className="relative">
                                             <Input
-                                              type={field.masked && !isVisible ? "password" : "text"}
+                                              type={isVisible ? "text" : "password"}
                                               value={val}
                                               onChange={(e) => updateFormField(config.id, field.key, e.target.value)}
                                               placeholder={field.placeholder || (savedValue ? maskValue(savedValue) : `${field.label}`)}
                                               className={cn(
-                                                "bg-muted/50 h-10 text-sm",
-                                                config.id === 'youtube' && field.key === 'client_id' && (val.startsWith('UC') || (val && !val.endsWith('.apps.googleusercontent.com') && val.length > 5)) && "border-red-500 ring-2 ring-500",
+                                                "bg-muted/50 h-10 text-sm pr-10",
+                                                config.id === 'youtube' && field.key === 'client_id' && (val.startsWith('UC') || (val && !val.endsWith('.apps.googleusercontent.com') && val.length > 5)) && "border-red-500 ring-2 ring-red-500",
                                                 config.id === 'threads' && field.key === 'app_id' && val && !/^\d+$/.test(val) && "border-red-500 ring-2 ring-red-500"
                                               )}
                                               autoComplete={field.masked ? "new-password" : "off"}
                                             />
-                                            {field.masked && (
-                                              <button
-                                                type="button"
-                                                onClick={() => toggleFieldVisibility(fieldId)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                              >
-                                                {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                              </button>
-                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleFieldVisibility(fieldId)}
+                                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                            >
+                                              {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </button>
                                           </div>
                                         </div>
                                       );
                                     })}
-                                  </form>
+                                  </div>
                                 </div>
                               )}
 
@@ -824,7 +913,7 @@ export const APITab = memo(({
                                               {pixelId && (
                                                 <div className="flex flex-col items-end gap-0.5">
                                                   <span className="text-[8px] font-black uppercase text-muted-foreground tracking-widest">Volume de Dados</span>
-                                                  <span className="text-xs font-mono font-bold text-green-500">{(Math.floor(Math.random() * 5000 + 1200)).toLocaleString('pt-BR')} Hits</span>
+                                                  <span className="text-xs font-mono font-bold text-green-500">—</span>
                                                 </div>
                                               )}
                                             </div>
@@ -1004,7 +1093,8 @@ export const APITab = memo(({
                 );
               })}
             
-    </div>
+
+    </form>
   );
 });
 

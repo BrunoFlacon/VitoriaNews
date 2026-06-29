@@ -102,7 +102,23 @@ serve(async (req: Request) => {
       return v;
     };
 
-    const [postsRes, socialRes, accMetRes, postMetRes, msgRes, adsRes, gaRes, ytRes, mChanRes] = await Promise.allSettled([
+    // Check which services are configured with credentials
+    const [credMetaRes, credGcloudRes, credOAuthRes] = await Promise.allSettled([
+      supabase.from("api_credentials").select("credentials").eq("user_id", userId).eq("platform", "meta_ads").maybeSingle(),
+      supabase.from("api_credentials").select("credentials").eq("user_id", userId).eq("platform", "google_cloud").maybeSingle(),
+      supabase.from("social_connections").select("access_token").eq("user_id", userId).in("platform", ["google", "youtube"]).eq("is_connected", true).limit(1),
+    ]);
+    const metaCreds = credMetaRes.status === "fulfilled" ? credMetaRes.value.data?.credentials || null : null;
+    const gcloudCreds = credGcloudRes.status === "fulfilled" ? credGcloudRes.value.data?.credentials || null : null;
+    const hasOAuth = credOAuthRes.status === "fulfilled" && credOAuthRes.value.data && credOAuthRes.value.data.length > 0 && credOAuthRes.value.data[0].access_token;
+
+    const metaAdsConfigured = metaCreds?.access_token ? true : false;
+    const googleAdsConfigured = gcloudCreds?.ads_id ? true : false;
+    const ga4Configured = gcloudCreds?.analytics_id && hasOAuth ? true : false;
+    const searchConsoleConfigured = gcloudCreds?.search_console_id && hasOAuth ? true : false;
+    const youtubeConfigured = hasOAuth ? true : false;
+
+    const [postsRes, socialRes, accMetRes, postMetRes, msgRes, adsRes, gaRes, ytRes, mChanRes, googleAdsRes] = await Promise.allSettled([
       supabase.from("scheduled_posts").select("id, status, platforms, created_at, content").eq("user_id", userId).gte("created_at", startISO).order("created_at", { ascending: false }).limit(500),
       supabase.from("social_accounts").select("id, platform, page_name, display_name, username, followers, followers_count, subscribers_count, posts_count, profile_picture, last_synced_at, updated_at, platform_user_id, page_id").eq("user_id", userId),
       supabase.from("account_metrics").select("social_account_id, followers, collected_at").eq("user_id", userId).gte("collected_at", startISO).order("collected_at", { ascending: true }).limit(1000),
@@ -112,6 +128,7 @@ serve(async (req: Request) => {
       supabase.from("google_analytics_data").select("metric_name,metric_value,date").eq("user_id", userId).gte("date", startDate10).limit(500),
       supabase.from("youtube_analytics").select("views,likes,comments,date,subscribers_gained,watch_time_minutes,estimated_minutes_watched,title,metadata").eq("user_id", userId).gte("date", startDate10).limit(500),
       supabase.from("messaging_channels").select("id, platform, channel_name, page_name, username, channel_id, members_count, profile_picture, updated_at").eq("user_id", userId),
+      supabase.from("google_ads_campaigns").select("impressions,clicks,cost_micros,conversions,date").eq("user_id", userId).gte("date", startDate10).limit(200),
     ]);
 
     const getD = (r: any) => r.status === "fulfilled" ? (r.value.data || []) : [];
@@ -124,6 +141,7 @@ serve(async (req: Request) => {
     const gaData = getD(gaRes);
     const ytData = getD(ytRes);
     const msgChannels = getD(mChanRes);
+    const googleAds = getD(googleAdsRes);
 
     console.log(`Dados encontrados: Posts: ${rawPosts.length}, Contas: ${socialAccounts.length}, Mensagens: ${messages.length}, Canais: ${msgChannels.length}`);
 
@@ -153,6 +171,25 @@ serve(async (req: Request) => {
       const p = normalizePlatform(ch.platform);
       if (normPlatform !== "all" && p !== normPlatform) continue;
       
+      // WhatsApp/Telegram: consolidate channels into a single aggregated entry per platform
+      if (p === 'whatsapp' || p === 'telegram') {
+        const existingKey = Array.from(accountMap.keys()).find(k => k.startsWith(`${p}_agg_`));
+        if (existingKey) {
+          const existing = accountMap.get(existingKey);
+          existing.currentFollowers += Number(ch.members_count || 0);
+          existing.postsCount += 0;
+          if (ch.profile_picture && !existing.profileImage) existing.profileImage = ch.profile_picture;
+          continue;
+        }
+        const aggKey = `${p}_agg_${ch.id}`;
+        accountMap.set(aggKey, {
+          id: ch.id, platform: p, username: p === 'whatsapp' ? 'WhatsApp' : 'Telegram',
+          currentFollowers: Number(ch.members_count || 0), postsCount: 0, growth: 0,
+          profileImage: ch.profile_picture, is_connected: true, last_synced_at: ch.updated_at,
+        });
+        continue;
+      }
+
       const externalId = ch.channel_id;
       if (externalId && processedExternalIds.has(`${p}_${externalId}`)) continue; // Skip duplicate
 
@@ -247,6 +284,22 @@ serve(async (req: Request) => {
     }
 
     const gaViews = gaData.reduce((s, g) => s + (g.metric_name === "screenPageViews" ? Number(g.metric_value) : 0), 0);
+    const scData = gaData.filter((g: any) => g.metric_name === "search_console");
+    const scStats = scData.length > 0 ? scData.reduce((acc: any, g: any) => {
+      const m = g.metadata || {};
+      return {
+        clicks: acc.clicks + (m.clicks || 0),
+        impressions: acc.impressions + (m.impressions || 0),
+        totalPosition: acc.totalPosition + ((m.position || 0) * (m.impressions || 1)),
+        totalWeight: acc.totalWeight + (m.impressions || 1),
+      };
+    }, { clicks: 0, impressions: 0, totalPosition: 0, totalWeight: 0 }) : null;
+    const searchConsoleStats = scStats ? {
+      clicks: scStats.clicks,
+      impressions: scStats.impressions,
+      ctr: scStats.impressions > 0 ? (scStats.clicks / scStats.impressions * 100).toFixed(2) : "0",
+      avgPosition: scStats.totalWeight > 0 ? (scStats.totalPosition / scStats.totalWeight).toFixed(1) : "0",
+    } : searchConsoleConfigured ? { clicks: 0, impressions: 0, ctr: "0", avgPosition: "0" } : undefined;
     const ytViews = ytData.reduce((s, y) => s + (y.views || 0), 0);
     const ytSubscribersGained = ytData.reduce((s, y) => s + (y.subscribers_gained || 0), 0);
     const ytWatchTimeMinutes = ytData.reduce((s, y) => s + (y.watch_time_minutes || 0), 0);
@@ -374,17 +427,25 @@ serve(async (req: Request) => {
         platformBreakdown,
         topContent: Array.from(metricsByPost.values()).sort((a,b) => b.engagement - a.engagement).slice(0, 10),
         bestTimes,
-        followerData: accounts,
-        adsStats: ads.reduce((acc, ad) => ({ impressions: acc.impressions + (ad.impressions || 0), reach: acc.reach + (ad.reach || 0), clicks: acc.clicks + (ad.clicks || 0), spend: acc.spend + (ad.amount_spent || 0) }), { impressions: 0, reach: 0, clicks: 0, spend: 0 }),
-        youtubeStats: includeYouTube ? {
+        followerData: accounts.filter((a: any) => {
+          if ((a.platform === 'whatsapp' || a.platform === 'telegram') && String(a.id).includes('_agg_')) {
+            return !accounts.some((o: any) => o.platform === a.platform && !String(o.id).includes('_agg_'));
+          }
+          return true;
+        }),
+        adsStats: metaAdsConfigured ? ads.reduce((acc, ad) => ({ impressions: acc.impressions + (ad.impressions || 0), reach: acc.reach + (ad.reach || 0), clicks: acc.clicks + (ad.clicks || 0), spend: acc.spend + (ad.amount_spent || 0) }), { impressions: 0, reach: 0, clicks: 0, spend: 0 }) : null,
+        googleAdsStats: googleAdsConfigured ? googleAds.reduce((acc: any, g: any) => ({ impressions: acc.impressions + (g.impressions || 0), clicks: acc.clicks + (g.clicks || 0), cost: acc.cost + ((g.cost_micros || 0) / 1000000), conversions: acc.conversions + (g.conversions || 0) }), { impressions: 0, clicks: 0, cost: 0, conversions: 0 }) : null,
+        youtubeStats: youtubeConfigured && includeYouTube ? {
           views: ytViews,
           likes: ytData.reduce((s,y)=>s+(y.likes||0),0),
           comments: ytData.reduce((s,y)=>s+(y.comments||0),0),
           subscribersGained: ytSubscribersGained,
           watchTimeMinutes: ytWatchTimeMinutes,
           subscribers: ytSubscribers,
-        } : { views: 0, likes: 0, comments: 0 },
-        gaStats: includeGA ? { views: gaViews } : { views: 0 },
+        } : null,
+        gaStats: ga4Configured && includeGA ? { views: gaViews } : null,
+        adsConfigured: googleAdsConfigured,
+        searchConsoleStats,
         messageStats: { 
           totalSent: messages.filter(m => m.status === "sent").length, 
           totalFailed: messages.filter(m => m.status === "failed").length, 

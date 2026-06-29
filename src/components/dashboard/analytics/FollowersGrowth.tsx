@@ -52,7 +52,9 @@ export const FollowersGrowth = ({
     );
   };
 
-  const sortedPlatforms = [...socialPlatforms].sort((a, b) => {
+  const sortedPlatforms = [...socialPlatforms]
+    .filter(p => p.id !== 'meta_ads')
+    .sort((a, b) => {
     const groupA = groupedFollowers?.find((g: any) => g.platform === a.id);
     const isConnA = !!groupA && groupA.profiles && groupA.profiles.length > 0;
     const groupB = groupedFollowers?.find((g: any) => g.platform === b.id);
@@ -167,7 +169,7 @@ export const FollowersGrowth = ({
                            const pId = `${prof.platform}-${prof.username || prof.platform_user_id}`;
                            const displayName = prof.page_name || prof.username || 'Perfil';
                            return (
-                             <SelectItem key={pIdx} value={pId}>
+                              <SelectItem key={pId} value={pId}>
                                {prof.page_name ? displayName : `@${displayName}`}
                              </SelectItem>
                            );

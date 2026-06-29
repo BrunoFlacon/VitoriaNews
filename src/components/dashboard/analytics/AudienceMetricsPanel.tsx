@@ -125,7 +125,7 @@ export const AudienceMetricsPanel = ({
                   messageSuccessRate >= 50 ? "border-yellow-500/30 text-yellow-400" :
                   "border-red-500/30 text-red-400"
                 )}>
-                  {messageSuccessRate.toFixed(1)}%
+                  {isNaN(messageSuccessRate) ? "0.0" : Number(messageSuccessRate).toFixed(1)}%
                 </Badge>
               </div>
             </div>

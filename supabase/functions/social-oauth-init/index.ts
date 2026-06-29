@@ -59,7 +59,7 @@ serve(async (req: Request) => {
     if (!platform || !redirect_uri) return oauthError(platform || "unknown", "init", "platform and redirect_uri are required");
 
     // Bloqueio preventivo para plataformas que NÃO usam OAuth
-    if (['googlenews', 'giphy', 'spotify', 'site', 'telegram', 'kwai', 'rumble', 'gettr', 'truthsocial'].includes(platform.toLowerCase())) {
+    if (['googlenews', 'giphy', 'site', 'telegram', 'kwai', 'rumble', 'gettr', 'truthsocial', 'medium', 'substack', 'resend'].includes(platform.toLowerCase())) {
         return oauthError(platform, "init", `A plataforma '${platform}' utiliza chaves de API ou identificadores manuais, não OAuth padrão. Por favor, configure as credenciais diretamente na aba de Configurações das APIs.`);
     }
 
@@ -170,6 +170,29 @@ serve(async (req: Request) => {
       
       console.log(`[THREADS INIT] Generated URL (Manual): ${authUrl.split('?')[0]}?client_id=${finalAppId.substring(0, 5)}...`);
 
+    } else if (platform === "spotify") {
+      const spotifyId = formattedCreds.client_id || getVal("client_id", "SPOTIFY_CLIENT_ID");
+      if (!spotifyId) throw new Error("Client ID do Spotify não configurado.");
+      const spotifyScopes = "user-read-private user-read-email playlist-read-private playlist-modify-public playlist-modify-private";
+      authUrl = `https://accounts.spotify.com/authorize?` + new URLSearchParams({
+        client_id: spotifyId,
+        redirect_uri: redirect_uri,
+        scope: spotifyScopes,
+        state: state,
+        response_type: "code"
+      });
+    } else if (platform === "reddit") {
+      const redditId = formattedCreds.client_id || getVal("client_id", "REDDIT_CLIENT_ID");
+      if (!redditId) throw new Error("Client ID do Reddit não configurado.");
+      const redditScopes = "identity,submit,read";
+      authUrl = `https://www.reddit.com/api/v1/authorize?` + new URLSearchParams({
+        client_id: redditId,
+        redirect_uri: redirect_uri,
+        scope: redditScopes,
+        state: state,
+        response_type: "code",
+        duration: "permanent"
+      });
     } else if (platform === "twitter") {
       const twitterKey = getVal("client_id", "TWITTER_CLIENT_ID");
       if (!twitterKey) throw new Error("Client ID do X (Twitter) não configurado.");

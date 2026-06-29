@@ -17,7 +17,10 @@ import {
   GettrIcon,
   SpotifyIcon,
   GiphyIcon,
-  GoogleNewsIcon
+  GoogleNewsIcon,
+  MediumIcon,
+  SubstackIcon,
+  RedditIcon
 } from "./SocialIcons";
 
 export const socialPlatforms = [
@@ -163,7 +166,7 @@ export const socialPlatforms = [
     color: "bg-[#1DB954]",
     textColor: "text-[#1DB954]",
     gradient: "from-[#1DB954] to-[#191414]",
-    type: "tool"
+    type: "social"
   },
   {
     id: "giphy",
@@ -180,7 +183,7 @@ export const socialPlatforms = [
     icon: GoogleNewsIcon,
     color: "bg-[#4285F4]",
     textColor: "text-[#4285F4]",
-    gradient: "from-[#4285F4] via-[#34A853] via-[#FBBC05] to-[#EA4335]",
+    gradient: "from-[#4285F4] to-[#34A853]",
     type: "news"
   },
   {
@@ -197,23 +200,14 @@ export const socialPlatforms = [
     name: "Meta Marketing & Ads API",
     icon: FacebookIcon,
     color: "bg-[#0081FB]",
-    textColor: "#0081FB",
+    textColor: "text-[#0081FB]",
     gradient: "from-[#0081FB] to-[#0165E1]",
     type: "tool"
   },
   {
-    id: "google_news",
-    name: "Google News",
-    icon: GoogleNewsIcon,
-    color: "bg-white",
-    textColor: "text-[#4285F4]",
-    gradient: "from-white to-[#f8f9fa]",
-    type: "social"
-  },
-  {
     id: "medium",
     name: "Medium",
-    icon: Camera, // Placeholder for now, could add icon later
+    icon: MediumIcon,
     color: "bg-black",
     textColor: "text-white",
     gradient: "from-zinc-800 to-black",
@@ -222,10 +216,19 @@ export const socialPlatforms = [
   {
     id: "substack",
     name: "Substack",
-    icon: Camera,
+    icon: SubstackIcon,
     color: "bg-[#FF6719]",
     textColor: "text-[#FF6719]",
     gradient: "from-[#FF6719] to-[#E65C16]",
+    type: "social"
+  },
+  {
+    id: "reddit",
+    name: "Reddit",
+    icon: RedditIcon,
+    color: "bg-[#FF4500]",
+    textColor: "text-[#FF4500]",
+    gradient: "from-[#FF4500] to-[#CC3700]",
     type: "social"
   },
   {

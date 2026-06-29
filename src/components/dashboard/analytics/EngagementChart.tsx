@@ -20,8 +20,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+interface ChartDataPoint {
+  name: string;
+  views: number;
+  engagement: number;
+  reach: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  posts?: number;
+}
+
 interface EngagementChartProps {
-  chartData: any[];
+  chartData: ChartDataPoint[];
   totalFollowers?: number;
 }
 

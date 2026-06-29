@@ -74,11 +74,20 @@ export const StatsGrid = ({ engagement, overview, messageStats, chartData, dataS
     );
   };
 
+  const computeGrowth = (field: keyof ChartDataPoint): number => {
+    if (!chartData || chartData.length < 2) return 0;
+    const values = chartData.map(d => Number(d[field]) || 0);
+    const first = values[0];
+    const last = values[values.length - 1];
+    if (first === 0) return last > 0 ? 100 : 0;
+    return Math.round(((last - first) / first) * 100);
+  };
+
   const sparkFields = [
-    { field: 'views' as const, growth: engagement.growth },
-    { field: 'engagement' as const, growth: engagement.likes + engagement.comments > 0 ? (engagement.growth) : 0 },
-    { field: 'reach' as const, growth: engagement.growth },
-    { field: 'shares' as const, growth: engagement.growth },
+    { field: 'views' as const, growth: computeGrowth('views') },
+    { field: 'engagement' as const, growth: computeGrowth('engagement') },
+    { field: 'reach' as const, growth: computeGrowth('reach') },
+    { field: 'shares' as const, growth: computeGrowth('shares') },
   ];
 
   const topStats = [

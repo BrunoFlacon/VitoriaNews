@@ -330,6 +330,50 @@ export const NewsapiIcon = ({ 'data-active': active, style, className, ...props 
     </g>
     </svg>
   );
-};  
+};
 
-  
+export const MediumIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg 
+      viewBox="0 0 64 64" 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill={isActive ? "currentColor" : "currentColor"}
+      style={{
+        width: '48px',
+        height: '48px',
+        opacity: isActive ? 1 : 0.2,
+        ...style
+      }}
+      {...props}
+    >
+      <circle cx="32" cy="32" r="30" fill="currentColor"/>
+      <g transform="translate(16, 16) scale(1.6)" fill={isActive ? "#fff" : "currentColor"}>
+        <path d="M4.27 14.34c0-.27-.12-.53-.32-.7l-3.52-4.24V8.8h6.63l4.42 9.7 3.7-9.7h6.33v.6l-2.15 2.06c-.18.15-.27.36-.24.58v7.42c-.03.22.06.43.24.58l2.1 2.06v.6H14.9v-.6l2.1-2.06c.2-.15.3-.36.24-.58V12.5l-4.94 10.56h-.6L7.97 12.5v6.28c0 .4 0 .48-.24.72L5.7 21.8v.6H1.04l-.22-.6 3.1-3.06c.24-.24.35-.3.35-.72v-3.68z"/>
+      </g>
+    </svg>
+  );
+};
+
+export const SubstackIcon = ({ 'data-active': active, style, className, ...props }: React.SVGProps<SVGSVGElement> & { 'data-active'?: boolean | string }) => {
+  const isActive = active !== false && active !== "false" && active !== undefined;
+  return (
+    <svg 
+      viewBox="0 0 64 64" 
+      xmlns="http://www.w3.org/2000/svg" 
+      fill="currentColor"
+      style={{
+        width: '48px',
+        height: '48px',
+        opacity: isActive ? 1 : 0.2,
+        ...style
+      }}
+      {...props}
+    >
+      <rect x="4" y="4" width="56" height="56" rx="12" fill="currentColor"/>
+      <g transform="translate(14, 18)" fill={isActive ? "#fff" : "currentColor"}>
+        <path d="M0 0h36v4.5H0V0zm0 8.5h36V13H0V8.5zm0 8h36v2.5l-18 9-18-9v-2.5z"/>
+      </g>
+    </svg>
+  );
+};

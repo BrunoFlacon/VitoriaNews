@@ -2,7 +2,6 @@ import React, { startTransition } from "react";
 import { 
   BarChart3, 
   Clock, 
-  TrendingUp, 
   Calendar, 
   RefreshCw, 
   Check, 
@@ -29,8 +28,8 @@ interface AnalyticsHeaderProps {
   setPlatform: (platform: string) => void;
   syncAnalytics: () => void;
   isSyncingAll: boolean;
-  activeView: 'analytics' | 'trends' | 'platform-detail';
-  setActiveView: (view: 'analytics' | 'trends' | 'platform-detail') => void;
+  activeView: 'analytics' | 'platform-detail';
+  setActiveView: (view: 'analytics' | 'platform-detail') => void;
   handleExportPDF: () => void;
   isExporting: boolean;
   lastSyncedAt?: string;
@@ -101,15 +100,7 @@ export const AnalyticsHeader = ({
             >
               Visão Geral
             </button>
-            <button 
-              onClick={() => setActiveView('trends')}
-              className={cn(
-                "px-4 py-2 text-xs font-bold uppercase rounded-lg transition-all flex items-center gap-2", 
-                activeView === 'trends' ? "bg-card shadow-lg text-primary border border-border" : "text-muted-foreground hover:text-white"
-              )}
-            >
-              <TrendingUp className="w-3.5 h-3.5" /> Trends & Viral
-            </button>
+
           </div>
         </div>
       </div>

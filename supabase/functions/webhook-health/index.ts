@@ -91,7 +91,7 @@ serve(async (req: Request) => {
       }
     }
 
-    if (platform === "all" || platform === "meta" || platform === "whatsapp" || platform === "facebook" || platform === "instagram") {
+    if (platform === "all" || platform === "meta" || platform === "whatsapp" || platform === "facebook" || platform === "instagram" || platform === "threads") {
       const metaConfigured = verifyTokenConfigured && !!metaAppId && !!metaAppSecret;
       webhookStatuses["meta"] = {
         configured: metaConfigured,
@@ -118,6 +118,16 @@ serve(async (req: Request) => {
           details: metaConfigured
             ? "Meta webhook unificado configurado — verificar no Meta Developer Console se o campo 'feed' está assinado"
             : "Configure as env vars e registre o webhook no Meta Dev Console com campo 'feed'",
+        };
+      }
+
+      if (platform === "threads" || platform === "all") {
+        webhookStatuses["threads"] = {
+          configured: metaConfigured,
+          healthy: metaConfigured,
+          details: metaConfigured
+            ? "Meta webhook unificado configurado — verificar no Meta Developer Console as assinaturas do Threads"
+            : "Configure as env vars e registre o webhook no Meta Dev Console para Threads",
         };
       }
 

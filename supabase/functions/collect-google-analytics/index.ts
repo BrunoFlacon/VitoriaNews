@@ -1,11 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveCorsOrigin } from "../_shared/cors.ts";
+import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
 
-const corsHeaders = (req) => ({
+const corsHeaders = (req: Request) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-authorization",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Max-Age": "86400",
 });
 
 
@@ -57,32 +59,60 @@ serve(async (req: Request) => {
       });
     }
 
-    const propertyId = analyticsId.replace("properties/", "");
+    let propertyId = analyticsId.replace("properties/", "");
+    if (/^G-[A-Z0-9]+$/i.test(propertyId)) {
+      return new Response(JSON.stringify({ error: `"${propertyId}" parece ser um Measurement ID (G-XXXX). Use o Property ID numérico. Encontre em: Admin > Configuração da Propriedade > ID da Propriedade.` }), {
+        status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+      });
+    }
     const results: any[] = [];
 
-    const { data: gaToken } = await supabase
-      .from("social_connections")
-      .select("access_token")
-      .eq("user_id", userId)
-      .eq("platform", "google")
-      .eq("is_connected", true)
-      .maybeSingle();
-
-    const gaAccessToken = gaToken?.access_token;
+    let gaAccessToken: string | null = null;
+    let storedRefreshToken: string | null = null;
+    for (const p of ["google", "youtube"]) {
+      const { data: tok } = await supabase
+        .from("social_connections")
+        .select("access_token, refresh_token, token_expires_at")
+        .eq("user_id", userId)
+        .eq("platform", p)
+        .eq("is_connected", true)
+        .maybeSingle();
+      if (tok?.access_token) {
+        const expired = tok.token_expires_at && new Date(tok.token_expires_at) < new Date();
+        if (!expired) {
+          gaAccessToken = tok.access_token;
+          break;
+        }
+        storedRefreshToken = tok.refresh_token;
+        if (storedRefreshToken) {
+          try {
+            const refreshRes = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                client_id: creds?.client_id || Deno.env.get("GOOGLE_CLIENT_ID") || "",
+                client_secret: creds?.client_secret || Deno.env.get("GOOGLE_CLIENT_SECRET") || "",
+                refresh_token: storedRefreshToken,
+                grant_type: "refresh_token",
+              }),
+            });
+            const refreshData = await refreshRes.json();
+            if (refreshData.access_token) {
+              gaAccessToken = refreshData.access_token;
+              await supabase.from("social_connections").update({
+                access_token: refreshData.access_token,
+                token_expires_at: new Date(Date.now() + (refreshData.expires_in || 3600) * 1000).toISOString(),
+                updated_at: new Date().toISOString(),
+              }).eq("user_id", userId).eq("platform", p);
+              break;
+            }
+          } catch (_e) { /* refresh failed, try next */ }
+        }
+      }
+    }
 
     if (!gaAccessToken) {
-      // Try with API key approach for limited data
-      const apiKey = creds?.api_key || creds?.maps_api_key;
-      if (!apiKey) {
-        return new Response(JSON.stringify({
-          error: "No Google OAuth connection or API key found. Please connect Google account or add API key.",
-          hint: "Connect via OAuth in Settings > Google, or add an API key in Google Cloud credentials"
-        }), {
-          status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
-        });
-      }
-
-      return new Response(JSON.stringify({ status: "skipped", message: "Google OAuth connection missing" }), {
+      return new Response(JSON.stringify({ status: "skipped", message: "Google OAuth access token não encontrado ou expirado sem refresh. Reconecte sua conta Google em Redes Sociais." }), {
         status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
@@ -93,8 +123,25 @@ serve(async (req: Request) => {
     ];
 
     const now = new Date();
-    const startDate = "2020-01-01"; // Fetch from a safe "creation" point
     const yesterday = new Date(now.getTime() - 86400000).toISOString().split("T")[0];
+
+    // Sync incremental: buscar apenas dados desde a última data coletada
+    const { data: lastData } = await supabase
+      .from("google_analytics_data")
+      .select("date")
+      .eq("user_id", userId)
+      .eq("property_id", propertyId)
+      .order("date", { ascending: false })
+      .limit(1);
+    const lastDate = lastData?.length > 0 ? lastData[0].date : null;
+    const startDate = lastDate ? lastDate : "2020-01-01";
+
+    // Se já temos dados de hoje, pular
+    if (lastDate === yesterday) {
+      return new Response(JSON.stringify({ success: true, status: "up_to_date", message: "Dados já atualizados hoje" }), {
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" },
+      });
+    }
 
     for (const metricSet of metricSets) {
       const requestBody = {
@@ -105,7 +152,7 @@ serve(async (req: Request) => {
       };
 
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
           {
             method: "POST",
@@ -197,8 +244,8 @@ serve(async (req: Request) => {
 
   } catch (error: any) {
     console.error("[GA Collect] Fatal error:", error);
-    return new Response(JSON.stringify({ status: "skipped", message: error?.message || "Unknown error" }), {
-      status: 200, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+    return new Response(JSON.stringify({ error: error?.message || "Unknown error" }), {
+      status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
   }
 });

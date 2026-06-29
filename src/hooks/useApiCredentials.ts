@@ -66,10 +66,11 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   google_cloud: [
     { label: "Google Maps API Key", key: "maps_api_key", masked: true },
     { label: "Google News API Key", key: "news_api_key", masked: true },
-    { label: "YouTube API Key", key: "youtube_api_key", masked: true },
-    { label: "Google Ads ID", key: "ads_id", placeholder: "Ex: 123-456-7890" },
-    { label: "Google Analytics ID", key: "analytics_id", placeholder: "Ex: G-XXXXXXXXXX" },
+    { label: "Google Analytics Property ID", key: "analytics_id", placeholder: "Ex: 123456789 (númerico, NÃO use G-XXXXXXX)" },
+    { label: "Google Analytics Pixel ID (G-TAG)", key: "gtag_id", placeholder: "Ex: G-XXXXXXXXXX" },
     { label: "Search Console ID", key: "search_console_id" },
+    { label: "Google People API Key (Contatos)", key: "people_api_key", masked: true },
+    { label: "Google Ads Customer ID", key: "ads_id", placeholder: "Cole o ID do cliente (10 dígitos): 123-456-7890" },
   ],
   spotify: [
     { label: "Spotify Client ID", key: "client_id" },
@@ -93,15 +94,24 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
   gettr: [
     { label: "Gettr API Key", key: "api_key", masked: true },
   ],
-  googlenews: [
-    { label: "Google News API Key", key: "api_key", masked: true },
-  ],
   newsapi: [
     { label: "NewsAPI.org API Key", key: "api_key", masked: true, placeholder: "Cole sua chave de API do newsapi.org" },
   ],
   resend: [
     { label: "Resend API Key (Email)", key: "api_key", masked: true, placeholder: "re_..." },
     { label: "Sender Domain/Address", key: "from_email", placeholder: "Ex: Portal <contato@seusite.com>" },
+  ],
+  reddit: [
+    { label: "Reddit Client ID", key: "client_id", placeholder: "Ex: abc123..." },
+    { label: "Reddit Client Secret", key: "client_secret", masked: true },
+    { label: "User Agent (Reddit API)", key: "user_agent", placeholder: "Ex: MyApp/1.0" },
+  ],
+  medium: [
+    { label: "Medium API Token (Integrations → Tokens)", key: "api_token", masked: true, placeholder: "Ex: rwg...Y3d" },
+  ],
+  substack: [
+    { label: "Substack Publication URL", key: "publication_url", placeholder: "https://seunome.substack.com" },
+    { label: "Substack API Key (opcional)", key: "api_key", masked: true, placeholder: "Deixe vazio para publicações gratuitas" },
   ],
   ai_config: [
     { label: "Provedor de IA (openrouter, openai, google, anthropic, lovable)", key: "provider", placeholder: "Ex: openrouter" },
@@ -138,6 +148,33 @@ export function useApiCredentials() {
       (data as any[])?.forEach((row: any) => {
         map[row.platform] = row.credentials || {};
       });
+
+      // Migration: googlenews.api_key → google_cloud.news_api_key
+      if (map['googlenews']?.api_key && !map['google_cloud']?.news_api_key) {
+        const googleCloudCreds = { ...(map['google_cloud'] || {}), news_api_key: map['googlenews'].api_key };
+        map['google_cloud'] = googleCloudCreds;
+        supabase
+          .from("api_credentials" as any)
+          .upsert(
+            { user_id: user.id, platform: 'google_cloud', credentials: googleCloudCreds } as any,
+            { onConflict: "user_id,platform" }
+          )
+          .then(() => {
+            supabase
+              .from("api_credentials" as any)
+              .delete()
+              .eq("user_id", user.id)
+              .eq("platform", "googlenews")
+              .then(() => {
+                setCredentials(prev => {
+                  const next = { ...prev };
+                  delete next['googlenews'];
+                  return { ...next, google_cloud: googleCloudCreds };
+                });
+              });
+          });
+      }
+
       setCredentials(map);
     } catch (e: any) {
       // Error handled by loading state
