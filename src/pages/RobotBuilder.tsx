@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Bot, 
@@ -23,7 +23,8 @@ import {
   AlertCircle,
   MousePointer2,
   Bell,
-  Info
+  Info,
+  ChevronDown
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ import { ptBR } from "date-fns/locale";
 interface BotSetting {
   id?: string;
   platform: string;
+  connection_id?: string;
   is_active: boolean;
   respond_groups: boolean;
   respond_private: boolean;
@@ -75,6 +77,21 @@ interface BotSetting {
   silence_duration_hours?: number;
 }
 
+interface SocialConnection {
+  id: string;
+  platform: string;
+  page_name: string;
+  platform_user_id: string;
+  profile_image_url?: string;
+  is_connected: boolean;
+  is_primary?: boolean;
+  phone_number_id?: string;
+}
+
+function getSettingsKey(platform: string, connectionId?: string): string {
+  return connectionId ? `${platform}::${connectionId}` : platform;
+}
+
 const RobotBuilder = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -85,6 +102,8 @@ const RobotBuilder = () => {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [whatsappConnections, setWhatsappConnections] = useState<SocialConnection[]>([]);
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
 
   // Load settings
   useEffect(() => {
@@ -104,7 +123,7 @@ const RobotBuilder = () => {
 
         const settingsMap: Record<string, BotSetting> = {};
         data?.forEach((item: any) => {
-          settingsMap[item.platform] = item;
+          settingsMap[getSettingsKey(item.platform, item.connection_id || undefined)] = item;
         });
         setSettings(settingsMap);
       } catch (err) {
@@ -116,6 +135,44 @@ const RobotBuilder = () => {
 
     fetchSettings();
   }, [user]);
+
+  // Fetch WhatsApp connections for multi-perfil support
+  useEffect(() => {
+    const fetchConnections = async () => {
+      if (!user) return;
+      try {
+        const { data, error } = await supabase
+          .from('social_connections')
+          .select('id, platform, page_name, platform_user_id, profile_image_url, is_connected, is_primary, phone_number_id')
+          .eq('user_id', user.id)
+          .eq('platform', 'whatsapp')
+          .eq('is_connected', true)
+          .order('is_primary', { ascending: false })
+          .order('page_name');
+
+        if (error) throw error;
+        const connections = data || [];
+        setWhatsappConnections(connections);
+
+        if (connections.length > 0 && !selectedConnectionId) {
+          setSelectedConnectionId(connections[0].id);
+        }
+      } catch (err) {
+        console.error("Error fetching WhatsApp connections:", err);
+      }
+    };
+
+    fetchConnections();
+  }, [user]);
+
+  // Reset selectedConnectionId when switching platforms
+  useEffect(() => {
+    if (activePlatform !== 'whatsapp') {
+      setSelectedConnectionId(null);
+    } else if (whatsappConnections.length > 0 && !selectedConnectionId) {
+      setSelectedConnectionId(whatsappConnections[0].id);
+    }
+  }, [activePlatform, whatsappConnections]);
 
   const fetchLogs = async (platform: string) => {
     if (!user) return;
@@ -153,8 +210,11 @@ const RobotBuilder = () => {
     if (!user) return;
     try {
       setSaving(true);
-      const currentSetting = settings[platform] || {
+      const connectionId = platform === 'whatsapp' ? selectedConnectionId : undefined;
+      const settingsKey = getSettingsKey(platform, connectionId || undefined);
+      const currentSetting = settings[settingsKey] || {
         platform,
+        connection_id: connectionId || undefined,
         is_active: false,
         respond_groups: false,
         respond_private: true,
@@ -174,21 +234,61 @@ const RobotBuilder = () => {
       const settingToSave = { ...currentSetting, ...overrides };
       const isActive = overrides.is_active ?? settingToSave.is_active;
 
+      // For WhatsApp with connection_id, manually check for existing record
+      // to work with partial unique indexes instead of onConflict
+      if (connectionId) {
+        const { data: existing } = await supabase
+          .from('bot_settings' as any)
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('platform', platform)
+          .eq('connection_id', connectionId)
+          .maybeSingle();
+
+        if (existing) {
+          settingToSave.id = existing.id;
+        }
+      } else {
+        // For non-connection-specific settings, check by (user_id, platform, null)
+        const { data: existing } = await supabase
+          .from('bot_settings' as any)
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('platform', platform)
+          .is('connection_id', null)
+          .maybeSingle();
+
+        if (existing) {
+          settingToSave.id = existing.id;
+        }
+      }
+
       const { error } = await supabase
         .from('bot_settings' as any)
         .upsert({
           ...settingToSave,
           user_id: user.id,
           platform,
-          is_active: isActive
-        }, { onConflict: 'user_id,platform' });
+          connection_id: connectionId || null,
+          is_active: isActive,
+          id: settingToSave.id || undefined,
+        });
 
       if (error) throw error;
 
+      // Update local state with correct key
+      setSettings(prev => ({
+        ...prev,
+        [settingsKey]: { ...settingToSave, is_active: isActive, id: settingToSave.id }
+      }));
+
       const statusLabel = isActive ? "ATIVADO" : "DESATIVADO";
+      const label = connectionId
+        ? `${platform.toUpperCase()} (${whatsappConnections.find(c => c.id === connectionId)?.page_name || connectionId.substring(0, 8)})`
+        : platform.toUpperCase();
       toast({
         title: `Robô ${statusLabel}!`,
-        description: `O assistente para ${platform.toUpperCase()} agora está ${statusLabel.toLowerCase()}.`,
+        description: `O assistente para ${label} agora está ${statusLabel.toLowerCase()}.`,
         variant: isActive ? "default" : "destructive",
       });
     } catch (err) {
@@ -203,34 +303,44 @@ const RobotBuilder = () => {
     }
   };
 
+  const getActiveKey = (platform: string) => {
+    const connectionId = platform === 'whatsapp' ? selectedConnectionId : undefined;
+    return getSettingsKey(platform, connectionId || undefined);
+  };
+
+  const getDefaultSetting = (platform: string) => ({
+    platform,
+    connection_id: platform === 'whatsapp' ? selectedConnectionId || undefined : undefined,
+    is_active: false,
+    respond_groups: false,
+    respond_private: true,
+    respond_channels: false,
+    respond_broadcast_lists: false,
+    respond_comments: false,
+    ai_prompt: "",
+    flow_coordinates: [],
+    behavior_mode: 'hybrid',
+    ai_provider: 'openai',
+    ai_model: 'gpt-4o-mini',
+    floating_button_enabled: true,
+    audio_alerts_enabled: true,
+    silence_duration_hours: 1
+  } as BotSetting);
+
   const updateSetting = (platform: string, key: keyof BotSetting, value: any) => {
+    const settingsKey = getActiveKey(platform);
     setSettings(prev => ({
       ...prev,
-      [platform]: {
-        ...(prev[platform] || {
-          platform,
-          is_active: false,
-          respond_groups: false,
-          respond_private: true,
-          respond_channels: false,
-          respond_broadcast_lists: false,
-          respond_comments: false,
-          ai_prompt: "",
-          flow_coordinates: [],
-          behavior_mode: 'hybrid',
-          ai_provider: 'openai',
-          ai_model: 'gpt-4o-mini',
-          floating_button_enabled: true,
-          audio_alerts_enabled: true,
-          silence_duration_hours: 1
-        } as BotSetting),
+      [settingsKey]: {
+        ...(prev[settingsKey] || getDefaultSetting(platform)),
         [key]: value
       }
     }));
   };
 
   const addFlow = (platform: string) => {
-    const currentFlows = settings[platform]?.flow_coordinates || [];
+    const settingsKey = getActiveKey(platform);
+    const currentFlows = settings[settingsKey]?.flow_coordinates || [];
     updateSetting(platform, 'flow_coordinates', [
       ...currentFlows,
       { keyword: "", response: "", category: "geral" }
@@ -238,15 +348,22 @@ const RobotBuilder = () => {
   };
 
   const removeFlow = (platform: string, index: number) => {
-    const currentFlows = [...(settings[platform]?.flow_coordinates || [])];
+    const settingsKey = getActiveKey(platform);
+    const currentFlows = [...(settings[settingsKey]?.flow_coordinates || [])];
     currentFlows.splice(index, 1);
     updateSetting(platform, 'flow_coordinates', currentFlows);
   };
 
   const updateFlow = (platform: string, index: number, key: string, value: string) => {
-    const currentFlows = [...(settings[platform]?.flow_coordinates || [])];
+    const settingsKey = getActiveKey(platform);
+    const currentFlows = [...(settings[settingsKey]?.flow_coordinates || [])];
     currentFlows[index] = { ...currentFlows[index], [key]: value };
     updateSetting(platform, 'flow_coordinates', currentFlows);
+  };
+
+  const getActiveSetting = (platform: string) => {
+    const settingsKey = getActiveKey(platform);
+    return settings[settingsKey] || getDefaultSetting(platform);
   };
 
   if (loading) {
@@ -300,11 +417,16 @@ const RobotBuilder = () => {
               <TabsTrigger 
                 key={platId} 
                 value={platId}
-                className="rounded-xl py-3 font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all flex items-center gap-2"
+                className="rounded-xl py-3 font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all flex items-center gap-2 relative"
               >
                 {plat && <plat.icon className="w-4 h-4" />}
                 <span className="capitalize">{platId}</span>
-                {settings[platId]?.is_active && (
+                {platId === 'whatsapp' && whatsappConnections.length > 1 && (
+                  <span className="text-[9px] font-bold text-muted-foreground ml-1">
+                    ({whatsappConnections.length})
+                  </span>
+                )}
+                {Object.values(settings).some(s => s.platform === platId && s.is_active) && (
                   <span className="w-2 h-2 rounded-full bg-green-400 animate-ping absolute top-2 right-2" />
                 )}
               </TabsTrigger>
@@ -315,8 +437,37 @@ const RobotBuilder = () => {
         <AnimatePresence>
           {['whatsapp', 'telegram', 'instagram', 'facebook', 'threads'].map((platId) => (
             <TabsContent key={platId} value={platId} className="mt-8 focus-visible:outline-none focus-visible:ring-0">
-              {activePlatform === platId && (
+              {activePlatform === platId && (() => {
+                const currentSettings = getActiveSetting(platId);
+                return (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+                {/* WhatsApp Connection Selector */}
+                {platId === 'whatsapp' && whatsappConnections.length > 1 && (
+                  <div className="lg:col-span-3 -mb-4">
+                    <div className="flex items-center gap-3 p-4 rounded-2xl bg-muted/20 border border-border/40">
+                      <Users className="w-5 h-5 text-green-500/80" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        Perfil WhatsApp:
+                      </span>
+                      <select
+                        value={selectedConnectionId || ''}
+                        onChange={(e) => setSelectedConnectionId(e.target.value || null)}
+                        className="flex-1 bg-background border border-border rounded-xl px-4 py-2 text-sm font-bold text-foreground focus:ring-1 focus:ring-primary shadow-sm"
+                      >
+                        {whatsappConnections.map((conn) => (
+                          <option key={conn.id} value={conn.id}>
+                            {conn.page_name || conn.platform_user_id?.substring(0, 12) || conn.id.substring(0, 8)}
+                            {conn.is_primary ? ' (Padrão)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-[10px] text-muted-foreground italic">
+                        {whatsappConnections.length} {whatsappConnections.length === 1 ? 'conexão' : 'conexões'}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 
                 {/* CONFIG COL 1: ACTIVATION & UX (THE CLASSIC DESIGN) */}
                 <div className="space-y-6">
@@ -326,7 +477,7 @@ const RobotBuilder = () => {
                     </div>
                     
                     <h3 className="font-bold text-lg mb-6 flex items-center gap-3">
-                      <Power className={cn("w-5 h-5", settings[platId]?.is_active ? "text-green-500" : "text-muted-foreground")} />
+                      <Power className={cn("w-5 h-5", currentSettings.is_active ? "text-green-500" : "text-muted-foreground")} />
                       Conexão e Status
                     </h3>
 
@@ -337,10 +488,9 @@ const RobotBuilder = () => {
                           <p className="text-xs text-muted-foreground">Responder automaticamente em {platId}</p>
                         </div>
                         <Switch 
-                          checked={!!settings[platId]?.is_active} 
+                          checked={!!currentSettings.is_active} 
                           onCheckedChange={async (val) => {
                             updateSetting(platId, 'is_active', val);
-                            // Pass override to ensure correct toast label and immediate save
                             await handleSave(platId, { is_active: val });
                           }}
                         />
@@ -358,7 +508,7 @@ const RobotBuilder = () => {
                               Botão Flutuante Inteligente
                             </label>
                             <Switch 
-                              checked={settings[platId]?.floating_button_enabled ?? true} 
+                              checked={currentSettings?.floating_button_enabled ?? true} 
                               onCheckedChange={async (val) => {
                                 updateSetting(platId, 'floating_button_enabled', val);
                                 await handleSave(platId, { floating_button_enabled: val });
@@ -373,7 +523,7 @@ const RobotBuilder = () => {
                               Alertas Sonoros (WhatsApp Style)
                             </label>
                             <Switch 
-                              checked={settings[platId]?.audio_alerts_enabled ?? true} 
+                              checked={currentSettings?.audio_alerts_enabled ?? true} 
                               onCheckedChange={async (val) => {
                                 updateSetting(platId, 'audio_alerts_enabled', val);
                                 await handleSave(platId, { audio_alerts_enabled: val });
@@ -388,7 +538,7 @@ const RobotBuilder = () => {
                               type="number" 
                               min="0" 
                               max="24"
-                              value={settings[platId]?.silence_duration_hours ?? 1}
+                              value={currentSettings?.silence_duration_hours ?? 1}
                               onChange={(e) => updateSetting(platId, 'silence_duration_hours', parseInt(e.target.value))}
                               className="h-8 bg-muted/20 border-none rounded-lg text-xs font-bold"
                             />
@@ -418,7 +568,7 @@ const RobotBuilder = () => {
                                 {item.label}
                               </label>
                               <Switch 
-                                checked={!!(settings[platId] as any)?.[item.key]} 
+                                checked={!!(currentSettings as any)?.[item.key]} 
                                 onCheckedChange={async (val) => {
                                   updateSetting(platId, item.key as any, val);
                                   await handleSave(platId, { [item.key]: val });
@@ -491,11 +641,11 @@ const RobotBuilder = () => {
                                 ].map((p) => (
                                   <Button
                                     key={p.id}
-                                    variant={settings[platId]?.ai_provider === p.id ? "default" : "outline"}
+                                    variant={currentSettings?.ai_provider === p.id ? "default" : "outline"}
                                     onClick={() => updateSetting(platId, 'ai_provider', p.id)}
                                     className={cn(
                                       "h-12 gap-2 font-bold rounded-xl justify-start px-4",
-                                      settings[platId]?.ai_provider === p.id 
+                                      currentSettings?.ai_provider === p.id 
                                         ? "bg-primary text-primary-foreground" 
                                         : "bg-background text-foreground border-border hover:bg-muted"
                                     )}
@@ -527,18 +677,18 @@ const RobotBuilder = () => {
                                 name="password"
                                 autoComplete="current-password"
                                 value={
-                                  (settings[platId]?.ai_provider === 'groq' ? settings[platId]?.groq_api_key :
-                                  settings[platId]?.ai_provider === 'openrouter' ? settings[platId]?.openrouter_api_key :
-                                  settings[platId]?.ai_provider === 'openai' ? settings[platId]?.openai_api_key :
-                                  settings[platId]?.ai_provider === 'google' ? settings[platId]?.gemini_api_key :
+                                  (currentSettings?.ai_provider === 'groq' ? currentSettings?.groq_api_key :
+                                  currentSettings?.ai_provider === 'openrouter' ? currentSettings?.openrouter_api_key :
+                                  currentSettings?.ai_provider === 'openai' ? currentSettings?.openai_api_key :
+                                  currentSettings?.ai_provider === 'google' ? currentSettings?.gemini_api_key :
                                   '') || ""
                                 }
                                 onChange={(e) => {
                                   const key = 
-                                    settings[platId]?.ai_provider === 'groq' ? 'groq_api_key' :
-                                    settings[platId]?.ai_provider === 'openrouter' ? 'openrouter_api_key' :
-                                    settings[platId]?.ai_provider === 'openai' ? 'openai_api_key' :
-                                    settings[platId]?.ai_provider === 'google' ? 'gemini_api_key' :
+                                    currentSettings?.ai_provider === 'groq' ? 'groq_api_key' :
+                                    currentSettings?.ai_provider === 'openrouter' ? 'openrouter_api_key' :
+                                    currentSettings?.ai_provider === 'openai' ? 'openai_api_key' :
+                                    currentSettings?.ai_provider === 'google' ? 'gemini_api_key' :
                                     '';
                                   if (key) updateSetting(platId, key as any, e.target.value);
                                 }}
@@ -551,7 +701,7 @@ const RobotBuilder = () => {
                               <ShieldCheck className="w-4 h-4 text-green-500" />
                               <span className="text-[10px] font-bold text-green-500">Inteligência Híbrida Ativada</span>
                               <Switch 
-                                checked={settings[platId]?.behavior_mode !== 'fixed'} 
+                                checked={currentSettings?.behavior_mode !== 'fixed'} 
                                 onCheckedChange={(val) => updateSetting(platId, 'behavior_mode', val ? 'hybrid' : 'fixed')}
                                 className="ml-auto"
                               />
@@ -584,13 +734,13 @@ const RobotBuilder = () => {
                         </div>
 
                         <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                          {settings[platId]?.flow_coordinates?.length === 0 ? (
+                          {currentSettings?.flow_coordinates?.length === 0 ? (
                             <div className="text-center py-20 rounded-3xl border-2 border-dashed border-border/50 bg-muted/5">
                               <MessageCircle className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
                               <p className="text-muted-foreground font-medium">Nenhum fluxo configurado.</p>
                             </div>
                           ) : (
-                            settings[platId]?.flow_coordinates.map((flow, fIdx) => (
+                            currentSettings?.flow_coordinates.map((flow, fIdx) => (
                               <Card key={fIdx} className="p-6 bg-muted/10 border border-border/40 rounded-2xl group hover:border-primary/30 transition-all">
                                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                                   <div className="md:col-span-4 space-y-2">
@@ -647,7 +797,7 @@ const RobotBuilder = () => {
                             <div className="space-y-3">
                               <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Prompt do Sistema (Contexto)</Label>
                               <Textarea 
-                                value={settings[platId]?.ai_prompt || ""}
+                                value={currentSettings?.ai_prompt || ""}
                                 onChange={(e) => updateSetting(platId, 'ai_prompt', e.target.value)}
                                 placeholder="Você é o assistente virtual da empresa..."
                                 className="min-h-[200px] rounded-2xl bg-muted/20 border-border/50 text-foreground resize-none font-medium leading-relaxed"
@@ -670,7 +820,7 @@ const RobotBuilder = () => {
                                     onClick={() => updateSetting(platId, 'ai_model', m.id)}
                                     className={cn(
                                       "w-full text-left p-3 rounded-xl border transition-all",
-                                      settings[platId]?.ai_model === m.id 
+                                      currentSettings?.ai_model === m.id 
                                         ? "bg-primary text-primary-foreground border-primary" 
                                         : "bg-muted/30 border-transparent text-foreground hover:bg-muted/50"
                                     )}
@@ -681,7 +831,7 @@ const RobotBuilder = () => {
                                 <div className="pt-2">
                                   <Label className="text-[10px] font-black uppercase opacity-40 text-foreground">Custom ID</Label>
                                   <Input 
-                                    value={settings[platId]?.ai_model || ""}
+                                    value={currentSettings?.ai_model || ""}
                                     onChange={(e) => updateSetting(platId, 'ai_model', e.target.value)}
                                     className="h-8 bg-muted/20 border-none rounded-lg text-xs text-foreground"
                                   />
@@ -692,7 +842,7 @@ const RobotBuilder = () => {
                             <div className="p-4 rounded-3xl bg-amber-500/5 border border-amber-500/10">
                               <Label className="text-[10px] font-black uppercase text-amber-500 mb-2 block">Cérebro do Robô</Label>
                               <select 
-                                value={settings[platId]?.behavior_mode || "hybrid"}
+                                value={currentSettings?.behavior_mode || "hybrid"}
                                 onChange={(e) => updateSetting(platId, 'behavior_mode', e.target.value)}
                                 className="w-full bg-background border border-border rounded-lg p-2 text-xs font-bold text-foreground focus:ring-1 focus:ring-primary shadow-sm"
                               >
@@ -708,7 +858,7 @@ const RobotBuilder = () => {
                   </Tabs>
                 </div>
               </div>
-            )}
+            )})()}
             </TabsContent>
           ))}
         </AnimatePresence>
