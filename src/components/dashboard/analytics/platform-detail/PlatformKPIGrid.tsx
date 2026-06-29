@@ -27,9 +27,10 @@ function formatValue(value: number | null | undefined, format: "number" | "perce
   }
 }
 
-function computeKpiValue(key: string, metrics: AccountMetric[]): number | null {
+function computeKpiValue(key: string, metrics: AccountMetric[], platformId?: string): number | null {
   if (metrics.length === 0) return null;
 
+  const isMessaging = platformId === "whatsapp" || platformId === "telegram";
   const latest = metrics[metrics.length - 1];
   switch (key) {
     case "followers":
@@ -37,12 +38,14 @@ function computeKpiValue(key: string, metrics: AccountMetric[]): number | null {
     case "subscribers":
       return latest.followers ?? null;
     case "members":
+      if (isMessaging) return latest.unique_contacts_count ?? latest.followers ?? null;
       return latest.followers ?? null;
     case "views":
       return latest.views ?? null;
     case "likes":
       return latest.likes ?? null;
     case "reach":
+      if (isMessaging) return latest.messages_delivered_count ?? latest.reach ?? null;
       return latest.reach ?? null;
     case "profileVisits":
       return latest.profile_visits ?? null;
@@ -61,10 +64,17 @@ function computeKpiValue(key: string, metrics: AccountMetric[]): number | null {
     case "posts":
       return latest.posts_count ?? null;
     case "messagesSent":
+      if (isMessaging) return latest.messages_sent_count ?? latest.posts_count ?? null;
       return latest.posts_count ?? null;
     case "messagesDelivered":
+      if (isMessaging) return latest.messages_delivered_count ?? latest.reach ?? null;
       return latest.reach ?? null;
     case "successRate": {
+      if (isMessaging) {
+        const sent = latest.messages_sent_count || latest.posts_count || 1;
+        const delivered = latest.messages_delivered_count || latest.reach || 0;
+        return (delivered / sent) * 100;
+      }
       const sent = latest.posts_count || 1;
       const delivered = latest.reach || 0;
       return (delivered / sent) * 100;
@@ -108,7 +118,7 @@ export const PlatformKPIGrid = memo(({ platformId, metrics, loading, previousMet
     if (!previousMetrics || previousMetrics.length === 0) return null;
     const prevMap: Record<string, number | null> = {};
     kpis.forEach(kpi => {
-      prevMap[kpi.key] = computeKpiValue(kpi.key, previousMetrics);
+      prevMap[kpi.key] = computeKpiValue(kpi.key, previousMetrics, platformId);
     });
     return prevMap;
   }, [previousMetrics, kpis]);
@@ -124,7 +134,7 @@ export const PlatformKPIGrid = memo(({ platformId, metrics, loading, previousMet
             </div>
           );
         }
-        const value = computeKpiValue(kpi.key, metrics);
+        const value = computeKpiValue(kpi.key, metrics, platformId);
         const prevVal = previousValues?.[kpi.key] ?? null;
         const delta = calcDelta(value, prevVal);
         return (

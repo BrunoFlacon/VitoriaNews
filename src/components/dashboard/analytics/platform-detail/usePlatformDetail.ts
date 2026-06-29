@@ -25,6 +25,9 @@ export interface AccountMetric {
   profile_visits: number | null;
   new_followers: number | null;
   platform: string | null;
+  messages_sent_count: number | null;
+  messages_delivered_count: number | null;
+  unique_contacts_count: number | null;
 }
 
 export interface PostMetric {

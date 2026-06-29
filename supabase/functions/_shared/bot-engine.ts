@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getMetaCredentials } from "./credentials.ts";
 
 declare const Deno: any;
 
@@ -10,20 +11,33 @@ export interface BotEngineConfig {
   chatId: string;
   message: string;
   isGroup?: boolean;
+  connectionId?: string;
 }
 
 export async function getSmartResponse(config: BotEngineConfig) {
-  const { supabaseUrl, supabaseServiceKey, userId, platform, chatId, message, isGroup = false } = config;
+  const { supabaseUrl, supabaseServiceKey, userId, platform, chatId, message, isGroup = false, connectionId } = config;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  console.log(`[BOT-ENGINE] [${platform}] Processing message for User ${userId}, Chat ${chatId}. isGroup: ${isGroup}`);
+  console.log(`[BOT-ENGINE] [${platform}] Processing message for User ${userId}, Chat ${chatId}. isGroup: ${isGroup}. connectionId: ${connectionId || 'none'}`);
 
-  const { data: settings } = await supabase
+  let settings: any = null;
+  let settingsQuery = supabase
     .from('bot_settings')
     .select('*')
     .eq('user_id', userId)
-    .eq('platform', platform)
-    .maybeSingle();
+    .eq('platform', platform);
+
+  if (connectionId) {
+    const { data: perConn } = await settingsQuery.eq('connection_id', connectionId).maybeSingle();
+    settings = perConn;
+    if (!perConn) {
+      const { data: fallback } = await settingsQuery.is('connection_id', null).maybeSingle();
+      settings = fallback;
+    }
+  } else {
+    const { data: fallback } = await settingsQuery.is('connection_id', null).maybeSingle();
+    settings = fallback;
+  }
 
   if (!settings) {
     console.warn(`[BOT-ENGINE] [${platform}] No settings found.`);
@@ -268,12 +282,29 @@ export interface NormalizedMessage {
   duration?: number;
 }
 
-export async function sendMetaGraphMessage(msg: NormalizedMessage, replyText: string) {
+export async function sendMetaGraphMessage(
+  msg: NormalizedMessage,
+  replyText: string,
+  options?: { supabase?: any; connectionId?: string; userId?: string }
+) {
   const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") || "v21.0";
-  const SYSTEM_TOKEN = Deno.env.get("META_SYSTEM_USER_TOKEN");
 
-  if (!SYSTEM_TOKEN) {
-    throw new Error("META_SYSTEM_USER_TOKEN não configurado no .env");
+  let accessToken = Deno.env.get("META_SYSTEM_USER_TOKEN");
+
+  if (options?.supabase && options?.connectionId && options?.userId && msg.platform === "whatsapp") {
+    try {
+      const meta = await getMetaCredentials(options.supabase, options.userId, "whatsapp", options.connectionId);
+      if (meta.accessToken) {
+        accessToken = meta.accessToken;
+        console.log(`[BOT-SENDER] Using per-connection token for connection ${options.connectionId}`);
+      }
+    } catch (e) {
+      console.warn(`[BOT-SENDER] Failed to resolve per-connection token, falling back to SYSTEM_TOKEN:`, e);
+    }
+  }
+
+  if (!accessToken) {
+    throw new Error("Nenhum token disponível para enviar mensagem");
   }
 
   let url = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -308,7 +339,7 @@ export async function sendMetaGraphMessage(msg: NormalizedMessage, replyText: st
     const response = await fetch(url, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${SYSTEM_TOKEN}`,
+        "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify(payload)
@@ -336,33 +367,31 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
   }
 
   let userId: string | null = null;
+  let connectionId: string | null = null;
 
   if (msg.platform === "whatsapp") {
     const { data: connection } = await supabase
       .from("social_connections")
-      .select("user_id")
+      .select("user_id, id")
       .eq("platform", "whatsapp")
       .eq("platform_user_id", msg.recipientId)
       .maybeSingle();
     userId = connection?.user_id || null;
+    connectionId = connection?.id || null;
   }
 
   if (!userId) {
     const { data: connection } = await supabase
       .from("social_connections")
-      .select("user_id")
+      .select("user_id, id")
       .eq("platform_user_id", msg.recipientId)
       .maybeSingle();
     userId = connection?.user_id || null;
+    connectionId = connection?.id || null;
   }
 
   if (!userId) {
-    const { data: adminUsers } = await supabase.from("profiles").select("id").limit(1);
-    userId = adminUsers?.[0]?.id;
-  }
-
-  if (!userId) {
-    console.warn("[BOTZAP] Nenhum usuário encontrado.");
+    console.warn("[BOTZAP] Mensagem recebida de número não mapeado em nenhuma conexão. Ignorando.");
     return;
   }
 
@@ -392,6 +421,7 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
       is_comment: msg.isComment,
       comment_id: msg.commentId,
       post_id: msg.postId,
+      connection_id: connectionId,
       ...mediaMetadata
     }
   });
@@ -403,12 +433,13 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
     platform: msg.platform,
     chatId: msg.chatId,
     message: msg.text,
-    isGroup: msg.isGroup
+    isGroup: msg.isGroup,
+    connectionId: connectionId || undefined
   });
 
   if (reply && typeof reply === "string") {
     console.log(`[BOTZAP] Respondendo [${msg.platform}]: "${reply.slice(0, 50)}..."`);
-    await sendMetaGraphMessage(msg, reply);
+    await sendMetaGraphMessage(msg, reply, { supabase, connectionId, userId });
 
     await logInteraction(supabase, {
       userId,
@@ -417,7 +448,11 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
       content: reply,
       status: "sent",
       isBot: true,
-      metadata: { is_group: msg.isGroup, is_comment: msg.isComment }
+      metadata: {
+        is_group: msg.isGroup,
+        is_comment: msg.isComment,
+        connection_id: connectionId
+      }
     });
   } else if (reply && typeof reply === "object" && reply.error) {
     console.log(`[BOTZAP] Silenciado/Não respondeu: ${reply.error}`);

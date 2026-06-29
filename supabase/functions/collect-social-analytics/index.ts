@@ -333,40 +333,54 @@ async function processPlatform(conn: any, supabase: any) {
       }
 
       // Upload profile photo to Supabase Storage for permanent serving
+      const origPic = profilePic;
       if (profilePic && profilePic.startsWith("http")) {
-        try {
-          const imgResp = await fetchWithTimeout(profilePic, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-              "Referer": "https://www.facebook.com/",
-              "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            }
-          });
-          if (imgResp.ok) {
-            const imgBlob = await imgResp.blob();
-            const ct = imgResp.headers.get("content-type") || "image/png";
-            const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
-            const fileName = `whatsapp/${conn.page_id || conn.platform_user_id || conn.id}.${ext}`;
+        // Retry with 1s delay on first failure
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 1000));
+          try {
+            const imgResp = await fetchWithTimeout(profilePic, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://www.facebook.com/",
+                "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+              }
+            });
+            if (imgResp.ok) {
+              const imgBlob = await imgResp.blob();
+              const ct = imgResp.headers.get("content-type") || "image/png";
+              const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+              const fileName = `whatsapp/${conn.page_id || conn.platform_user_id || conn.id}.${ext}`;
 
-            const { error: uploadError } = await supabase.storage
-              .from("profile-photos")
-              .upload(fileName, imgBlob, { contentType: ct, upsert: true });
-
-            if (!uploadError) {
-              const { data: pubUrl } = supabase.storage
+              const { error: uploadError } = await supabase.storage
                 .from("profile-photos")
-                .getPublicUrl(fileName);
-              // Add cache-busting timestamp so browser always loads the latest photo
-              profilePic = pubUrl.publicUrl + `?v=${Date.now()}`;
-              console.log(`[WA-PHOTO] ${conn.page_name}: uploaded to storage: ${profilePic}`);
+                .upload(fileName, imgBlob, { contentType: ct, upsert: true });
+
+              if (!uploadError) {
+                const { data: pubUrl } = supabase.storage
+                  .from("profile-photos")
+                  .getPublicUrl(fileName);
+                profilePic = pubUrl.publicUrl + `?v=${Date.now()}`;
+                console.log(`[WA-PHOTO] ${conn.page_name}: uploaded to storage: ${profilePic}`);
+                break;
+              }
+              console.error(`[WA-PHOTO] ${conn.page_name}: upload failed (attempt ${attempt + 1}):`, uploadError.message);
             } else {
-              console.error(`[WA-PHOTO] ${conn.page_name}: upload failed:`, uploadError.message);
+              console.warn(`[WA-PHOTO] ${conn.page_name}: fetch status ${imgResp.status} (attempt ${attempt + 1})`);
             }
-          } else {
-            console.error(`[WA-PHOTO] ${conn.page_name}: fetch image failed (${imgResp.status})`);
+          } catch (e) {
+            console.warn(`[WA-PHOTO] ${conn.page_name}: error attempt ${attempt + 1}:`, String(e));
           }
-        } catch (e) {
-          console.error(`[WA-PHOTO] ${conn.page_name}: image upload error:`, String(e));
+        }
+      }
+      // Never persist raw Meta CDN/Graph URL — fall back to last good cache
+      if (profilePic && !profilePic.includes('supabase.co')) {
+        profilePic = conn.profile_image_url || "";
+        if (profilePic && profilePic.includes('supabase.co')) {
+          console.log(`[WA-PHOTO] ${conn.page_name}: falling back to last cached image`);
+        } else {
+          profilePic = ""; // no cached version either
+          console.log(`[WA-PHOTO] ${conn.page_name}: no cached image available`);
         }
       }
       // WhatsApp API doesn't expose per-phone-number followers/posts at account level.
@@ -376,32 +390,31 @@ async function processPlatform(conn: any, supabase: any) {
       let botSentCount = 0;
       let botAnsweredCount = 0;
       try {
-        const { count: bCountBot } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", conn.user_id)
-          .eq("platform", "whatsapp")
-          .eq("metadata->>bot_reply", "true");
+        // Try per-connection filtering via metadata->>connection_id first (Fase 3)
+        // Fall back to user-wide count ÷ connections for legacy messages
+        const connFilter: any = conn.id ? { "metadata->>connection_id": conn.id } : {};
+        const hasConnFilter = !!conn.id;
 
-        const { count: bCountSent } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", conn.user_id)
-          .eq("platform", "whatsapp")
-          .eq("status", "sent");
+        async function countMsgs(filters: Record<string, any>): Promise<number> {
+          let q = supabase.from("messages").select("*", { count: "exact", head: true });
+          for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
+          if (hasConnFilter) {
+            // Prefer connection-tagged messages
+            const { count: tagged } = await q.eq("metadata->>connection_id", conn.id) as any;
+            if ((tagged || 0) > 0) return tagged;
+          }
+          const { count: total } = await q as any;
+          return total || 0;
+        }
 
-        const totalSent = (bCountBot || 0) > 0 ? (bCountBot || 0) : (bCountSent || 0);
+        const totalSent = (await countMsgs({ user_id: conn.user_id, platform: "whatsapp", "metadata->>bot_reply": "true" }))
+          || (await countMsgs({ user_id: conn.user_id, platform: "whatsapp", status: "sent" }));
 
-        const { count: receivedCount } = await supabase
-          .from("messages")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", conn.user_id)
-          .eq("platform", "whatsapp")
-          .eq("status", "received");
+        const receivedCount = await countMsgs({ user_id: conn.user_id, platform: "whatsapp", status: "received" });
 
         let totalAnswered = 0;
-        if ((receivedCount || 0) > 0) {
-          totalAnswered = receivedCount || 0;
+        if (receivedCount > 0) {
+          totalAnswered = receivedCount;
         } else {
           const { data: botConvos } = await supabase
             .from("messages")
@@ -422,20 +435,44 @@ async function processPlatform(conn: any, supabase: any) {
           totalAnswered = [...botPhones].filter(p => humanPhones.has(p)).length;
         }
 
-        // Divide total by number of active WhatsApp connections for per-connection stats
-        const { count: waCount } = await supabase
-          .from("social_connections")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", conn.user_id)
-          .eq("platform", "whatsapp")
-          .eq("is_connected", true);
-        const divisor = Math.max(waCount || 1, 1);
+        // Divide total by number of active WhatsApp connections for per-connection stats (legacy fallback)
+        let divisor = 1;
+        if (!hasConnFilter || totalSent === 0) {
+          const { count: waCount } = await supabase
+            .from("social_connections")
+            .select("*", { count: "exact", head: true })
+            .eq("user_id", conn.user_id)
+            .eq("platform", "whatsapp")
+            .eq("is_connected", true);
+          divisor = Math.max(waCount || 1, 1);
+        }
         botSentCount = Math.round(totalSent / divisor);
         botAnsweredCount = Math.round(totalAnswered / divisor);
         console.log(`[WA-BOT-METRICS] ${conn.page_name}: total=${totalSent}, connections=${divisor}, per-conn=${botSentCount}`);
       } catch (e) {
         console.error("[WA-BOT-METRICS] DB query error:", e);
       }
+
+      // Count unique contacts for this connection (item 1.3)
+      let uniqueContacts = 0;
+      try {
+        let contactQuery = supabase
+          .from("messages")
+          .select("recipient_phone")
+          .eq("user_id", conn.user_id)
+          .eq("platform", "whatsapp")
+          .not("recipient_phone", "is", null);
+        if (conn.id) {
+          contactQuery = contactQuery.eq("metadata->>connection_id", conn.id);
+        }
+        const { data: contactRows } = await contactQuery;
+        if (contactRows) {
+          uniqueContacts = new Set(contactRows.map((r: any) => r.recipient_phone)).size;
+        }
+      } catch (e) {
+        console.warn("[WA-CONTACTS] Error counting unique contacts:", e);
+      }
+
       metrics = {
         followers_count: 0,
         media_count: botSentCount,
@@ -443,6 +480,7 @@ async function processPlatform(conn: any, supabase: any) {
         profile_picture: profilePic,
         bot_posts_count: botSentCount,
         bot_answers_count: botAnsweredCount,
+        unique_contacts_count: uniqueContacts,
       };
       break;
     }
@@ -755,8 +793,18 @@ async function processPlatform(conn: any, supabase: any) {
         social_account_id: account.id,
         platform: conn.platform,
         followers: finalFollowers,
+        likes: finalLikes,
+        shares: finalShares,
+        comments: finalComments,
         posts_count: finalPosts,
         views: metrics.views_count || 0,
+        reach: metrics.reach || 0,
+        profile_visits: metrics.profile_visits || 0,
+        new_followers: metrics.new_followers || 0,
+        engagement_rate: typeof metrics.engagement_rate === 'number' ? metrics.engagement_rate : null,
+        messages_sent_count: metrics.bot_posts_count || metrics.media_count || 0,
+        messages_delivered_count: metrics.reach || 0,
+        unique_contacts_count: metrics.unique_contacts_count || 0,
         collected_at: new Date().toISOString()
       });
 

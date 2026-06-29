@@ -11,9 +11,14 @@ export function getAuthUrl(platform: string, redirectUri: string, state: string,
     });
   }
 
-  const scope = platform === "instagram" 
-    ? "instagram_basic,instagram_content_publish,instagram_manage_insights" 
-    : "pages_show_list,pages_read_engagement,pages_manage_posts";
+  let scope: string;
+  if (platform === "instagram") {
+    scope = "instagram_basic,instagram_content_publish,instagram_manage_insights";
+  } else if (platform === "whatsapp") {
+    scope = "pages_show_list,pages_read_engagement,pages_manage_posts,whatsapp_business_management,whatsapp_business_messaging";
+  } else {
+    scope = "pages_show_list,pages_read_engagement,pages_manage_posts";
+  }
 
   return `https://www.facebook.com/v21.0/dialog/oauth?` + new URLSearchParams({
     client_id: creds.app_id,
