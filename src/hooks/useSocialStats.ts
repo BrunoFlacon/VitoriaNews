@@ -493,13 +493,27 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
     setRealtimeError(entry.errorCount > 2);
 
     const checkHandler = () => {
+      if (document.hidden) return;
       const e = sharedChannels.get(channelName);
       if (e) setRealtimeError(e.errorCount > 2);
     };
-    const checkInterval = setInterval(checkHandler, 60000);
+
+    let checkInterval: ReturnType<typeof setInterval>;
+    const startCheck = () => {
+      clearInterval(checkInterval);
+      if (!document.hidden) {
+        checkInterval = setInterval(checkHandler, 60000);
+      }
+    };
+    const onVisible = () => {
+      if (!document.hidden) startCheck();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    startCheck();
 
     return () => {
       clearInterval(checkInterval);
+      document.removeEventListener('visibilitychange', onVisible);
       const e = sharedChannels.get(channelName);
       if (!e) return;
       e.refCount--;

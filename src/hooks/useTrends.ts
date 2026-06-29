@@ -109,8 +109,21 @@ export function useTrends() {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, POLL_INTERVAL);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval>;
+    const onVisible = () => {
+      clearInterval(interval);
+      if (!document.hidden) {
+        interval = setInterval(fetchData, POLL_INTERVAL);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    if (!document.hidden) {
+      interval = setInterval(fetchData, POLL_INTERVAL);
+    }
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [fetchData]);
 
   const syncManually = useCallback(async () => {
@@ -178,6 +191,7 @@ export function useTrends() {
     if (loading) return;
 
     const doSync = () => {
+      if (document.hidden) return;
       const now = Date.now();
       if ((now - lastSyncRef.current) > SYNC_COOLDOWN) {
         lastSyncRef.current = now;
@@ -185,9 +199,23 @@ export function useTrends() {
       }
     };
 
-    doSync();
-    const interval = setInterval(doSync, SYNC_COOLDOWN);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval>;
+    const onVisible = () => {
+      clearInterval(interval);
+      if (!document.hidden) {
+        doSync();
+        interval = setInterval(doSync, SYNC_COOLDOWN);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    if (!document.hidden) {
+      doSync();
+      interval = setInterval(doSync, SYNC_COOLDOWN);
+    }
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [loading, syncManually]);
 
   return {

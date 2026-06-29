@@ -134,12 +134,14 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
     return cPlatform === platformId && c.is_connected;
   });
   
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const mql = window.matchMedia('(max-width: 767px)');
+    const onChange = () => setIsMobile(mql.matches);
+    mql.addEventListener('change', onChange);
+    setIsMobile(mql.matches);
+    return () => mql.removeEventListener('change', onChange);
   }, []);
   const [showRulers, setShowRulers] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
