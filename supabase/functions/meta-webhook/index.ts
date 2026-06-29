@@ -81,12 +81,11 @@ serve(async (req: Request) => {
           if (!phoneNumberId) continue;
 
           for (const msg of change?.value?.messages || []) {
-            if (msg.type === "echo") continue; // Pula mensagens enviadas por nós mesmos
+            if (msg.type === "echo") continue;
 
             const contacts = change.value.contacts || [];
             const contact = contacts.find((c: any) => c.wa_id === msg.from);
             
-            // Extract WhatsApp media info from the type-specific payload field
             let mediaId: string | undefined;
             let mimeType: string | undefined;
             let filename: string | undefined;
@@ -110,10 +109,58 @@ serve(async (req: Request) => {
               mediaId,
               mimeType,
               filename,
-              rawPayload: msg
+              rawPayload: msg,
+              waMessageId: msg.id
             };
 
+            if (msg.referral) {
+              console.log(`[META-WEBHOOK] Click-to-WhatsApp referral:`, JSON.stringify(msg.referral));
+            }
+
             await processOmnichannelMessage(supabase, normalized);
+          }
+
+          // Processar statuses (delivered/read/failed) — Item 1.4
+          for (const status of change?.value?.statuses || []) {
+            try {
+              const waMsgId = status.id;
+              const waStatus = status.status; // "sent" | "delivered" | "read" | "failed"
+              const recipientPhone = status.recipient_id;
+              const timestamp = status.timestamp
+                ? new Date(parseInt(status.timestamp) * 1000).toISOString()
+                : new Date().toISOString();
+
+              console.log(`[META-WEBHOOK] Status: ${waStatus} for message ${waMsgId} to ${recipientPhone}`);
+
+              // Look up the message by WA message ID in metadata
+              const { data: existing } = await supabase
+                .from("messages")
+                .select("id, metadata")
+                .eq("metadata->>wa_message_id", waMsgId)
+                .maybeSingle();
+
+              if (existing) {
+                const metadata = existing.metadata || {};
+                if (waStatus === "delivered") metadata.delivered_at = timestamp;
+                else if (waStatus === "read") metadata.read_at = timestamp;
+                else if (waStatus === "failed") {
+                  metadata.failed_reason = status.errors?.[0]?.title || "unknown";
+                  metadata.failed_at = timestamp;
+                }
+
+                await supabase
+                  .from("messages")
+                  .update({
+                    status: waStatus === "failed" ? "failed" : "delivered",
+                    metadata
+                  })
+                  .eq("id", existing.id);
+              } else {
+                console.warn(`[META-WEBHOOK] No message found with wa_message_id=${waMsgId}`);
+              }
+            } catch (statusErr) {
+              console.error("[META-WEBHOOK] Error processing status:", statusErr);
+            }
           }
         }
       } 

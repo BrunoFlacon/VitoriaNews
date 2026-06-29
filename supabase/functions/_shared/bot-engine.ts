@@ -280,6 +280,7 @@ export interface NormalizedMessage {
   contact?: { phone: string; name: string };
   stickerEmoji?: string;
   duration?: number;
+  waMessageId?: string;
 }
 
 export async function sendMetaGraphMessage(
@@ -422,6 +423,8 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
       comment_id: msg.commentId,
       post_id: msg.postId,
       connection_id: connectionId,
+      wa_message_id: msg.waMessageId,
+      referral: msg.rawPayload?.referral || null,
       ...mediaMetadata
     }
   });
@@ -439,7 +442,15 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
 
   if (reply && typeof reply === "string") {
     console.log(`[BOTZAP] Respondendo [${msg.platform}]: "${reply.slice(0, 50)}..."`);
-    await sendMetaGraphMessage(msg, reply, { supabase, connectionId, userId });
+    let sentWaMessageId: string | undefined;
+    try {
+      const sentResult = await sendMetaGraphMessage(msg, reply, { supabase, connectionId, userId });
+      if (sentResult?.messages?.[0]?.id) {
+        sentWaMessageId = sentResult.messages[0].id;
+      }
+    } catch (sendErr) {
+      console.error("[BOTZAP] Error sending reply:", sendErr);
+    }
 
     await logInteraction(supabase, {
       userId,
@@ -451,7 +462,8 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
       metadata: {
         is_group: msg.isGroup,
         is_comment: msg.isComment,
-        connection_id: connectionId
+        connection_id: connectionId,
+        wa_message_id: sentWaMessageId
       }
     });
   } else if (reply && typeof reply === "object" && reply.error) {

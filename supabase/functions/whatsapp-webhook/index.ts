@@ -45,7 +45,9 @@ serve(async (req) => {
               const text = msg.text?.body || "Mensagem de mídia";
               const timestamp = new Date(msg.timestamp * 1000).toISOString();
 
-              // Insert into messages table
+              const msgId = msg.id;
+              const referral = msg.referral || null;
+
               await supabase.from("messages").insert({
                 content: text,
                 recipient_phone: from,
@@ -53,8 +55,17 @@ serve(async (req) => {
                 status: "received",
                 platform: "whatsapp",
                 created_at: timestamp,
-                user_id: Deno.env.get("DEFAULT_USER_ID") // Em produção, vincular ao ID do dono da conta WhatsApp
+                user_id: Deno.env.get("DEFAULT_USER_ID"),
+                metadata: {
+                  wa_message_id: msgId,
+                  referral,
+                  connection_id: null,
+                }
               });
+
+              if (referral) {
+                console.log(`[WA-WEBHOOK] Click-to-WhatsApp referral: ${JSON.stringify(referral)}`);
+              }
             }
           }
         }
