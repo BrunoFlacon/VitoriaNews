@@ -59,14 +59,17 @@ const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, co
   const handleClick = useCallback(() => {
     const video = localVideoRef.current;
     if (video) {
-      if (playing) {
-        video.pause();
-      } else {
+      // Read current paused state directly to avoid stale closure (L3 fix)
+      const isPaused = video.paused;
+      if (isPaused) {
         video.play().catch(err => console.log("Video playback error:", err));
+        setPlaying?.(true);
+      } else {
+        video.pause();
+        setPlaying?.(false);
       }
-      setPlaying?.(!playing);
     }
-  }, [playing, setPlaying]);
+  }, [setPlaying]);
 
   if (!resolvedUrl) return <div className="w-full h-full bg-zinc-900 animate-pulse" />;
 

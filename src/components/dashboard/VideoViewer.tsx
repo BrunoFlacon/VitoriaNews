@@ -96,27 +96,49 @@ export function VideoViewer({ videos, initialIndex, onClose }: VideoViewerProps)
       const dy = touches[0].clientY - touches[1].clientY;
       touchState.current.startDist = Math.sqrt(dx * dx + dy * dy);
       touchState.current.startScale = transform.scale;
+      // Track midpoint for pan during pinch
+      touchState.current.startX = (touches[0].clientX + touches[1].clientX) / 2;
+      touchState.current.startY = (touches[0].clientY + touches[1].clientY) / 2;
       isPinching.current = true;
+      isSwiping.current = false;
     } else if (touches.length === 1) {
       touchState.current.startX = touches[0].clientX;
       touchState.current.startY = touches[0].clientY;
+      isPinching.current = false;
     }
   }, [transform.scale]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2 && isPinching.current) {
       e.preventDefault();
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const touches = e.touches;
+      const dx = touches[0].clientX - touches[1].clientX;
+      const dy = touches[0].clientY - touches[1].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const newScale = Math.max(1, Math.min(4, touchState.current.startScale * (dist / touchState.current.startDist)));
-      setTransform(prev => ({ ...prev, scale: newScale }));
+      // Pan: track midpoint movement
+      const midX = (touches[0].clientX + touches[1].clientX) / 2;
+      const midY = (touches[0].clientY + touches[1].clientY) / 2;
+      const panX = midX - touchState.current.startX;
+      const panY = midY - touchState.current.startY;
+      setTransform(prev => ({ scale: newScale, x: prev.x + panX / newScale, y: prev.y + panY / newScale }));
+      touchState.current.startX = midX;
+      touchState.current.startY = midY;
       setZoomed(newScale > 1.1);
     } else if (e.touches.length === 1 && !isPinching.current) {
       const deltaX = e.touches[0].clientX - touchState.current.startX;
-      if (Math.abs(deltaX) > 10) isSwiping.current = true;
+      const deltaY = e.touches[0].clientY - touchState.current.startY;
+      // If already zoomed, pan with single finger instead of swipe
+      if (zoomed) {
+        e.preventDefault();
+        setTransform(prev => ({ ...prev, x: prev.x + deltaX / transform.scale, y: prev.y + deltaY / transform.scale }));
+        touchState.current.startX = e.touches[0].clientX;
+        touchState.current.startY = e.touches[0].clientY;
+      } else if (Math.abs(deltaX) > 10) {
+        isSwiping.current = true;
+      }
     }
-  }, []);
+  }, [zoomed, transform.scale]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     if (isPinching.current) {
