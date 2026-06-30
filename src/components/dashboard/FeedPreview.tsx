@@ -96,18 +96,17 @@ const SlideVideo = memo(({ url, isActive, posterUrl }: { url: string; isActive: 
   return (
     <div
       onClick={handleTogglePlay}
-      className="relative w-full h-full cursor-pointer block"
+      className="relative w-full h-full cursor-pointer block bg-zinc-950"
     >
       <video
         ref={videoRef}
         src={url}
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain"
         muted
         loop
         playsInline
         preload="metadata"
         poster={posterUrl || undefined}
-        style={{ background: 'rgba(0,0,0,0.08)' }}
       />
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
@@ -147,12 +146,12 @@ const PlayableVideo = memo(({ url, posterUrl, className }: { url: string; poster
   return (
     <div
       onClick={handleTogglePlay}
-      className={cn("relative cursor-pointer w-full h-full overflow-hidden bg-black/5", className)}
+      className={cn("relative cursor-pointer w-full h-full overflow-hidden bg-zinc-950", className)}
     >
       <video
         ref={videoRef}
         src={url}
-        className="w-full h-full object-cover"
+        className="w-full h-full object-contain"
         muted
         loop
         playsInline
@@ -391,9 +390,9 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
       case "linkedin":
         return <LinkedInPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "whatsapp":
-        return <WhatsAppPreview post={post} account={account} />;
+        return <WhatsAppPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "telegram":
-        return <TelegramPreview post={post} account={account} />;
+        return <TelegramPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "tiktok":
         return <TikTokPreview post={post} account={account} />;
       case "youtube":
@@ -415,14 +414,14 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
 
   return (
     <><Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/40 shadow-2xl">
+      <DialogContent className="max-w-4xl w-[95vw] md:w-full max-h-[90vh] md:max-h-none p-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/40 shadow-2xl">
         <DialogHeader className="sr-only">
             <DialogTitle>Prévia da Publicação</DialogTitle>
             <DialogDescription>Visualize como o post agendado aparecerá nas redes sociais antes de ser publicado.</DialogDescription>
         </DialogHeader>
-        <div className="flex h-[80vh]">
+        <div className="flex flex-col md:flex-row h-[85vh] md:h-[80vh] min-h-0 overflow-hidden">
           {/* Sidebar - Platforms */}
-          <div className="w-20 border-r border-border/40 bg-muted/10 flex flex-col items-center py-5 gap-3">
+          <div className="w-full md:w-20 h-16 md:h-auto border-b md:border-b-0 md:border-r border-border/40 bg-muted/10 flex flex-row md:flex-col items-center py-2 md:py-5 px-3 md:px-0 gap-2 md:gap-3 overflow-x-auto md:overflow-x-visible md:overflow-y-auto shrink-0 justify-start scrollbar-none">
             {platformEntries.map((entry, idx) => {
               const { platform } = entry;
               if (!platform) return null;
@@ -431,28 +430,28 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
 
               const btnBg = isSelected
                 ? platform.id === "snapchat"
-                  ? "bg-[#FFFC00] text-black scale-110 shadow-lg shadow-yellow-400/40"
+                  ? "bg-[#FFFC00] text-black scale-105 md:scale-110 shadow-lg shadow-yellow-400/40"
                   : platform.id === "tiktok"
-                  ? "bg-black text-white scale-110 shadow-lg shadow-black/40"
+                  ? "bg-black text-white scale-105 md:scale-110 shadow-lg shadow-black/40"
                   : platform.id === "whatsapp"
-                  ? "bg-[#25D366] text-white scale-110 shadow-lg shadow-green-400/40"
+                  ? "bg-[#25D366] text-white scale-105 md:scale-110 shadow-lg shadow-green-400/40"
                   : platform.id === "instagram"
-                  ? "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white scale-110 shadow-lg"
+                  ? "bg-gradient-to-br from-[#F58529] via-[#DD2A7B] to-[#8134AF] text-white scale-105 md:scale-110 shadow-lg"
                   : platform.id === "facebook"
-                  ? "bg-[#1877F2] text-white scale-110 shadow-lg shadow-blue-500/40"
+                  ? "bg-[#1877F2] text-white scale-105 md:scale-110 shadow-lg shadow-blue-500/40"
                   : platform.id === "twitter"
-                  ? "bg-black text-white scale-110 shadow-lg"
+                  ? "bg-black text-white scale-105 md:scale-110 shadow-lg"
                   : platform.id === "linkedin"
-                  ? "bg-[#0A66C2] text-white scale-110 shadow-lg shadow-blue-600/40"
+                  ? "bg-[#0A66C2] text-white scale-105 md:scale-110 shadow-lg shadow-blue-600/40"
                   : platform.id === "youtube"
-                  ? "bg-[#FF0000] text-white scale-110 shadow-lg shadow-red-500/40"
+                  ? "bg-[#FF0000] text-white scale-105 md:scale-110 shadow-lg shadow-red-500/40"
                   : platform.id === "telegram"
-                  ? "bg-[#0088CC] text-white scale-110 shadow-lg shadow-sky-500/40"
+                  ? "bg-[#0088CC] text-white scale-105 md:scale-110 shadow-lg shadow-sky-500/40"
                   : platform.id === "pinterest"
-                  ? "bg-[#E60023] text-white scale-110 shadow-lg shadow-red-600/40"
+                  ? "bg-[#E60023] text-white scale-105 md:scale-110 shadow-lg shadow-red-600/40"
                   : platform.id === "threads"
-                  ? "bg-black text-white scale-110 shadow-lg"
-                  : "bg-primary text-white scale-110 shadow-lg"
+                  ? "bg-black text-white scale-105 md:scale-110 shadow-lg"
+                  : "bg-primary text-white scale-105 md:scale-110 shadow-lg"
                 : "bg-muted/40 text-muted-foreground hover:bg-muted";
 
               return (
@@ -460,12 +459,12 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
                   key={`${entry.platformId}-${entry.accountId || idx}`}
                   onClick={() => setSelectedIdx(idx)}
                   className={cn(
-                    "w-14 h-14 rounded-2xl flex items-center justify-center transition-all relative group",
+                    "w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center transition-all relative group shrink-0",
                     btnBg
                   )}
                 >
                   <Icon
-                    className="w-9 h-9"
+                    className="w-6 h-6 md:w-9 md:h-9"
                     data-active={isSelected}
                     style={{
                       filter: isSelected
@@ -475,7 +474,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
                   />
                   {isSelected && (
                     <div
-                      className="absolute -right-2 w-1 h-6 bg-primary rounded-full"
+                      className="absolute bottom-0 md:bottom-auto md:-right-2 w-6 h-1 md:w-1 md:h-6 bg-primary rounded-full"
                     />
                   )}
                   <div className="absolute left-14 bg-popover text-popover-foreground px-2 py-1 rounded text-[10px] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-50">
@@ -487,17 +486,17 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
           </div>
 
           {/* Main Preview Area */}
-          <div className="flex-1 overflow-y-auto bg-muted/5 flex items-center justify-center p-8">
+          <div className="flex-1 overflow-y-auto bg-muted/5 flex items-center justify-center p-4 md:p-8 min-h-0">
             <div
               key={selectedEntry?.raw || selectedEntry?.platformId}
-              className="w-full max-w-md shadow-2xl rounded-xl overflow-hidden bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
+              className="w-full max-w-sm md:max-w-md max-h-full shadow-2xl rounded-xl overflow-hidden bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex flex-col justify-center"
             >
               {renderPreview()}
             </div>
           </div>
 
           {/* Info Side Panel */}
-          <div className="w-80 border-l border-border/40 p-6 hidden lg:block bg-muted/10 overflow-y-auto">
+          <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-border/40 p-6 hidden md:block bg-muted/10 overflow-y-auto shrink-0">
             {post.status === 'published' && (
               <div className="flex bg-muted/30 rounded-xl p-1 mb-6 border border-border/20">
                 <button
@@ -1130,8 +1129,11 @@ const ThumbsUp = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88Z"/></svg>
 );
 
-const TelegramPreview = memo(({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => {
+const TelegramPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, account?: SocialAccountStat, onVideoClick?: (url: string) => void }) => {
   const isVerified = !!(account?.metadata?.is_verified || account?.metadata?.verified || account?.metadata?.verified_account || false);
+  const isVertical = post.media_type === 'story' || post.media_type === 'reel' || post.media_type === 'video';
+  const mediaAspect = isVertical ? 'aspect-[9/16]' : 'aspect-video';
+
   return (
     <div className="flex flex-col bg-[#54a9eb] h-full min-h-[400px] p-4 relative font-sans text-zinc-900">
       <div className="absolute top-0 left-0 right-0 h-12 bg-[#54a9eb] border-b border-white/10 flex items-center px-4 justify-between z-10">
@@ -1152,11 +1154,29 @@ const TelegramPreview = memo(({ post, account }: { post: ScheduledPost, account?
 
       <div className="mt-12 max-w-[85%] bg-white rounded-xl overflow-hidden shadow-md self-start relative border-l-4 border-[#54a9eb] w-full">
         {post.media_urls?.[0] && (
-          <div className="overflow-hidden w-full aspect-video">
+          <div 
+            onClick={() => onVideoClick?.(post.media_urls[0])}
+            className={cn("overflow-hidden w-full relative cursor-pointer group bg-zinc-950", mediaAspect)}
+          >
             {isVideoUrl(post.media_urls[0]) ? (
-              <PlayableVideo url={post.media_urls[0]} posterUrl={post.thumbnail_url} className="w-full h-full" />
+              <>
+                <video
+                  src={post.media_urls[0]}
+                  className="w-full h-full object-contain"
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  poster={post.thumbnail_url || undefined}
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-colors">
+                  <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
+                    <Play className="w-6 h-6 text-white fill-white ml-0.5" />
+                  </div>
+                </div>
+              </>
             ) : (
-              <SafeImage src={post.media_urls[0]} className="w-full h-auto object-cover max-h-[300px]" />
+              <SafeImage src={post.media_urls[0]} className="w-full h-full object-contain" />
             )}
           </div>
         )}
@@ -1172,8 +1192,11 @@ const TelegramPreview = memo(({ post, account }: { post: ScheduledPost, account?
   );
 });
 
-const WhatsAppPreview = memo(({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => {
+const WhatsAppPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, account?: SocialAccountStat, onVideoClick?: (url: string) => void }) => {
   const isVerified = !!(account?.metadata?.is_verified || account?.metadata?.verified || account?.metadata?.verified_account || false);
+  const isVertical = post.media_type === 'story' || post.media_type === 'reel' || post.media_type === 'video';
+  const mediaAspect = isVertical ? 'aspect-[9/16]' : 'aspect-video';
+
   return (
     <div className="flex flex-col bg-[#efeae2] h-full min-h-[400px] p-4 relative font-sans text-zinc-900">
       <div className="absolute top-0 left-0 right-0 h-14 bg-[#075e54] flex items-center px-4 justify-between z-10">
@@ -1194,11 +1217,29 @@ const WhatsAppPreview = memo(({ post, account }: { post: ScheduledPost, account?
 
       <div className="mt-14 max-w-[85%] bg-white rounded-lg p-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] self-start relative after:content-[''] after:absolute after:top-0 after:-left-2 after:w-0 after:h-0 after:border-t-[8px] after:border-t-white after:border-l-[8px] after:border-l-transparent w-full">
         {post.media_urls?.[0] && (
-          <div className="rounded-md overflow-hidden mb-2 w-full aspect-video">
+          <div 
+            onClick={() => onVideoClick?.(post.media_urls[0])}
+            className={cn("rounded-md overflow-hidden mb-2 w-full relative cursor-pointer group bg-zinc-950", mediaAspect)}
+          >
             {isVideoUrl(post.media_urls[0]) ? (
-              <PlayableVideo url={post.media_urls[0]} posterUrl={post.thumbnail_url} className="w-full h-full" />
+              <>
+                <video
+                  src={post.media_urls[0]}
+                  className="w-full h-full object-contain"
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  poster={post.thumbnail_url || undefined}
+                />
+                <div className="absolute inset-0 flex items-center justify-center bg-black/10 group-hover:bg-black/20 transition-colors">
+                  <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
+                    <Play className="w-6 h-6 text-white fill-white ml-0.5" />
+                  </div>
+                </div>
+              </>
             ) : (
-              <SafeImage src={post.media_urls[0]} className="w-full h-auto object-cover max-h-[300px]" />
+              <SafeImage src={post.media_urls[0]} className="w-full h-full object-contain" />
             )}
           </div>
         )}
@@ -1216,31 +1257,74 @@ const TikTokPreview = memo(({ post, account }: { post: ScheduledPost, account?: 
   const isPublished = post.status === 'published';
   const m = post.metrics;
   const [liked, setLiked] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
   const likeCount = m ? (liked ? m.likes + 1 : m.likes) : (liked ? 1 : 0);
   const isVerified = !!(account?.metadata?.is_verified || account?.metadata?.verified || account?.metadata?.verified_account || false);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const handleTogglePlay = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      el.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+    } else {
+      el.pause();
+      setIsPlaying(false);
+    }
+  }, []);
+
+  const handleToggleMute = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = !el.muted;
+    setIsMuted(el.muted);
+  }, []);
+
   return (
-    <div className="flex flex-col bg-black h-full min-h-[500px] relative font-sans overflow-hidden">
-      <div className="absolute inset-0 flex items-center justify-center opacity-70 z-0">
+    <div className="flex flex-col bg-black h-full min-h-[500px] relative font-sans overflow-hidden select-none">
+      {/* Media container - FULL COLOR (opacity-100), click to play/pause */}
+      <div 
+        onClick={handleTogglePlay}
+        className="absolute inset-0 flex items-center justify-center opacity-100 z-0 cursor-pointer"
+      >
         {post.media_urls?.[0] ? (
           isVideoUrl(post.media_urls[0]) ? (
             <video
+              ref={videoRef}
               src={post.media_urls[0]}
-              className="w-full h-full object-cover"
-              muted
+              className="w-full h-full object-contain bg-zinc-950"
+              muted={isMuted}
               loop
               autoPlay
               playsInline
               preload="metadata"
             />
           ) : (
-            <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover" loading="eager" alt="bg" />
+            <SafeImage src={post.media_urls[0]} className="w-full h-full object-contain bg-zinc-950" loading="eager" alt="bg" />
           )
         ) : <div className="text-white/10 italic">Video Preview</div>}
       </div>
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 flex flex-col justify-end p-4 z-10">
-        <div className="flex items-end justify-between">
-          <div className="flex-1 text-white pr-12">
+
+      {/* Central Play Indicator Overlay when paused */}
+      {!isPlaying && (
+        <div 
+          onClick={handleTogglePlay}
+          className="absolute inset-0 flex items-center justify-center z-10 cursor-pointer"
+        >
+          <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center shadow-lg">
+            <Play className="w-8 h-8 text-white fill-white ml-1" />
+          </div>
+        </div>
+      )}
+
+      {/* Bottom overlay & right actions */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/50 flex flex-col justify-end p-4 z-10 pointer-events-none">
+        <div className="flex items-end justify-between w-full">
+          <div className="flex-1 text-white pr-12 pointer-events-auto">
             <div className="flex items-center gap-1 mb-2">
               <p className="font-bold text-sm">@{account?.username || 'seu_perfil'}</p>
               {isVerified && <VerifiedBadge className="w-3.5 h-3.5 text-[#20d5ec]" />}
@@ -1251,7 +1335,7 @@ const TikTokPreview = memo(({ post, account }: { post: ScheduledPost, account?: 
               <span className="text-[10px] whitespace-nowrap">Som original - SocialHub Pro</span>
             </div>
           </div>
-          <div className="flex flex-col items-center gap-4 text-white">
+          <div className="flex flex-col items-center gap-4 text-white pointer-events-auto">
             <div className="w-10 h-10 rounded-full border-2 border-white overflow-hidden mb-2 relative">
               {account?.profile_picture && <img src={account.profile_picture} className="w-full h-full object-cover" width={40} height={40} alt="profile" />}
               <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-[#ff0050] text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">+</div>
@@ -1269,12 +1353,25 @@ const TikTokPreview = memo(({ post, account }: { post: ScheduledPost, account?: 
               <Send className="w-7 h-7 fill-white -rotate-12" />
               <span className="text-[10px] font-bold">{isPublished && m ? formatMetric(m.shares) : '0'}</span>
             </div>
-            {isPublished && m && m.views > 0 && (
-              <div className="flex flex-col items-center">
-                <svg viewBox="0 0 24 24" className="w-7 h-7 fill-white"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                <span className="text-[10px] font-bold">{formatMetric(m.views)}</span>
-              </div>
-            )}
+
+            {/* Mute/Unmute audio button */}
+            <button 
+              type="button" 
+              onClick={handleToggleMute}
+              className="w-10 h-10 rounded-full bg-black/40 flex items-center justify-center hover:bg-black/60 transition-colors shadow-lg cursor-pointer"
+              aria-label="Alternar áudio"
+            >
+              {isMuted ? (
+                <svg className="w-5 h-5 text-white fill-current" viewBox="0 0 24 24">
+                  <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM19 12c0 2.82-1.7 5.25-4.13 6.27l1.09 1.09C19.06 17.86 21 15.16 21 12c0-3.16-1.94-5.86-4.04-7.36L15.87 5.7C18.3 6.75 19 9.18 19 12z" opacity="0.4"/>
+                  <path d="M12 4L7 9H3v6h4l5 5V4zm-2 11.58l-2.58-2.58H5V11h2.42L10 8.42v7.16z"/>
+                </svg>
+              ) : (
+                <svg className="w-5 h-5 text-white fill-current" viewBox="0 0 24 24">
+                  <path d="M12 4L7 9H3v6h4l5 5V4zm-2 11.58l-2.58-2.58H5V11h2.42L10 8.42v7.16zm6.5-3.58c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </div>
