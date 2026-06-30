@@ -15,7 +15,8 @@ import {
   X,
   FolderOpen,
   Play,
-  Loader2
+  Loader2,
+  Sliders
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import { useMediaUpload } from "@/hooks/useMediaUpload";
 import { getMediaUrl } from "@/utils/mediaUtils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import MediaEditor from "./MediaEditor";
 
 type MediaType = "all" | "image" | "video" | "document";
 type ViewMode = "grid" | "list";
@@ -53,6 +55,8 @@ export const MediaGalleryView = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
+  const [editingImageUrl, setEditingImageUrl] = useState<string | null>(null);
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
@@ -474,16 +478,49 @@ export const MediaGalleryView = () => {
                 </div>
               )}
               
-              <div className="p-4 border-t border-border">
-                <p className="font-medium">{selectedMedia.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {selectedMedia.size} • Enviado em {format(selectedMedia.uploadedAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                </p>
+              <div className="p-4 border-t border-border flex justify-between items-center bg-card">
+                <div>
+                  <p className="font-medium text-foreground">{selectedMedia.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedMedia.size} • Enviado em {format(selectedMedia.uploadedAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                  </p>
+                </div>
+                {selectedMedia.type === "image" && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="hover:bg-primary hover:text-primary-foreground transition-all duration-300"
+                    onClick={() => {
+                      setEditingImageUrl(selectedMedia.url);
+                      setEditingMediaId(selectedMedia.id);
+                    }}
+                  >
+                    <Sliders className="w-4 h-4 mr-2" />
+                    Editar Imagem
+                  </Button>
+                )}
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {editingImageUrl && (
+        <MediaEditor
+          imageUrl={editingImageUrl}
+          onSave={async (editedDataUrl) => {
+            setMedia(prev => prev.map(item => item.id === editingMediaId ? { ...item, url: editedDataUrl } : item));
+            toast({ title: "Imagem editada com sucesso!", description: "As modificações foram salvas na galeria local." });
+            setEditingImageUrl(null);
+            setEditingMediaId(null);
+            setSelectedMedia(null);
+          }}
+          onClose={() => {
+            setEditingImageUrl(null);
+            setEditingMediaId(null);
+          }}
+        />
+      )}
     </div>
   );
 };
