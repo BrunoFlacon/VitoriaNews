@@ -15,6 +15,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSocialStats } from "@/hooks/useSocialStats";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
 
 import { cn, normalizePlatform } from "@/lib/utils";
 
@@ -149,6 +151,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     audienceBreakdown, lastUpdated, demographics,
     totalSocialFollowers, totalMessagingMembers, totalPosts,
     connectedPlatforms, postStatusCounts, messageDeliveryStats: socialMessageStats,
+    stats: localStats,
   } = useSocialStats();
 
   const { retention, topContent: pmTopContent, bestTimes: pmBestTimes, formatRecs, isLoading: pmLoading } = usePlatformMetrics(
@@ -156,6 +159,190 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     period,
     platformMetricsReady
   );
+
+  // Cache for heavy chart computations in Analytics
+  const snapshotsCache = useRef<{ key: string; data: any }>({ key: '', data: null });
+  const chartCache = useRef<{ key: string; data: any }>({ key: '', data: null });
+
+  // Query account_metrics for real time-series chart data
+  const { data: accountMetricsData } = useQuery({
+    queryKey: ['account_metrics', user?.id, 'v3_analytics'],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('account_metrics')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('collected_at', { ascending: true });
+      if (error) { console.warn('[Analytics] account_metrics query failed:', error); return []; }
+      return data || [];
+    },
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+  });
+
+  // Pre-process raw metrics into daily snapshots per account
+  const accountDailySnapshots = useMemo(() => {
+    const metrics = (accountMetricsData ?? []) as any[];
+    if (metrics.length === 0) return null;
+
+    const cacheKey = `${(accountMetricsData ?? []).length}-${platform}`;
+    if (snapshotsCache.current.key === cacheKey) return snapshotsCache.current.data;
+
+    const filtered = platform !== 'all'
+      ? metrics.filter((m: any) => normalizePlatform(m.platform) === platform)
+      : metrics;
+
+    if (filtered.length === 0) return null;
+
+    const grouped = new Map<string, any>();
+    for (let i = 0; i < filtered.length; i++) {
+      const m = filtered[i];
+      const d = new Date(m.collected_at);
+      const y = d.getFullYear();
+      const mo = d.getMonth() + 1;
+      const dd = d.getDate();
+      const dateKey = `${y}-${mo < 10 ? '0' + mo : mo}-${dd < 10 ? '0' + dd : dd}`;
+      const accountKey = `${m.platform}-${m.platform_user_id || m.id}`;
+      const dedupKey = `${accountKey}-${dateKey}`;
+      const existing = grouped.get(dedupKey);
+      if (!existing || new Date(m.collected_at) > new Date(existing.collected_at)) {
+        grouped.set(dedupKey, {
+          views: Number(m.views || 0),
+          likes: Number(m.likes || 0),
+          comments: Number(m.comments || 0),
+          shares: Number(m.shares || 0),
+          engagement: Number(m.likes || 0) + Number(m.comments || 0) + Number(m.shares || 0),
+          reach: Math.round(Number(m.views || 0) * 0.35),
+          dateKey,
+          accountKey,
+          collected_at: m.collected_at,
+        });
+      }
+    }
+
+    const accountGroups = new Map<string, any[]>();
+    for (const snap of grouped.values()) {
+      const key = snap.accountKey;
+      if (!accountGroups.has(key)) accountGroups.set(key, []);
+      accountGroups.get(key)!.push(snap);
+    }
+    for (const snaps of accountGroups.values()) {
+      snaps.sort((a: any, b: any) => new Date(a.collected_at).getTime() - new Date(b.collected_at).getTime());
+    }
+
+    snapshotsCache.current = { key: cacheKey, data: accountGroups };
+    return accountGroups;
+  }, [accountMetricsData, platform]);
+
+  // Build final chart array from pre-computed snapshots for the selected period
+  const analyticsChartData = useMemo(() => {
+    // 1. Prioritize local account_metrics snapshots
+    if (accountDailySnapshots && accountDailySnapshots.size > 0) {
+      const cacheKey = `${(accountDailySnapshots?.size ?? 0)}-${period}`;
+      if (chartCache.current.key === cacheKey) return chartCache.current.data;
+
+      const periodDays = period === '15d' ? 15 : period === '30d' ? 30 : period === '45d' ? 45 : period === '60d' ? 60 : period === '90d' ? 90 : 7;
+
+      const dateDeltas = new Map<string, { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number; likesVal: number; commentsVal: number; sharesVal: number; posts: number }>();
+      
+      for (const snaps of accountDailySnapshots.values()) {
+        for (let idx = 0; idx < snaps.length; idx++) {
+          const snap = snaps[idx];
+          const prev = idx > 0 ? snaps[idx - 1] : null;
+          let entry = dateDeltas.get(snap.dateKey);
+          if (!entry) {
+            entry = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0, likesVal: 0, commentsVal: 0, sharesVal: 0, posts: 0 };
+            dateDeltas.set(snap.dateKey, entry);
+          }
+          entry.views += snap.views - (prev?.views || 0);
+          entry.likesVal += snap.likes - (prev?.likes || 0);
+          entry.commentsVal += snap.comments - (prev?.comments || 0);
+          entry.sharesVal += snap.shares - (prev?.shares || 0);
+          entry.engagement += snap.engagement - (prev?.engagement || 0);
+          entry.reach += snap.reach - (prev?.reach || 0);
+          entry.posts += 1;
+        }
+      }
+
+      const months = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
+      const result: any[] = new Array(periodDays + 1);
+      const now = new Date();
+      let idx = 0;
+      for (let i = periodDays; i >= 0; i--, idx++) {
+        const dt = new Date(now); dt.setDate(dt.getDate() - i);
+        const y = dt.getFullYear();
+        const mo = dt.getMonth();
+        const dd = dt.getDate();
+        const isoKey = `${y}-${mo + 1 < 10 ? '0' + (mo + 1) : mo + 1}-${dd < 10 ? '0' + dd : dd}`;
+        const delta = dateDeltas.get(isoKey);
+        
+        result[idx] = {
+          name: `${dd} de ${months[mo]}`,
+          views: delta?.views ?? 0,
+          engagement: delta?.engagement ?? 0,
+          reach: delta?.reach ?? 0,
+          likes: delta?.likesVal ?? 0,
+          comments: delta?.commentsVal ?? 0,
+          shares: delta?.sharesVal ?? 0,
+          posts: delta?.posts ?? 0,
+        };
+      }
+      chartCache.current = { key: cacheKey, data: result };
+      return result;
+    }
+
+    // 2. Fallback to API chart data if local account_metrics snapshots are not available
+    const rawChartData = data?.chartData || [];
+    const apiHasRealData = rawChartData.some(
+      (d: any) => (d.views ?? 0) > 0 || (d.engagement ?? 0) > 0 || (d.reach ?? 0) > 0
+    );
+    if (apiHasRealData) return rawChartData;
+
+    return [];
+  }, [data, accountDailySnapshots, period]);
+
+  // Compute platform breakdown locally from social_accounts
+  const localPlatformBreakdown = useMemo(() => {
+    const breakdown: Record<string, { posts: number; engagement: number; views: number; likes: number; comments: number; shares: number }> = {};
+    const accounts = localStats || [];
+    
+    accounts.forEach((acc: any) => {
+      const p = normalizePlatform(acc.platform);
+      if (!breakdown[p]) {
+        breakdown[p] = { posts: 0, engagement: 0, views: 0, likes: 0, comments: 0, shares: 0 };
+      }
+      
+      const likes = Number(acc.likes_count || acc.likes || 0);
+      const comments = Number(acc.comments_count || acc.comments || 0);
+      const shares = Number(acc.shares_count || acc.shares || 0);
+      const views = Number(acc.views_count || acc.views || 0);
+      const posts = Number(acc.posts_count || 0);
+      const eng = likes + comments + shares;
+      
+      breakdown[p].posts += posts;
+      breakdown[p].likes += likes;
+      breakdown[p].comments += comments;
+      breakdown[p].shares += shares;
+      breakdown[p].views += views;
+      breakdown[p].engagement += eng;
+    });
+    
+    return breakdown;
+  }, [localStats]);
+
+  // Consolidate platformBreakdown to ensure it never displays empty or seeded data when local data is available
+  const platformBreakdown = useMemo(() => {
+    const apiBreakdown = data.platformBreakdown || {};
+    const localHasData = Object.values(localPlatformBreakdown).some(
+      (v: any) => v.posts > 0 || v.engagement > 0 || v.views > 0
+    );
+    if (localHasData) {
+      return localPlatformBreakdown;
+    }
+    return apiBreakdown;
+  }, [data.platformBreakdown, localPlatformBreakdown]);
 
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
@@ -178,12 +365,12 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   const realSource = data.dataSource === 'real';
 
   const formatReachData = useMemo(() => {
-    if (!data.platformBreakdown || Object.keys(data.platformBreakdown).length === 0) return undefined;
-    return Object.entries(data.platformBreakdown).map(([key, val]) => ({
+    if (!platformBreakdown || Object.keys(platformBreakdown).length === 0) return undefined;
+    return Object.entries(platformBreakdown).map(([key, val]) => ({
       name: key.charAt(0).toUpperCase() + key.slice(1),
       value: val.views || 0,
     }));
-  }, [data.platformBreakdown]);
+  }, [platformBreakdown]);
 
   const viralPotentialData = useMemo(() => {
     const seguidores = totalFollowerCount;
@@ -450,10 +637,10 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         <div ref={reportRef} className="space-y-8 animate-in fade-in duration-500 p-0.5 md:p-1 overflow-x-hidden" style={{ contain: 'layout style' }}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-w-0">
             <div className="lg:col-span-2 min-w-0">
-              <EngagementChart chartData={data.chartData} totalFollowers={totalSocialFollowers + totalMessagingMembers} />
+              <EngagementChart chartData={analyticsChartData} totalFollowers={totalSocialFollowers + totalMessagingMembers} />
             </div>
             <PlatformDistribution 
-              platformBreakdown={data.platformBreakdown || {}} 
+              platformBreakdown={platformBreakdown || {}} 
               COLORS={COLORS}
               onPieSelect={setPieSelectedPlatform}
             />
