@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 interface MediaEditorProps {
   imageUrl: string;

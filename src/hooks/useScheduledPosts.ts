@@ -44,6 +44,7 @@ export interface ScheduledPost {
     reach: number;
   } | null;
   platform_metrics?: PlatformMetricDetail[] | null;
+  thumbnail_url?: string | null;
 }
 
 export interface CreatePostInput {
