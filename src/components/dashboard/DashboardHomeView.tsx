@@ -27,6 +27,7 @@ import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 
 import { AnalyticsChart } from "@/components/dashboard/AnalyticsChart";
+import { VideoCarousel } from "@/components/dashboard/VideoCarousel";
 
 const RecentPosts = lazy(() => import("@/components/dashboard/RecentPosts"));
 
@@ -127,7 +128,7 @@ export const DashboardHomeView = memo(({
     <>
       <div className="flex items-center justify-between mb-8 sticky top-0 md:relative bg-background/80 backdrop-blur-md z-10 py-1">
         <div>
-          <h1 className="font-display font-bold text-2xl md:text-3xl mb-0.5 md:mb-1">
+          <h1 className="font-display font-bold text-2xl md:text-3xl mb-0.5 md:mb-1 lcp-target">
             Dashboard Principal 👋
           </h1>
           <p className="text-muted-foreground text-[10px] md:text-sm truncate">
@@ -253,7 +254,7 @@ export const DashboardHomeView = memo(({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 stats-grid" style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}>
 <StatsCard 
               title="Total de Posts" 
               value={platformTotalPosts.toLocaleString('pt-BR')} 
@@ -340,6 +341,11 @@ export const DashboardHomeView = memo(({
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Video Carousel */}
+      <div className="mb-6 mt-6">
+        <VideoCarousel />
       </div>
 
       <div className="mt-6" style={{ contentVisibility: 'auto', containIntrinsicHeight: 400 }}>

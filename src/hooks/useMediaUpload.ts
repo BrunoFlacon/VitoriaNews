@@ -35,6 +35,7 @@ export function useMediaUpload() {
     const allowedTypes = [
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
       'video/mp4', 'video/webm', 'video/quicktime',
+      'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/mp4',
       'application/pdf'
     ];
     

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, memo, useRef, useCallback } from "react";
+import { VideoViewer } from "./VideoViewer";
 import { motion } from "framer-motion";
 import { 
   Heart, MessageCircle, Share2, Bookmark, MoreHorizontal, 
@@ -42,23 +43,40 @@ interface PostPreviewProps {
 
 const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, controls, videoRef, playing, setPlaying }: any) {
   const resolvedUrl = getMediaUrl(fileUrl);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const handleVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    localVideoRef.current = el;
+    if (videoRef) {
+      if (typeof videoRef === 'function') {
+        videoRef(el);
+      } else if ('current' in videoRef) {
+        videoRef.current = el;
+      }
+    }
+  }, [videoRef]);
+
   const handleClick = useCallback(() => {
-    if (videoRef?.current) {
-      if (playing) videoRef.current.pause();
-      else videoRef.current.play();
+    const video = localVideoRef.current;
+    if (video) {
+      if (playing) {
+        video.pause();
+      } else {
+        video.play().catch(err => console.log("Video playback error:", err));
+      }
       setPlaying?.(!playing);
     }
-  }, [videoRef, playing, setPlaying]);
+  }, [playing, setPlaying]);
 
   if (!resolvedUrl) return <div className="w-full h-full bg-zinc-900 animate-pulse" />;
 
   if (controls) {
-    return <video src={resolvedUrl} className={cn("w-full h-full object-cover", className)} controls />;
+    return <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} controls />;
   }
 
   return (
-    <div className="relative w-full h-full" onClick={handleClick}>
-      <video ref={videoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} loop playsInline />
+    <div className="relative w-full h-full cursor-pointer" onClick={handleClick}>
+      <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} loop playsInline />
       {!playing && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Play className="w-12 h-12 text-white fill-white" /></div>}
     </div>
   );
@@ -79,6 +97,8 @@ const MediaWrapper = ({ children, className }: { children: React.ReactNode; clas
 const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, className: _outerClassName, isStory = false }: any) => {
   const [carouselApi, setCarouselApi] = useState<CarouselApi | null>(null);
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [perVideoPlaying, setPerVideoPlaying] = useState<Record<number, boolean>>({});
+  const perVideoRefs = useRef<Map<number, HTMLVideoElement>>(new Map());
 
   useEffect(() => {
     if (!carouselApi) return;
@@ -87,6 +107,10 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
     onSelect();
     return () => { carouselApi.off("select", onSelect); };
   }, [carouselApi]);
+
+  useEffect(() => {
+    return () => { perVideoRefs.current.clear(); };
+  }, []);
 
   if (!media || media.length === 0) return null;
 
@@ -100,16 +124,22 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
     />
   );
 
-  const renderVideo = (fileUrl: string, idx: number, absolute = false) => (
-    <ResolvedVideo
-      fileUrl={fileUrl}
-      className={absolute ? "absolute inset-0" : "w-full h-full object-cover"}
-      videoRef={idx === 0 ? videoRef : undefined}
-      playing={playing}
-      setPlaying={setPlaying}
-      controls={media.length > 1}
-    />
-  );
+  const renderVideo = (fileUrl: string, idx: number, absolute = false) => {
+    const isMulti = media.length > 1;
+    const p = isMulti ? (perVideoPlaying[idx] ?? true) : playing;
+    const setP = isMulti ? (v: boolean) => setPerVideoPlaying(prev => ({ ...prev, [idx]: v })) : setPlaying;
+    const ref = isMulti ? (el: HTMLVideoElement | null) => { if (el) perVideoRefs.current.set(idx, el); else perVideoRefs.current.delete(idx); } : videoRef;
+    return (
+      <ResolvedVideo
+        fileUrl={fileUrl}
+        className={absolute ? "absolute inset-0" : "w-full h-full object-cover"}
+        videoRef={ref}
+        playing={p}
+        setPlaying={setP}
+        controls={isMulti}
+      />
+    );
+  };
 
   const renderAudio = (fileUrl: string) => (
     <div className="p-8 bg-zinc-900 flex flex-col items-center gap-6 w-full h-full justify-center">
@@ -1180,6 +1210,24 @@ export const PostPreview = memo(function PostPreview({ content, selectedPlatform
   const { connections } = useSocialConnections();
   const [previewMode, setPreviewMode] = useState<"mobile" | "desktop">("mobile");
   const [activeTabIdx, setActiveTabIdx] = useState(0);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const videoItems = useMemo(() => {
+    return uploadedFiles
+      .filter(f => f.file_type?.startsWith("video/"))
+      .map((f, idx) => ({
+        id: f.id || `${Date.now()}-v${idx}`,
+        title: videoTitle || f.name || 'Vídeo',
+        media_url: getMediaUrl(f.file_url) || f.file_url,
+        thumbnail_url: thumbnailUrl || null,
+        duration: null,
+        views: null,
+        platform: mediaType || 'Vídeo',
+        created_at: new Date().toISOString(),
+      }));
+  }, [uploadedFiles, videoTitle, thumbnailUrl, mediaType]);
 
   const previewItems = useMemo(() => {
     return selectedPlatforms.map(pId => {
@@ -1187,6 +1235,30 @@ export const PostPreview = memo(function PostPreview({ content, selectedPlatform
       return { platform, accountId, pId };
     }); // no limit — show all selected platforms
   }, [selectedPlatforms]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || videoItems.length === 0) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const videoEl = target.closest('video');
+      if (videoEl && videoEl.src) {
+        const url = videoEl.src;
+        const idx = videoItems.findIndex(v => {
+          const resolved = getMediaUrl(v.media_url);
+          return resolved === url || v.media_url === url;
+        });
+        if (idx >= 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          setViewerIndex(idx);
+          setViewerOpen(true);
+        }
+      }
+    };
+    container.addEventListener('click', handler, { capture: true });
+    return () => container.removeEventListener('click', handler, { capture: true });
+  }, [videoItems]);
 
   useEffect(() => {
     if (activeTabIdx >= previewItems.length) {
@@ -1243,7 +1315,7 @@ export const PostPreview = memo(function PostPreview({ content, selectedPlatform
   };
 
   return (
-    <div className="space-y-6 dark designer-black" style={{ contain: 'layout style paint' }}>
+    <div ref={containerRef} className="space-y-6 dark designer-black" style={{ contain: 'layout style paint' }}>
       <div className="flex justify-end mb-4">
         <div className="bg-zinc-900 p-1 rounded-xl border border-white border-opacity-5 flex gap-1 shadow-2xl">
           <button 
@@ -1318,6 +1390,13 @@ export const PostPreview = memo(function PostPreview({ content, selectedPlatform
           </div>
         )}
       </div>
+      {viewerOpen && videoItems.length > 0 && (
+        <VideoViewer
+          videos={videoItems}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
     </div>
   );
 });

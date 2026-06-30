@@ -78,7 +78,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
           const rect = gearBtnRef.current.getBoundingClientRect();
           setDropdownPos({
             top: rect.bottom + window.scrollY + 6,
-            right: window.innerWidth - rect.right + window.scrollX,
+            right: document.documentElement.clientWidth - rect.right + window.scrollX,
           });
         }
       });

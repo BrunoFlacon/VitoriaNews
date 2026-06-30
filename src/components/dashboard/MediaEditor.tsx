@@ -29,8 +29,8 @@ interface MediaEditorProps {
 interface TextOverlay {
   id: string;
   text: string;
-  x: number;
-  y: number;
+  xPercent: number;
+  yPercent: number;
   fontSize: number;
   color: string;
 }
@@ -52,13 +52,17 @@ const MediaEditor = ({ imageUrl, onSave, onClose }: MediaEditorProps) => {
   
   // Text overlays
   const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [newText, setNewText] = useState("");
   const [textColor, setTextColor] = useState("#ffffff");
   const [fontSize, setFontSize] = useState(32);
   
   // Crop
-  const [cropMode, setCropMode] = useState(false);
   const [cropAspect, setCropAspect] = useState<'free' | '1:1' | '16:9' | '9:16' | '4:5'>('free');
+  const [cropRect, setCropRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  
+  const [exportFormat, setExportFormat] = useState<'image/png' | 'image/jpeg' | 'image/webp'>('image/jpeg');
+  const [exportQuality, setExportQuality] = useState(0.92);
   
   const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(null);
 
@@ -74,11 +78,35 @@ const MediaEditor = ({ imageUrl, onSave, onClose }: MediaEditorProps) => {
 
   useEffect(() => {
     if (originalImage) {
+      if (cropAspect === 'free') {
+        setCropRect(null);
+      } else {
+        const [wAspect, hAspect] = cropAspect.split(':').map(Number);
+        const aspect = wAspect / hAspect;
+        
+        let w = originalImage.width;
+        let h = originalImage.height;
+        
+        if (w / h > aspect) {
+          w = h * aspect;
+        } else {
+          h = w / aspect;
+        }
+        
+        const x = (originalImage.width - w) / 2;
+        const y = (originalImage.height - h) / 2;
+        setCropRect({ x, y, width: w, height: h });
+      }
+    }
+  }, [cropAspect, originalImage]);
+
+  useEffect(() => {
+    if (originalImage) {
       renderCanvas(originalImage);
     }
-  }, [brightness, contrast, saturation, hue, rotation, flipH, flipV, textOverlays]);
+  }, [brightness, contrast, saturation, hue, rotation, flipH, flipV, textOverlays, cropRect]);
 
-  const renderCanvas = (img: HTMLImageElement) => {
+  const renderCanvas = (img: HTMLImageElement, skipCropMask = false) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -122,24 +150,48 @@ const MediaEditor = ({ imageUrl, onSave, onClose }: MediaEditorProps) => {
       ctx.shadowBlur = 4;
       ctx.shadowOffsetX = 2;
       ctx.shadowOffsetY = 2;
-      ctx.fillText(overlay.text, overlay.x, overlay.y);
+      
+      const x = (overlay.xPercent / 100) * canvas.width;
+      const y = (overlay.yPercent / 100) * canvas.height;
+      ctx.fillText(overlay.text, x, y);
     });
+
+    // Draw crop mask if in crop mode and not skipped
+    if (cropRect && !skipCropMask) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      
+      // Top mask
+      ctx.fillRect(0, 0, canvas.width, cropRect.y);
+      // Bottom mask
+      ctx.fillRect(0, cropRect.y + cropRect.height, canvas.width, canvas.height - (cropRect.y + cropRect.height));
+      // Left mask
+      ctx.fillRect(0, cropRect.y, cropRect.x, cropRect.height);
+      // Right mask
+      ctx.fillRect(cropRect.x + cropRect.width, cropRect.y, canvas.width - (cropRect.x + cropRect.width), cropRect.height);
+      
+      // Draw white outline
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(2, Math.round(canvas.width / 500));
+      ctx.setLineDash([6, 6]);
+      ctx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+      ctx.setLineDash([]);
+    }
   };
 
   const handleAddText = () => {
     if (!newText.trim() || !canvasRef.current) return;
     
-    const canvas = canvasRef.current;
     const newOverlay: TextOverlay = {
       id: crypto.randomUUID(),
       text: newText,
-      x: canvas.width / 2,
-      y: canvas.height / 2,
+      xPercent: 50,
+      yPercent: 50,
       fontSize,
       color: textColor,
     };
     
     setTextOverlays([...textOverlays, newOverlay]);
+    setSelectedTextId(newOverlay.id);
     setNewText("");
   };
 
@@ -156,23 +208,59 @@ const MediaEditor = ({ imageUrl, onSave, onClose }: MediaEditorProps) => {
     setFlipH(false);
     setFlipV(false);
     setTextOverlays([]);
+    setSelectedTextId(null);
+    setCropAspect('free');
+    setCropRect(null);
+  };
+
+  const getProcessedDataUrl = (): string | null => {
+    const canvas = canvasRef.current;
+    if (!canvas || !originalImage) return null;
+
+    // Render original image without crop mask first
+    renderCanvas(originalImage, true);
+
+    let dataUrl = "";
+    if (cropRect) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = cropRect.width;
+      tempCanvas.height = cropRect.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      if (tempCtx) {
+        tempCtx.drawImage(
+          canvas, 
+          cropRect.x, cropRect.y, cropRect.width, cropRect.height, 
+          0, 0, cropRect.width, cropRect.height
+        );
+        dataUrl = tempCanvas.toDataURL(exportFormat, exportQuality);
+      } else {
+        dataUrl = canvas.toDataURL(exportFormat, exportQuality);
+      }
+    } else {
+      dataUrl = canvas.toDataURL(exportFormat, exportQuality);
+    }
+
+    // Restore crop mask for user preview
+    renderCanvas(originalImage, false);
+
+    return dataUrl;
   };
 
   const handleSave = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const dataUrl = canvas.toDataURL('image/png', 1.0);
-    onSave(dataUrl);
+    const dataUrl = getProcessedDataUrl();
+    if (dataUrl) {
+      onSave(dataUrl);
+    }
   };
 
   const handleDownload = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const dataUrl = getProcessedDataUrl();
+    if (!dataUrl) return;
     
+    const ext = exportFormat.split('/')[1];
     const link = document.createElement('a');
-    link.download = 'edited-image.png';
-    link.href = canvas.toDataURL('image/png', 1.0);
+    link.download = `edited-image.${ext}`;
+    link.href = dataUrl;
     link.click();
   };
 
@@ -183,6 +271,13 @@ const MediaEditor = ({ imageUrl, onSave, onClose }: MediaEditorProps) => {
     { label: '9:16', value: '9:16' },
     { label: '4:5', value: '4:5' },
   ];
+
+  const selectedOverlay = textOverlays.find(t => t.id === selectedTextId);
+
+  const updateSelectedOverlay = (updates: Partial<TextOverlay>) => {
+    if (!selectedTextId) return;
+    setTextOverlays(prev => prev.map(t => t.id === selectedTextId ? { ...t, ...updates } : t));
+  };
 
   return (
     <motion.div
@@ -374,6 +469,39 @@ const MediaEditor = ({ imageUrl, onSave, onClose }: MediaEditorProps) => {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Export Format */}
+                  <div className="space-y-3 pt-2 border-t border-border">
+                    <span className="text-sm font-medium">Exportar</span>
+                    <div className="flex gap-2">
+                      {(['image/jpeg', 'image/png', 'image/webp'] as const).map(fmt => (
+                        <Button
+                          key={fmt}
+                          variant={exportFormat === fmt ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setExportFormat(fmt)}
+                          className="flex-1 text-[10px]"
+                        >
+                          {fmt.split('/')[1].toUpperCase()}
+                        </Button>
+                      ))}
+                    </div>
+                    {exportFormat !== 'image/png' && (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Qualidade</span>
+                          <span>{Math.round(exportQuality * 100)}%</span>
+                        </div>
+                        <Slider
+                          value={[exportQuality]}
+                          onValueChange={([v]) => setExportQuality(v)}
+                          min={0.1}
+                          max={1}
+                          step={0.01}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               )}
 
@@ -412,60 +540,160 @@ const MediaEditor = ({ imageUrl, onSave, onClose }: MediaEditorProps) => {
                   exit={{ opacity: 0, x: -20 }}
                   className="space-y-4"
                 >
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Adicionar texto</label>
-                    <Input
-                      value={newText}
-                      onChange={(e) => setNewText(e.target.value)}
-                      placeholder="Digite o texto..."
-                      maxLength={100}
-                    />
-                  </div>
+                  {selectedOverlay ? (
+                    <div className="p-3 bg-muted/30 rounded-lg space-y-4 border border-border">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-primary uppercase">Editar Texto</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setSelectedTextId(null)}
+                          className="h-6 px-2 text-[10px]"
+                        >
+                          Voltar / Novo
+                        </Button>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm">Cor</label>
-                      <Input
-                        type="color"
-                        value={textColor}
-                        onChange={(e) => setTextColor(e.target.value)}
-                        className="h-10 p-1"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm">Tamanho</label>
-                      <Input
-                        type="number"
-                        value={fontSize}
-                        onChange={(e) => setFontSize(Number(e.target.value))}
-                        min={12}
-                        max={200}
-                      />
-                    </div>
-                  </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Texto</label>
+                        <Input
+                          value={selectedOverlay.text}
+                          onChange={(e) => updateSelectedOverlay({ text: e.target.value })}
+                          maxLength={100}
+                        />
+                      </div>
 
-                  <Button onClick={handleAddText} disabled={!newText.trim()} className="w-full">
-                    Adicionar Texto
-                  </Button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Cor</label>
+                          <Input
+                            type="color"
+                            value={selectedOverlay.color}
+                            onChange={(e) => updateSelectedOverlay({ color: e.target.value })}
+                            className="h-9 p-1"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">Tamanho</label>
+                          <Input
+                            type="number"
+                            value={selectedOverlay.fontSize}
+                            onChange={(e) => updateSelectedOverlay({ fontSize: Number(e.target.value) })}
+                            min={12}
+                            max={200}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Posição X (%)</span>
+                          <span>{selectedOverlay.xPercent}%</span>
+                        </div>
+                        <Slider
+                          value={[selectedOverlay.xPercent]}
+                          onValueChange={([v]) => updateSelectedOverlay({ xPercent: v })}
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Posição Y (%)</span>
+                          <span>{selectedOverlay.yPercent}%</span>
+                        </div>
+                        <Slider
+                          value={[selectedOverlay.yPercent]}
+                          onValueChange={([v]) => updateSelectedOverlay({ yPercent: v })}
+                          min={0}
+                          max={100}
+                          step={1}
+                        />
+                      </div>
+
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="w-full h-8 text-xs"
+                        onClick={() => {
+                          handleRemoveText(selectedOverlay.id);
+                          setSelectedTextId(null);
+                        }}
+                      >
+                        Remover Texto
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Adicionar texto</label>
+                        <Input
+                          value={newText}
+                          onChange={(e) => setNewText(e.target.value)}
+                          placeholder="Digite o texto..."
+                          maxLength={100}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-sm">Cor</label>
+                          <Input
+                            type="color"
+                            value={textColor}
+                            onChange={(e) => setTextColor(e.target.value)}
+                            className="h-10 p-1"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-sm">Tamanho</label>
+                          <Input
+                            type="number"
+                            value={fontSize}
+                            onChange={(e) => setFontSize(Number(e.target.value))}
+                            min={12}
+                            max={200}
+                          />
+                        </div>
+                      </div>
+
+                      <Button onClick={handleAddText} disabled={!newText.trim()} className="w-full">
+                        Adicionar Texto
+                      </Button>
+                    </div>
+                  )}
 
                   {textOverlays.length > 0 && (
-                    <div className="space-y-2">
+                    <div className="space-y-2 pt-2 border-t border-border">
                       <span className="text-sm font-medium">Textos adicionados</span>
-                      {textOverlays.map((overlay) => (
-                        <div
-                          key={overlay.id}
-                          className="flex items-center justify-between p-2 bg-muted rounded"
-                        >
-                          <span className="text-sm truncate">{overlay.text}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveText(overlay.id)}
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {textOverlays.map((overlay) => (
+                          <div
+                            key={overlay.id}
+                            onClick={() => setSelectedTextId(overlay.id)}
+                            className={cn(
+                              "flex items-center justify-between p-2 rounded cursor-pointer transition-colors text-left",
+                              selectedTextId === overlay.id ? "bg-primary/20 border border-primary/40 text-primary-foreground" : "bg-muted hover:bg-muted/70"
+                            )}
                           >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
+                            <span className="text-sm truncate flex-1">{overlay.text}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-red-500/10 text-muted-foreground hover:text-red-500"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemoveText(overlay.id);
+                                if (selectedTextId === overlay.id) setSelectedTextId(null);
+                              }}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </motion.div>

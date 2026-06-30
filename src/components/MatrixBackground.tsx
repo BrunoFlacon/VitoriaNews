@@ -10,8 +10,8 @@ export const MatrixBackground: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
+    let width = (canvas.width = document.documentElement.clientWidth);
+    let height = (canvas.height = document.documentElement.clientHeight);
 
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$+-*/=%"\'#&_(),.;:?!\\|{}<>[]^~';
     const fontSize = 14;
@@ -45,8 +45,8 @@ export const MatrixBackground: React.FC = () => {
     draw();
 
     const handleResize = () => {
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+      width = canvas.width = document.documentElement.clientWidth;
+      height = canvas.height = document.documentElement.clientHeight;
     };
 
     window.addEventListener('resize', handleResize);

@@ -2,6 +2,7 @@ import { memo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Search, ChevronDown, User, Shield, Camera, Key, Settings, LogOut, X } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/hooks/useAuth";
 import { useSystem } from "@/contexts/SystemContext";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -36,6 +37,7 @@ export const Header = memo(({
   const { unreadCount } = useNotifications();
   const { user, profile, logout, isOnline, toggleOnline } = useAuth();
   const { settings } = useSystem();
+  const isMobile = useIsMobile();
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
   const displayName = profile?.name || user?.email?.split('@')[0] || "Usuário";
@@ -78,7 +80,7 @@ export const Header = memo(({
           {/* Collapsible Search */}
           <div className="relative flex-1 md:max-w-md flex justify-end md:justify-start">
             <AnimatePresence>
-              {(isSearchExpanded || !window.innerWidth || window.innerWidth > 768) ? (
+              {(isSearchExpanded || !isMobile) ? (
                 <motion.div
                   initial={{ width: 0, opacity: 0 }}
                   animate={{ width: "100%", opacity: 1 }}

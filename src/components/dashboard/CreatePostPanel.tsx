@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo, startTransition } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { SafeImage } from "@/components/ui/SafeImage";
@@ -48,6 +49,7 @@ import { useMediaUpload, type UploadedMedia } from "@/hooks/useMediaUpload";
 import { BulkUploadDialog } from "@/components/dashboard/BulkUploadDialog";
 import { GiphySearch } from "@/components/dashboard/GiphySearch";
 import { SpotifySearch } from "@/components/dashboard/SpotifySearch";
+import { PostVideoPicker } from "@/components/dashboard/PostVideoPicker";
 import { 
   PostPreview, 
   InstagramCard, 
@@ -242,6 +244,7 @@ const ResolvedVideo = ({ fileUrl, className }: { fileUrl: string; className?: st
 };
 
 export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackToCalendar, onEditPost, createPost, updatePost, submitForApproval, approvePost, rejectPost }: CreatePostPanelProps) => {
+  const isMobile = useIsMobile();
   const [content, setContent] = useState(editingPost?.content || "");
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(() => {
     if (editingPost?.platforms) return editingPost.platforms as string[];
@@ -511,14 +514,21 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     setIsGeneratingAudio(true);
     try {
       const result = await generateAudio({ text: content });
-      if (result) {
-        setUploadedFiles(prev => [...prev, {
-          id: `audio-${Date.now()}`,
-          file_url: result.audioUrl,
-          name: "IA Áudio",
-          file_type: "audio/mpeg",
-          file_size: 0
-        }]);
+      if (result?.audioUrl) {
+        const blob = await fetch(result.audioUrl).then(r => r.blob());
+        const file = new File([blob], `ia-audio-${Date.now()}.mp3`, { type: 'audio/mpeg' });
+        const uploaded = await uploadMedia(file);
+        if (uploaded) {
+          setUploadedFiles(prev => [...prev, uploaded]);
+        } else {
+          setUploadedFiles(prev => [...prev, {
+            id: `audio-${Date.now()}`,
+            file_url: result.audioUrl,
+            name: "IA Áudio",
+            file_type: "audio/mpeg",
+            file_size: 0
+          }]);
+        }
         setShowAudioDialog(false);
       }
     } catch (error) {
@@ -847,15 +857,15 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                 <div 
                   key={`platform-container-${platform.id}`}
                   className="relative group"
-                  onMouseEnter={() => { if (window.innerWidth >= 768) setHoveredPlatform(platform.id); }}
-                  onMouseLeave={() => { if (window.innerWidth >= 768) setHoveredPlatform(null); }}
+                  onMouseEnter={() => { if (!isMobile) setHoveredPlatform(platform.id); }}
+                  onMouseLeave={() => { if (!isMobile) setHoveredPlatform(null); }}
                 >
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => {
                       // On mobile, first click shows the menu if there are connections
-                      if (window.innerWidth < 768 && hasConnections) {
+                      if (isMobile && hasConnections) {
                         setHoveredPlatform(prev => prev === platform.id ? null : platform.id);
                         return;
                       }
@@ -1432,6 +1442,37 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     });
                   }}
                   onClose={() => {}}
+                />
+              </PopoverContent>
+            </Popover>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <button 
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-[10px] md:text-sm font-bold text-muted-foreground hover:text-foreground transition-all active:scale-95 shrink-0"
+                  title="Vídeos"
+                >
+                  <Video className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Vídeos</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[350px] p-3 border-border/50" align="start">
+                <PostVideoPicker
+                  onSelect={(url) => {
+                    const newMedia: UploadedMedia = {
+                      id: `video-${Date.now()}`,
+                      file_url: url,
+                      file_type: "video/mp4",
+                      name: "video.mp4",
+                      file_size: 0,
+                    };
+                    setUploadedFiles(prev => [...prev, newMedia]);
+                    if (!selectedMedia) setSelectedMedia("video");
+                    toast({
+                      title: "Vídeo Adicionado!",
+                      description: "Vídeo selecionado para o post.",
+                    });
+                  }}
                 />
               </PopoverContent>
             </Popover>

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
-import { loadSelectedAccounts } from "@/utils/mediaUtils";
+import { loadSelectedAccounts, getMediaUrl } from "@/utils/mediaUtils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -783,7 +783,7 @@ export const StoriesLivesView = () => {
                         {story.type === 'video' || (story.media_url && story.media_url.match(/\.(mp4|webm|mov|m4v)/i)) ? (
                           <video 
                             key={story.id}
-                            src={story.media_url || story.thumbnail_url || ""} 
+                            src={getMediaUrl(story.media_url) || getMediaUrl(story.thumbnail_url) || ""} 
                             className="w-full h-full object-cover bg-zinc-950"
                             preload="metadata"
                             muted
@@ -1409,7 +1409,7 @@ export const StoriesLivesView = () => {
                 
                 return items.length > 0 
                   ? items.map(s => s.url) 
-                  : [editingStory.thumbnail_url || editingStory.media_url || ""];
+                  : [getMediaUrl(editingStory.media_url) || editingStory.thumbnail_url || ""];
               })()
             }
             platform={editingStory.platform as SocialPlatformId}

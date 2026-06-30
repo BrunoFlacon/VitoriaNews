@@ -1,0 +1,1 @@
+ALTER TABLE public.stories_lives ADD COLUMN IF NOT EXISTS duration INTEGER DEFAULT 0;

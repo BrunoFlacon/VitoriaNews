@@ -8,19 +8,25 @@ import {
   Grid, 
   List, 
   Search, 
-  Filter,
   MoreVertical,
   Trash2,
   Download,
   Eye,
   X,
   FolderOpen,
-  Play
+  Play,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useMediaUpload } from "@/hooks/useMediaUpload";
+import { getMediaUrl } from "@/utils/mediaUtils";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 type MediaType = "all" | "image" | "video" | "document";
 type ViewMode = "grid" | "list";
@@ -30,30 +36,58 @@ interface MediaItem {
   name: string;
   type: "image" | "video" | "document";
   url: string;
+  file_url: string;
   size: string;
+  file_size: number;
   uploadedAt: Date;
   thumbnail?: string;
 }
 
-const mockMedia: MediaItem[] = [
-  { id: '1', name: 'banner-promo.jpg', type: 'image', url: '/placeholder.svg', size: '2.4 MB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 2) },
-  { id: '2', name: 'video-produto.mp4', type: 'video', url: '/placeholder.svg', size: '45.2 MB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 24) },
-  { id: '3', name: 'apresentacao.pdf', type: 'document', url: '/placeholder.svg', size: '1.8 MB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 48) },
-  { id: '4', name: 'story-destaque.jpg', type: 'image', url: '/placeholder.svg', size: '890 KB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 72) },
-  { id: '5', name: 'tutorial.mp4', type: 'video', url: '/placeholder.svg', size: '128.5 MB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 96) },
-  { id: '6', name: 'catalogo.pdf', type: 'document', url: '/placeholder.svg', size: '5.2 MB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 120) },
-  { id: '7', name: 'foto-equipe.jpg', type: 'image', url: '/placeholder.svg', size: '3.1 MB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 144) },
-  { id: '8', name: 'reels-trend.mp4', type: 'video', url: '/placeholder.svg', size: '22.8 MB', uploadedAt: new Date(Date.now() - 1000 * 60 * 60 * 168) },
-];
-
 export const MediaGalleryView = () => {
-  const [media, setMedia] = useState<MediaItem[]>(mockMedia);
+  const { user } = useAuth();
+  const { uploadMedia, uploading } = useMediaUpload();
+  const { toast } = useToast();
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<MediaType>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    const load = async () => {
+      const { data } = await supabase
+        .from('media')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (data) {
+        setMedia(data.map(m => {
+          let type: "image" | "video" | "document" = "document";
+          if (m.file_type?.startsWith("image/")) type = "image";
+          else if (m.file_type?.startsWith("video/")) type = "video";
+
+          return {
+            id: m.id,
+            name: m.name || 'Arquivo',
+            type,
+            url: getMediaUrl(m.file_url) || '',
+            file_url: m.file_url,
+            size: formatFileSize(m.file_size || 0),
+            file_size: m.file_size || 0,
+            uploadedAt: new Date(m.created_at),
+          };
+        }));
+      }
+      setLoading(false);
+    };
+    load();
+  }, [user]);
 
   useEffect(() => {
     const handleGlobalSearch = (e: any) => {
@@ -82,7 +116,6 @@ export const MediaGalleryView = () => {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
     const files = Array.from(e.dataTransfer.files);
     handleFiles(files);
   }, []);
@@ -93,27 +126,29 @@ export const MediaGalleryView = () => {
     }
   };
 
-  const handleFiles = (files: File[]) => {
-    const newMedia: MediaItem[] = files.map(file => {
-      let type: "image" | "video" | "document" = "document";
-      if (file.type.startsWith("image/")) type = "image";
-      if (file.type.startsWith("video/")) type = "video";
-
-      return {
-        id: crypto.randomUUID(),
-        name: file.name,
-        type,
-        url: URL.createObjectURL(file),
-        size: formatFileSize(file.size),
-        uploadedAt: new Date()
-      };
-    });
-
-    setMedia(prev => [...newMedia, ...prev]);
-    toast({
-      title: "Upload concluído",
-      description: `${files.length} arquivo(s) adicionado(s) à galeria.`
-    });
+  const handleFiles = async (files: File[]) => {
+    const uploaded: MediaItem[] = [];
+    for (const file of files) {
+      const result = await uploadMedia(file);
+      if (result) {
+        let type: "image" | "video" | "document" = "document";
+        if (result.file_type?.startsWith("image/")) type = "image";
+        else if (result.file_type?.startsWith("video/")) type = "video";
+        uploaded.push({
+          id: result.id,
+          name: result.name,
+          type,
+          url: getMediaUrl(result.file_url) || '',
+          file_url: result.file_url,
+          size: formatFileSize(result.file_size || 0),
+          file_size: result.file_size || 0,
+          uploadedAt: new Date(),
+        });
+      }
+    }
+    if (uploaded.length > 0) {
+      setMedia(prev => [...uploaded, ...prev]);
+    }
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -122,12 +157,18 @@ export const MediaGalleryView = () => {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const handleDelete = (id: string) => {
-    setMedia(prev => prev.filter(item => item.id !== id));
-    toast({
-      title: "Arquivo excluído",
-      description: "O arquivo foi removido da galeria."
-    });
+  const handleDelete = async (id: string, fileUrl: string) => {
+    try {
+      const urlParts = fileUrl.split('/media/');
+      if (urlParts.length > 1) {
+        await supabase.storage.from('media').remove([urlParts[1]]);
+      }
+      await supabase.from('media').delete().eq('id', id);
+      setMedia(prev => prev.filter(item => item.id !== id));
+      toast({ title: "Arquivo excluído", description: "O arquivo foi removido da galeria." });
+    } catch {
+      toast({ title: "Erro ao excluir", description: "Não foi possível remover o arquivo.", variant: "destructive" });
+    }
   };
 
   const getTypeIcon = (type: string) => {
@@ -184,7 +225,7 @@ export const MediaGalleryView = () => {
         <input
           type="file"
           multiple
-          accept="image/*,video/*,.pdf,.doc,.docx"
+          accept="image/*,video/*,audio/*,.pdf"
           onChange={handleFileInput}
           className="hidden"
           id="file-upload"
@@ -194,7 +235,7 @@ export const MediaGalleryView = () => {
           className="cursor-pointer flex flex-col items-center"
         >
           <div className="w-16 h-16 rounded-2xl bg-primary/20 flex items-center justify-center mb-4">
-            <Upload className="w-8 h-8 text-primary" />
+            {uploading ? <Loader2 className="w-8 h-8 text-primary animate-spin" /> : <Upload className="w-8 h-8 text-primary" />}
           </div>
           <h3 className="font-medium text-lg mb-2">
             {isDragging ? "Solte os arquivos aqui" : "Arraste e solte arquivos"}
@@ -203,7 +244,7 @@ export const MediaGalleryView = () => {
             ou clique para selecionar
           </p>
           <p className="text-xs text-muted-foreground">
-            Suporta: JPG, PNG, GIF, MP4, MOV, PDF, DOC
+            Suporta: JPG, PNG, GIF, MP4, MOV, MP3, WAV, PDF
           </p>
         </label>
       </motion.div>
@@ -267,7 +308,11 @@ export const MediaGalleryView = () => {
       </motion.div>
 
       {/* Media Grid/List */}
-      {filteredMedia.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : filteredMedia.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -301,6 +346,7 @@ export const MediaGalleryView = () => {
                     src={item.url}
                     alt={item.name}
                     className="w-full h-full object-cover"
+                    loading="lazy"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
@@ -329,7 +375,7 @@ export const MediaGalleryView = () => {
                 {/* Actions */}
                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.file_url); }}
                     className="p-1.5 rounded-lg bg-black/50 text-white hover:bg-destructive transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -362,21 +408,18 @@ export const MediaGalleryView = () => {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{item.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {item.size} • {item.uploadedAt.toLocaleDateString('pt-BR')}
+                    {item.size} • {format(item.uploadedAt, "dd/MM/yyyy", { locale: ptBR })}
                   </p>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setSelectedMedia(item); }}>
                     <Eye className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <Download className="w-4 h-4" />
                   </Button>
                   <Button 
                     variant="ghost" 
                     size="icon" 
                     className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                    onClick={(e) => { e.stopPropagation(); handleDelete(item.id, item.file_url); }}
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -434,7 +477,7 @@ export const MediaGalleryView = () => {
               <div className="p-4 border-t border-border">
                 <p className="font-medium">{selectedMedia.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {selectedMedia.size} • Enviado em {selectedMedia.uploadedAt.toLocaleDateString('pt-BR')}
+                  {selectedMedia.size} • Enviado em {format(selectedMedia.uploadedAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                 </p>
               </div>
             </motion.div>

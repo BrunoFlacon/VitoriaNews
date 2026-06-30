@@ -17,6 +17,8 @@ import { GoogleIcon, FacebookIcon, MetaIcon, NewsapiIcon, MapsIcon, YoutubeIcon,
 
 import { PLATFORM_CREDENTIAL_FIELDS } from "@/hooks/useApiCredentials";
 import { WebhookStatusBadge } from "./WebhookStatusBadge";
+import { WhatsAppMetricsDashboard } from "@/components/dashboard/analytics/WhatsAppMetricsDashboard";
+import { WhatsAppPhotoUpload } from "./WhatsAppPhotoUpload";
 
 interface APITabProps {
   UNIQUE_PLATFORM_CONFIGS: any[];
@@ -762,11 +764,28 @@ export const APITab = memo(({
                                       </div>
                                     );
                                   })()}
+
+                                  {/* WhatsApp Photo Upload */}
+                                  {config.id === 'whatsapp' && platformConnections.length > 0 && (
+                                    <div className="px-1 pt-2">
+                                      <WhatsAppPhotoUpload
+                                        connectionId={platformConnections[0].id}
+                                        currentPhoto={platformConnections[0].profile_image_url}
+                                        onPhotoUpdated={() => refreshStats()}
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* WhatsApp Metrics */}
+                                  {config.id === 'whatsapp' && (
+                                    <div className="pt-4">
+                                      <WhatsAppMetricsDashboard />
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             )}
 
-                            {/*  Credential fields and Actions  */}
                             {/*  Credential fields and Actions  */}
                             <div className="space-y-6">
                               {fields.length > 0 && (

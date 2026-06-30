@@ -26,6 +26,23 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.ogv']);
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.m4a', '.aac', '.opus', '.wma']);
+
+function detectMediaType(url: string): "image" | "video" | "audio" {
+  try {
+    const path = new URL(url).pathname;
+    const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
+    if (VIDEO_EXTENSIONS.has(ext)) return "video";
+    if (AUDIO_EXTENSIONS.has(ext)) return "audio";
+  } catch {
+    const ext = url.substring(url.lastIndexOf('.')).toLowerCase();
+    if (VIDEO_EXTENSIONS.has(ext)) return "video";
+    if (AUDIO_EXTENSIONS.has(ext)) return "audio";
+  }
+  return "image";
+}
+
 interface Sticker {
   id: string;
   type: "hashtag" | "location" | "link" | "music" | "emoji" | "gif" | "poll" | "custom";
@@ -89,7 +106,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
     initialMediaUrls.map((url, i) => ({
       id: `story-${i}-${Date.now()}`,
       url,
-      type: url.includes(".mp4") || url.includes(".mov") ? "video" : i === 0 && url.includes(".mp3") ? "audio" : "image",
+      type: detectMediaType(url),
       text: "",
       textConfig: {
         position: { x: 0, y: 0 },

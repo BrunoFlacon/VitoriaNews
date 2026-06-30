@@ -8,7 +8,26 @@ interface VideoRetentionChartProps {
 export function VideoRetentionChart({ data, totalViews }: VideoRetentionChartProps) {
   if (!data || data.length === 0) return null;
 
+  const allZero = data.every(d => d.views === 0);
   const maxViews = Math.max(...data.map(d => d.views), 1);
+
+  if (allZero) {
+    return (
+      <div className="space-y-2 opacity-40">
+        {data.map((metric) => (
+          <div key={metric.duration} className="flex items-center gap-3">
+            <span className="w-16 text-xs text-muted-foreground font-medium shrink-0">{metric.label}</span>
+            <div className="flex-1 h-5 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-blue-500/30 to-cyan-400/30" style={{ width: '100%' }} />
+            </div>
+            <span className="w-20 text-xs font-bold text-right tabular-nums text-muted-foreground">—</span>
+            <span className="w-12 text-[10px] text-muted-foreground text-right">—</span>
+          </div>
+        ))}
+        <p className="text-xs text-muted-foreground text-center pt-2">Nenhum dado de retenção disponível</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2">

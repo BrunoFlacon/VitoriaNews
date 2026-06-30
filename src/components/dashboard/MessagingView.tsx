@@ -995,7 +995,7 @@ export const MessagingView = () => {
       const { error } = await supabase.storage.from("media").upload(path, file, { cacheControl: '3600' });
       if (error) throw error;
       const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-      const fileType = file.type.startsWith("image") ? "image" : file.type.startsWith("video") ? "video" : file.type.startsWith("audio") ? "audio" : "file";
+      const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("video/") ? "video" : file.type.startsWith("audio/") ? "audio" : "file";
       setAttachments(prev => [...prev, { url: urlData.publicUrl, type: fileType, name: file.name }]);
       toast({ title: "Arquivo anexado", description: file.name });
     } catch (err: any) {

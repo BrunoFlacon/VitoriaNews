@@ -1,6 +1,6 @@
 import { useState, useEffect, memo, useMemo, useCallback } from "react";
 import {
-  X, Instagram, Facebook, Twitter, Linkedin, MessageCircle,
+  X, Instagram, Facebook, Twitter, Linkedin, MessageCircle, Play,
   Heart, MessageSquare, Share2, Bookmark, Send, MoreHorizontal,
   ChevronLeft, ChevronRight, CheckCircle2, Clock, Calendar,
   BarChart3, DollarSign, TrendingUp, Tv, Coins
@@ -13,6 +13,19 @@ import { ScheduledPost } from "@/hooks/useScheduledPosts";
 import { useSocialStats, SocialAccountStat } from "@/hooks/useSocialStats";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
+import { VideoViewer } from "./VideoViewer";
+
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.ogv']);
+
+function isVideoUrl(url: string): boolean {
+  try {
+    const path = new URL(url).pathname;
+    const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
+    return VIDEO_EXTENSIONS.has(ext);
+  } catch {
+    return url.match(/\.(mp4|webm|mov|avi|mkv|m4v|3gp|ogv)(\?|$)/i) !== null;
+  }
+}
 
 /** Formata data/hora do post com indicadores visuais */
 function formatPostDate(post: import("@/hooks/useScheduledPosts").ScheduledPost) {
@@ -51,10 +64,14 @@ const SlideCarousel = memo(({
   urls,
   aspectClass = 'aspect-square',
   dotsClass = '',
+  onVideoClick,
+  posterUrl,
 }: {
   urls: (string | null)[];
   aspectClass?: string;
   dotsClass?: string;
+  onVideoClick?: (url: string) => void;
+  posterUrl?: string | null;
 }) => {
   const [idx, setIdx] = useState(0);
   const validUrls = useMemo(() => urls.filter((u): u is string => !!u), [urls]);
@@ -79,13 +96,38 @@ const SlideCarousel = memo(({
               className="relative h-full flex-shrink-0"
               style={{ width: `${100 / count}%` }}
             >
-              <SafeImage
-                src={url}
-                alt={`mídia ${i + 1}`}
-                className="w-full h-full object-cover"
-                loading="eager"
-                fetchPriority={i === 0 ? 'high' : 'low'}
-              />
+              {isVideoUrl(url) ? (
+                <button
+                  type="button"
+                  onClick={() => onVideoClick?.(url)}
+                  className="relative w-full h-full cursor-pointer border-0 p-0 bg-transparent block"
+                  aria-label={`Reproduzir vídeo ${i + 1}`}
+                >
+                  <video
+                    src={url}
+                    className="w-full h-full object-cover"
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    poster={posterUrl || undefined}
+                    style={{ background: 'rgba(0,0,0,0.08)' }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
+                    <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+                      <Play className="w-5 h-5 text-white ml-0.5" />
+                    </div>
+                  </div>
+                </button>
+              ) : (
+                <SafeImage
+                  src={url}
+                  alt={`mídia ${i + 1}`}
+                  className="w-full h-full object-cover"
+                  loading="eager"
+                  fetchPriority={i === 0 ? 'high' : 'low'}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -166,6 +208,32 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
   const selectedEntry = platformEntries[selectedIdx] || platformEntries[0];
 
   const [activeTab, setActiveTab] = useState<'details' | 'metrics'>('details');
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState(0);
+
+  const videoItems = useMemo(() => {
+    if (!post.media_urls) return [];
+    return post.media_urls
+      .filter((u): u is string => !!u && isVideoUrl(u))
+      .map((url, idx) => ({
+        id: `${post.id}-v${idx}`,
+        title: post.content?.slice(0, 100) || 'Vídeo',
+        media_url: url,
+        thumbnail_url: null,
+        duration: null,
+        views: post.metrics?.views ?? null,
+        platform: post.media_type === 'reel' ? 'Instagram Reels' : post.media_type === 'story' ? 'Stories' : 'Vídeo',
+        created_at: post.created_at,
+      }));
+  }, [post]);
+
+  const handleOpenViewer = useCallback((url: string) => {
+    const idx = videoItems.findIndex(v => v.media_url === url);
+    if (idx >= 0) {
+      setViewerIndex(idx);
+      setViewerOpen(true);
+    }
+  }, [videoItems]);
 
   useEffect(() => {
     if (post.status !== 'published') {
@@ -218,16 +286,16 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
 
     switch (platformId) {
       case "instagram":
-        return <InstagramPreview post={post} account={account} />;
+        return <InstagramPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "facebook":
-        return <FacebookPreview post={post} account={account} />;
+        return <FacebookPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "twitter":
       case "x" as any:
-        return <XPreview post={post} account={account} />;
+        return <XPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "threads":
-        return <ThreadsPreview post={post} account={account} />;
+        return <ThreadsPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "linkedin":
-        return <LinkedInPreview post={post} account={account} />;
+        return <LinkedInPreview post={post} account={account} onVideoClick={handleOpenViewer} />;
       case "whatsapp":
         return <WhatsAppPreview post={post} account={account} />;
       case "telegram":
@@ -252,7 +320,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
+    <><Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="max-w-4xl p-0 overflow-hidden bg-background/95 backdrop-blur-xl border-border/40 shadow-2xl">
         <DialogHeader className="sr-only">
             <DialogTitle>Prévia da Publicação</DialogTitle>
@@ -399,7 +467,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
                       {post.media_type === 'carousel' && <span className="ml-1 text-primary">• Carrossel</span>}
                     </p>
                     {post.media_urls.length > 1 ? (
-                      <SidebarCarousel urls={post.media_urls.filter((u): u is string => !!u)} />
+                      <SidebarCarousel urls={post.media_urls.filter((u): u is string => !!u)} posterUrl={post.thumbnail_url} />
                     ) : (
                       <div className="aspect-square rounded-lg overflow-hidden bg-muted border border-border/50">
                         <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover" />
@@ -534,17 +602,26 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
         </div>
       </DialogContent>
     </Dialog>
+      {viewerOpen && videoItems.length > 0 && (
+        <VideoViewer
+          videos={videoItems}
+          initialIndex={viewerIndex}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
+    </>
   );
 });
 
 /* Mini carousel for sidebar — reutiliza SlideCarousel com dots escuros */
-const SidebarCarousel = memo(({ urls }: { urls: string[] }) => {
+const SidebarCarousel = memo(({ urls, posterUrl }: { urls: string[]; posterUrl?: string | null }) => {
   return (
     <div className="rounded-lg overflow-hidden bg-muted border border-border/50">
       <SlideCarousel
         urls={urls}
         aspectClass="aspect-square"
         dotsClass="bg-muted/80"
+        posterUrl={posterUrl}
       />
     </div>
   );
@@ -552,7 +629,7 @@ const SidebarCarousel = memo(({ urls }: { urls: string[] }) => {
 
 /* Platform Specific Mini-Previews */
 
-const InstagramPreview = memo(({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => {
+const InstagramPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, account?: SocialAccountStat, onVideoClick?: (url: string) => void }) => {
   const isStory = post.media_type === 'story';
   const hasMedia = (post.media_urls?.length ?? 0) > 0;
   const dateInfo = formatPostDate(post);
@@ -594,7 +671,8 @@ const InstagramPreview = memo(({ post, account }: { post: ScheduledPost, account
       <div className="relative bg-zinc-100" style={{ contain: 'paint layout' }}>
         {hasMedia ? (
           <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-square"
-            dotsClass="absolute bottom-0 left-0 right-0 bg-transparent pb-1" />
+            dotsClass="absolute bottom-0 left-0 right-0 bg-transparent pb-1" onVideoClick={onVideoClick}
+            posterUrl={post.thumbnail_url} />
         ) : (
           <div className="aspect-square flex items-center justify-center"><Instagram className="w-12 h-12 text-zinc-300" /></div>
         )}
@@ -655,7 +733,7 @@ const InstagramPreview = memo(({ post, account }: { post: ScheduledPost, account
   );
 });
 
-const FacebookPreview = memo(({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => {
+const FacebookPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, account?: SocialAccountStat, onVideoClick?: (url: string) => void }) => {
   const isStory = post.media_type === 'story';
   const hasMedia = (post.media_urls?.length ?? 0) > 0;
   const dateInfo = formatPostDate(post);
@@ -703,7 +781,8 @@ const FacebookPreview = memo(({ post, account }: { post: ScheduledPost, account?
       <div className="border-y border-zinc-100" style={{ contain: 'paint layout' }}>
         {hasMedia ? (
           <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-[1.91/1]"
-            dotsClass="absolute bottom-0 left-0 right-0 bg-transparent pb-1" />
+            dotsClass="absolute bottom-0 left-0 right-0 bg-transparent pb-1" onVideoClick={onVideoClick}
+            posterUrl={post.thumbnail_url} />
         ) : (
           <div className="aspect-[1.91/1] flex items-center justify-center opacity-10">
             <Facebook className="w-16 h-16" />
@@ -747,7 +826,7 @@ const FacebookPreview = memo(({ post, account }: { post: ScheduledPost, account?
   );
 });
 
-const XPreview = memo(({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => {
+const XPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, account?: SocialAccountStat, onVideoClick?: (url: string) => void }) => {
   const dateInfo = formatPostDate(post);
   const isPublished = post.status === 'published';
   const m = post.metrics;
@@ -775,7 +854,7 @@ const XPreview = memo(({ post, account }: { post: ScheduledPost, account?: Socia
           <p className="text-sm mb-3 whitespace-pre-wrap leading-normal text-zinc-900">{post.content}</p>
           {(post.media_urls?.length ?? 0) > 0 && (
             <div className="rounded-2xl overflow-hidden border border-zinc-200 mb-3" style={{ contain: 'paint layout' }}>
-              <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-video" />
+              <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-video" onVideoClick={onVideoClick} />
             </div>
           )}
           {/* Metrics bar */}
@@ -807,7 +886,7 @@ const XPreview = memo(({ post, account }: { post: ScheduledPost, account?: Socia
   );
 });
 
-const ThreadsPreview = memo(({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => {
+const ThreadsPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, account?: SocialAccountStat, onVideoClick?: (url: string) => void }) => {
   const dateInfo = formatPostDate(post);
   const isPublished = post.status === 'published';
   const m = post.metrics;
@@ -837,7 +916,7 @@ const ThreadsPreview = memo(({ post, account }: { post: ScheduledPost, account?:
       <p className="text-sm px-4 py-3 whitespace-pre-wrap leading-relaxed">{post.content}</p>
       {(post.media_urls?.length ?? 0) > 0 && (
         <div className="bg-zinc-900 overflow-hidden" style={{ contain: 'paint layout' }}>
-          <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-square" />
+          <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-square" onVideoClick={onVideoClick} />
         </div>
       )}
       <div className="flex items-center gap-5 px-4 py-3 text-zinc-400">
@@ -866,7 +945,7 @@ const RefreshCw = ({ className }: { className?: string }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
 );
 
-const LinkedInPreview = memo(({ post, account }: { post: ScheduledPost, account?: SocialAccountStat }) => {
+const LinkedInPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, account?: SocialAccountStat, onVideoClick?: (url: string) => void }) => {
   const dateInfo = formatPostDate(post);
   const isPublished = post.status === 'published';
   const m = post.metrics;
@@ -900,7 +979,7 @@ const LinkedInPreview = memo(({ post, account }: { post: ScheduledPost, account?
       </div>
       {(post.media_urls?.length ?? 0) > 0 && (
         <div className="border-y border-zinc-100" style={{ contain: 'paint layout' }}>
-          <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-[1.91/1]" />
+          <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-[1.91/1]" onVideoClick={onVideoClick} />
         </div>
       )}
       {/* Reactions summary */}

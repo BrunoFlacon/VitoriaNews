@@ -617,7 +617,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         setTimeout(() => handleOAuthEvent(d, event), 0);
       };
 
-      window.addEventListener("message", handleMessage);
+      window.addEventListener("message", handleMessage, { passive: true });
 
       const showToastForPlatform = () => {
         const savedPlatform = localStorage.getItem("oauth_platform");

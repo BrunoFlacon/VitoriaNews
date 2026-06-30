@@ -80,7 +80,7 @@ export function WhatsAppEmbeddedSignup({
       }
     };
 
-    window.addEventListener('message', handleMessage);
+    window.addEventListener('message', handleMessage, { passive: true });
 
     return () => {
       window.removeEventListener('message', handleMessage);
