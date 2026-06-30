@@ -156,7 +156,7 @@ export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate,
             <div className="p-1.5 rounded-lg bg-purple-500/10">
               <UserPlus className="w-4 h-4 text-purple-400" />
             </div>
-            <h3 className="font-bold text-sm text-white">Novos espectadores</h3>
+            <h3 className="font-bold text-sm text-white">Novos Espectadores</h3>
           </div>
           <p className="text-[10px] text-muted-foreground mb-2">Últimos 28 dias</p>
           <div className="flex justify-between items-end border-b border-border/50 pb-2">
@@ -170,7 +170,7 @@ export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate,
             <div className="p-1.5 rounded-lg bg-purple-500/10">
               <Users className="w-4 h-4 text-purple-400" />
             </div>
-            <h3 className="font-bold text-sm text-white">espectadores comuns</h3>
+            <h3 className="font-bold text-sm text-white">Espectadores Recorrentes</h3>
           </div>
           <p className="text-[10px] text-muted-foreground mb-2">Últimos 28 dias</p>
           <div className="flex justify-between items-end border-b border-border/50 pb-2">

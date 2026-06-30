@@ -585,8 +585,8 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       <StatsGrid 
         engagement={data.engagement} 
         overview={{...data.overview, publishRate: Number(data.overview.publishRate || 0)}} 
-        messageStats={data.messageStats} 
-        chartData={data.chartData}
+        messageStats={socialMessageStats} 
+        chartData={analyticsChartData}
         dataSource={data.dataSource}
       />
 
@@ -795,7 +795,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
             filteredTopContent={filteredTopContent}
             topContentFilter={topContentFilter}
             setTopContentFilter={setTopContentFilter}
-            messageStats={data.messageStats}
+            messageStats={socialMessageStats}
             audienceBreakdown={audienceBreakdown}
           />
 
