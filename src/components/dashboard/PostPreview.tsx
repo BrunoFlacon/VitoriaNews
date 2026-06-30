@@ -71,15 +71,25 @@ const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, co
     }
   }, [setPlaying]);
 
+  useEffect(() => {
+    const video = localVideoRef.current;
+    if (!video) return;
+    if (playing) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [playing]);
+
   if (!resolvedUrl) return <div className="w-full h-full bg-zinc-900 animate-pulse" />;
 
   if (controls) {
-    return <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} controls />;
+    return <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} controls muted playsInline />;
   }
 
   return (
     <div className="relative w-full h-full cursor-pointer" onClick={handleClick}>
-      <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} loop playsInline />
+      <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} loop playsInline muted />
       {!playing && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Play className="w-12 h-12 text-white fill-white" /></div>}
     </div>
   );
@@ -129,7 +139,8 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
 
   const renderVideo = (fileUrl: string, idx: number, absolute = false) => {
     const isMulti = media.length > 1;
-    const p = isMulti ? (perVideoPlaying[idx] ?? true) : playing;
+    const isCurrent = idx === currentSlide;
+    const p = isMulti ? isCurrent : playing;
     const setP = isMulti ? (v: boolean) => setPerVideoPlaying(prev => ({ ...prev, [idx]: v })) : setPlaying;
     const ref = isMulti ? (el: HTMLVideoElement | null) => { if (el) perVideoRefs.current.set(idx, el); else perVideoRefs.current.delete(idx); } : videoRef;
     return (

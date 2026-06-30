@@ -59,6 +59,47 @@ const VerifiedBadge = memo(({ className = "w-4 h-4 text-[#1d9bf0]" }: { classNam
   </svg>
 ));
 
+const SlideVideo = memo(({ url, isActive, posterUrl, onClick }: { url: string; isActive: boolean; posterUrl?: string | null; onClick?: () => void }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (isActive) {
+      el.currentTime = 0;
+      el.play().catch(() => {});
+    } else {
+      el.pause();
+    }
+  }, [isActive]);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative w-full h-full cursor-pointer border-0 p-0 bg-transparent block"
+      aria-label="Reproduzir vídeo"
+    >
+      <video
+        ref={videoRef}
+        src={url}
+        className="w-full h-full object-cover"
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        poster={posterUrl || undefined}
+        style={{ background: 'rgba(0,0,0,0.08)' }}
+      />
+      <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
+        <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+          <Play className="w-5 h-5 text-white ml-0.5" />
+        </div>
+      </div>
+    </button>
+  );
+});
+
 /** Carrossel com slide CSS — sem tela preta, sem reflow */
 const SlideCarousel = memo(({
   urls,
@@ -97,28 +138,12 @@ const SlideCarousel = memo(({
               style={{ width: `${100 / count}%` }}
             >
               {isVideoUrl(url) ? (
-                <button
-                  type="button"
+                <SlideVideo
+                  url={url}
+                  isActive={i === idx}
+                  posterUrl={posterUrl}
                   onClick={() => onVideoClick?.(url)}
-                  className="relative w-full h-full cursor-pointer border-0 p-0 bg-transparent block"
-                  aria-label={`Reproduzir vídeo ${i + 1}`}
-                >
-                  <video
-                    src={url}
-                    className="w-full h-full object-cover"
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
-                    poster={posterUrl || undefined}
-                    style={{ background: 'rgba(0,0,0,0.08)' }}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
-                    <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
-                      <Play className="w-5 h-5 text-white ml-0.5" />
-                    </div>
-                  </div>
-                </button>
+                />
               ) : (
                 <SafeImage
                   src={url}
@@ -469,8 +494,20 @@ export const FeedPreview = memo(({ post, isOpen, onClose }: FeedPreviewProps) =>
                     {post.media_urls.length > 1 ? (
                       <SidebarCarousel urls={post.media_urls.filter((u): u is string => !!u)} posterUrl={post.thumbnail_url} />
                     ) : (
-                      <div className="aspect-square rounded-lg overflow-hidden bg-muted border border-border/50">
-                        <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover" />
+                      <div className="aspect-square rounded-lg overflow-hidden bg-muted border border-border/50 relative">
+                        {isVideoUrl(post.media_urls[0]) ? (
+                          <video
+                            src={post.media_urls[0]}
+                            className="w-full h-full object-cover"
+                            muted
+                            loop
+                            playsInline
+                            preload="metadata"
+                            poster={post.thumbnail_url || undefined}
+                          />
+                        ) : (
+                          <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover" />
+                        )}
                       </div>
                     )}
                   </div>
@@ -1047,7 +1084,18 @@ const TelegramPreview = memo(({ post, account }: { post: ScheduledPost, account?
       <div className="mt-12 max-w-[85%] bg-white rounded-xl overflow-hidden shadow-md self-start relative border-l-4 border-[#54a9eb]">
         {post.media_urls?.[0] && (
           <div className="overflow-hidden">
-            <SafeImage src={post.media_urls?.[0] ?? null} className="w-full h-auto object-cover max-h-[300px]" />
+            {isVideoUrl(post.media_urls[0]) ? (
+              <video
+                src={post.media_urls[0]}
+                className="w-full h-auto object-cover max-h-[300px]"
+                muted
+                loop
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <SafeImage src={post.media_urls[0]} className="w-full h-auto object-cover max-h-[300px]" />
+            )}
           </div>
         )}
         <div className="p-3">
@@ -1085,7 +1133,18 @@ const WhatsAppPreview = memo(({ post, account }: { post: ScheduledPost, account?
       <div className="mt-14 max-w-[85%] bg-white rounded-lg p-2 shadow-[0_1px_0.5px_rgba(0,0,0,0.13)] self-start relative after:content-[''] after:absolute after:top-0 after:-left-2 after:w-0 after:h-0 after:border-t-[8px] after:border-t-white after:border-l-[8px] after:border-l-transparent">
         {post.media_urls?.[0] && (
           <div className="rounded-md overflow-hidden mb-2">
-            <SafeImage src={post.media_urls?.[0] ?? null} className="w-full h-auto object-cover max-h-[300px]" />
+            {isVideoUrl(post.media_urls[0]) ? (
+              <video
+                src={post.media_urls[0]}
+                className="w-full h-auto object-cover max-h-[300px]"
+                muted
+                loop
+                playsInline
+                preload="metadata"
+              />
+            ) : (
+              <SafeImage src={post.media_urls[0]} className="w-full h-auto object-cover max-h-[300px]" />
+            )}
           </div>
         )}
         <p className="text-[0.9rem] leading-relaxed whitespace-pre-wrap text-zinc-900 px-1">{post.content}</p>
@@ -1107,12 +1166,24 @@ const TikTokPreview = memo(({ post, account }: { post: ScheduledPost, account?: 
 
   return (
     <div className="flex flex-col bg-black h-full min-h-[500px] relative font-sans overflow-hidden">
-      <div className="absolute inset-0 flex items-center justify-center opacity-30">
+      <div className="absolute inset-0 flex items-center justify-center opacity-40 z-0">
         {post.media_urls?.[0] ? (
-          <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover grayscale blur-sm" loading="eager" alt="bg" />
+          isVideoUrl(post.media_urls[0]) ? (
+            <video
+              src={post.media_urls[0]}
+              className="w-full h-full object-cover grayscale blur-sm"
+              muted
+              loop
+              autoPlay
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            <SafeImage src={post.media_urls[0]} className="w-full h-full object-cover grayscale blur-sm" loading="eager" alt="bg" />
+          )
         ) : <div className="text-white/10 italic">Video Preview</div>}
       </div>
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 flex flex-col justify-end p-4">
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60 flex flex-col justify-end p-4 z-10">
         <div className="flex items-end justify-between">
           <div className="flex-1 text-white pr-12">
             <div className="flex items-center gap-1 mb-2">
@@ -1162,7 +1233,18 @@ const YouTubePreview = memo(({ post, account }: { post: ScheduledPost, account?:
     <div className="flex flex-col bg-white text-zinc-900 border-zinc-200 font-sans">
         <div className="aspect-video bg-zinc-100 overflow-hidden relative">
             {post.media_urls?.[0] ? (
+              isVideoUrl(post.media_urls[0]) ? (
+                <video
+                  src={post.media_urls[0]}
+                  className="w-full h-full object-cover"
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
                 <SafeImage src={post.media_urls?.[0] ?? null} className="w-full h-full object-cover" />
+              )
             ) : (
                 <div className="w-full h-full flex items-center justify-center bg-zinc-900 text-white font-bold">Video Thumbnail</div>
             )}
@@ -1193,7 +1275,18 @@ const PinterestPreview = memo(({ post, account }: { post: ScheduledPost, account
     <div className="flex flex-col bg-white rounded-3xl overflow-hidden shadow-sm border border-zinc-100">
         <div className="relative">
             {post.media_urls?.[0] ? (
+              isVideoUrl(post.media_urls[0]) ? (
+                <video
+                  src={post.media_urls[0]}
+                  className="w-full h-full object-cover"
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
                 <SafeImage src={post.media_urls?.[0] ?? null} className="w-full h-full object-cover" />
+              )
             ) : (
                 <div className="aspect-[2/3] bg-zinc-50 flex items-center justify-center italic text-zinc-300">Pin Image</div>
             )}
@@ -1222,7 +1315,18 @@ const SnapchatPreview = memo(({ post, account }: { post: ScheduledPost, account?
     <div className="flex flex-col bg-[#FFFC00] h-full min-h-[500px] relative font-sans overflow-hidden">
         <div className="absolute inset-0 flex items-center justify-center">
             {post.media_urls?.[0] ? (
+              isVideoUrl(post.media_urls[0]) ? (
+                <video
+                  src={post.media_urls[0]}
+                  className="w-full h-full object-cover"
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
                 <SafeImage src={post.media_urls?.[0] ?? null} className="w-full h-full object-cover" />
+              )
             ) : (
                 <div className="text-black/50 font-bold uppercase tracking-widest text-2xl rotate-45 opacity-10">Snap Preview</div>
             )}
@@ -1268,7 +1372,18 @@ const WebsitePreview = memo(({ post, account }: { post: ScheduledPost, account?:
         </div>
         <div className="p-0 border-b border-zinc-100">
             {post.media_urls?.[0] ? (
+              isVideoUrl(post.media_urls[0]) ? (
+                <video
+                  src={post.media_urls[0]}
+                  className="w-full h-48 object-cover"
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                />
+              ) : (
                 <SafeImage src={post.media_urls?.[0] ?? null} className="w-full h-48 object-cover" />
+              )
             ) : (
                 <div className="w-full h-48 bg-zinc-50 flex items-center justify-center text-zinc-300 italic">Post Image</div>
             )}
