@@ -323,61 +323,62 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
 
   // Build final chart array from pre-computed snapshots for the selected period
   const dashboardChartData = useMemo(() => {
+    // 1. Prioritize local account_metrics snapshots, which contain the real consolidated historical account data.
+    if (accountDailySnapshots && accountDailySnapshots.size > 0) {
+      const cacheKey = `${(accountDailySnapshots?.size ?? 0)}-${analyticsPeriod}`;
+      if (chartCache.current.key === cacheKey) return chartCache.current.data;
+
+      const periodDays = analyticsPeriod === '15d' ? 15 : analyticsPeriod === '30d' ? 30 : analyticsPeriod === '45d' ? 45 : analyticsPeriod === '60d' ? 60 : analyticsPeriod === '90d' ? 90 : 7;
+
+      const dateDeltas = new Map<string, { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number }>();
+      for (const snaps of accountDailySnapshots.values()) {
+        for (let idx = 0; idx < snaps.length; idx++) {
+          const snap = snaps[idx];
+          const prev = idx > 0 ? snaps[idx - 1] : null;
+          let entry = dateDeltas.get(snap.dateKey);
+          if (!entry) {
+            entry = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0 };
+            dateDeltas.set(snap.dateKey, entry);
+          }
+          entry.views += snap.views - (prev?.views || 0);
+          entry.likes += snap.likes - (prev?.likes || 0);
+          entry.comments += snap.comments - (prev?.comments || 0);
+          entry.shares += snap.shares - (prev?.shares || 0);
+          entry.engagement += snap.engagement - (prev?.engagement || 0);
+          entry.reach += snap.reach - (prev?.reach || 0);
+        }
+      }
+
+      const months = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
+      const result: any[] = new Array(periodDays + 1);
+      const now = new Date();
+      let idx = 0;
+      for (let i = periodDays; i >= 0; i--, idx++) {
+        const dt = new Date(now); dt.setDate(dt.getDate() - i);
+        const y = dt.getFullYear();
+        const mo = dt.getMonth();
+        const dd = dt.getDate();
+        const isoKey = `${y}-${mo + 1 < 10 ? '0' + (mo + 1) : mo + 1}-${dd < 10 ? '0' + dd : dd}`;
+        const delta = dateDeltas.get(isoKey);
+        result[idx] = {
+          name: `${dd} de ${months[mo]}`,
+          views: delta?.views ?? 0,
+          engagement: delta?.engagement ?? 0,
+          reach: delta?.reach ?? 0,
+        };
+      }
+      chartCache.current = { key: cacheKey, data: result };
+      return result;
+    }
+
+    // 2. Fallback to API chart data if local account_metrics snapshots are not available
     const rawChartData = analyticsData?.chartData || [];
-    // Only use API chart data if it has at least one point with real (non-zero) values.
-    // This prevents the chart from flashing empty/zeroed data after the Edge Function
-    // resolves and overwrites the good local account_metrics data.
     const apiHasRealData = rawChartData.some(
       (d: any) => (d.views ?? 0) > 0 || (d.engagement ?? 0) > 0 || (d.reach ?? 0) > 0
     );
     if (apiHasRealData) return rawChartData;
 
-    if (!accountDailySnapshots) return [];
-
-    const cacheKey = `${(accountDailySnapshots?.size ?? 0)}-${analyticsPeriod}`;
-    if (chartCache.current.key === cacheKey) return chartCache.current.data;
-
-    const periodDays = analyticsPeriod === '15d' ? 15 : analyticsPeriod === '30d' ? 30 : analyticsPeriod === '45d' ? 45 : analyticsPeriod === '60d' ? 60 : analyticsPeriod === '90d' ? 90 : 7;
-
-    const dateDeltas = new Map<string, { views: number; likes: number; comments: number; shares: number; engagement: number; reach: number }>();
-    for (const snaps of accountDailySnapshots.values()) {
-      for (let idx = 0; idx < snaps.length; idx++) {
-        const snap = snaps[idx];
-        const prev = idx > 0 ? snaps[idx - 1] : null;
-        let entry = dateDeltas.get(snap.dateKey);
-        if (!entry) {
-          entry = { views: 0, likes: 0, comments: 0, shares: 0, engagement: 0, reach: 0 };
-          dateDeltas.set(snap.dateKey, entry);
-        }
-        entry.views += snap.views - (prev?.views || 0);
-        entry.likes += snap.likes - (prev?.likes || 0);
-        entry.comments += snap.comments - (prev?.comments || 0);
-        entry.shares += snap.shares - (prev?.shares || 0);
-        entry.engagement += snap.engagement - (prev?.engagement || 0);
-        entry.reach += snap.reach - (prev?.reach || 0);
-      }
-    }
-
-    const months = ['jan.','fev.','mar.','abr.','mai.','jun.','jul.','ago.','set.','out.','nov.','dez.'];
-    const result: any[] = new Array(periodDays + 1);
-    const now = new Date();
-    let idx = 0;
-    for (let i = periodDays; i >= 0; i--, idx++) {
-      const dt = new Date(now); dt.setDate(dt.getDate() - i);
-      const y = dt.getFullYear();
-      const mo = dt.getMonth();
-      const dd = dt.getDate();
-      const isoKey = `${y}-${mo + 1 < 10 ? '0' + (mo + 1) : mo + 1}-${dd < 10 ? '0' + dd : dd}`;
-      const delta = dateDeltas.get(isoKey);
-      result[idx] = {
-        name: `${dd} de ${months[mo]}`,
-        views: delta?.views ?? 0,
-        engagement: delta?.engagement ?? 0,
-        reach: delta?.reach ?? 0,
-      };
-    }
-    chartCache.current = { key: cacheKey, data: result };
-    return result;
+    return [];
   }, [analyticsData, accountDailySnapshots, analyticsPeriod]);
 
   // Show loading spinner only when we have no data at all (neither from API nor local metrics)
@@ -386,7 +387,6 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard":
-        if (chartLoading) return <DashboardSkeleton />;
         return (
           <div className="min-h-[70vh] w-full contents">
 <ErrorBoundary><DashboardHomeView 
