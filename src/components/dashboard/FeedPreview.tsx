@@ -59,26 +59,44 @@ const VerifiedBadge = memo(({ className = "w-4 h-4 text-[#1d9bf0]" }: { classNam
   </svg>
 ));
 
-const SlideVideo = memo(({ url, isActive, posterUrl, onClick }: { url: string; isActive: boolean; posterUrl?: string | null; onClick?: () => void }) => {
+const SlideVideo = memo(({ url, isActive, posterUrl }: { url: string; isActive: boolean; posterUrl?: string | null }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     if (isActive) {
       el.currentTime = 0;
-      el.play().catch(() => {});
+      el.muted = true;
+      el.play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
     } else {
       el.pause();
+      setIsPlaying(false);
     }
   }, [isActive]);
 
+  const handleTogglePlay = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      el.muted = false;
+      el.play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
+    } else {
+      el.pause();
+      setIsPlaying(false);
+    }
+  }, []);
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative w-full h-full cursor-pointer border-0 p-0 bg-transparent block"
-      aria-label="Reproduzir vídeo"
+    <div
+      onClick={handleTogglePlay}
+      className="relative w-full h-full cursor-pointer block"
     >
       <video
         ref={videoRef}
@@ -91,12 +109,14 @@ const SlideVideo = memo(({ url, isActive, posterUrl, onClick }: { url: string; i
         poster={posterUrl || undefined}
         style={{ background: 'rgba(0,0,0,0.08)' }}
       />
-      <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
-        <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
-          <Play className="w-5 h-5 text-white ml-0.5" />
+      {!isPlaying && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
+          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
+            <Play className="w-5 h-5 text-white ml-0.5" />
+          </div>
         </div>
-      </div>
-    </button>
+      )}
+    </div>
   );
 });
 
@@ -142,7 +162,6 @@ const SlideCarousel = memo(({
                   url={url}
                   isActive={i === idx}
                   posterUrl={posterUrl}
-                  onClick={() => onVideoClick?.(url)}
                 />
               ) : (
                 <SafeImage
