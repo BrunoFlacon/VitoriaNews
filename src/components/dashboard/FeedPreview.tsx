@@ -886,11 +886,11 @@ const FacebookPreview = memo(({ post, account, onVideoClick }: { post: Scheduled
       </div>
       <div className="border-y border-zinc-100" style={{ contain: 'paint layout' }}>
         {hasMedia ? (
-          <SlideCarousel urls={post.media_urls ?? []} aspectClass={isStory ? "aspect-[9/16]" : "aspect-[1.91/1]"}
+          <SlideCarousel urls={post.media_urls ?? []} aspectClass={isStory ? "aspect-[9/16]" : "aspect-[4/3]"}
             dotsClass="absolute bottom-0 left-0 right-0 bg-transparent pb-1" onVideoClick={onVideoClick}
             posterUrl={post.thumbnail_url} />
         ) : (
-          <div className="aspect-[1.91/1] flex items-center justify-center opacity-10">
+          <div className="aspect-[4/3] flex items-center justify-center opacity-10">
             <Facebook className="w-16 h-16" />
           </div>
         )}
@@ -960,7 +960,7 @@ const XPreview = memo(({ post, account, onVideoClick }: { post: ScheduledPost, a
           <p className="text-sm mb-3 whitespace-pre-wrap leading-normal text-zinc-900">{post.content}</p>
           {(post.media_urls?.length ?? 0) > 0 && (
             <div className="rounded-2xl overflow-hidden border border-zinc-200 mb-3" style={{ contain: 'paint layout' }}>
-              <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-video" onVideoClick={onVideoClick} />
+              <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-[4/3]" onVideoClick={onVideoClick} />
             </div>
           )}
           {/* Metrics bar */}
@@ -1085,7 +1085,7 @@ const LinkedInPreview = memo(({ post, account, onVideoClick }: { post: Scheduled
       </div>
       {(post.media_urls?.length ?? 0) > 0 && (
         <div className="border-y border-zinc-100" style={{ contain: 'paint layout' }}>
-          <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-[1.91/1]" onVideoClick={onVideoClick} />
+          <SlideCarousel urls={post.media_urls ?? []} aspectClass="aspect-[4/3]" onVideoClick={onVideoClick} />
         </div>
       )}
       {/* Reactions summary */}
