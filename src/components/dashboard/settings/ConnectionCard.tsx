@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { Users, FileText, Check, Unplug, MessageSquare, AlertTriangle, RefreshCw, Star } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -91,32 +91,7 @@ export const ConnectionCard = ({
         ? `${daysUntilExpiry} dias`
         : null;
 
-  // Build ordered list of candidate image URLs to try
-  const proxyUrl = getProxyUrl(metaAdsProfile?.profile_image_url) || getProxyUrl(displayPhoto) || "";
-  const directUrl = metaAdsProfile?.profile_image_url || displayPhoto || "";
-
-  const [imgSrc, setImgSrc] = useState<string>(proxyUrl || directUrl);
-  const [imgAttempt, setImgAttempt] = useState(0);
-
-  // Reset when displayPhoto or metaAdsProfile changes (e.g. after sync)
-  useEffect(() => {
-    const freshProxy = getProxyUrl(metaAdsProfile?.profile_image_url) || getProxyUrl(displayPhoto) || "";
-    const freshDirect = metaAdsProfile?.profile_image_url || displayPhoto || "";
-    setImgSrc(freshProxy || freshDirect);
-    setImgAttempt(0);
-  }, [displayPhoto, metaAdsProfile?.profile_image_url]);
-
-  const handleImgError = () => {
-    if (imgAttempt === 0 && directUrl && imgSrc !== directUrl) {
-      // Proxy failed → try direct URL
-      setImgSrc(directUrl);
-      setImgAttempt(1);
-    } else {
-      // Both failed → let AvatarFallback (letter) show
-      setImgSrc("");
-      setImgAttempt(2);
-    }
-  };
+  const proxyUrl = getProxyUrl(metaAdsProfile?.profile_image_url) || getProxyUrl(displayPhoto);
 
   return (
     <div className="space-y-4">
@@ -125,14 +100,11 @@ export const ConnectionCard = ({
         <div className="flex items-center gap-6 flex-1 min-w-0">
           <div className="relative">
             <Avatar className="w-16 h-16 rounded-2xl border-[3px] border-[#151726] shadow-xl flex-shrink-0 transition-transform group-hover:scale-105">
-              {imgSrc ? (
-                <AvatarImage
-                  src={imgSrc}
-                  alt={displayName}
-                  className="object-cover"
-                  onError={handleImgError}
-                />
-              ) : null}
+              <AvatarImage
+                src={proxyUrl}
+                alt={displayName}
+                className="object-cover"
+              />
               <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 text-xl font-bold">
                 {displayName.charAt(0).toUpperCase()}
               </AvatarFallback>

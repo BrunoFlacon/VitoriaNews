@@ -9,7 +9,7 @@ const corsHeaders = {
 
 function applyFilters(q: any, userId: string, since: string | null, connectionId?: string | null) {
   q = q.eq('platform', 'whatsapp').eq('user_id', userId);
-  if (since) q = q.gte('sent_at', since);
+  if (since) q = q.or(`sent_at.gte.${since},and(sent_at.is.null,created_at.gte.${since})`);
   if (connectionId) q = q.eq('metadata->>connection_id', connectionId);
   return q;
 }
@@ -39,13 +39,12 @@ serve(async (req) => {
     }
 
     const since = days ? new Date(Date.now() - days * 86400000).toISOString() : null;
-    const tsFilter = since || '1970-01-01';
 
-    // Status + bot_reply GROUP BY
+    // Status + bot_reply
     const { data: statusData, error: err1 } = await applyFilters(
       supabase.from('messages').select('status, metadata->>bot_reply'),
       userId, since, connectionId
-    ).gte('sent_at', tsFilter);
+    );
 
     if (err1) throw err1;
 
@@ -64,7 +63,7 @@ serve(async (req) => {
     const { data: phones, error: err2 } = await applyFilters(
       supabase.from('messages').select('recipient_phone'),
       userId, since, connectionId
-    ).not('recipient_phone', 'is', null).gte('sent_at', tsFilter);
+    ).not('recipient_phone', 'is', null);
 
     if (err2) throw err2;
     const uniquePhones = new Set((phones || []).map(c => c.recipient_phone));
@@ -73,7 +72,7 @@ serve(async (req) => {
     const { data: botPhones, error: err3 } = await applyFilters(
       supabase.from('messages').select('recipient_phone'),
       userId, since, connectionId
-    ).eq('metadata->>bot_reply', 'true').not('recipient_phone', 'is', null).gte('sent_at', tsFilter);
+    ).eq('metadata->>bot_reply', 'true').not('recipient_phone', 'is', null);
 
     if (err3) throw err3;
     const botPhoneSet = new Set((botPhones || []).map(r => r.recipient_phone));
@@ -83,7 +82,7 @@ serve(async (req) => {
     const { count: pendingDelete, error: err4 } = await applyFilters(
       supabase.from('messages').select('*', { count: 'exact', head: true }),
       userId, since, connectionId
-    ).eq('metadata->>is_system_log', 'true').gte('sent_at', tsFilter);
+    ).eq('metadata->>is_system_log', 'true');
 
     if (err4) throw err4;
 
@@ -91,7 +90,7 @@ serve(async (req) => {
     const { data: connData, error: err5 } = await applyFilters(
       supabase.from('messages').select('metadata->>connection_id'),
       userId, since, connectionId
-    ).gte('sent_at', tsFilter);
+    );
 
     if (err5) throw err5;
 
@@ -100,6 +99,14 @@ serve(async (req) => {
       const cid = row.connection_id || 'unknown';
       byConnection[cid] = (byConnection[cid] || 0) + 1;
     }
+
+    // Recent messages for display
+    const { data: recentMessages, error: err6 } = await applyFilters(
+      supabase.from('messages').select('id, content, status, created_at, recipient_phone, metadata'),
+      userId, null, connectionId  // no date filter for recent messages
+    ).order('created_at', { ascending: false }).limit(20);
+
+    if (err6) throw err6;
 
     const total = statusData?.length || 0;
     const responseRate = humanCount > 0 ? Math.round((botCount / (botCount + humanCount)) * 100) : 0;
@@ -117,6 +124,14 @@ serve(async (req) => {
         apagadas: pendingDelete || 0,
       },
       byConnection,
+      recentMessages: (recentMessages || []).map(m => ({
+        id: m.id,
+        content: m.content?.substring(0, 200),
+        status: m.status,
+        created_at: m.created_at,
+        recipient_phone: m.recipient_phone,
+        is_bot: m.metadata?.bot_reply === true || m.metadata?.bot_reply === 'true',
+      })),
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

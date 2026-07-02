@@ -88,6 +88,9 @@ verify_jwt = false
 [functions.cleanup-temp-messages]
 verify_jwt = false
 
+[functions.media-relay]
+verify_jwt = false
+
 [functions.fix-whatsapp-photos]
 verify_jwt = false
 

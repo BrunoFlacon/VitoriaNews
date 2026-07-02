@@ -65,33 +65,42 @@ interface IntegrationCardProps {
 
 const IntegrationCard = memo(({ title, icon: Icon, color, bg, stats, statLabels, formatValue, onConnect, subtitle }: IntegrationCardProps) => {
   const hasPositiveValue = stats && Object.values(stats).some(v => v > 0);
+  
   return (
-    <div className="p-4 rounded-xl bg-card border border-border/50 hover:border-border transition-all">
-      <div className="flex items-center gap-3 mb-4">
-        <div className={`p-2.5 rounded-xl ${bg}`}>
-          <Icon className={`w-5 h-5 ${color}`} />
+    <div className="p-4 rounded-xl bg-[#0a0c16]/30 border border-border/50 hover:border-border/80 transition-all flex flex-col justify-between min-h-[145px] shadow-lg">
+      <div>
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`p-2.5 rounded-xl ${bg}`}>
+            <Icon className={`w-5 h-5 ${color}`} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-white">{title}</p>
+            <p className="text-[10px] text-muted-foreground">{subtitle || (hasPositiveValue ? 'Com dados ativos' : 'Sem tráfego recente')}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-bold">{title}</p>
-          <p className="text-[10px] text-muted-foreground">{subtitle || (hasPositiveValue ? 'Com dados' : 'Configure nas APIs')}</p>
-        </div>
+
+        {stats && hasPositiveValue ? (
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            {Object.entries(statLabels).map(([key, label]) => {
+              const val = stats[key] ?? 0;
+              return (
+                <div key={key} className="bg-muted/10 p-2 rounded-lg">
+                  <p className="text-base font-black text-white">{formatValue ? formatValue(key, val) : val.toLocaleString('pt-BR')}</p>
+                  <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">{label}</p>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="my-2.5 py-2 px-3 rounded-lg bg-yellow-500/5 border border-yellow-500/10 text-center">
+            <p className="text-[10px] text-yellow-300/80 font-medium leading-relaxed">Nenhum dado captado ainda. Aguardando sincronização de campanhas.</p>
+          </div>
+        )}
       </div>
-      {stats && (
-        <div className="grid grid-cols-2 gap-3">
-          {Object.entries(statLabels).map(([key, label]) => {
-            const val = stats[key] ?? 0;
-            return (
-              <div key={key}>
-                <p className="text-lg font-bold text-white">{formatValue ? formatValue(key, val) : val.toLocaleString('pt-BR')}</p>
-                <p className="text-[10px] text-muted-foreground font-medium uppercase">{label}</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <div className="mt-2">
-        <button onClick={onConnect} className="text-[10px] text-muted-foreground hover:text-primary transition-colors underline underline-offset-2">
-          Configurar em APIs Sociais & Dev →
+
+      <div className="mt-3 pt-2 border-t border-border/20">
+        <button onClick={onConnect} className="text-[10px] font-bold text-primary hover:text-primary/80 transition-colors">
+          Configurar Integração →
         </button>
       </div>
     </div>
@@ -355,6 +364,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   const [audienceTypeInfo, setAudienceTypeInfo] = useState<string>('all');
   const [audienceOnlineInfo, setAudienceOnlineInfo] = useState<string>('all');
   const [pieSelectedPlatform, setPieSelectedPlatform] = useState<string | null>(null);
+  const [activeSubTab, setActiveSubTab] = useState<"overview" | "social" | "messaging" | "traffic">("overview");
 
   // Derived data for new analytic components
   const isRealtime = data.dataSource === 'real' || !!fetchedData;
@@ -451,9 +461,9 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
   const handleExportCSV = useCallback(() => {
     const demoData = demographics ? { ageGroups: demographics.ageGroups, gender: demographics.gender, devices: demographics.devices, topCities: demographics.topCities, topCountries: demographics.topCountries } : undefined;
-    exportToXLSX({ ...data, demographics: demoData }, 'analytics');
+    exportToXLSX({ ...data, platform, period, demographics: demoData }, 'analytics');
     toast({ title: "XLSX Exportado", description: "Dados exportados com sucesso." });
-  }, [data, demographics, toast]);
+  }, [data, platform, period, demographics, toast]);
 
   useEffect(() => {
     const handleSearch = (e: any) => setSearchQuery((e.detail?.query || "").toLowerCase());
@@ -502,10 +512,16 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
       if (existing) {
         if (!existing.content && pm.content) existing.content = pm.content;
-        if (!existing.platforms && pm.platforms) existing.platforms = pm.platforms;
-        if (!existing.allPlatforms && pm.allPlatforms) existing.allPlatforms = pm.allPlatforms;
+        if (!existing.platforms && pm.allPlatforms) existing.platforms = pm.allPlatforms;
       } else {
-        merged.push({ ...pm, views: pm.views || 0, engagement: (pm.likes || 0) + (pm.comments || 0) });
+        merged.push({
+          id: pm.id,
+          content: pm.content,
+          platforms: pm.allPlatforms || (pm.platform ? [pm.platform] : []),
+          engagement: pm.engagement || ((pm.likes || 0) + (pm.comments || 0)),
+          views: pm.views || 0,
+          publishedAt: pm.published_at
+        });
       }
     }
 
@@ -577,29 +593,33 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         </div>
       )}
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-mono">
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/25 text-red-400 text-sm font-mono">
           Erro ao buscar analytics: {error}
         </div>
       )}
 
-      <StatsGrid 
-        engagement={data.engagement} 
-        overview={{...data.overview, publishRate: Number(data.overview.publishRate || 0)}} 
-        messageStats={socialMessageStats} 
-        chartData={analyticsChartData}
-        dataSource={data.dataSource}
-      />
-
-      <AudienceMetricsPanel
-        totalSocialFollowers={totalSocialFollowers}
-        totalMessagingMembers={totalMessagingMembers}
-        totalPosts={totalPosts}
-        connectedPlatforms={connectedPlatforms}
-        postStatusCounts={postStatusCounts}
-        messageSuccessRate={socialMessageStats?.successRate ?? 0}
-        messageTotalSent={socialMessageStats?.totalSent ?? 0}
-        messageTotalFailed={socialMessageStats?.totalFailed ?? 0}
-      />
+      {/* Tabs Navigation Bar */}
+      <div className="flex border-b border-border/40 gap-6 overflow-x-auto no-scrollbar scroll-smooth">
+        {[
+          { id: "overview", label: "Visão Geral" },
+          { id: "social", label: "Redes Sociais" },
+          { id: "messaging", label: "Mensageria" },
+          { id: "traffic", label: "Tráfego & Ads" }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSubTab(tab.id as any)}
+            className={cn(
+              "pb-3 text-sm font-bold transition-all relative border-b-2 whitespace-nowrap",
+              activeSubTab === tab.id 
+                ? "text-primary border-primary font-black scale-105" 
+                : "text-muted-foreground border-transparent hover:text-foreground hover:scale-102"
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
       {platform !== 'all' && activeView === 'analytics' && (
         <motion.div
@@ -635,178 +655,220 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         <PlatformDetailTab initialPlatform={platform !== 'all' ? platform : undefined} dateRange={dateRange?.start && dateRange?.end ? { start: dateRange.start.toISOString(), end: dateRange.end.toISOString() } : null} />
       ) : (
         <div ref={reportRef} className="space-y-8 animate-in fade-in duration-500 p-0.5 md:p-1 overflow-x-hidden" style={{ contain: 'layout style' }}>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-w-0">
-            <div className="lg:col-span-2 min-w-0">
-              <EngagementChart chartData={analyticsChartData} totalFollowers={totalSocialFollowers + totalMessagingMembers} />
-            </div>
-            <PlatformDistribution 
-              platformBreakdown={platformBreakdown || {}} 
-              COLORS={COLORS}
-              onPieSelect={setPieSelectedPlatform}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="font-bold text-sm uppercase text-muted-foreground px-1">Integrações Avançadas</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <IntegrationCard
-                title="Meta Ads"
-                icon={Activity}
-                color="text-blue-400"
-                bg="bg-blue-500/10"
-                stats={data.adsStats ? { impressions: data.adsStats.impressions, clicks: data.adsStats.clicks, spend: data.adsStats.spend } : undefined}
-                statLabels={{ impressions: 'Impressões', clicks: 'Cliques', spend: 'Gasto' }}
-                formatValue={(k, v) => k === 'spend' ? `R$ ${v.toLocaleString('pt-BR')}` : v.toLocaleString('pt-BR')}
-                onConnect={() => onNavigate?.('settings', 'api')}
-                subtitle={data.adsStats && !(data.adsStats.impressions > 0 || data.adsStats.clicks > 0 || data.adsStats.spend > 0) ? 'Conectado, sem dados' : undefined}
+          
+          {/* TAB 1: VISÃO GERAL */}
+          {activeSubTab === "overview" && (
+            <div className="space-y-8">
+              <StatsGrid 
+                engagement={data.engagement} 
+                overview={{...data.overview, publishRate: Number(data.overview.publishRate || 0)}} 
+                messageStats={socialMessageStats} 
+                chartData={analyticsChartData}
+                dataSource={data.dataSource}
               />
-              <IntegrationCard
-                title="YouTube Analytics"
-                icon={Eye}
-                color="text-red-400"
-                bg="bg-red-500/10"
-                stats={data.youtubeStats ? { views: data.youtubeStats.views, likes: data.youtubeStats.likes, comments: data.youtubeStats.comments } : undefined}
-                statLabels={{ views: 'Visualizações', likes: 'Curtidas', comments: 'Comentários' }}
-                onConnect={() => onNavigate?.('settings', 'api')}
-                subtitle={data.youtubeStats && !(data.youtubeStats.views > 0 || data.youtubeStats.likes > 0 || data.youtubeStats.comments > 0) ? 'Conectado, sem dados' : undefined}
-              />
-              <IntegrationCard
-                title="Google Analytics 4"
-                icon={Globe}
-                color="text-indigo-400"
-                bg="bg-indigo-500/10"
-                stats={data.gaStats ? { views: data.gaStats.views } : undefined}
-                statLabels={{ views: 'Page Views' }}
-                onConnect={() => onNavigate?.('settings', 'api')}
-                subtitle={data.gaStats && !(data.gaStats.views > 0) ? 'Conectado, sem dados' : undefined}
-              />
-              <IntegrationCard
-                title="Google Search Console"
-                icon={Search}
-                color="text-green-400"
-                bg="bg-green-500/10"
-                stats={data.searchConsoleStats ? { clicks: data.searchConsoleStats.clicks, impressions: data.searchConsoleStats.impressions, ctr: data.searchConsoleStats.ctr ? parseFloat(data.searchConsoleStats.ctr) : 0 } : undefined}
-                statLabels={{ clicks: 'Cliques', impressions: 'Impressões', ctr: 'CTR' }}
-                formatValue={(k, v) => k === 'ctr' ? `${v.toFixed(2)}%` : v.toLocaleString('pt-BR')}
-                onConnect={() => onNavigate?.('settings', 'api')}
-                subtitle={data.searchConsoleStats && !(data.searchConsoleStats.clicks > 0 || data.searchConsoleStats.impressions > 0) ? 'Conectado, sem dados' : undefined}
-              />
-              <IntegrationCard
-                title="Google Ads"
-                icon={DollarSign}
-                color="text-yellow-400"
-                bg="bg-yellow-500/10"
-                stats={data.googleAdsStats ? { impressions: data.googleAdsStats.impressions, clicks: data.googleAdsStats.clicks, cost: data.googleAdsStats.cost, conversions: data.googleAdsStats.conversions } : undefined}
-                statLabels={{ impressions: 'Impressões', clicks: 'Cliques', cost: 'Gasto (USD)', conversions: 'Conv.' }}
-                formatValue={(k, v) => k === 'cost' ? `$${v.toFixed(2)}` : v.toLocaleString('pt-BR')}
-                onConnect={() => onNavigate?.('settings', 'api')}
-                subtitle={data.googleAdsStats && !(data.googleAdsStats.impressions > 0 || data.googleAdsStats.clicks > 0 || data.googleAdsStats.cost > 0) ? 'Conectado, sem dados' : undefined}
-              />
-            </div>
-          </div>
-
-          <AudienceTracking 
-            audienceBreakdown={audienceBreakdown}
-            lastUpdated={lastUpdated ? new Date(lastUpdated).toISOString() : undefined}
-            globalPeakHour={globalPeakHour}
-            audienceNetworkInfo={audienceNetworkInfo} setAudienceNetworkInfo={setAudienceNetworkInfo}
-            audienceTypeInfo={audienceTypeInfo} setAudienceTypeInfo={setAudienceTypeInfo}
-            audienceOnlineInfo={audienceOnlineInfo} setAudienceOnlineInfo={setAudienceOnlineInfo}
-            searchQuery={searchQuery}
-            onNavigate={onNavigate}
-          />
-
-          <AudienceDemographics demographics={demographics} />
-
-          <div className="space-y-2">
-            <h3 className="font-bold text-sm uppercase text-muted-foreground px-1">Meta Insights</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <FormatReachChart data={formatReachData} />
-              <ViralPotentialChart data={viralPotentialData} />
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RetentionFunnelChart data={retentionFunnelData} />
-              <Card className="p-4 md:p-6 shadow-xl border-border bg-card hover:shadow-2xl transition-shadow">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-1.5 rounded-lg bg-primary/10">
-                    <DollarSign className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-white">Meta Ads</h3>
-                    <p className="text-[10px] text-muted-foreground">{hasAdsData ? 'Gastos com anúncios' : 'Configure nas APIs Meta para ver dados'}</p>
-                  </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-w-0">
+                <div className="lg:col-span-2 min-w-0">
+                  <EngagementChart chartData={analyticsChartData} totalFollowers={totalSocialFollowers + totalMessagingMembers} />
                 </div>
-                {hasAdsData ? (
-                  <>
-                    <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl p-6 text-center">
-                      <p className="text-blue-100 font-semibold text-xs uppercase tracking-wider mb-1">Total Gasto</p>
-                      <h2 className="text-3xl font-bold text-white">R$ {data.adsStats!.spend.toFixed(2)}</h2>
+                <PlatformDistribution 
+                  platformBreakdown={platformBreakdown || {}} 
+                  COLORS={COLORS}
+                  onPieSelect={setPieSelectedPlatform}
+                />
+              </div>
+
+              <AudienceDemographics demographics={demographics} />
+
+              <FollowersGrowth 
+                groupedFollowers={groupedFollowers}
+                selectedProfileId={selectedProfileId}
+                setSelectedProfileId={setSelectedProfileId}
+                platformActiveProfile={platformActiveProfile}
+                setPlatformActiveProfile={setPlatformActiveProfile}
+                onNavigate={onNavigate}
+              />
+
+              <AnalyticsDetailedReports 
+                bestTimes={data.bestTimes}
+                bestTimesFilter={bestTimesFilter}
+                setBestTimesFilter={setBestTimesFilter}
+                filteredTopContent={filteredTopContent}
+                topContentFilter={topContentFilter}
+                setTopContentFilter={setTopContentFilter}
+                messageStats={socialMessageStats}
+                audienceBreakdown={audienceBreakdown}
+              />
+            </div>
+          )}
+
+          {/* TAB 2: REDES SOCIAIS */}
+          {activeSubTab === "social" && (
+            <div className="space-y-8">
+              <div className="space-y-2">
+                <h3 className="font-bold text-sm uppercase text-muted-foreground px-1">Meta Insights</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FormatReachChart data={formatReachData} />
+                  <ViralPotentialChart data={viralPotentialData} />
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <RetentionFunnelChart data={retentionFunnelData} />
+                  {(platform === 'all' || platform === 'facebook') && retention.length > 0 && (
+                    <Card className="p-4 md:p-6 shadow-xl border-border bg-card hover:shadow-2xl transition-shadow">
+                      <h3 className="font-bold text-sm mb-4 uppercase text-muted-foreground flex items-center gap-2">
+                        <Eye className="w-4 h-4 text-blue-500" />
+                        Retenção de Vídeo (Facebook)
+                      </h3>
+                      <VideoRetentionChart data={retention} totalViews={data.engagement.views} />
+                    </Card>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="font-bold text-sm uppercase text-muted-foreground px-1">YouTube Insights</h3>
+                <YouTubeSummaryCards data={ytSummaryData} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <YouTubePerformanceChart data={ytPerformanceData} />
+                  <YouTubeEngagementChart data={ytEngagementData} />
+                </div>
+                <YouTubeAudienceCharts ageData={ytAgeData} trafficData={ytTrafficData} />
+                <YouTubeShortsInsights funnelData={ytShortsFunnel} spectators={ytShortsSpectators} />
+              </div>
+
+              <FormatRecommendations data={formatRecs} />
+            </div>
+          )}
+
+          {/* TAB 3: MENSAGERIA */}
+          {activeSubTab === "messaging" && (
+            <div className="space-y-8">
+              <AudienceMetricsPanel
+                totalSocialFollowers={totalSocialFollowers}
+                totalMessagingMembers={totalMessagingMembers}
+                totalPosts={totalPosts}
+                connectedPlatforms={connectedPlatforms}
+                postStatusCounts={postStatusCounts}
+                messageSuccessRate={socialMessageStats?.successRate ?? 0}
+                messageTotalSent={socialMessageStats?.totalSent ?? 0}
+                messageTotalFailed={socialMessageStats?.totalFailed ?? 0}
+              />
+
+              <AudienceTracking 
+                audienceBreakdown={audienceBreakdown}
+                lastUpdated={lastUpdated ? new Date(lastUpdated).toISOString() : undefined}
+                globalPeakHour={globalPeakHour}
+                audienceNetworkInfo={audienceNetworkInfo} setAudienceNetworkInfo={setAudienceNetworkInfo}
+                audienceTypeInfo={audienceTypeInfo} setAudienceTypeInfo={setAudienceTypeInfo}
+                audienceOnlineInfo={audienceOnlineInfo} setAudienceOnlineInfo={setAudienceOnlineInfo}
+                searchQuery={searchQuery}
+                onNavigate={onNavigate}
+              />
+            </div>
+          )}
+
+          {/* TAB 4: TRÁFEGO & ADS */}
+          {activeSubTab === "traffic" && (
+            <div className="space-y-8">
+              <div className="space-y-2">
+                <h3 className="font-bold text-sm uppercase text-muted-foreground px-1">Integrações de Tráfego</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <IntegrationCard
+                    title="Meta Ads"
+                    icon={Activity}
+                    color="text-blue-400"
+                    bg="bg-blue-500/10"
+                    stats={data.adsStats ? { impressions: data.adsStats.impressions, clicks: data.adsStats.clicks, spend: data.adsStats.spend } : undefined}
+                    statLabels={{ impressions: 'Impressões', clicks: 'Cliques', spend: 'Gasto' }}
+                    formatValue={(k, v) => k === 'spend' ? `R$ ${v.toLocaleString('pt-BR')}` : v.toLocaleString('pt-BR')}
+                    onConnect={() => onNavigate?.('settings', 'api')}
+                    subtitle={data.adsStats && !(data.adsStats.impressions > 0 || data.adsStats.clicks > 0 || data.adsStats.spend > 0) ? 'Conectado, sem dados' : undefined}
+                  />
+                  <IntegrationCard
+                    title="YouTube Analytics"
+                    icon={Eye}
+                    color="text-red-400"
+                    bg="bg-red-500/10"
+                    stats={data.youtubeStats ? { views: data.youtubeStats.views, likes: data.youtubeStats.likes, comments: data.youtubeStats.comments } : undefined}
+                    statLabels={{ views: 'Visualizações', likes: 'Curtidas', comments: 'Comentários' }}
+                    onConnect={() => onNavigate?.('settings', 'api')}
+                    subtitle={data.youtubeStats && !(data.youtubeStats.views > 0 || data.youtubeStats.likes > 0 || data.youtubeStats.comments > 0) ? 'Conectado, sem dados' : undefined}
+                  />
+                  <IntegrationCard
+                    title="Google Analytics 4"
+                    icon={Globe}
+                    color="text-indigo-400"
+                    bg="bg-indigo-500/10"
+                    stats={data.gaStats ? { views: data.gaStats.views } : undefined}
+                    statLabels={{ views: 'Page Views' }}
+                    onConnect={() => onNavigate?.('settings', 'api')}
+                    subtitle={data.gaStats && !(data.gaStats.views > 0) ? 'Conectado, sem dados' : undefined}
+                  />
+                  <IntegrationCard
+                    title="Google Search Console"
+                    icon={Search}
+                    color="text-green-400"
+                    bg="bg-green-500/10"
+                    stats={data.searchConsoleStats ? { clicks: data.searchConsoleStats.clicks, impressions: data.searchConsoleStats.impressions, ctr: data.searchConsoleStats.ctr ? parseFloat(data.searchConsoleStats.ctr) : 0 } : undefined}
+                    statLabels={{ clicks: 'Cliques', impressions: 'Impressões', ctr: 'CTR' }}
+                    formatValue={(k, v) => k === 'ctr' ? `${v.toFixed(2)}%` : v.toLocaleString('pt-BR')}
+                    onConnect={() => onNavigate?.('settings', 'api')}
+                    subtitle={data.searchConsoleStats && !(data.searchConsoleStats.clicks > 0 || data.searchConsoleStats.impressions > 0) ? 'Conectado, sem dados' : undefined}
+                  />
+                  <IntegrationCard
+                    title="Google Ads"
+                    icon={DollarSign}
+                    color="text-yellow-400"
+                    bg="bg-yellow-500/10"
+                    stats={data.googleAdsStats ? { impressions: data.googleAdsStats.impressions, clicks: data.googleAdsStats.clicks, cost: data.googleAdsStats.cost, conversions: data.googleAdsStats.conversions } : undefined}
+                    statLabels={{ impressions: 'Impressões', clicks: 'Cliques', cost: 'Gasto (USD)', conversions: 'Conv.' }}
+                    formatValue={(k, v) => k === 'cost' ? `$${v.toFixed(2)}` : v.toLocaleString('pt-BR')}
+                    onConnect={() => onNavigate?.('settings', 'api')}
+                    subtitle={data.googleAdsStats && !(data.googleAdsStats.impressions > 0 || data.googleAdsStats.clicks > 0 || data.googleAdsStats.cost > 0) ? 'Conectado, sem dados' : undefined}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="p-4 md:p-6 shadow-xl border-border bg-card hover:shadow-2xl transition-shadow">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-1.5 rounded-lg bg-primary/10">
+                      <DollarSign className="w-4 h-4 text-primary" />
                     </div>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      <div className="text-center">
-                        <p className="text-lg font-bold">{data.adsStats!.impressions.toLocaleString('pt-BR')}</p>
-                        <p className="text-[10px] text-muted-foreground">Impressões</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-lg font-bold">{data.adsStats!.clicks.toLocaleString('pt-BR')}</p>
-                        <p className="text-[10px] text-muted-foreground">Cliques</p>
-                      </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-white">Detalhamento Financeiro Meta Ads</h3>
+                      <p className="text-[10px] text-muted-foreground">{hasAdsData ? 'Gastos com anúncios' : 'Aguardando configuração de API'}</p>
                     </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-10 text-center opacity-50">
-                    <DollarSign className="w-10 h-10 text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">Conecte o Meta Ads para acompanhar gastos</p>
-                    <button onClick={() => onNavigate?.('settings', 'api')} className="mt-2 text-xs text-primary hover:underline underline-offset-2">
-                      Configurar em APIs Sociais & Dev →
-                    </button>
                   </div>
-                )}
-              </Card>
+                  {hasAdsData ? (
+                    <>
+                      <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-xl p-6 text-center">
+                        <p className="text-blue-100 font-semibold text-xs uppercase tracking-wider mb-1">Total Gasto</p>
+                        <h2 className="text-3xl font-bold text-white">R$ {data.adsStats!.spend.toFixed(2)}</h2>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 mt-4">
+                        <div className="text-center bg-muted/5 p-3 rounded-xl border border-border/20">
+                          <p className="text-lg font-bold text-white">{data.adsStats!.impressions.toLocaleString('pt-BR')}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Impressões</p>
+                        </div>
+                        <div className="text-center bg-muted/5 p-3 rounded-xl border border-border/20">
+                          <p className="text-lg font-bold text-white">{data.adsStats!.clicks.toLocaleString('pt-BR')}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Cliques</p>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-center opacity-70 bg-yellow-500/[0.02] border border-yellow-500/10 rounded-xl">
+                      <DollarSign className="w-10 h-10 text-yellow-500/50 mb-2 animate-pulse" />
+                      <p className="text-sm text-muted-foreground max-w-xs">Nenhum dado financeiro coletado do Meta Ads ainda.</p>
+                      <button onClick={() => onNavigate?.('settings', 'api')} className="mt-3 text-xs text-primary font-bold hover:underline underline-offset-2">
+                        Configurar em APIs Sociais & Dev →
+                      </button>
+                    </div>
+                  )}
+                </Card>
+              </div>
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <h3 className="font-bold text-sm uppercase text-muted-foreground px-1">YouTube Insights</h3>
-            <YouTubeSummaryCards data={ytSummaryData} />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <YouTubePerformanceChart data={ytPerformanceData} />
-              <YouTubeEngagementChart data={ytEngagementData} />
-            </div>
-            <YouTubeAudienceCharts ageData={ytAgeData} trafficData={ytTrafficData} />
-            <YouTubeShortsInsights funnelData={ytShortsFunnel} spectators={ytShortsSpectators} />
-          </div>
-
-          <FormatRecommendations data={formatRecs} />
-
-          <FollowersGrowth 
-            groupedFollowers={groupedFollowers}
-            selectedProfileId={selectedProfileId}
-            setSelectedProfileId={setSelectedProfileId}
-            platformActiveProfile={platformActiveProfile}
-            setPlatformActiveProfile={setPlatformActiveProfile}
-            onNavigate={onNavigate}
-          />
-
-          <AnalyticsDetailedReports 
-            bestTimes={data.bestTimes}
-            bestTimesFilter={bestTimesFilter}
-            setBestTimesFilter={setBestTimesFilter}
-            filteredTopContent={filteredTopContent}
-            topContentFilter={topContentFilter}
-            setTopContentFilter={setTopContentFilter}
-            messageStats={socialMessageStats}
-            audienceBreakdown={audienceBreakdown}
-          />
-
-          {(platform === 'all' || platform === 'facebook') && retention.length > 0 && (
-            <Card className="p-4 md:p-6 shadow-xl border-border bg-card hover:shadow-2xl transition-shadow">
-              <h3 className="font-bold text-sm mb-4 uppercase text-muted-foreground flex items-center gap-2">
-                <Eye className="w-4 h-4 text-blue-500" />
-                Retenção de Vídeo (Facebook)
-              </h3>
-              <VideoRetentionChart data={retention} totalViews={data.engagement.views} />
-            </Card>
           )}
         </div>
       )}

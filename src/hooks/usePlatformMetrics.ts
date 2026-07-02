@@ -20,6 +20,7 @@ export interface PostMetric {
   content: string;
   platform: string;
   allPlatforms: string[];
+  platforms?: string[];
   media_type: string | null;
   likes: number;
   comments: number;

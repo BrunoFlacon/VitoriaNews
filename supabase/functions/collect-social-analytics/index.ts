@@ -131,6 +131,7 @@ async function processPlatform(conn: any, supabase: any) {
         let fallbackPhoneId: string | null = null;
         let wabaToken = conn.access_token; // fallback to conn token (may be stale Page Token)
 
+        let apiCredData: any = null;
         // First check api_credentials for stored WABA info and fresh access token
         try {
           const { data: apiCred } = await supabase
@@ -139,6 +140,7 @@ async function processPlatform(conn: any, supabase: any) {
             .eq("user_id", conn.user_id)
             .eq("platform", "whatsapp")
             .maybeSingle();
+          apiCredData = apiCred;
           if (apiCred?.credentials) {
             if (apiCred.credentials.waba_id) {
               console.log(`[WA-SYNC] ${conn.page_name}: found waba_id=${apiCred.credentials.waba_id} in api_credentials`);
@@ -216,7 +218,7 @@ async function processPlatform(conn: any, supabase: any) {
             .eq("id", conn.id);
           conn.phone_number_id = phoneId;
           conn.page_name = bizName;
-        } else if (fallbackPhoneId && (!conn.waba_id || conn.waba_id === (apiCred?.credentials?.waba_id || ''))) {
+        } else if (fallbackPhoneId && (!conn.waba_id || conn.waba_id === (apiCredData?.credentials?.waba_id || ''))) {
           // Only use fallback phone ID if this connection belongs to the main credentials account
           const isMainAccount = (conn.page_name || '').toLowerCase().trim().includes('banca') || 
                                 (conn.page_name || '').toLowerCase().trim().includes('paloma');
@@ -807,6 +809,35 @@ async function processPlatform(conn: any, supabase: any) {
         unique_contacts_count: metrics.unique_contacts_count || 0,
         collected_at: new Date().toISOString()
       });
+
+      // For WhatsApp, also populate messaging_channels
+      if (conn.platform === 'whatsapp' && conn.phone_number_id) {
+        const phoneId = conn.phone_number_id;
+        const finalPic = metrics.profile_picture || conn.profile_image_url || "";
+        const { data: existingChannel } = await supabase
+          .from("messaging_channels")
+          .select("id")
+          .eq("user_id", conn.user_id)
+          .eq("platform", "whatsapp")
+          .eq("channel_id", phoneId)
+          .maybeSingle();
+        const channelPayload = {
+          user_id: conn.user_id,
+          platform: "whatsapp",
+          channel_id: phoneId,
+          channel_name: conn.page_name || "WhatsApp",
+          profile_picture: finalPic,
+          members_count: finalFollowers,
+          online_count: 0,
+          updated_at: new Date().toISOString(),
+        };
+        if (existingChannel) {
+          await supabase.from("messaging_channels").update(channelPayload).eq("id", existingChannel.id);
+        } else {
+          await supabase.from("messaging_channels").insert(channelPayload);
+        }
+        console.log(`[WA-CHANNEL] ${conn.page_name}: messaging_channel upserted for phone ${phoneId}`);
+      }
 
       if (recentPostsMetrics.length > 0) {
         for (const postMetric of recentPostsMetrics) {

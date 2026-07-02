@@ -2843,6 +2843,7 @@ export type Database = {
           completed_at: string | null
           content: string | null
           created_at: string
+          duration: number | null
           id: string
           likes: number | null
           media_url: string | null
@@ -2862,6 +2863,7 @@ export type Database = {
           completed_at?: string | null
           content?: string | null
           created_at?: string
+          duration?: number | null
           id?: string
           likes?: number | null
           media_url?: string | null
@@ -2881,6 +2883,7 @@ export type Database = {
           completed_at?: string | null
           content?: string | null
           created_at?: string
+          duration?: number | null
           id?: string
           likes?: number | null
           media_url?: string | null

@@ -13,6 +13,19 @@ import {
   Edit
 } from "lucide-react";
 import { cn, normalizePlatform } from "@/lib/utils";
+
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.ogv']);
+function isVideoUrl(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const path = new URL(url).pathname;
+    const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
+    return VIDEO_EXTENSIONS.has(ext);
+  } catch {
+    return url.match(/\.(mp4|webm|mov|avi|mkv|m4v|3gp|ogv)(\?|$)/i) !== null;
+  }
+}
+
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
@@ -168,6 +181,41 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                       </div>
                     )}
                   </div>
+
+                  {/* Thumbnail / Micro-Prévia (Fase 3) */}
+                  {post.media_urls && post.media_urls.length > 0 && (
+                    <div className="relative w-12 h-12 rounded-lg bg-zinc-950 border border-border/40 overflow-hidden shrink-0">
+                      {isVideoUrl(post.media_urls[0]) ? (
+                        <div className="w-full h-full relative">
+                          <video
+                            src={post.media_urls[0]}
+                            className="w-full h-full object-cover"
+                            preload="none"
+                            muted
+                          />
+                          <div className="absolute inset-0 bg-black/10 flex items-center justify-center">
+                            <span className="text-[10px] text-white">▶</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={post.media_urls[0]}
+                          alt=""
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                      
+                      {/* Format/Aspect Ratio Badge */}
+                      <div className="absolute bottom-0.5 right-0.5 bg-black/80 px-1 py-0.2 rounded text-[7px] font-bold text-white leading-none scale-90 origin-bottom-right">
+                        {isVideoUrl(post.media_urls[0]) ? (
+                          post.platforms.some(p => p.includes('tiktok') || p.includes('instagram')) ? '9:16' : '16:9'
+                        ) : (
+                          post.media_urls.length > 1 ? `x${post.media_urls.length}` : '1:1'
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <p className="text-sm font-medium line-clamp-2 mb-1.5 md:mb-2">{post.content || "Sem conteúdo"}</p>

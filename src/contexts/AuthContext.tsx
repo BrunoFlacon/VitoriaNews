@@ -61,7 +61,39 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const CACHE_KEY = 'auth_cached_profile';
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function loadCachedProfile(): Profile | null {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL_MS) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return data as Profile;
+  } catch {
+    sessionStorage.removeItem(CACHE_KEY);
+    return null;
+  }
+}
+
+function saveCachedProfile(profile: Profile): void {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data: profile, ts: Date.now() }));
+  } catch { /* quota exceeded */ }
+}
+
+function clearCachedProfile(): void {
+  try { sessionStorage.removeItem(CACHE_KEY); } catch {}
+}
+
 export const AuthProvider = ({ children }: AuthProviderProps) => {
+  // Restore optimistic profile cache from sessionStorage (instant load)
+  const cachedProfile = loadCachedProfile();
+
   // Check if there's a cached Supabase session in localStorage
   // This avoids showing the loading screen on return visits
   const hasCachedSession = Object.keys(localStorage).some(
@@ -69,8 +101,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   );
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isLoading, setIsLoading] = useState(!hasCachedSession ? true : false);
+  const [profile, setProfile] = useState<Profile | null>(cachedProfile);
+  const [isLoading, setIsLoading] = useState(!hasCachedSession && !cachedProfile ? true : false);
   const [isOnline, setIsOnline] = useState(true);
   const [onlineUsersMap, setOnlineUsersMap] = useState<Record<string, any>>({});
   const presenceChannelRef = React.useRef<any>(null);
@@ -83,7 +115,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       .maybeSingle();
     
     if (!error && data) {
-      setProfile(data as unknown as Profile);
+      const p = data as unknown as Profile;
+      setProfile(p);
+      saveCachedProfile(p);
       supabase
         .from('profiles')
         .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })
@@ -99,6 +133,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           clearSupabaseSession();
           setProfile(null);
           setIsLoading(false);
+          clearCachedProfile();
           return;
         }
 
@@ -259,6 +294,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUser(null);
     setSession(null);
     setProfile(null);
+    clearCachedProfile();
   };
 
   const updateProfile = async (updates: Partial<Profile>): Promise<boolean> => {

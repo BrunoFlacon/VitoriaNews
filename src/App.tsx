@@ -8,18 +8,18 @@ import { SystemProvider } from "@/contexts/SystemContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { TrackingProvider } from "./components/analytics/TrackingProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
 import OAuthCallback from "./pages/OAuthCallback";
 import { ThemeEngine } from "./components/ThemeEngine";
+import PortalLanding from "./pages/PortalLanding";
 const BrunoProfile = lazy(() => import("./pages/BrunoProfile"));
 const TermsPage = lazy(() => import("./pages/TermsPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const ManualPage = lazy(() => import("./pages/ManualPage"));
-const PortalLanding = lazy(() => import("./pages/PortalLanding"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const News = lazy(() => import("./pages/News"));
 const ArticlePage = lazy(() => import("./pages/ArticlePage"));
@@ -60,13 +60,20 @@ const LoadingFallback = () => (
   </div>
 );
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   const { user, isLoading } = useAuth();
   
   // Check localStorage cache to prevent flash of loading screen on return visits
   const hasCachedSession = Object.keys(localStorage).some(
     k => k.includes('auth-token') || k.includes('supabase.auth.token')
   );
+
+  // Preload Dashboard chunk during auth check to reduce LCP
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import("./pages/Dashboard").catch(() => {});
+    }
+  }, []);
 
   if (isLoading && !hasCachedSession) {
     return <LoadingFallback />;
@@ -108,7 +115,7 @@ const App = () => (
                     <Route path="/system-history" element={<ProtectedRoute><SystemEvolutionPage /></ProtectedRoute>} />
                     <Route path="/radar2" element={<ProtectedRoute><Radar2 /></ProtectedRoute>} />
                     <Route path="/radarnews" element={<ProtectedRoute><RadarNews /></ProtectedRoute>} />
-                    <Route path="*" element={<Navigate to="/profile/bruno-flacon" replace />} />
+                    <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
               </BrowserRouter>

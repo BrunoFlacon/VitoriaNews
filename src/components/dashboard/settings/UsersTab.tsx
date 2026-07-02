@@ -184,15 +184,10 @@ export const UsersTab = () => {
   const handleResetPassword = async (email: string) => {
     if (!email) return;
     try {
-      const res = await fetch(`https://ghtkdkauseesambzqfrd.supabase.co/auth/v1/recover`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-        },
-        body: JSON.stringify({ email }),
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/dashboard`,
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (error) throw error;
       toast({ title: "Link enviado", description: `Verifique ${email}` });
     } catch {
       toast({

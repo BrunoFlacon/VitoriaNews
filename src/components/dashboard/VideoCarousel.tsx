@@ -36,7 +36,7 @@ export function VideoCarousel() {
 
       const { data } = await supabase
         .from('stories_lives')
-        .select('id, title, media_url, thumbnail_url, platform, viewers, duration, created_at')
+        .select('id, title, media_url, thumbnail_url, platform, viewers, duration, metadata, created_at')
         .eq('user_id', user.user.id)
         .in('type', ['video', 'story'])
         .eq('status', 'published')
@@ -45,16 +45,19 @@ export function VideoCarousel() {
 
       if (!mounted) return;
       if (data) {
-        setVideos(data.map(v => ({
-          id: v.id,
-          title: v.title || 'Vídeo',
-          media_url: v.media_url || '',
-          thumbnail_url: v.thumbnail_url,
-          duration: v.duration,
-          views: v.viewers,
-          platform: v.platform,
-          created_at: v.created_at,
-        })));
+        setVideos((data as any[]).map(v => {
+          const meta = v.metadata && typeof v.metadata === 'object' ? (v.metadata as any) : {};
+          return {
+            id: v.id,
+            title: v.title || 'Vídeo',
+            media_url: v.media_url || '',
+            thumbnail_url: v.thumbnail_url,
+            duration: typeof v.duration === 'number' ? v.duration : (typeof meta.duration === 'number' ? meta.duration : null),
+            views: v.viewers,
+            platform: v.platform,
+            created_at: v.created_at,
+          };
+        }));
       }
       setLoading(false);
     }

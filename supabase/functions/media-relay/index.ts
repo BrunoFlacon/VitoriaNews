@@ -152,7 +152,9 @@ serve(async (req: Request) => {
     // Referer específico por plataforma para burlar bloqueios de hotlinking
     if (targetUrlObj.hostname.includes("twimg.com") || targetUrlObj.hostname.includes("twitter.com")) {
       fetchHeaders["Referer"] = "https://twitter.com/";
-    } else if (targetUrlObj.hostname.includes("fbcdn.net") || targetUrlObj.hostname.includes("instagram.com") || targetUrlObj.hostname.includes("cdninstagram.com")) {
+    } else if (targetUrlObj.hostname.includes("fbcdn.net")) {
+      fetchHeaders["Referer"] = "https://www.facebook.com/";
+    } else if (targetUrlObj.hostname.includes("instagram.com") || targetUrlObj.hostname.includes("cdninstagram.com")) {
       fetchHeaders["Referer"] = "https://www.instagram.com/";
     } else if (targetUrlObj.hostname.includes("whatsapp.net")) {
       fetchHeaders["Referer"] = "https://web.whatsapp.com/";
@@ -272,25 +274,23 @@ serve(async (req: Request) => {
                 .maybeSingle();
               token = credsData?.credentials?.access_token;
             }
-            if (token) {
-              console.log(`[PROXY] Querying Meta API for Phone Number ID ${conn.platform_user_id}...`);
-              const metaResp = await fetchWithTimeout(`https://graph.facebook.com/v21.0/${conn.platform_user_id}/whatsapp_business_profile?fields=profile_picture_url`, {
-                headers: { "Authorization": `Bearer ${token}` }
-              }, 2500);
-              if (metaResp.ok) {
-                const metaData = await metaResp.json();
-                const freshUrl = metaData.data?.profile_picture_url || metaData.profile_picture_url;
-                if (freshUrl) {
-                  console.log(`[PROXY] Recovered WhatsApp URL: ${freshUrl}`);
-                  response = await fetchWithTimeout(freshUrl, { method: "GET", headers: fetchHeaders }, 3000);
-                  if (response.ok) {
-                    await cacheImageToStorage(adminClient, "whatsapp", conn.platform_user_id, freshUrl, fetchHeaders);
+              if (token) {
+                // Try /picture endpoint (works for any Page ID)
+                const picResp = await fetchWithTimeout(`https://graph.facebook.com/v21.0/${conn.platform_user_id}/picture?type=large&redirect=false`, {
+                  headers: { "Authorization": `Bearer ${token}` }
+                }, 2500);
+                if (picResp.ok) {
+                  const picData = await picResp.json();
+                  const freshUrl = picData.data?.url;
+                  if (freshUrl) {
+                    console.log(`[PROXY] Recovered WhatsApp URL via /picture: ${freshUrl}`);
+                    response = await fetchWithTimeout(freshUrl, { method: "GET", headers: fetchHeaders }, 3000);
+                    if (response.ok) await cacheImageToStorage(adminClient, "whatsapp", conn.platform_user_id, freshUrl, fetchHeaders);
                   }
+                } else {
+                  console.warn(`[PROXY] /picture endpoint returned ${picResp.status}: ${await picResp.text()}`);
                 }
-              } else {
-                console.warn(`[PROXY] Meta API returned ${metaResp.status}: ${await metaResp.text()}`);
               }
-            }
           }
         }
       } catch (e) {
@@ -401,19 +401,53 @@ serve(async (req: Request) => {
       }
     }
 
-    // 6. TikTok Expiry Recovery
+    // 6. fbcdn.net Expiry Recovery (Facebook & WhatsApp CDN)
+    if (!response.ok && targetUrlObj.hostname.includes("fbcdn.net")) {
+      console.log(`[PROXY] fbcdn.net image expired (status ${response.status}). Attempting recovery...`);
+      try {
+        const pathPart = targetUrl.split('/').slice(3).join('/').split('?')[0];
+        if (!pathPart) throw new Error("No path to match");
+        if (supabaseUrl && supabaseKey) {
+          const adminClient = createClient(supabaseUrl, supabaseKey);
+          const { data: conns } = await adminClient
+            .from("social_connections")
+            .select("user_id, platform, platform_user_id")
+            .or(`profile_image_url.ilike.%${pathPart}%,profile_picture.ilike.%${pathPart}%`)
+            .limit(5);
+          const conn = conns?.find(c => c.platform_user_id) || conns?.[0];
+          if (conn && conn.platform_user_id) {
+            let token = conn.access_token;
+            if (!token) {
+              const { data: credsData } = await adminClient
+                .from("api_credentials")
+                .select("credentials")
+                .eq("user_id", conn.user_id)
+                .eq("platform", conn.platform)
+                .maybeSingle();
+              token = credsData?.credentials?.access_token;
+            }
+            let freshUrl: string | null = null;
+            if (token) {
+              const pr = await fetchWithTimeout(
+                `https://graph.facebook.com/v21.0/${conn.platform_user_id}/picture?type=large&redirect=false`,
+                { headers: { "Authorization": `Bearer ${token}` } }, 2500);
+              if (pr.ok) { const d = await pr.json(); freshUrl = d.data?.url; }
+            }
+            if (freshUrl) {
+              console.log(`[PROXY] Recovered ${conn.platform} URL: ${freshUrl}`);
+              response = await fetchWithTimeout(freshUrl, { method: "GET", headers: fetchHeaders }, 3000);
+              if (response.ok) await cacheImageToStorage(adminClient, conn.platform, conn.platform_user_id, freshUrl, fetchHeaders);
+            }
+          }
+        }
+      } catch (e: any) { console.error(`[PROXY] fbcdn.net recovery failed:`, e.message); }
+    }
 
     if (!response.ok) {
       console.error(`[PROXY] Failed to fetch after all recovery attempts. Status: ${response.status} URL: ${finalTargetUrl}`);
-      // Return a minimal SVG placeholder instead of 404 to avoid breaking image components
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect fill="#e2e8f0" width="64" height="64" rx="32"/><text x="32" y="38" text-anchor="middle" fill="#94a3b8" font-size="20" font-family="Arial">?</text></svg>`;
-      return new Response(svg, {
-        status: 200,
-        headers: {
-          ...corsHeaders(req),
-          "Content-Type": "image/svg+xml",
-          "Cache-Control": "public, max-age=300"
-        }
+      return new Response(JSON.stringify({ error: "Image fetch failed" }), {
+        status: 502,
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
@@ -430,6 +464,42 @@ serve(async (req: Request) => {
     responseHeaders.set("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
 
     const body = await response.arrayBuffer();
+
+    // Cache to storage for future requests
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const pathPart = targetUrl.split('/').slice(3).join('/').split('?')[0];
+        if (pathPart) {
+          const ac = createClient(supabaseUrl, supabaseKey);
+          const { data: conns } = await ac
+            .from("social_connections")
+            .select("platform, platform_user_id")
+            .or(`profile_image_url.ilike.%${pathPart}%,profile_picture.ilike.%${pathPart}%`)
+            .limit(3);
+          const conn = conns?.[0];
+          if (conn?.platform_user_id) {
+            const { data: existing } = await ac.from("social_connections")
+              .select("profile_image_url")
+              .eq("platform", conn.platform)
+              .eq("platform_user_id", conn.platform_user_id)
+              .maybeSingle();
+            if (!existing?.profile_image_url?.includes('supabase.co/storage')) {
+              const ext = (contentType || "image/jpeg").split("/")[1] || "jpg";
+              const filePath = `profiles/${conn.platform}/${conn.platform_user_id}.${ext}`;
+              const { error: uploadErr } = await ac.storage.from('media').upload(filePath, body, { contentType: contentType || "image/jpeg", upsert: true });
+              if (!uploadErr) {
+                const { data: urlData } = ac.storage.from('media').getPublicUrl(filePath);
+                await ac.from("social_connections")
+                  .update({ profile_image_url: urlData.publicUrl, profile_picture: urlData.publicUrl })
+                  .eq("platform", conn.platform)
+                  .eq("platform_user_id", conn.platform_user_id);
+                console.log(`[PROXY] Cached to storage: ${urlData.publicUrl}`);
+              }
+            }
+          }
+        }
+      } catch (e: any) { console.warn(`[PROXY] Cache-to-storage skipped:`, e.message); }
+    }
 
     return new Response(body, {
       status: 200,

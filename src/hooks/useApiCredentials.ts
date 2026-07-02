@@ -367,7 +367,7 @@ export function useApiCredentials() {
     return Object.values(creds).some(v => {
       if (v === null || v === undefined) return false;
       if (typeof v === 'string') return v.trim() !== "";
-      if (Array.isArray(v)) return v.length > 0;
+      if (Array.isArray(v as any)) return (v as any).length > 0;
       return !!v;
     });
   };

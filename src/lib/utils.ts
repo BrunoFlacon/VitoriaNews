@@ -77,24 +77,40 @@ export function getWhatsAppMediaUrl(mediaId: string, userId: string): string | n
 
 export function getProxyUrl(url: string | null | undefined): string {
   if (!url) return "";
+
+  // URLs já proxied ou do nosso storage não precisam de proxy
+  if (url.includes('media-relay?url=') || url.includes('proxy-media?url=')) return url;
+  if (url.includes('supabase.co/storage/')) return url;
+
+  const problematicDomains = [
+    "fbcdn.net", 
+    "fbsbx.com", 
+    "googleusercontent.com",
+    "ggpht.com",
+    "graph.facebook.com",
+    "graph.threads.net",
+    "cdninstagram.com",
+    "instagram.fbcdn.net",
+    "api.telegram.org",
+    "twimg.com",
+    "twitter.com",
+    "whatsapp.net",
+    "linkedin.com/media",
+    "tiktok.com",
+    "tiktokv.com",
+    "tiktokcdn.com",
+    "tiktokcdn-us.com",
+    "threads.net"
+  ];
   
-  // If it's already a Supabase function proxy, don't double proxy
-  if (url.includes('/functions/v1/proxy-media?url=')) return url;
+  const shouldProxy = problematicDomains.some(domain => url.includes(domain));
   
-  // WhatsAapp, Telegram, Instagram CDNs block direct hotlinking — proxy via Supabase
-  if (
-    url.includes('pps.whatsapp.net') ||
-    url.includes('scontent.whatsapp.net') ||
-    url.includes('mmg.whatsapp.net') ||
-    url.includes('api.telegram.org') ||
-    url.includes('t.me') ||
-    url.includes('ui-avatars.com') ||
-    url.includes('platform-lookaside.fbsbx.com') ||
-    url.includes('cdninstagram.com')
-  ) {
-    const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "ghtkdkauseesambzqfrd";
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${projectId}.supabase.co`;
-    return `${supabaseUrl}/functions/v1/proxy-media?url=${encodeURIComponent(url)}`;
+  if (shouldProxy) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+    if (!supabaseUrl) return url;
+    const anonParam = supabaseKey ? `&apikey=${supabaseKey}` : '';
+    return `${supabaseUrl}/functions/v1/media-relay?url=${encodeURIComponent(url)}${anonParam}`;
   }
   
   return url;

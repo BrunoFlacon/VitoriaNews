@@ -10,23 +10,29 @@ export const MatrixBackground: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let width = (canvas.width = document.documentElement.clientWidth);
-    let height = (canvas.height = document.documentElement.clientHeight);
-
     const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$+-*/=%"\'#&_(),.;:?!\\|{}<>[]^~';
     const fontSize = 14;
-    const columns = Math.ceil(width / fontSize);
+    let width = 0;
+    let height = 0;
+    let columns = 0;
+    let drops: number[] = [];
 
-    const drops: number[] = new Array(columns).fill(0).map(() => Math.random() * -height);
+    const initCanvas = () => {
+      width = canvas.width = document.documentElement.clientWidth;
+      height = canvas.height = document.documentElement.clientHeight;
+      columns = Math.ceil(width / fontSize);
+      drops = new Array(columns).fill(0).map(() => Math.random() * -height);
+    };
+
+    initCanvas();
 
     let animationFrameId: number;
 
     const draw = () => {
-      // Fundo semi-transparente para criar o efeito de rastro
       ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
       ctx.fillRect(0, 0, width, height);
 
-      ctx.fillStyle = '#0F0'; // Verde Matrix clássico
+      ctx.fillStyle = '#0F0';
       ctx.font = `${fontSize}px monospace`;
 
       for (let i = 0; i < drops.length; i++) {
@@ -45,8 +51,9 @@ export const MatrixBackground: React.FC = () => {
     draw();
 
     const handleResize = () => {
-      width = canvas.width = document.documentElement.clientWidth;
-      height = canvas.height = document.documentElement.clientHeight;
+      requestAnimationFrame(() => {
+        initCanvas();
+      });
     };
 
     window.addEventListener('resize', handleResize);

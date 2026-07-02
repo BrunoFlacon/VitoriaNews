@@ -21,6 +21,8 @@ const AvatarImage = React.forwardRef<
 >(({ className, src, ...props }, ref) => {
   const proxySrc = React.useMemo(() => getProxyUrl(src), [src]);
 
+  if (!proxySrc) return null;
+
   return (
     <AvatarPrimitive.Image ref={ref} src={proxySrc} className={cn("aspect-square h-full w-full object-cover", className)} {...props} />
   );

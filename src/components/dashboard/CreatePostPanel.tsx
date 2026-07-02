@@ -2082,3 +2082,5 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     </motion.div>
   );
 };
+
+export default CreatePostPanel;

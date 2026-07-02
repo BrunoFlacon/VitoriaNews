@@ -397,6 +397,8 @@ export const PostsFeedView = memo(({ onEditPost }: PostsFeedViewProps) => {
           post={previewPost} 
           isOpen={!!previewPost} 
           onClose={() => setPreviewPost(null)} 
+          onEdit={onEditPost}
+          onDelete={deletePost}
         />
       )}
     </div>

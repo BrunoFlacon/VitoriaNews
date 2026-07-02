@@ -62,7 +62,7 @@ export const ProfileTab = memo(({
     const src = profileData.avatar_url;
     if (!src) return "";
     
-    const currentProjectId = import.meta.env.VITE_SUPABASE_PROJECT_ID || "ghtkdkauseesambzqfrd";
+    const currentProjectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
     
     if (src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:')) {
        if (src.startsWith('http') && src.includes('.supabase.co/storage/v1/object/public/media/') && !src.includes(`${currentProjectId}.supabase.co`)) {

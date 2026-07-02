@@ -121,7 +121,7 @@ export function useAIContent() {
     try {
       const { data, error } = await supabase.functions.invoke('generate-post-content', {
         body: {
-          topic: options.topic,
+          topic: options.topic || options.inputText,
           platforms: options.platforms || [],
           tone: options.tone || "profissional",
           language: options.language || "pt-BR",

@@ -71,7 +71,7 @@ serve(async (req: Request) => {
       fetchHeaders["Referer"] = "https://web.whatsapp.com/";
     } else if (targetHostname.includes("twimg.com") || targetHostname.includes("twitter.com")) {
       fetchHeaders["Referer"] = "https://twitter.com/";
-    } else if (targetHostname.includes("fbcdn.net") || targetHostname.includes("instagram.com")) {
+    } else if (targetHostname.includes("facebook.com") || targetHostname.includes("fbcdn.net") || targetHostname.includes("instagram.com")) {
       fetchHeaders["Referer"] = "https://www.facebook.com/";
     } else if (targetHostname.includes("tiktok.com")) {
       fetchHeaders["Referer"] = "https://www.tiktok.com/";

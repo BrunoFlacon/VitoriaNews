@@ -58,7 +58,7 @@ export interface CreatePostInput {
   published_at?: string;
 }
 
-export function useScheduledPosts() {
+export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
   const { addNotification } = useNotifications();
@@ -200,7 +200,7 @@ export function useScheduledPosts() {
   const { data: posts = [], isLoading: loading, refetch } = useQuery({
     queryKey,
     queryFn: fetchPosts,
-    enabled: !!user,
+    enabled: !!user && enabled,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });

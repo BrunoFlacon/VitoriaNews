@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/components/ui/use-toast';
-import { SubscriberCapture } from '@/components/portal/SubscriberCapture';
 import './PortalLanding.css';
+
+const SubscriberCapture = React.lazy(() => import('@/components/portal/SubscriberCapture'));
 
 export default function PortalLanding() {
   const { toast } = useToast();
@@ -212,13 +213,15 @@ export default function PortalLanding() {
 
             <div className="vip-price">Apenas R$ 22,00 / mês</div>
             
-            <SubscriberCapture 
-              planType="paid" 
-              showTrigger={true} 
-              triggerLabel="Assine Já!" 
-              triggerClassName="btn-vip" 
-              showFloating={false}
-            />
+            <Suspense fallback={<div className="btn-vip" style={{ opacity: 0.5 }}>Carregando...</div>}>
+              <SubscriberCapture 
+                planType="paid" 
+                showTrigger={true} 
+                triggerLabel="Assine Já!" 
+                triggerClassName="btn-vip" 
+                showFloating={false}
+              />
+            </Suspense>
           </div>
 
         </div>
