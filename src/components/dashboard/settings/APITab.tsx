@@ -126,6 +126,7 @@ export const APITab = memo(({
   }, [credentials, saveCredentials]);
 
   return (
+    <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
       {/* Hidden username field for browser accessibility / password manager compliance */}
       <input type="text" name="username" value={user?.email || ""} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
               {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
@@ -433,6 +434,17 @@ export const APITab = memo(({
                                                           refreshStats();
                                                           return;
                                                         }
+
+                                                        const invokeOptions = {
+                                                          body: { userId: session.user.id },
+                                                          headers: { Authorization: `Bearer ${session.access_token}` }
+                                                        };
+
+                                                        if (svc.syncFn === 'radar-api' && svc.action) {
+                                                          invokeOptions.body.path = svc.action;
+                                                        }
+
+                                                        const syncResult = await supabase.functions.invoke(svc.syncFn, invokeOptions);
 
                                                         if (syncResult?.data?.error) {
                                                           throw new Error(syncResult.data.error);
