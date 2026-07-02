@@ -243,6 +243,7 @@ export const CarrosselView = () => {
   const [scheduleDate, setScheduleDate] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragRef = useRef<{ active: boolean; startX: number; startY: number; origX: number; origY: number }>({ active: false, startX: 0, startY: 0, origX: 0, origY: 0 });
+  const dragRAFRef = useRef<number | null>(null);
 
   const fetchCarousels = async () => {
     if (!user) return;
@@ -346,18 +347,29 @@ export const CarrosselView = () => {
 
   const onDragMove = (e: React.MouseEvent) => {
     if (!dragRef.current.active) return;
-    const slide = slides[currentSlideIdx];
-    if (!slide) return;
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-    setSlideTransforms(prev => ({
-      ...prev,
-      [slide.id]: { ...getTransform(slide.id), x: dragRef.current.origX + dx, y: dragRef.current.origY + dy }
-    }));
+    e.preventDefault();
+    if (dragRAFRef.current) return;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    dragRAFRef.current = requestAnimationFrame(() => {
+      dragRAFRef.current = null;
+      const slide = slides[currentSlideIdx];
+      if (!slide) return;
+      const dx = clientX - dragRef.current.startX;
+      const dy = clientY - dragRef.current.startY;
+      setSlideTransforms(prev => ({
+        ...prev,
+        [slide.id]: { ...getTransform(slide.id), x: dragRef.current.origX + dx, y: dragRef.current.origY + dy }
+      }));
+    });
   };
 
   const onDragEnd = () => {
     dragRef.current.active = false;
+    if (dragRAFRef.current) {
+      cancelAnimationFrame(dragRAFRef.current);
+      dragRAFRef.current = null;
+    }
   };
 
   const resetEditor = () => {

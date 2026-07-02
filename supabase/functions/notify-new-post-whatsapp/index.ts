@@ -152,7 +152,7 @@ serve(async (req: Request) => {
 
       try {
         const msgResp = await fetchWithTimeout(
-          `https://graph.facebook.com/v22.0/${phoneNumberId}/messages`,
+          `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
           {
             method: "POST",
             headers: {

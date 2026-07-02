@@ -194,7 +194,6 @@ const GatewaySection = () => {
           readOnly 
           className="sr-only" 
           tabIndex={-1} 
-          aria-hidden="true" 
         />
         <div className="relative">
           <Input

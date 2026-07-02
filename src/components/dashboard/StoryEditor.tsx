@@ -1239,6 +1239,7 @@ const SelectionWrapper = ({ children, onTransform, transform, onRemove, fullSize
   const [isPinching, setIsPinching] = useState(false);
   const pinchStartDist = useRef<number>(0);
   const pinchStartScale = useRef<number>(1);
+  const pinchRAFRef = useRef<number | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
@@ -1254,18 +1255,27 @@ const SelectionWrapper = ({ children, onTransform, transform, onRemove, fullSize
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (isPinching && e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      const delta = dist / pinchStartDist.current;
-      const newScale = Math.max(0.2, Math.min(5, pinchStartScale.current * delta));
-      onTransform({ scale: newScale });
+      if (pinchRAFRef.current) return;
+      const t0x = e.touches[0].clientX;
+      const t0y = e.touches[0].clientY;
+      const t1x = e.touches[1].clientX;
+      const t1y = e.touches[1].clientY;
+      pinchRAFRef.current = requestAnimationFrame(() => {
+        pinchRAFRef.current = null;
+        const dist = Math.hypot(t1x - t0x, t1y - t0y);
+        const delta = dist / pinchStartDist.current;
+        const newScale = Math.max(0.2, Math.min(5, pinchStartScale.current * delta));
+        onTransform({ scale: newScale });
+      });
     }
   };
 
   const handleTouchEnd = () => {
     setIsPinching(false);
+    if (pinchRAFRef.current) {
+      cancelAnimationFrame(pinchRAFRef.current);
+      pinchRAFRef.current = null;
+    }
   };
   
   return (
@@ -1305,12 +1315,19 @@ const SelectionWrapper = ({ children, onTransform, transform, onRemove, fullSize
               e.stopPropagation();
               const startX = e.clientX;
               const startScale = transform.scale;
+              let resizeRAF: number | null = null;
               const handleDrag = (moveEvent: PointerEvent) => {
-                const deltaX = moveEvent.clientX - startX;
-                const newScale = Math.max(0.2, startScale + deltaX / 200);
-                onTransform({ scale: newScale });
+                if (resizeRAF) return;
+                const moveX = moveEvent.clientX;
+                resizeRAF = requestAnimationFrame(() => {
+                  resizeRAF = null;
+                  const deltaX = moveX - startX;
+                  const newScale = Math.max(0.2, startScale + deltaX / 200);
+                  onTransform({ scale: newScale });
+                });
               };
               const handleUp = () => {
+                if (resizeRAF) cancelAnimationFrame(resizeRAF);
                 window.removeEventListener("pointermove", handleDrag);
                 window.removeEventListener("pointerup", handleUp);
               };
@@ -1327,23 +1344,29 @@ const SelectionWrapper = ({ children, onTransform, transform, onRemove, fullSize
             onPointerDown={(e) => {
               e.stopPropagation();
               const target = containerRef.current;
-              requestAnimationFrame(() => {
-                const rect = target?.getBoundingClientRect();
-                if (!rect) return;
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                
-                const handleRotate = (moveEvent: PointerEvent) => {
-                  const angle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) * (180 / Math.PI);
+              const rect = target?.getBoundingClientRect();
+              if (!rect) return;
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              let rotateRAF: number | null = null;
+              
+              const handleRotate = (moveEvent: PointerEvent) => {
+                if (rotateRAF) return;
+                const my = moveEvent.clientY;
+                const mx = moveEvent.clientX;
+                rotateRAF = requestAnimationFrame(() => {
+                  rotateRAF = null;
+                  const angle = Math.atan2(my - centerY, mx - centerX) * (180 / Math.PI);
                   onTransform({ rotation: angle + 90 });
-                };
-                const handleUp = () => {
-                  window.removeEventListener("pointermove", handleRotate);
-                  window.removeEventListener("pointerup", handleUp);
-                };
-                window.addEventListener("pointermove", handleRotate);
-                window.addEventListener("pointerup", handleUp);
-              });
+                });
+              };
+              const handleUp = () => {
+                if (rotateRAF) cancelAnimationFrame(rotateRAF);
+                window.removeEventListener("pointermove", handleRotate);
+                window.removeEventListener("pointerup", handleUp);
+              };
+              window.addEventListener("pointermove", handleRotate);
+              window.addEventListener("pointerup", handleUp);
             }}
           >
             <RotateCw className="w-4 h-4 text-primary" />

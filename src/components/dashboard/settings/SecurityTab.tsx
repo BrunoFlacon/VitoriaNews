@@ -49,7 +49,7 @@ export const SecurityTab = memo(({ profile, profileData, setProfileData }: Secur
             </div>
           </div>
           <div className="space-y-4 pl-14">
-            <input type="text" name="username" value={profileData.email || ""} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
+            <input type="text" name="username" value={profileData.email || ""} readOnly autoComplete="username" className="sr-only" tabIndex={-1} />
             <div className="space-y-1.5">
               <Input id="security-current-password" name="current_password" type="password" placeholder="Senha atual" autoComplete="current-password" className="bg-background max-w-md" />
             </div>

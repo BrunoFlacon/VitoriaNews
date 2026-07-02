@@ -73,6 +73,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
 
     const handleGearClick = (e: React.MouseEvent) => {
       e.stopPropagation();
+      setGearOpen((v) => !v);
       requestAnimationFrame(() => {
         if (gearBtnRef.current) {
           const rect = gearBtnRef.current.getBoundingClientRect();
@@ -82,7 +83,6 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
           });
         }
       });
-      setGearOpen((v) => !v);
     };
 
     const handleSelectAccount = (e: React.MouseEvent, account: SocialAccount) => {
