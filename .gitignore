@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+
 node_modules
 dist
 dist-ssr
@@ -78,3 +79,9 @@ supabase/functions/**/tests/
 # Supabase CLI temp files (leak project ref and pooler URL)
 supabase/.temp/
 
+# Backup/temp directories (should not be committed)
+_system_backup_*/
+_temp_root_files/
+_restore_backup/
+_conflict_backup/
+backup_migrations/

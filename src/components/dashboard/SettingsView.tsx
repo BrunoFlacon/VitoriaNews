@@ -372,7 +372,13 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           syncTasks.push(invokeFn('collect-youtube-analytics').catch(e => console.warn('[YT]', e.message)));
           syncTasks.push(invokeFn('collect-google-analytics').catch(e => console.warn('[GA]', e.message)));
           syncTasks.push(invokeFn('collect-search-console-data').catch(e => console.warn('[SC]', e.message)));
-          syncTasks.push(invokeFn('sync-google-contacts').catch(e => console.warn('[Contacts]', e.message)));
+          
+          // Only sync Google Contacts if there's a Google OAuth connection or People API key
+          const hasGoogleOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
+          const hasPeopleApiKey = !!credentials['google_cloud']?.people_api_key;
+          if (hasGoogleOAuth || hasPeopleApiKey) {
+            syncTasks.push(invokeFn('sync-google-contacts').catch(e => console.warn('[Contacts]', e.message)));
+          }
         }
         
         await Promise.all(syncTasks);

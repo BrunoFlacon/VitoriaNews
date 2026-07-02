@@ -127,6 +127,8 @@ export const APITab = memo(({
 
   return (
     <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
+      {/* Hidden username field for browser accessibility / password manager compliance */}
+      <input type="text" name="username" value={user?.email || ""} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
               {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
                 const platformStats = socialStats.find(s => s.platform === config.id);
                 // isVerified = true if any Telegram entry has followers > 0 OR there's any bot entry saved
@@ -381,7 +383,30 @@ export const APITab = memo(({
                                           <div className="flex items-center gap-1">
                                             {/* Sync button (only when active) */}
                                             {isActive && svc.syncFn && (
-                                              <Button
+                                              // Check if People API sync should be allowed (needs Google OAuth or People API key)
+                                              (() => {
+                                                if (svc.syncFn === 'sync-google-contacts') {
+                                                  const hasGoogleOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
+                                                  const hasPeopleApiKey = !!credentials['google_cloud']?.people_api_key;
+                                                  if (!hasGoogleOAuth && !hasPeopleApiKey) {
+                                                    return (
+                                                      <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-7 px-2 text-[9px] font-black uppercase tracking-wider rounded-lg text-muted-foreground hover:text-muted-foreground/50 hover:bg-muted-foreground/10 transition-all cursor-not-allowed"
+                                                        disabled
+                                                        title="Conecte sua Conta Google/YouTube ou adicione People API Key"
+                                                      >
+                                                        <RefreshCw className="w-3 h-3 mr-1" />
+                                                        Sincronizar
+                                                      </Button>
+                                                    );
+                                                  }
+                                                }
+                                                return null;
+                                              })()
+                                              ||
                                                 type="button"
                                                 variant="ghost"
                                                 size="sm"
