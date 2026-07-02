@@ -435,7 +435,7 @@ export const APITab = memo(({
                                                           return;
                                                         }
 
-                                                        const invokeOptions = {
+                                                        const invokeOptions: any = {
                                                           body: { userId: session.user.id },
                                                           headers: { Authorization: `Bearer ${session.access_token}` }
                                                         };

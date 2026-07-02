@@ -3,7 +3,8 @@ import {
   X, Instagram, Facebook, Twitter, Linkedin, MessageCircle, Play,
   Heart, MessageSquare, Share2, Bookmark, Send, MoreHorizontal,
   ChevronLeft, ChevronRight, CheckCircle2, Clock, Calendar,
-  BarChart3, DollarSign, TrendingUp, Tv, Coins, Music
+  BarChart3, DollarSign, TrendingUp, Tv, Coins, Music,
+  Trash2, Eye, Globe, Zap, Image, AlertTriangle, Smile, PenLine
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms, SocialPlatformId } from "@/components/icons/platform-metadata";
@@ -283,26 +284,7 @@ const SlideCarousel = memo(({
           </button>
         )}
       </div>
-      {/* Dots */}
-      {count > 1 && (
-        <div className={cn('flex justify-center gap-1 py-1.5', dotsClass)}>
-          {validUrls.slice(0, 8).map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => setIdx(i)}
-              aria-label={`Ir para imagem ${i + 1}`}
-              className={cn(
-                'rounded-full transition-all',
-                i === idx
-                  ? 'w-3 h-1.5 bg-blue-500'
-                  : 'w-1.5 h-1.5 bg-white/60 hover:bg-white/90'
-              )}
-            />
-          ))}
-          {count > 8 && <span className="text-[9px] text-white/70 self-center">+{count - 8}</span>}
-        </div>
-      )}
+
     </div>
   );
 });
@@ -933,7 +915,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                 <div className="grid grid-cols-2 gap-2">
                   {/* Visibilidade Select */}
                   <div className="flex items-center gap-1.5 bg-[#3a3b3c] hover:bg-zinc-700 transition-colors px-2.5 py-1.5 rounded-lg text-zinc-200 text-[11px] font-bold cursor-pointer relative">
-                    <span>🌐</span>
+                    <Globe className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                     <select
                       value={visibility}
                       onChange={(e) => {
@@ -950,7 +932,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
 
                   {/* Status Select */}
                   <div className="flex items-center gap-1.5 bg-[#1877f2]/15 border border-[#1877f2]/30 text-[#1877f2] px-2.5 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider cursor-pointer relative">
-                    <span>⚡</span>
+                    <Zap className="w-3.5 h-3.5 text-[#1877f2] fill-[#1877f2]/20 shrink-0" />
                     <select
                       value={status}
                       onChange={(e) => {
@@ -988,14 +970,16 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                     onClick={handleEditPost}
                     className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#3a3b3c] text-white hover:bg-zinc-700 rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors"
                   >
-                    📝 Editar Publicação
+                    <PenLine className="w-3.5 h-3.5 mr-1" />
+                    Editar Publicação
                   </button>
                   <button
                     type="button"
                     onClick={handleEditCover}
                     className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#1877F2] text-white hover:bg-[#166fe5] rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors"
                   >
-                    🖼️ Alterar Capa
+                    <Image className="w-3.5 h-3.5 mr-1" />
+                    Alterar Capa
                   </button>
                 </div>
               </div>
@@ -1088,30 +1072,34 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                         <button
                           type="button"
                           onClick={() => handleCommentLike(c.id)}
-                          className={cn("hover:underline bg-transparent border-0 cursor-pointer p-0 font-bold transition-colors", c.liked ? "text-[#fe2c55]" : "text-zinc-400")}
+                          className={cn("hover:underline bg-transparent border-0 cursor-pointer p-0 font-bold transition-colors flex items-center gap-1", c.liked ? "text-[#fe2c55]" : "text-zinc-400")}
                         >
-                          {c.liked ? "❤️ Curtido" : "🤍 Curtir"}
+                          <Heart className={cn("w-3 h-3", c.liked && "fill-current")} />
+                          <span>{c.liked ? "Curtido" : "Curtir"}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => toast({ title: "Responder Comentário", description: `Respondendo para @${c.author}...` })}
-                          className="hover:underline bg-transparent border-0 cursor-pointer p-0 text-zinc-400 font-bold"
+                          className="hover:underline bg-transparent border-0 cursor-pointer p-0 text-zinc-400 font-bold flex items-center gap-1"
                         >
-                          💬 Responder
+                          <MessageSquare className="w-3 h-3" />
+                          <span>Responder</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleCommentHide(c.id)}
-                          className="hover:underline bg-[#3a3b3c]/20 hover:bg-[#3a3b3c]/40 px-1.5 py-0.5 rounded border-0 cursor-pointer text-zinc-350 font-bold"
+                          className="hover:underline bg-[#3a3b3c]/20 hover:bg-[#3a3b3c]/40 px-1.5 py-0.5 rounded border-0 cursor-pointer text-zinc-350 font-bold flex items-center gap-1"
                         >
-                          {c.hidden ? "👁️ Mostrar" : "👁️‍🗨️ Ocultar"}
+                          <Eye className="w-3 h-3" />
+                          <span>{c.hidden ? "Mostrar" : "Ocultar"}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleCommentDelete(c.id)}
-                          className="hover:underline bg-red-500/10 hover:bg-red-500/25 px-1.5 py-0.5 rounded border-0 cursor-pointer text-[#ff3b30] font-bold"
+                          className="hover:underline bg-red-500/10 hover:bg-red-500/25 px-1.5 py-0.5 rounded border-0 cursor-pointer text-[#ff3b30] font-bold flex items-center gap-1"
                         >
-                          🗑️ Excluir
+                          <Trash2 className="w-3 h-3" />
+                          <span>Excluir</span>
                         </button>
                       </div>
                     </div>
@@ -1197,13 +1185,16 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                   onChange={(e) => setInputText(e.target.value)}
                   className="bg-transparent border-0 text-xs outline-none flex-1 w-full text-inherit placeholder:text-zinc-500"
                 />
-                <span className="text-zinc-550 text-xs cursor-pointer hover:text-white shrink-0">😊</span>
+                <Smile className="w-4 h-4 text-zinc-400 hover:text-white transition-colors cursor-pointer shrink-0" />
               </div>
               <button type="submit" className={cn("font-bold text-xs border-0 bg-transparent cursor-pointer px-2 shrink-0 text-[#1877F2]", !inputText.trim() && "opacity-50 pointer-events-none")}>
                 Enviar
               </button>
             </form>
-            <p className="text-[9px] text-zinc-500 text-center font-semibold">⚠️ Você está comentando como Bruno Flacon.</p>
+            <p className="text-[9px] text-zinc-500 text-center font-semibold flex items-center justify-center gap-1">
+              <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
+              <span>Você está comentando como Bruno Flacon.</span>
+            </p>
           </div>
         </div>
 
@@ -1332,7 +1323,10 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                     setInputText('');
                   }}
                   className={cn(
-                    "w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center transition-all relative group shrink-0",
+                    "w-10 h-10 md:w-14 md:h-14 flex items-center justify-center transition-all relative group shrink-0",
+                    platform.id === "facebook" || platform.id === "threads" || platform.id === "pinterest" || platform.id === "tiktok" || platform.id === "whatsapp" || platform.id === "telegram"
+                      ? "rounded-full"
+                      : "rounded-xl md:rounded-2xl",
                     btnBg
                   )}
                 >
