@@ -28,6 +28,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { ChatList } from "./messaging/ChatList";
 import { ChatWindow } from "./messaging/ChatWindow";
+import { useWhatsAppRealtime } from "@/hooks/useWhatsAppRealtime";
 
 
 interface MessagingChannel {
@@ -181,6 +182,8 @@ export const MessagingView = () => {
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [historySearch, setHistorySearch] = useState("");
 
+  const { conversations: waConversations, conversationMessages: waMessages, loading: waLoading } = useWhatsAppRealtime(user?.id);
+
   useEffect(() => {
     const handleGlobalSearch = (e: any) => {
       const query = e.detail?.query || "";
@@ -194,23 +197,34 @@ export const MessagingView = () => {
   const activeMessages = useMemo(() => {
     if (!activeChatId) return [];
     
-    return messages
+    // Support WhatsApp conversation messages via realtime hook
+    const waConvId = activeChatId.startsWith('wa-') ? activeChatId.slice(3) : null;
+    const waConvMsgs = waConvId ? (waMessages.get(waConvId) ?? []) : [];
+    
+    const dbMessages = messages
       .filter(m => {
         let belongs = false;
         if (activeChatType === "channel") {
-          // activeChatId agora é o UUID direto do canal (ch.id)
           belongs = m.channel_id === activeChatId;
         } else {
-          // Para individuais, remover prefixo "ind-" do activeChatId
           const rawKey = activeChatId.startsWith('ind-') ? activeChatId.slice(4) : activeChatId;
-          belongs = m.recipient_phone === rawKey || m.recipient_name === rawKey;
+          belongs = m.recipient_phone === rawKey || m.recipient_name === rawKey || m.conversation_id === waConvId;
         }
         if (!belongs) return false;
         if (chatSearchQuery.trim()) return m.content.toLowerCase().includes(chatSearchQuery.toLowerCase());
         return true;
       })
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  }, [messages, activeChatId, activeChatType, channels, chatSearchQuery]);
+
+    // Merge WhatsApp realtime messages (avoid duplicates by id)
+    if (waConvMsgs.length > 0) {
+      const existingIds = new Set(dbMessages.map(m => m.id));
+      const newMsgs = waConvMsgs.filter(m => !existingIds.has(m.id)) as unknown as typeof dbMessages;
+      return [...dbMessages, ...newMsgs].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    }
+
+    return dbMessages;
+  }, [messages, activeChatId, activeChatType, chatSearchQuery, waMessages]);
 
   // --- Memoized Data Processing ---
 
@@ -256,60 +270,110 @@ export const MessagingView = () => {
       };
     });
 
+    // Build lookup maps for O(1) access instead of O(n) nested loops
+    const accMap = new Map<string, any>();    // tracks which keys already added
+    const msgMap = new Map<string, any>();    // pre-compute last message per key
+    const connMap = new Map<string, any>();
+    if (connections) {
+      for (const c of connections) {
+        connMap.set(c.page_name, c);
+        connMap.set(c.platform_user_id, c);
+      }
+    }
+    const channelMap = new Map<string, any>();
+    if (channels) {
+      for (const ch of channels) {
+        channelMap.set(ch.channel_name, ch);
+        channelMap.set(ch.channel_id, ch);
+      }
+    }
+
+    // WhatsApp conversations from realtime hook
+    const waChats = (waConversations || []).map(c => ({
+      key: `wa-${c.id}`,
+      id: c.id,
+      channelId: c.contact_wa_id,
+      type: "individual" as const,
+      channel_type: "individual",
+      lastMsg: null,
+      name: c.contact_name || c.contact_wa_id,
+      photo: c.avatar_url,
+      photoUrl: c.avatar_url,
+      platform: "whatsapp",
+      is_online: false,
+      online_count: 0,
+      members_count: 0,
+      unread_count: c.unread_count,
+      last_message_preview: c.last_message_preview,
+      last_message_at: c.last_message_at,
+    }));
+
     const individualChats = (messages || [])
       .filter(m => !m.channel_id && (m.recipient_phone || m.recipient_name))
       .reduce((acc: any[], current) => {
         const key = current.recipient_phone || current.recipient_name || "";
-        if (!acc.find(i => i.key === `ind-${key}`)) {
-          // Find photo in channels or connections
-          const conn = (connections || []).find(c => c.page_name === key || c.platform_user_id === key);
-          const ch = (channels || []).find(c => c.channel_name === key || c.channel_id === key);
-          const rawPhoto = conn?.profile_image_url || ch?.profile_picture;
-          
-          let photoUrl = null;
-          if (rawPhoto) {
-            if (rawPhoto.startsWith('http') || rawPhoto.startsWith('data:')) {
-              photoUrl = rawPhoto;
-            } else {
-              photoUrl = supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl;
-            }
-          }
+        const existing = accMap.get(key);
+        if (existing) return acc;
 
-          let displayName = current.recipient_name || current.recipient_phone || key;
-          if (displayName.includes('@s.whatsapp.net') || displayName.includes('@c.us') || displayName.includes('@g.us')) {
-            displayName = displayName.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@g.us', '');
-            // Se for apenas número e tiver código de país do BR, formatar simples
-            if (/^55\d{10,11}$/.test(displayName)) {
-               const ddd = displayName.substring(2, 4);
-               const num = displayName.substring(4);
-               displayName = `(${ddd}) ${num.length === 9 ? num.substring(0, 5) + '-' + num.substring(5) : num.substring(0, 4) + '-' + num.substring(4)}`;
-            }
+        // Find photo in channels or connections via Map (O(1))
+        const conn = connMap.get(key);
+        const ch = channelMap.get(key);
+        const rawPhoto = conn?.profile_image_url || ch?.profile_picture;
+        
+        let photoUrl = null;
+        if (rawPhoto) {
+          if (rawPhoto.startsWith('http') || rawPhoto.startsWith('data:')) {
+            photoUrl = rawPhoto;
+          } else {
+            photoUrl = supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl;
           }
-
-          acc.push({
-            key: `ind-${key}`, // Prefixo para nunca colidir com UUIDs dos canais
-            id: current.id,
-            type: "individual",
-            channel_type: "individual",
-            lastMsg: messages.filter(m => (m.recipient_phone === key || m.recipient_name === key)).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0],
-            name: displayName,
-            photo: rawPhoto,
-            photoUrl,
-            platform: current.platform,
-            is_online: false,
-            online_count: 0,
-            members_count: 0
-          });
         }
+
+        let displayName = current.recipient_name || current.recipient_phone || key;
+        if (displayName.includes('@s.whatsapp.net') || displayName.includes('@c.us') || displayName.includes('@g.us')) {
+          displayName = displayName.replace('@s.whatsapp.net', '').replace('@c.us', '').replace('@g.us', '');
+          if (/^55\d{10,11}$/.test(displayName)) {
+             const ddd = displayName.substring(2, 4);
+             const num = displayName.substring(4);
+             displayName = `(${ddd}) ${num.length === 9 ? num.substring(0, 5) + '-' + num.substring(5) : num.substring(0, 4) + '-' + num.substring(4)}`;
+          }
+        }
+
+        // Use track: track most recent message per key via single pass
+        const lastMsg = msgMap.get(key) || (
+          messages!.filter(m => (m.recipient_phone === key || m.recipient_name === key))
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+        );
+
+        const item = {
+          key: `ind-${key}`,
+          id: current.id,
+          type: "individual",
+          channel_type: "individual",
+          lastMsg,
+          name: displayName,
+          photo: rawPhoto,
+          photoUrl,
+          platform: current.platform,
+          is_online: false,
+          online_count: 0,
+          members_count: 0
+        };
+        accMap.set(key, item);
+        acc.push(item);
         return acc;
       }, []);
 
-    return [...channelChats, ...individualChats].sort((a, b) => {
-      const dateA = a.lastMsg ? new Date(a.lastMsg.created_at).getTime() : 0;
-      const dateB = b.lastMsg ? new Date(b.lastMsg.created_at).getTime() : 0;
+    // Merge WhatsApp conversations, avoid duplicating with individualChats
+    const waPhoneSet = new Set(individualChats.map(c => c.key.replace('ind-', '')));
+    const uniqueWa = waChats.filter(c => !waPhoneSet.has(c.channelId));
+
+    return [...channelChats, ...individualChats, ...uniqueWa].sort((a, b) => {
+      const dateA = a.lastMsg ? new Date(a.lastMsg.created_at).getTime() : (a.last_message_at ? new Date(a.last_message_at).getTime() : 0);
+      const dateB = b.lastMsg ? new Date(b.lastMsg.created_at).getTime() : (b.last_message_at ? new Date(b.last_message_at).getTime() : 0);
       return dateB - dateA;
     });
-  }, [channels, messages]);
+  }, [channels, messages, waConversations]);
 
   // 2. Filter chats based on sidebar tab
   const filteredChats = useMemo(() => {
@@ -566,8 +630,13 @@ export const MessagingView = () => {
         body: { members: memberData }
       });
       
-      if (syncError || !syncResult?.success) {
-        throw new Error(syncResult?.error || syncError?.message || "Erro na sincronização");
+      if (syncError) {
+        const context = (syncError as any)?.context;
+        const serverMsg = typeof context === 'string' ? context : context ? JSON.stringify(context) : null;
+        throw new Error(serverMsg || syncError.message || "Erro na sincronização");
+      }
+      if (!syncResult?.success) {
+        throw new Error(syncResult?.error || syncResult?.message || "Erro na sincronização");
       }
       
       toast({ 
@@ -639,29 +708,40 @@ export const MessagingView = () => {
   useEffect(() => {
     fetchChannels();
     fetchMessages();
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!user) return;
+    
+    // Debounce refetches to avoid multiple rapid calls from batch updates
+    let debounceTimer1: ReturnType<typeof setTimeout>;
+    let debounceTimer2: ReturnType<typeof setTimeout>;
+    
+    const debouncedFetchChannels = () => {
+      clearTimeout(debounceTimer1);
+      debounceTimer1 = setTimeout(fetchChannels, 300);
+    };
+    const debouncedFetchMessages = () => {
+      clearTimeout(debounceTimer2);
+      debounceTimer2 = setTimeout(fetchMessages, 300);
+    };
+
     const ch1 = supabase
       .channel("messaging-channels-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, () => fetchChannels())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, debouncedFetchChannels)
       .subscribe();
     const ch2 = supabase
       .channel("messages-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, () => fetchMessages())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, debouncedFetchMessages)
       .subscribe();
 
-    // Listen for telegram sync events
-    const handleChannelsUpdate = () => { fetchChannels(); };
-    window.addEventListener("messaging-channels-updated", handleChannelsUpdate);
-
     return () => { 
+      clearTimeout(debounceTimer1);
+      clearTimeout(debounceTimer2);
       supabase.removeChannel(ch1).catch(() => {}); 
       supabase.removeChannel(ch2).catch(() => {});
-      window.removeEventListener("messaging-channels-updated", handleChannelsUpdate);
     };
-  }, [user]);
+  }, [user?.id]); // Use user.id instead of user object to prevent re-subscription on reference change
 
   // Auto-cleanup system messages every 5min
   useEffect(() => {
@@ -669,7 +749,7 @@ export const MessagingView = () => {
     cleanupSystemMessages();
     const interval = setInterval(cleanupSystemMessages, 300_000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [user?.id]);
 
   const availableTypes = formPlatform
     ? messagingPlatformConfigs.find(p => p.id === formPlatform)?.types || []

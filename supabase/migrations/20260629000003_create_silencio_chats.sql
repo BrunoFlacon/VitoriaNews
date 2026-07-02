@@ -21,21 +21,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_silencio_chats_contact_connection
 -- 3. RLS
 ALTER TABLE public.silencio_chats ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can view own silenced chats"
-  ON public.silencio_chats FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY IF NOT EXISTS "Users can insert own silenced chats"
-  ON public.silencio_chats FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY IF NOT EXISTS "Users can update own silenced chats"
-  ON public.silencio_chats FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY IF NOT EXISTS "Users can delete own silenced chats"
-  ON public.silencio_chats FOR DELETE
-  USING (auth.uid() = user_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'silencio_chats' AND policyname = 'Users can view own silenced chats') THEN
+    CREATE POLICY "Users can view own silenced chats"
+      ON public.silencio_chats FOR SELECT
+      USING (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'silencio_chats' AND policyname = 'Users can insert own silenced chats') THEN
+    CREATE POLICY "Users can insert own silenced chats"
+      ON public.silencio_chats FOR INSERT
+      WITH CHECK (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'silencio_chats' AND policyname = 'Users can update own silenced chats') THEN
+    CREATE POLICY "Users can update own silenced chats"
+      ON public.silencio_chats FOR UPDATE
+      USING (auth.uid() = user_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'silencio_chats' AND policyname = 'Users can delete own silenced chats') THEN
+    CREATE POLICY "Users can delete own silenced chats"
+      ON public.silencio_chats FOR DELETE
+      USING (auth.uid() = user_id);
+  END IF;
+END $$;
 
 -- 4. Função para limpar silêncios expirados
 CREATE OR REPLACE FUNCTION public.cleanup_expired_silencio()

@@ -236,7 +236,8 @@ export async function getSmartResponse(config: BotEngineConfig) {
 }
 
 export async function logInteraction(supabase: any, {
-  userId, platform, chatId, content, status, isBot = false, metadata = {}, mediaUrl
+  userId, platform, chatId, content, status, isBot = false, metadata = {}, mediaUrl,
+  waMessageId, conversationId
 }: any) {
   try {
     const insertPayload: any = {
@@ -250,6 +251,13 @@ export async function logInteraction(supabase: any, {
     };
     if (mediaUrl) {
       insertPayload.media_url = mediaUrl;
+    }
+    // Seção 6.3-6.4: WhatsApp delivery tracking & conversation grouping
+    if (waMessageId) {
+      insertPayload.metadata = { ...insertPayload.metadata, wa_message_id: waMessageId };
+    }
+    if (conversationId) {
+      insertPayload.conversation_id = conversationId;
     }
     await supabase.from("messages").insert(insertPayload);
   } catch (err) {
@@ -281,6 +289,8 @@ export interface NormalizedMessage {
   stickerEmoji?: string;
   duration?: number;
   waMessageId?: string;
+  /** Seção 6.4: WhatsApp conversation ID for grouping */
+  conversationId?: string;
 }
 
 export async function sendMetaGraphMessage(
@@ -416,6 +426,8 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
     status: "received",
     mediaUrl: msg.mediaUrl,
     isBot: false,
+    waMessageId: msg.waMessageId,
+    conversationId: msg.conversationId,
     metadata: {
       sender_name: msg.senderName,
       is_group: msg.isGroup,
@@ -459,6 +471,8 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
       content: reply,
       status: "sent",
       isBot: true,
+      waMessageId: sentWaMessageId,
+      conversationId: msg.conversationId,
       metadata: {
         is_group: msg.isGroup,
         is_comment: msg.isComment,

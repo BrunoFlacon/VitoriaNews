@@ -4,17 +4,23 @@ VALUES ('media', 'media', true)
 ON CONFLICT (id) DO UPDATE
 SET public = true;
 
--- Allow public access to read files in the 'media' bucket
-CREATE POLICY "Public Access"
-ON storage.objects FOR SELECT
-USING ( bucket_id = 'media' );
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname = 'Public Access') THEN
+    CREATE POLICY "Public Access"
+    ON storage.objects FOR SELECT
+    USING ( bucket_id = 'media' );
+  END IF;
 
--- Allow authenticated uploads to 'media' bucket
-CREATE POLICY "Authenticated Uploads"
-ON storage.objects FOR INSERT
-WITH CHECK ( bucket_id = 'media' );
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname = 'Authenticated Uploads') THEN
+    CREATE POLICY "Authenticated Uploads"
+    ON storage.objects FOR INSERT
+    WITH CHECK ( bucket_id = 'media' );
+  END IF;
 
--- Allow users to update their own files
-CREATE POLICY "Update own files"
-ON storage.objects FOR UPDATE
-USING ( bucket_id = 'media' );
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname = 'Update own files') THEN
+    CREATE POLICY "Update own files"
+    ON storage.objects FOR UPDATE
+    USING ( bucket_id = 'media' );
+  END IF;
+END $$;

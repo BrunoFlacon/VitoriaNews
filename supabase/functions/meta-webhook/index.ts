@@ -2,33 +2,13 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { processOmnichannelMessage, NormalizedMessage } from "../_shared/bot-engine.ts";
 import { resolveCorsOrigin } from "../_shared/cors.ts";
+import { verifyHmacSignature } from "../_shared/security/verifyMetaSignature.ts";
 
 const corsHeaders = (req) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 });
-
-async function verifyHmacSignature(rawBody: string, signatureHeader: string | null, secret: string): Promise<boolean> {
-  if (!signatureHeader || !secret) return false;
-  const expectedPrefix = "sha256=";
-  if (!signatureHeader.startsWith(expectedPrefix)) return false;
-  const providedSig = signatureHeader.slice(expectedPrefix.length);
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw", encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false, ["sign"]
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(rawBody));
-  const computedHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, "0")).join("");
-  if (computedHex.length !== providedSig.length) return false;
-  const buf1 = new Uint8Array(encoder.encode(computedHex));
-  const buf2 = new Uint8Array(encoder.encode(providedSig));
-  let result = 0;
-  for (let i = 0; i < buf1.length; i++) result |= buf1[i] ^ buf2[i];
-  return result === 0;
-}
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -80,6 +60,24 @@ serve(async (req: Request) => {
           const phoneNumberId = metadata.phone_number_id;
           if (!phoneNumberId) continue;
 
+          // Resolve connection_id for conversations + per-number isolation
+          let connectionId: string | null = null;
+          let resolvedUserId: string | null = null;
+          const { data: waConn } = await supabase
+            .from("social_connections")
+            .select("id, user_id")
+            .eq("platform", "whatsapp")
+            .eq("phone_number_id", phoneNumberId)
+            .maybeSingle();
+          connectionId = waConn?.id || null;
+          resolvedUserId = waConn?.user_id || null;
+
+          // Fallback to first admin if connection not found
+          if (!resolvedUserId) {
+            const { data: admin } = await supabase.from("profiles").select("id").limit(1).maybeSingle();
+            resolvedUserId = admin?.id || null;
+          }
+
           for (const msg of change?.value?.messages || []) {
             if (msg.type === "echo") continue;
 
@@ -96,6 +94,52 @@ serve(async (req: Request) => {
               filename = mediaPayload?.filename;
             }
 
+            // Seção 6.4: Upsert whatsapp_conversations
+            let convId: string | null = null;
+            if (connectionId && resolvedUserId) {
+              const contactWaId = msg.from;
+              const contactName = contact?.profile?.name || contactWaId;
+              const preview = msg.text?.body || (msg.caption) || "[Mídia]";
+              
+              // Primeiro tenta SELECT p/ ver se já existe
+              const { data: existingConv } = await supabase
+                .from("whatsapp_conversations")
+                .select("id, unread_count")
+                .eq("connection_id", connectionId)
+                .eq("contact_wa_id", contactWaId)
+                .maybeSingle();
+
+              if (existingConv) {
+                // Já existe → incrementa unread_count (mensagem do contato)
+                convId = existingConv.id;
+                await supabase
+                  .from("whatsapp_conversations")
+                  .update({
+                    contact_name: contactName,
+                    last_message_preview: preview,
+                    last_message_at: new Date().toISOString(),
+                    unread_count: existingConv.unread_count + 1,
+                  })
+                  .eq("id", existingConv.id);
+              } else {
+                // Não existe → cria com unread_count=1 (primeira mensagem)
+                const { data: newConv } = await supabase
+                  .from("whatsapp_conversations")
+                  .insert({
+                    user_id: resolvedUserId,
+                    connection_id: connectionId,
+                    contact_wa_id: contactWaId,
+                    contact_name: contactName,
+                    last_message_preview: preview,
+                    last_message_at: new Date().toISOString(),
+                    unread_count: 1,
+                  })
+                  .select("id")
+                  .maybeSingle();
+                convId = newConv?.id || null;
+              }
+            }
+
             const normalized: NormalizedMessage = {
               platform: "whatsapp",
               chatId: msg.from,
@@ -110,7 +154,8 @@ serve(async (req: Request) => {
               mimeType,
               filename,
               rawPayload: msg,
-              waMessageId: msg.id
+              waMessageId: msg.id,
+              conversationId: convId || undefined
             };
 
             if (msg.referral) {
@@ -120,41 +165,58 @@ serve(async (req: Request) => {
             await processOmnichannelMessage(supabase, normalized);
           }
 
-          // Processar statuses (delivered/read/failed) — Item 1.4
+          // Processar statuses (delivered/read/failed) — Item 1.4 + Seção 6.3
           for (const status of change?.value?.statuses || []) {
             try {
               const waMsgId = status.id;
               const waStatus = status.status; // "sent" | "delivered" | "read" | "failed"
-              const recipientPhone = status.recipient_id;
               const timestamp = status.timestamp
                 ? new Date(parseInt(status.timestamp) * 1000).toISOString()
                 : new Date().toISOString();
 
-              console.log(`[META-WEBHOOK] Status: ${waStatus} for message ${waMsgId} to ${recipientPhone}`);
+              console.log(`[META-WEBHOOK] Status: ${waStatus} for message ${waMsgId}`);
 
               // Look up the message by WA message ID in metadata
               const { data: existing } = await supabase
                 .from("messages")
-                .select("id, metadata")
+                .select("id, metadata, conversation_id")
                 .eq("metadata->>wa_message_id", waMsgId)
                 .maybeSingle();
 
               if (existing) {
                 const metadata = existing.metadata || {};
-                if (waStatus === "delivered") metadata.delivered_at = timestamp;
-                else if (waStatus === "read") metadata.read_at = timestamp;
-                else if (waStatus === "failed") {
+                const updateData: any = {
+                  delivery_status: waStatus === "failed" ? "failed" : "delivered",
+                  metadata
+                };
+
+                if (waStatus === "delivered") {
+                  updateData.delivered_at = timestamp;
+                  metadata.delivered_at = timestamp;
+                } else if (waStatus === "read") {
+                  updateData.read_at = timestamp;
+                  metadata.read_at = timestamp;
+                  updateData.delivery_status = "read";
+                } else if (waStatus === "failed") {
                   metadata.failed_reason = status.errors?.[0]?.title || "unknown";
                   metadata.failed_at = timestamp;
                 }
 
+                // Keep old status field for backward compat
+                updateData.status = waStatus === "failed" ? "failed" : "delivered";
+
                 await supabase
                   .from("messages")
-                  .update({
-                    status: waStatus === "failed" ? "failed" : "delivered",
-                    metadata
-                  })
+                  .update(updateData)
                   .eq("id", existing.id);
+
+                // Update conversation last message preview if available
+                if (existing.conversation_id) {
+                  await supabase
+                    .from("whatsapp_conversations")
+                    .update({ last_message_at: timestamp })
+                    .eq("id", existing.conversation_id);
+                }
               } else {
                 console.warn(`[META-WEBHOOK] No message found with wa_message_id=${waMsgId}`);
               }
