@@ -58,8 +58,8 @@ export const WhatsAppBackupTab = () => {
 
       if (error) throw error;
       setBackups((data ?? []) as WhatsAppBackup[]);
-    } catch (err: any) {
-      toast({ title: "Erro ao carregar backups", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao carregar backups", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -77,8 +77,8 @@ export const WhatsAppBackupTab = () => {
       if (error) throw error;
       toast({ title: "Backup criado", description: "Mensagens criptografadas com sucesso." });
       fetchBackups();
-    } catch (err: any) {
-      toast({ title: "Erro ao criar backup", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao criar backup", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     } finally {
       setCreating(false);
     }
@@ -108,8 +108,8 @@ export const WhatsAppBackupTab = () => {
       });
 
       toast({ title: "Download iniciado" });
-    } catch (err: any) {
-      toast({ title: "Erro ao baixar", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao baixar", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     }
   };
 
@@ -124,8 +124,8 @@ export const WhatsAppBackupTab = () => {
       toast({ title: "Backup excluído" });
       setDeleteConfirm(null);
       fetchBackups();
-    } catch (err: any) {
-      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao excluir", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     }
   };
 

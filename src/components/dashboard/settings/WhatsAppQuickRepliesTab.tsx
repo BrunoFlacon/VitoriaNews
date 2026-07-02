@@ -68,8 +68,8 @@ export const WhatsAppQuickRepliesTab = () => {
 
       if (error) throw error;
       setReplies((data ?? []) as QuickReply[]);
-    } catch (err: any) {
-      toast({ title: "Erro ao carregar respostas", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao carregar respostas", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -120,8 +120,8 @@ export const WhatsAppQuickRepliesTab = () => {
       }
       setDialogOpen(false);
       fetchReplies();
-    } catch (err: any) {
-      toast({ title: "Erro ao salvar", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao salvar", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -134,8 +134,8 @@ export const WhatsAppQuickRepliesTab = () => {
       toast({ title: "Resposta excluída" });
       setDeleteId(null);
       fetchReplies();
-    } catch (err: any) {
-      toast({ title: "Erro ao excluir", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Erro ao excluir", description: err instanceof Error ? err.message : "Erro desconhecido", variant: "destructive" });
     }
   };
 

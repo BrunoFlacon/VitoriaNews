@@ -121,9 +121,9 @@ export function useWhatsAppRealtime(
         }
         setConversationMessages(grouped);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[useWhatsAppRealtime] Error fetching:', err);
-      setError(err?.message || 'Failed to load WhatsApp conversations');
+      setError(err instanceof Error ? err.message : 'Failed to load WhatsApp conversations');
     } finally {
       setLoading(false);
     }
@@ -242,12 +242,14 @@ export function useWhatsAppRealtime(
       .subscribe();
 
     // Cleanup
+    const msgCh = messageChannels.current;
+    const actIds = activeConvIds.current;
     return () => {
       supabase.removeChannel(convChannel);
       supabase.removeChannel(msgChannel);
-      messageChannels.current.forEach(ch => supabase.removeChannel(ch));
-      messageChannels.current.clear();
-      activeConvIds.current.clear();
+      msgCh.forEach(ch => supabase.removeChannel(ch));
+      msgCh.clear();
+      actIds.clear();
     };
   }, [userId, enabled, fetchConversations]);
 
