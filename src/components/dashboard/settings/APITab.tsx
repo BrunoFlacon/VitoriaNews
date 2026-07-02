@@ -126,7 +126,6 @@ export const APITab = memo(({
   }, [credentials, saveCredentials]);
 
   return (
-    <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
       {/* Hidden username field for browser accessibility / password manager compliance */}
       <input type="text" name="username" value={user?.email || ""} readOnly autoComplete="username" className="hidden" aria-hidden="true" />
               {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
@@ -381,122 +380,80 @@ export const APITab = memo(({
                                           </div>
                                           
                                           <div className="flex items-center gap-1">
-                                            {/* Sync button (only when active) */}
+{/* Sync button (only when active) */}
                                             {isActive && svc.syncFn && (
                                               // Check if People API sync should be allowed (needs Google OAuth or People API key)
-                                              (() => {
-                                                if (svc.syncFn === 'sync-google-contacts') {
-                                                  const hasGoogleOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
-                                                  const hasPeopleApiKey = !!credentials['google_cloud']?.people_api_key;
-                                                  if (!hasGoogleOAuth && !hasPeopleApiKey) {
-                                                    return (
-                                                      <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 px-2 text-[9px] font-black uppercase tracking-wider rounded-lg text-muted-foreground hover:text-muted-foreground/50 hover:bg-muted-foreground/10 transition-all cursor-not-allowed"
-                                                        disabled
-                                                        title="Conecte sua Conta Google/YouTube ou adicione People API Key"
-                                                      >
-                                                        <RefreshCw className="w-3 h-3 mr-1" />
-                                                        Sincronizar
-                                                      </Button>
-                                                    );
-                                                  }
-                                                }
-                                                return null;
-                                              })()
-                                              ||
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-7 px-2 text-[9px] font-black uppercase tracking-wider rounded-lg text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all"
-                                                onClick={async (e) => {
-                                                  e.preventDefault();
-                                                  toast({ title: `Sincronizando ${svc.name}...`, description: "Aguarde enquanto os dados são carregados." });
-                                                  try {
-                                                    const session = (await supabase.auth.getSession()).data.session;
-                                                    if (!session) throw new Error('Sessão expirada');
-                                                    
-                                                    // Specially handle radar-api which acts as a router and needs 'path' in the body
-                                                     if (svc.syncFn === 'validate-maps-key') {
+                                              svc.syncFn === 'sync-google-contacts' &&
+                                              !connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected) &&
+                                              !credentials['google_cloud']?.people_api_key
+                                                ? (
+                                                  <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-7 px-2 text-[9px] font-black uppercase tracking-wider rounded-lg text-muted-foreground hover:text-muted-foreground/50 hover:bg-muted-foreground/10 transition-all cursor-not-allowed"
+                                                    disabled
+                                                    title="Conecte sua Conta Google/YouTube ou adicione People API Key"
+                                                  >
+                                                    <RefreshCw className="w-3 h-3 mr-1" />
+                                                    Sincronizar
+                                                  </Button>
+                                                )
+                                                : (
+                                                  <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-7 px-2 text-[9px] font-black uppercase tracking-wider rounded-lg text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all"
+                                                    onClick={async (e) => {
+                                                      e.preventDefault();
+                                                      toast({ title: `Sincronizando ${svc.name}...`, description: "Aguarde enquanto os dados são carregados." });
+                                                      try {
+                                                        const session = (await supabase.auth.getSession()).data.session;
+                                                        if (!session) throw new Error('Sessão expirada');
+                                                        
+                                                        if (svc.syncFn === 'validate-maps-key') {
                                                           const apiKey = formValues['google_cloud']?.maps_api_key || credentials['google_cloud']?.maps_api_key;
                                                           if (!apiKey) throw new Error('Maps API Key não configurada. Digite no campo abaixo e clique "Salvar Configuração" primeiro.');
-                                                         try {
-                                                           const testRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=test&key=${apiKey}`);
-                                                           const testData = await testRes.json();
-                                                           if (testData.status === 'REQUEST_DENIED') {
-                                                             toast({ title: 'Maps Key salva, Geocoding API desativada', description: 'Mapas funcionam, mas geolocalização precisa ativar Geocoding API + billing em console.cloud.google.com', variant: 'default' });
-                                                           } else {
-                                                             toast({ title: 'Maps API OK!', description: `Status: ${testData.status}` });
-                                                           }
-                                                         } catch (fetchErr: any) {
-                                                           if (fetchErr.message?.includes('CSP') || fetchErr.message?.includes('Content Security Policy') || fetchErr.name === 'TypeError') {
-                                                             toast({ title: 'Validação offline', description: 'Key salva. A validação online será feita no deploy.', variant: 'default' });
-                                                           } else {
-                                                             throw fetchErr;
-                                                           }
-                                                         }
-                                                         refreshStats();
-                                                         return;
-                                                       }
+                                                          try {
+                                                            const testRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=test&key=${apiKey}`);
+                                                            const testData = await testRes.json();
+                                                            if (testData.status === 'REQUEST_DENIED') {
+                                                              toast({ title: 'Maps Key salva, Geocoding API desativada', description: 'Mapas funcionam, mas geolocalização precisa ativar Geocoding API + billing em console.cloud.google.com', variant: 'default' });
+                                                            } else {
+                                                              toast({ title: 'Maps API OK!', description: `Status: ${testData.status}` });
+                                                            }
+                                                          } catch (fetchErr: any) {
+                                                            if (fetchErr.message?.includes('CSP') || fetchErr.message?.includes('Content Security Policy') || fetchErr.name === 'TypeError') {
+                                                              toast({ title: 'Validação offline', description: 'Key salva. A validação online será feita no deploy.', variant: 'default' });
+                                                            } else {
+                                                              throw fetchErr;
+                                                            }
+                                                          }
+                                                          refreshStats();
+                                                          return;
+                                                        }
 
-                                                      if (svc.syncFn === 'validate-google-ads') {
-                                                         const adsId = (formValues['google_cloud']?.ads_id || credentials['google_cloud']?.ads_id || '').trim();
-                                                         if (!adsId) throw new Error('Google Ads Customer ID não configurado. Digite no campo abaixo e clique "Salvar Configuração" primeiro.');
-                                                         const cleaned = adsId.replace(/[\s\-_]/g, '');
-                                                         if (!/^\d{10}$/.test(cleaned)) throw new Error(`Formato inválido: "${adsId}". O Google Ads Customer ID tem 10 dígitos. Encontre em: Google Ads > Configuração > Faturamento > ID do cliente (ex: 123-456-7890)`);
-                                                         const formatted = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
-                                                         toast({ title: 'Google Ads OK!', description: `ID ${formatted} válido.` });
-                                                         return;
-                                                       }
-
-                                                      if (svc.syncFn === 'validate-gtag') {
-                                                        const gtagId = (formValues['google_cloud']?.gtag_id || credentials['google_cloud']?.gtag_id || '').trim();
-                                                        if (!gtagId) throw new Error('Google Analytics Pixel ID (G-TAG) não configurado. Digite no campo abaixo e clique "Salvar Configuração" primeiro.');
-                                                        const cleaned = gtagId.replace(/[\s\-_]/g, '');
-                                                        if (!/^G[A-Z0-9]{6,}$/i.test(cleaned)) throw new Error(`Formato inválido: "${gtagId}". O G-TAG deve seguir o padrão G-XXXXXXXXXX (ex: G-ABCDEF1234)`);
-                                                        toast({ title: 'G-TAG OK!', description: `Pixel ID ${gtagId} válido.` });
-                                                        return;
+                                                        if (syncResult?.data?.error) {
+                                                          throw new Error(syncResult.data.error);
+                                                        }
+                                                        if (syncResult?.data?.status === 'skipped') {
+                                                          const msg = syncResult?.data?.message || 'Sem dados para sincronizar';
+                                                          toast({ title: `${svc.name} ignorado`, description: msg, variant: msg.includes('OAuth') ? 'destructive' : 'default' });
+                                                        } else {
+                                                          toast({ title: `${svc.name} Sincronizado!`, description: "Dados atualizados com sucesso." });
+                                                        }
+                                                        refreshStats();
+                                                      } catch (err: any) {
+                                                        toast({ title: "Erro na sincronização", description: err?.message || "Tente novamente.", variant: "destructive" });
                                                       }
-
-                                                      if (svc.syncFn === 'validate-google-oauth') {
-                                                       const hasGoogleConn = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
-                                                       if (!hasGoogleConn) throw new Error('Nenhuma conta Google conectada via OAuth. Conecte em Redes Sociais.');
-                                                       toast({ title: 'Google OAuth OK!', description: 'Conta Google ativa e conectada.' });
-                                                       return;
-                                                     }
-
-                                                    const invokeOptions: any = {
-                                                      body: { userId: session.user.id },
-                                                      headers: { Authorization: `Bearer ${session.access_token}` }
-                                                    };
-
-                                                    if (svc.syncFn === 'radar-api' && svc.action) {
-                                                      invokeOptions.body.path = svc.action;
-                                                    }
-
-                                                    const syncResult = await supabase.functions.invoke(svc.syncFn, invokeOptions);
-                                                    
-                                                    if (syncResult?.data?.error) {
-                                                      throw new Error(syncResult.data.error);
-                                                    }
-                                                    if (syncResult?.data?.status === 'skipped') {
-                                                      const msg = syncResult?.data?.message || 'Sem dados para sincronizar';
-                                                      toast({ title: `${svc.name} ignorado`, description: msg, variant: msg.includes('OAuth') ? 'destructive' : 'default' });
-                                                    } else {
-                                                      toast({ title: `${svc.name} Sincronizado!`, description: "Dados atualizados com sucesso." });
-                                                    }
-                                                    refreshStats();
-                                                  } catch (err: any) {
-                                                    toast({ title: "Erro na sincronização", description: err?.message || "Tente novamente.", variant: "destructive" });
-                                                  }
-                                                }}
-                                              >
-                                                <RefreshCw className="w-3 h-3 mr-1" />
-                                                Sincronizar
-                              </Button>
-                            )}
+                                                    }}
+                                                  >
+                                                    <RefreshCw className="w-3 h-3 mr-1" />
+                                                    Sincronizar
+                                                  </Button>
+                                                )
+                                            )}
                                             
                                             {/* Connect / Disconnect */}
                                             <Button
