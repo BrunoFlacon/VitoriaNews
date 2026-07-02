@@ -66,6 +66,8 @@ export interface MessageDeliveryStats {
   successRate: number;
   platformStats: Record<string, { sent: number; failed: number; draft: number; scheduled: number; received: number }>;
   recentMessages: any[];
+  perPlatformSender: Record<string, { bot: number; human: number }>;
+  perConnectionSender: Record<string, { bot: number; human: number }>;
 }
 
 export interface SocialStatsByPlatform {
@@ -161,6 +163,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       
       const actionCounts: Record<string, number> = {};
       const botActionCounts: Record<string, number> = {};
+      const perPlatformSender: Record<string, { bot: number; human: number }> = {};
+      const perConnectionSender: Record<string, { bot: number; human: number }> = {};
       
       let msgTotalSent = 0;
       let msgTotalFailed = 0;
@@ -178,6 +182,15 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           : (m.metadata?.integration_type === 'bot');
         if (isBot) botActionCounts[p] = (botActionCounts[p] || 0) + 1;
         else actionCounts[p] = (actionCounts[p] || 0) + 1;
+
+        if (!perPlatformSender[p]) perPlatformSender[p] = { bot: 0, human: 0 };
+        if (isBot) perPlatformSender[p].bot++;
+        else perPlatformSender[p].human++;
+
+        const cid = m.metadata?.connection_id || 'unknown';
+        if (!perConnectionSender[cid]) perConnectionSender[cid] = { bot: 0, human: 0 };
+        if (isBot) perConnectionSender[cid].bot++;
+        else perConnectionSender[cid].human++;
 
         if (!msgPlatformStats[p]) msgPlatformStats[p] = { sent: 0, failed: 0, draft: 0, scheduled: 0, received: 0 };
         if (m.status === 'sent') {
@@ -323,7 +336,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         channel_type: ch.channel_type || 'group',
         members_count: Number(ch.members_count ?? 0),
         online_count: Number(ch.online_count ?? 0),
-        profile_picture: ch.profile_picture || socialAccountPics[ch.platform] || null,
+        profile_picture: ch.profile_picture || socialAccountPicsByUid[`${ch.platform}-${ch.channel_id}`] || socialAccountPics[ch.platform] || null,
         channel_id: ch.channel_id || null,
       }));
 
@@ -413,6 +426,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           totalReceived: msgTotalReceived,
           successRate: msgSuccessRate,
           platformStats: msgPlatformStats,
+          perPlatformSender,
+          perConnectionSender,
           recentMessages: (messagesRes.data || []).slice(0, 15).map((m: any) => ({
             id: m.id,
             platform: m.platform,
@@ -558,7 +573,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
   }, [channelName, options.enabled, realtimeError, queryClient, user]);
 
   const MESSAGING_PLATFORMS = new Set(['whatsapp', 'telegram']);
-  const emptyMessageStats = { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, recentMessages: [] };
+  const emptyMessageStats = { totalSent: 0, totalFailed: 0, totalDraft: 0, totalScheduled: 0, totalReceived: 0, successRate: 0, platformStats: {}, perPlatformSender: {}, perConnectionSender: {}, recentMessages: [] };
 
   const stats = data?.stats || [];
   const messagingChannels = data?.messagingChannels || [];

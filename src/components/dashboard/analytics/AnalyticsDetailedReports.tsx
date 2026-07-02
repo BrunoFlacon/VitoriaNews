@@ -225,6 +225,30 @@ export const AnalyticsDetailedReports = ({
                 <p className="text-2xl font-bold text-red-500">{(messageStats?.totalFailed || 0).toLocaleString('pt-BR')}</p>
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              {(() => {
+                const wa = messageStats?.perPlatformSender?.whatsapp;
+                if (!wa) return null;
+                return (
+                  <>
+                    <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/10">
+                      <p className="text-[9px] text-muted-foreground uppercase font-bold mb-1 flex items-center gap-1">
+                        <MessageCircle className="w-3 h-3 text-purple-400" />
+                        WhatsApp — Bot
+                      </p>
+                      <p className="text-lg font-bold text-purple-400">{wa.bot.toLocaleString('pt-BR')}</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/10">
+                      <p className="text-[9px] text-muted-foreground uppercase font-bold mb-1 flex items-center gap-1">
+                        <MessageCircle className="w-3 h-3 text-blue-400" />
+                        WhatsApp — Humano
+                      </p>
+                      <p className="text-lg font-bold text-blue-400">{wa.human.toLocaleString('pt-BR')}</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
 
           <div>

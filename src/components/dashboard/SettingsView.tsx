@@ -256,7 +256,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const { connections, loading: connectionsLoading, initiateOAuth, disconnect, setPrimary, refetch: refetchConnections } = useSocialConnections({ enabled: apiTabActive });
   const { credentials, loading: credsLoading, saving, saveCredentials, deleteCredentials, hasCredentials } = useApiCredentials();
   
-  const { stats: socialStats, audienceBreakdown, loading: statsLoading, refresh: refreshStats } = useSocialStats({ enabled: apiTabActive });
+  const { stats: socialStats, audienceBreakdown, loading: statsLoading, refresh: refreshStats, messageDeliveryStats } = useSocialStats({ enabled: apiTabActive });
   const { settings: systemSettings, updateSettingsOptimistic } = useSystem();
 
   // Sync when defaultTab prop changes from parent (e.g. Header dropdown navigation)
@@ -941,6 +941,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
               user={user}
               saving={saving}
               onSetPrimary={setPrimary}
+              messageDeliveryStats={messageDeliveryStats}
             />
 
           </motion.div>

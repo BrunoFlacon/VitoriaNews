@@ -3,13 +3,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, RefreshCw, ChevronUp, ChevronDown, X, Globe, 
   Unplug, Link2, Loader2, Plug, Save, FileText, MessageSquare,
-  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2, Star, Webhook, Tag
+  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2, Star, Webhook, Tag, AlertCircle
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
@@ -56,6 +56,7 @@ interface APITabProps {
   saving?: string | null;
   handleDeleteCreds?: (id: string) => void;
   onSetPrimary?: (connectionId: string) => void;
+  messageDeliveryStats?: any;
 }
 
 export const APITab = memo(({
@@ -93,7 +94,8 @@ export const APITab = memo(({
   user,
   saving,
   handleDeleteCreds = (id) => { deleteCredentials(id); },
-  onSetPrimary
+  onSetPrimary,
+  messageDeliveryStats
 }: APITabProps) => {
   // toggleExpand is now received from parent to initialize formValues
   
@@ -588,7 +590,11 @@ export const APITab = memo(({
                                           <div className="flex items-center gap-6 flex-1 min-w-0">
                                             <div className="relative">
                                               <Avatar className="w-16 h-16 rounded-2xl border-[3px] border-[#151726] shadow-xl flex-shrink-0 transition-transform group-hover:scale-105">
-                                                <AvatarImage src={metaAdsProfile?.profile_image_url || displayPhoto} alt={displayName} className="object-cover" />
+                                                <AvatarImage 
+                                                  src={getProxyUrl(metaAdsProfile?.profile_image_url) || getProxyUrl(displayPhoto)} 
+                                                  alt={displayName} 
+                                                  className="object-cover" 
+                                                />
                                                 <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 text-xl font-bold">
                                                   {displayName.charAt(0).toUpperCase()}
                                                 </AvatarFallback>
@@ -864,7 +870,9 @@ export const APITab = memo(({
                                           return (
                                             <>
                                               <Avatar className="w-12 h-12 border-2 border-white/10">
-                                                <AvatarImage src={fbConn?.profile_image_url} />
+                                                <AvatarImage 
+                                                  src={getProxyUrl(fbConn?.profile_image_url)} 
+                                                />
                                                 <AvatarFallback className="bg-[#0081FB20] text-[#0081FB] font-bold">M</AvatarFallback>
                                               </Avatar>
                                               <div className="flex flex-col">
