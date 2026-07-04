@@ -8,6 +8,7 @@ import { SystemProvider } from "@/contexts/SystemContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { TrackingProvider } from "./components/analytics/TrackingProvider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { PresenceHeartbeat } from "@/components/dashboard/whatsapp/presence/presence-heartbeat";
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
 
 import Login from "./pages/Login";
@@ -83,7 +84,12 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <PresenceHeartbeat />
+      {children}
+    </>
+  );
 };
 
 const App = () => (
