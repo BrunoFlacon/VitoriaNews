@@ -46,8 +46,15 @@ function PipelineContent() {
   const [dealFormStageId, setDealFormStageId] = useState<string | undefined>();
   const [editingDeal, setEditingDeal] = useState<Deal | undefined>();
 
+  const loadDeals = useCallback(async () => {
+    const { data } = await supabase
+      .from("deals")
+      .select("*, contact:contacts(*), stage:pipeline_stages(*)")
+      .order("created_at", { ascending: false });
+    if (data) setDeals(data);
+  }, []);
+
   const handleDealMoved = useCallback(async (dealId: string, newStageId: string) => {
-    // Optimistic update
     setDeals((prev) =>
       prev.map((d) => (d.id === dealId ? { ...d, stage_id: newStageId } : d)),
     );
@@ -57,7 +64,6 @@ function PipelineContent() {
       .eq("id", dealId);
     if (error) {
       console.error("Error moving deal:", error);
-      // Revert
       loadDeals();
     }
   }, [loadDeals]);
@@ -79,14 +85,6 @@ function PipelineContent() {
       }
     };
     loadData();
-  }, []);
-
-  const loadDeals = useCallback(async () => {
-    const { data } = await supabase
-      .from("deals")
-      .select("*, contact:contacts(*), stage:pipeline_stages(*)")
-      .order("created_at", { ascending: false });
-    if (data) setDeals(data);
   }, []);
 
   const handleStagesChanged = useCallback(() => {
