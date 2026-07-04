@@ -11,6 +11,7 @@ import { WhatsAppContactsTab } from "./WhatsAppContactsTab";
 import { WhatsAppBroadcastsTab } from "./WhatsAppBroadcastsTab";
 import { WhatsAppBotSettingsTab } from "./WhatsAppBotSettingsTab";
 import { WhatsAppSettingsView } from "./WhatsAppSettingsView";
+import { WhatsAppTemplatesTab } from "../settings/WhatsAppTemplatesTab";
 import { DealCard } from "./deal-card";
 import { DealForm } from "./deal-form";
 import { PipelineSettings } from "./pipeline-settings";
@@ -19,7 +20,7 @@ import { PipelineBoard } from "./pipeline-board";
 import type { Deal, PipelineStage } from "@/types";
 import {
   MessageCircle, Users, Kanban, Send, Bot, Settings,
-  Camera, Smartphone, Loader2, Plus
+  Camera, Smartphone, Loader2, Plus, FileText
 } from "lucide-react";
 interface WhatsAppHubViewProps {
   defaultTab?: string;
@@ -31,6 +32,7 @@ const TABS = [
   { id: "contacts", label: "Contatos", icon: Users },
   { id: "pipeline", label: "Pipeline", icon: Kanban },
   { id: "broadcasts", label: "Transmissões", icon: Send },
+  { id: "templates", label: "Templates", icon: FileText },
   { id: "bot", label: "Bot", icon: Bot },
   { id: "settings", label: "Configurações", icon: Settings },
 ] as const;
@@ -263,6 +265,7 @@ export function WhatsAppHubView({ defaultTab, onBackToInbox }: WhatsAppHubViewPr
         {activeTab === "contacts" && <WhatsAppContactsTab />}
         {activeTab === "pipeline" && <PipelineContent />}
         {activeTab === "broadcasts" && <WhatsAppBroadcastsTab />}
+        {activeTab === "templates" && <WhatsAppTemplatesTab />}
         {activeTab === "bot" && <WhatsAppBotSettingsTab />}
         {activeTab === "settings" && <WhatsAppSettingsView userId={user?.id} />}
       </div>
