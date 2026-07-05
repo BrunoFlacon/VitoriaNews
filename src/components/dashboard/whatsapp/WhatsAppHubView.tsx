@@ -39,7 +39,7 @@ const TABS = [
 
 type TabId = typeof TABS[number]["id"];
 
-function PipelineContent() {
+function PipelineContent({ onOpenChat }: { onOpenChat?: (phone: string) => void }) {
   const [stages, setStages] = useState<PipelineStage[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +150,7 @@ function PipelineContent() {
               setEditingDeal(deal);
               setShowDealForm(true);
             }}
+            onOpenChat={onOpenChat}
           />
         </div>
       </div>
@@ -210,6 +211,13 @@ export function WhatsAppHubView({ defaultTab, onBackToInbox }: WhatsAppHubViewPr
     }
   }, [fetchPhotos, toast]);
 
+  const [navigateToPhone, setNavigateToPhone] = useState<string | null>(null);
+
+  const handleNavigateToChat = useCallback((phone: string) => {
+    setNavigateToPhone(phone);
+    setActiveTab("inbox");
+  }, []);
+
   const isInboxActive = activeTab === "inbox";
 
   return (
@@ -261,9 +269,17 @@ export function WhatsAppHubView({ defaultTab, onBackToInbox }: WhatsAppHubViewPr
       </div>
 
       <div className="flex-1 overflow-hidden">
-        {activeTab === "inbox" && <WhatsAppInboxView onBack={onBackToInbox} />}
-        {activeTab === "contacts" && <WhatsAppContactsTab />}
-        {activeTab === "pipeline" && <PipelineContent />}
+        {activeTab === "inbox" && (
+          <WhatsAppInboxView
+            onBack={onBackToInbox}
+            initialPhone={navigateToPhone}
+            onChatConsumed={() => setNavigateToPhone(null)}
+          />
+        )}
+        {activeTab === "contacts" && (
+          <WhatsAppContactsTab onNavigateToChat={handleNavigateToChat} />
+        )}
+        {activeTab === "pipeline" && <PipelineContent onOpenChat={handleNavigateToChat} />}
         {activeTab === "broadcasts" && <WhatsAppBroadcastsTab />}
         {activeTab === "templates" && <WhatsAppTemplatesTab />}
         {activeTab === "bot" && <WhatsAppBotSettingsTab />}
