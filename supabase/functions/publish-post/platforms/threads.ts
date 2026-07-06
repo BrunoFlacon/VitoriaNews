@@ -28,7 +28,7 @@ export async function publishThreads(content: string, media: any, connection: an
         const userId = connection.platform_user_id;
 
         // 1. CRIAR CONTAINER
-        let containerBody: any = {
+        const containerBody: any = {
             text: content.trim()
         };
 

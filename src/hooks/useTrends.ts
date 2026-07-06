@@ -107,25 +107,6 @@ export function useTrends() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-    let interval: ReturnType<typeof setInterval>;
-    const onVisible = () => {
-      clearInterval(interval);
-      if (!document.hidden) {
-        interval = setInterval(fetchData, POLL_INTERVAL);
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    if (!document.hidden) {
-      interval = setInterval(fetchData, POLL_INTERVAL);
-    }
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [fetchData]);
-
   const syncManually = useCallback(async () => {
     if (syncInProgress.current) return;
     syncInProgress.current = true;
@@ -188,14 +169,20 @@ export function useTrends() {
   }, [fetchData, toast]);
 
   useEffect(() => {
+    fetchData();
     if (loading) return;
 
-    const doSync = () => {
+    let syncCounter = 0;
+    const tick = () => {
       if (document.hidden) return;
-      const now = Date.now();
-      if ((now - lastSyncRef.current) > SYNC_COOLDOWN) {
-        lastSyncRef.current = now;
-        syncManually();
+      syncCounter++;
+      if (syncCounter % 3 === 0) {
+        const now = Date.now();
+        if ((now - lastSyncRef.current) > SYNC_COOLDOWN) {
+          syncManually();
+        }
+      } else {
+        fetchData();
       }
     };
 
@@ -203,20 +190,19 @@ export function useTrends() {
     const onVisible = () => {
       clearInterval(interval);
       if (!document.hidden) {
-        doSync();
-        interval = setInterval(doSync, SYNC_COOLDOWN);
+        syncCounter = 0;
+        interval = setInterval(tick, POLL_INTERVAL);
       }
     };
     document.addEventListener('visibilitychange', onVisible);
     if (!document.hidden) {
-      doSync();
-      interval = setInterval(doSync, SYNC_COOLDOWN);
+      interval = setInterval(tick, POLL_INTERVAL);
     }
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [loading, syncManually]);
+  }, [fetchData, loading, syncManually]);
 
   return {
     trends,

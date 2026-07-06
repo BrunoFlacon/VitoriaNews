@@ -155,7 +155,7 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
 
     // Resolve media_ids UUIDs → signed URLs
     const allMediaIds = [...new Set((postsData || []).flatMap(p => p.media_ids || []))];
-    let mediaUrlMap: Record<string, string | null> = {};
+    const mediaUrlMap: Record<string, string | null> = {};
 
     if (allMediaIds.length > 0) {
       const { data: mediaRecords } = await supabase

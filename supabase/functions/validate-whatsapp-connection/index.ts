@@ -35,7 +35,7 @@ serve(async (req: Request) => {
     }
 
     // Validate by fetching phone number info from Meta Graph API
-    const url = `https://graph.facebook.com/v21.0/${phone_number_id}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,account_review_status&access_token=${access_token}`;
+    const url = `https://graph.facebook.com/v21.0/${phone_number_id}?fields=display_phone_number,verified_name,quality_rating,code_verification_status&access_token=${access_token}`;
 
     const resp = await fetchWithTimeout(url, {
       headers: { "Accept": "application/json" }
@@ -62,7 +62,6 @@ serve(async (req: Request) => {
       verified_name: data.verified_name,
       quality_rating: data.quality_rating,
       code_verification_status: data.code_verification_status,
-      account_review_status: data.account_review_status,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

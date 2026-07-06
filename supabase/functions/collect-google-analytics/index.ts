@@ -59,7 +59,7 @@ serve(async (req: Request) => {
       });
     }
 
-    let propertyId = analyticsId.replace("properties/", "");
+    const propertyId = analyticsId.replace("properties/", "");
     if (/^G-[A-Z0-9]+$/i.test(propertyId)) {
       return new Response(JSON.stringify({ error: `"${propertyId}" parece ser um Measurement ID (G-XXXX). Use o Property ID numérico. Encontre em: Admin > Configuração da Propriedade > ID da Propriedade.` }), {
         status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }

@@ -40,7 +40,7 @@ export const MonetizationOverview = ({ totalRevenue, revenueBreakdown }: Monetiz
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={breakdown}
+                  data={revenueBreakdown}
                   cx="50%" cy="50%"
                   innerRadius={35}
                   outerRadius={55}
@@ -49,7 +49,7 @@ export const MonetizationOverview = ({ totalRevenue, revenueBreakdown }: Monetiz
                   isAnimationActive={false}
                   stroke="none"
                 >
-                  {breakdown.map((_, idx) => (
+                  {revenueBreakdown.map((_, idx) => (
                     <Cell key={`cell-${idx}`} fill={COLORS[idx]} fillOpacity={1} />
                   ))}
                 </Pie>
@@ -74,7 +74,7 @@ export const MonetizationOverview = ({ totalRevenue, revenueBreakdown }: Monetiz
             </ResponsiveContainer>
           </div>
           <div className="flex-1 space-y-2">
-            {breakdown.map((entry, idx) => {
+            {revenueBreakdown.map((entry, idx) => {
               const pct = total > 0 ? ((entry.value / total) * 100).toFixed(1) : "0";
               return (
                 <div key={entry.name} className="flex items-center gap-2 text-xs">

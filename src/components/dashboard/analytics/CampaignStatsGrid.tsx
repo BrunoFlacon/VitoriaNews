@@ -4,8 +4,7 @@ import {
   MousePointerClick, 
   TrendingUp, 
   Percent, 
-  ArrowUpRight, 
-  ArrowDownRight 
+  BarChart3
 } from "lucide-react";
 import { SparklineCard } from "./SparklineCard";
 
@@ -25,57 +24,61 @@ interface CampaignStatsGridProps {
   dataSource?: string;
 }
 
-export const CampaignStatsGrid = memo(({ adsStats, googleAdsStats, dataSource }: CampaignStatsGridProps) => {
-  const isDemo = dataSource === "demo" || (!adsStats && !googleAdsStats);
+export const CampaignStatsGrid = memo(({ adsStats, googleAdsStats }: CampaignStatsGridProps) => {
+  const hasData = !!(adsStats || googleAdsStats);
 
-  // Aggregated Values
+  if (!hasData) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
+            Métricas de Tráfego e Campanhas (Ads)
+          </p>
+        </div>
+        <div className="flex flex-col items-center justify-center text-center py-12 px-4 bg-card rounded-xl border border-dashed border-border/60">
+          <BarChart3 className="w-10 h-10 text-muted-foreground/30 mb-3" />
+          <p className="font-semibold text-sm text-foreground mb-1">Nenhuma campanha</p>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            Conecte contas de anúncios (Meta Ads, Google Ads) para acompanhar
+            o desempenho das suas campanhas.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Use only real data
   const impressions = (adsStats?.impressions || 0) + (googleAdsStats?.impressions || 0);
   const clicks = (adsStats?.clicks || 0) + (googleAdsStats?.clicks || 0);
-  const conversions = googleAdsStats?.conversions || Math.round(clicks * 0.076); // mock conversion rate of 7.6% if not provided
+  const conversions = googleAdsStats?.conversions || 0;
   
-  // Rates
-  const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 7.6;
-  const averageCtr = impressions > 0 ? (clicks / impressions) * 100 : 3.2;
+  const conversionRate = clicks > 0 ? (conversions / clicks) * 100 : 0;
+  const averageCtr = impressions > 0 ? (clicks / impressions) * 100 : 0;
 
-  // Formatting function
   const fmt = (v: number, isShort = false) => {
-    if (isDemo && v === 0) return "—";
+    if (v === 0) return "0";
     if (isShort && v >= 1000000000) return `${(v / 1000000000).toFixed(1)}B`;
     if (isShort && v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
     if (isShort && v >= 1000) return `${(v / 1000).toFixed(1)}K`;
     return v.toLocaleString("pt-BR");
   };
 
-  // Sparkline simulated data
-  const generateSimulatedSpark = (base: number, points = 7) => {
-    const values = [];
-    let current = base;
-    for (let i = 0; i < points; i++) {
-      const change = (Math.random() - 0.45) * (base * 0.15);
-      current = Math.max(0, current + change);
-      values.push(Math.round(current));
-    }
-    return values;
-  };
-
   const campaignStats = [
     {
       label: "Visualizações de Campanha",
-      value: impressions || (isDemo ? 120000000000 : 0), // 120B fallback as in screenshot
+      value: impressions,
       icon: Eye,
       color: "text-sky-400",
       bg: "bg-sky-500/10",
-      sparkValues: generateSimulatedSpark(1000),
-      trend: 12.4,
+      trend: 0,
     },
     {
       label: "Cliques de Campanha",
-      value: clicks || (isDemo ? 18500 : 0), // 18.5k fallback as in screenshot
+      value: clicks,
       icon: MousePointerClick,
       color: "text-indigo-400",
       bg: "bg-indigo-500/10",
-      sparkValues: generateSimulatedSpark(500),
-      trend: 8.2,
+      trend: 0,
     },
     {
       label: "Taxa de Conversão",
@@ -83,8 +86,7 @@ export const CampaignStatsGrid = memo(({ adsStats, googleAdsStats, dataSource }:
       icon: TrendingUp,
       color: "text-emerald-400",
       bg: "bg-emerald-500/10",
-      sparkValues: generateSimulatedSpark(76),
-      trend: 3.5,
+      trend: 0,
     },
     {
       label: "CTR Médio",
@@ -92,58 +94,37 @@ export const CampaignStatsGrid = memo(({ adsStats, googleAdsStats, dataSource }:
       icon: Percent,
       color: "text-amber-400",
       bg: "bg-amber-500/10",
-      sparkValues: generateSimulatedSpark(32),
-      trend: -0.4,
+      trend: 0,
     },
   ];
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
-        <p className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">Métricas de Tráfego e Campanhas (Ads)</p>
+        <p className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground">
+          Métricas de Tráfego e Campanhas (Ads)
+        </p>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        {campaignStats.map((stat, i) => {
-          const isPositive = stat.trend > 0;
-          return (
-            <div
-              key={stat.label}
-              className="p-4 md:p-6 rounded-xl bg-card shadow-xl border border-border/50 flex flex-col hover:border-primary/40 transition-all group animate-fade-in-up"
-              style={{ animationDelay: `${(i + 4) * 0.05}s`, animationFillMode: "both" }}
-            >
-              <div className="flex justify-between items-start mb-4 md:mb-6">
-                <div className={`p-2.5 rounded-xl ${stat.bg} group-hover:scale-110 transition-transform`}>
-                  <stat.icon className={`w-4 h-4 md:w-5 md:h-5 ${stat.color}`} />
-                </div>
-                <div className={`flex items-center text-[10px] font-extrabold uppercase tracking-wider space-x-0.5 px-2.5 py-1 rounded-full border ${
-                  isPositive 
-                    ? "bg-green-500/15 text-green-400 border-green-500/30" 
-                    : "bg-red-500/15 text-red-400 border-red-500/30"
-                }`}>
-                  {isPositive ? (
-                    <ArrowUpRight className="w-3 h-3 text-green-400 shrink-0" />
-                  ) : (
-                    <ArrowDownRight className="w-3 h-3 text-red-400 shrink-0" />
-                  )}
-                  <span>{isPositive ? "+" : ""}{stat.trend}%</span>
-                </div>
-              </div>
-              <div className="mb-4">
-                <h3 className="text-xl md:text-3xl font-black text-white mb-0.5 md:mb-1">
-                  {typeof stat.value === "number" ? fmt(stat.value, true) : stat.value}
-                </h3>
-                <p className="text-[10px] font-bold uppercase text-muted-foreground">{stat.label}</p>
-              </div>
-              <div className="mt-auto">
-                <SparklineCard 
-                  data={stat.sparkValues} 
-                  labels={Array.from({ length: stat.sparkValues.length }, (_, idx) => `D${idx+1}`)} 
-                  color={isPositive ? "#22c55e" : "#ef4444"} 
-                />
+        {campaignStats.map((stat, i) => (
+          <div
+            key={stat.label}
+            className="p-4 md:p-6 rounded-xl bg-card shadow-xl border border-border/50 flex flex-col hover:border-primary/40 transition-all group animate-fade-in-up"
+            style={{ animationDelay: `${(i + 4) * 0.05}s`, animationFillMode: "both" }}
+          >
+            <div className="flex justify-between items-start mb-4 md:mb-6">
+              <div className={`p-2.5 rounded-xl ${stat.bg} group-hover:scale-110 transition-transform`}>
+                <stat.icon className={`w-4 h-4 md:w-5 md:h-5 ${stat.color}`} />
               </div>
             </div>
-          );
-        })}
+            <div className="mb-4">
+              <h3 className="text-xl md:text-3xl font-black text-white mb-0.5 md:mb-1">
+                {typeof stat.value === "number" ? fmt(stat.value, true) : stat.value}
+              </h3>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground">{stat.label}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -394,6 +394,9 @@ export function WhatsAppContactsTab({ onNavigateToChat }: { onNavigateToChat?: (
 
   return (
     <div className="space-y-4 p-4">
+      <div className="px-4 pt-2 pb-1">
+        <p className="text-xs text-muted-foreground/70">Gerencie seus contatos do WhatsApp: visualize, filtre e navegue para o chat direto.</p>
+      </div>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={handleAddNew} className="bg-[#25D366] hover:bg-[#128C7E] text-white">

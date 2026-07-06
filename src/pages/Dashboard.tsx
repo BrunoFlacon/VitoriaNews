@@ -41,6 +41,8 @@ const ManualView = lazy(() => import("@/components/dashboard/ManualView").then(m
 const RobotBuilder = lazy(() => import("./RobotBuilder"));
 const CronMonitorView = lazy(() => import("@/components/dashboard/CronMonitorView").then(m => ({ default: m.CronMonitorView })));
 const SocialNetworksView = lazy(() => import("@/components/dashboard/SocialNetworksView").then(m => ({ default: m.SocialNetworksView })));
+const TrendsView = lazy(() => import("@/components/dashboard/TrendsView"));
+const PlatformPreview = lazy(() => import("@/components/dashboard/PlatformPreview"));
 const FloatingWhatsApp = lazy(() => import("@/components/dashboard/FloatingWhatsApp").then(m => ({ default: m.FloatingWhatsApp })));
 
 const ViewLoader = () => (
@@ -52,6 +54,9 @@ const ViewLoader = () => (
   </div>
 );
 
+// WhatsApp Hub View
+const WhatsAppHubView = lazy(() => import("@/components/dashboard/whatsapp/WhatsAppHubView").then(m => ({ default: m.WhatsAppHubView })));
+
 const Dashboard = () => {
   const { logout, user } = useAuth();
   const { toast } = useToast();
@@ -59,6 +64,7 @@ const Dashboard = () => {
   const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
 const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard");
+  const [activeSubTab, setActiveSubTab] = useState<string | undefined>(searchParams.get("subtab") || undefined);
   const [settingsSubTab, setSettingsSubTab] = useState<string | undefined>(undefined);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -187,13 +193,15 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
     startTransition(() => {
       setActiveTab(tab);
       if (tab !== 'settings') setSettingsSubTab(undefined);
+      if (tab !== 'whatsapp') setActiveSubTab(undefined);
     });
   }, []);
 
   const handleNotificationsClick = useCallback(() => setShowNotifications(true), []);
   const handleHeaderNavigate = useCallback((tab: string, subTab?: string) => {
     handleTabChange(tab);
-    if (subTab) setSettingsSubTab(subTab);
+    if (subTab && tab === 'settings') setSettingsSubTab(subTab);
+    if (subTab && tab === 'whatsapp') setActiveSubTab(subTab);
   }, [handleTabChange]);
 
   const handleEditPost = useCallback((post: ScheduledPost) => {
@@ -474,6 +482,19 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
             <ErrorBoundary><MessagingView /></ErrorBoundary>
           </Suspense>
         );
+      case "whatsapp":
+        return (
+          <div className="h-full flex flex-col flex-1 min-h-0">
+            <Suspense fallback={<ViewLoader />}>
+              <ErrorBoundary>
+                <WhatsAppHubView
+                  defaultTab={activeSubTab}
+                  onBackToInbox={() => handleTabChange("messaging")}
+                />
+              </ErrorBoundary>
+            </Suspense>
+          </div>
+        );
       case "news":
         return (
           <Suspense fallback={<ViewLoader />}>
@@ -529,6 +550,23 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
             <ErrorBoundary><CronMonitorView /></ErrorBoundary>
           </Suspense>
         );
+      case "trends":
+        return (
+          <Suspense fallback={<ViewLoader />}>
+            <ErrorBoundary><TrendsView /></ErrorBoundary>
+          </Suspense>
+        );
+      case "preview":
+        return (
+          <Suspense fallback={<ViewLoader />}>
+            <ErrorBoundary><PlatformPreview
+              content=""
+              mediaType="image"
+              selectedPlatforms={["instagram", "facebook", "twitter"]}
+              onClose={() => handleTabChange("dashboard")}
+            /></ErrorBoundary>
+          </Suspense>
+        );
       default:
         return <ViewLoader />;
     }
@@ -542,9 +580,11 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         onLogout={handleLogout}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
+        activeSubTab={activeSubTab}
+        setActiveSubTab={setActiveSubTab}
       />
       <div className={cn(
-        "flex-1 transition-[padding-left] duration-200 min-w-0 flex flex-col min-h-screen",
+        "flex-1 min-w-0 flex flex-col min-h-screen",
         isMobile ? "pl-0 pb-20" : (isSidebarCollapsed ? "md:pl-20" : "md:pl-64")
       )}>
         <Header 
@@ -553,9 +593,17 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
           isSidebarCollapsed={isSidebarCollapsed}
           setIsSidebarCollapsed={setIsSidebarCollapsed}
         />
-        <main className="p-4 md:p-8 flex-1 w-full max-w-7xl mx-auto overflow-x-hidden min-w-0">
-          {/* OTIMIZAÇÃO LCP: Garantir que a área de conteúdo tenha altura mínima para ser o maior elemento do viewport */}
-          <div className="min-h-[70vh] flex flex-col">
+        <main className={cn(
+          "flex-1 w-full mx-auto overflow-x-hidden min-w-0",
+          activeTab === "whatsapp"
+            ? "p-0 max-w-none"
+            : "p-4 md:p-8 max-w-7xl"
+        )}>
+          <div className={cn(
+            "flex flex-col",
+            activeTab !== "whatsapp" && "min-h-[70vh]",
+            activeTab === "whatsapp" && "h-[685px]"
+          )}>
             {renderContent()}
           </div>
         </main>

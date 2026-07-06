@@ -20,7 +20,11 @@ import {
   FolderOpen,
   Bot,
   Globe,
-  Activity
+  Activity,
+  ChevronDown,
+  Smartphone,
+  TrendingUp,
+  Eye
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSystem } from "@/hooks/useSystem";
@@ -33,6 +37,9 @@ interface SidebarProps {
   onLogout?: () => void;
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
+  /** Sub-tab for nested navigation (e.g., WhatsApp tools) */
+  activeSubTab?: string;
+  setActiveSubTab?: (subTab: string) => void;
 }
 
 // Icon mapping for dynamic IDs
@@ -51,7 +58,9 @@ const ICON_MAP: Record<string, any> = {
   notifications: Bell,
   manual: BookOpen,
   robot: Bot,
-  monitoring: Activity
+  monitoring: Activity,
+  trends: TrendingUp,
+  preview: Eye
 };
 
 export const Sidebar = memo(({ 
@@ -59,15 +68,28 @@ export const Sidebar = memo(({
   setActiveTab, 
   onLogout,
   isCollapsed,
-  setIsCollapsed 
+  setIsCollapsed,
+  activeSubTab,
+  setActiveSubTab
 }: SidebarProps) => {
   const { settings, navSettings } = useSystem();
   const { profile } = useAuth();
   const userRole = profile?.role || 'user';
   const isMobile = useIsMobile();
 
+  // State to control which accordion sections are open
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+  const toggleSection = useCallback((sectionId: string) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) next.delete(sectionId);
+      else next.add(sectionId);
+      return next;
+    });
+  }, []);
+
   const { topMenu, bottomMenu } = useMemo(() => {
-    // Definimos os itens padrão (fallback) que DEVEM sempre existir se não houver configuração contrária
     const defaultTopMenu = [
       { id: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
       { id: "create", icon: PenSquare, label: "Criar Post" },
@@ -80,6 +102,8 @@ export const Sidebar = memo(({
       { id: "networks", icon: Share2, label: "Redes Sociais" },
       { id: "robot", icon: Bot, label: "Artesão de Bots" },
       { id: "monitoring", icon: Activity, label: "Monitoramento" },
+      { id: "trends", icon: TrendingUp, label: "Tendências" },
+      { id: "preview", icon: Eye, label: "Prévia de Plataformas" },
     ];
 
     const mandatoryBottom = [
@@ -88,7 +112,6 @@ export const Sidebar = memo(({
       { id: "sys_portal", icon: Globe, label: "Portal & Temas" }
     ];
 
-    // Se não houver configurações no banco, retornamos os padrões
     if (navSettings.length === 0) {
       return { 
         topMenu: defaultTopMenu, 
@@ -96,22 +119,19 @@ export const Sidebar = memo(({
       };
     }
 
-    // Se houver configurações, mesclamos: o que está no banco sobrescreve o padrão
     const uniqueMap = new Map();
     
-    // Primeiro, preenchemos com os padrões
     defaultTopMenu.concat(mandatoryBottom).forEach(item => {
       uniqueMap.set(item.id, { ...item, active: true, order_index: 100 });
     });
 
-    // Depois, sobrepomos com as configurações do banco (navSettings)
     navSettings.forEach(s => {
       const existing = uniqueMap.get(s.key);
       uniqueMap.set(s.key, {
         id: s.key,
         label: s.value,
         icon: ICON_MAP[s.key] || (existing?.icon || LayoutDashboard),
-        active: s.active !== false,
+        active: existing ? existing.active : s.active !== false,
         order_index: s.order_index,
         allowed_roles: s.allowed_roles
       });
@@ -129,8 +149,185 @@ export const Sidebar = memo(({
     return { topMenu, bottomMenu };
   }, [navSettings, userRole]);
 
-  const dynamicMenuItems = topMenu;
-  const dynamicBottomItems = bottomMenu;
+  // WhatsApp child items
+  const whatsappChildren = [
+    { id: "whatsapp_hub", icon: Smartphone, label: "WhatsApp" },
+  ];
+
+  // Handle click on main item
+  const handleItemClick = useCallback((itemId: string) => {
+    startTransition(() => setActiveTab(itemId));
+    if (isMobile) requestAnimationFrame(() => setIsCollapsed(true));
+  }, [isMobile, setIsCollapsed, setActiveTab]);
+
+  const handleMessagingToggle = useCallback(() => {
+    toggleSection("messaging");
+  }, [toggleSection]);
+
+  const handleChildClick = useCallback((childId: string) => {
+    startTransition(() => {
+      setActiveTab("whatsapp");
+      if (setActiveSubTab) setActiveSubTab("inbox");
+    });
+    setExpandedSections(prev => { const n = new Set(prev); n.add("messaging"); return n; });
+    if (isMobile) requestAnimationFrame(() => setIsCollapsed(true));
+  }, [isMobile, setIsCollapsed, setActiveTab, setActiveSubTab]);
+
+  // Determine if a child is active
+  const isChildActive = useCallback((_childId: string) => {
+    return activeTab === "whatsapp";
+  }, [activeTab]);
+
+  const isMessagingExpanded = expandedSections.has("messaging");
+  const showMessagingSubmenu = isMessagingExpanded || activeTab === "whatsapp";
+
+  const renderSidebarItem = (item: { id: string; icon: any; label: string }, idx: number) => {
+    const Icon = item.icon;
+    const isActive = activeTab === item.id;
+
+      // Special treatment for "messaging" — accordion
+      if (item.id === "messaging" && !isCollapsed) {
+        const isMessagingOrWhatsapp = activeTab === "messaging" || activeTab === "whatsapp";
+        return (
+          <div key={item.id} className="w-full shrink-0">
+            <div
+              className={cn(
+                "w-full flex items-center gap-3 transition-all duration-300 group relative",
+                "px-4 py-2 rounded-xl",
+                isMessagingOrWhatsapp
+                  ? "sidebar-item-active"
+                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+            >
+              <button
+                onClick={() => handleItemClick(item.id)}
+                className="flex items-center gap-3 flex-1 min-w-0 text-left"
+              >
+                <Icon className={cn(
+                  "w-5 h-5 transition-transform duration-300 shrink-0",
+                  isMessagingOrWhatsapp ? "scale-110" : "group-hover:scale-110"
+                )} />
+                <span className="font-bold text-base tracking-tight">{item.label}</span>
+              </button>
+              <button
+                onClick={handleMessagingToggle}
+                className="shrink-0 p-0.5 rounded-md hover:bg-sidebar-accent/50 transition-colors focus:outline-none"
+                aria-label="Expandir/recolher WhatsApp"
+              >
+                <ChevronDown className={cn(
+                  "w-4 h-4 transition-transform duration-200",
+                  isMessagingExpanded ? "rotate-0" : "-rotate-90"
+                )} />
+              </button>
+            </div>
+
+            {/* Submenu — WhatsApp section */}
+            <AnimatePresence initial={false}>
+              {showMessagingSubmenu && (
+                <motion.div
+                  key="messaging-submenu"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeInOut" }}
+                  className="overflow-hidden"
+                >
+                  {/* WhatsApp section header */}
+                  <div className="pl-10 pr-4 py-1.5 mt-1">
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">
+                      <Smartphone className="w-3 h-3" />
+                      <span>WhatsApp</span>
+                      <div className="flex-1 border-t border-border/30" />
+                    </div>
+                  </div>
+
+                  <div className="pl-10 pr-2 pb-2 space-y-0.5">
+                    {whatsappChildren.map((child) => {
+                      const ChildIcon = child.icon;
+                      const childActive = isChildActive(child.id);
+                      return (
+                        <button
+                          key={child.id}
+                          onClick={() => handleChildClick(child.id)}
+                          className={cn(
+                            "w-full flex items-center gap-3 px-3 py-1.5 rounded-lg transition-all duration-200 text-sm group",
+                            childActive
+                              ? "bg-primary/10 text-primary font-semibold"
+                              : "text-muted-foreground/80 hover:text-foreground hover:bg-sidebar-accent/50"
+                          )}
+                        >
+                          <ChildIcon className="w-4 h-4 shrink-0" />
+                          <span className="truncate">{child.label}</span>
+                          {childActive && (
+                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_6px_hsl(var(--primary)/0.5)]" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      }
+
+    // Collapsed mode for messaging
+    if (item.id === "messaging" && isCollapsed) {
+      return (
+        <button
+          key={item.id}
+          onClick={() => handleItemClick(item.id)}
+          className={cn(
+            "w-full flex items-center gap-3 transition-all duration-300 group relative shrink-0",
+            "w-11 h-11 justify-center rounded-2xl",
+            activeTab === "messaging" || activeTab === "whatsapp"
+              ? "sidebar-item-active"
+              : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          )}
+        >
+          <Icon className={cn(
+            "w-5 h-5 transition-transform duration-300 shrink-0",
+            (activeTab === "messaging" || activeTab === "whatsapp") ? "scale-110" : "group-hover:scale-110"
+          )} />
+          <div className="absolute left-full ml-4 px-2 py-1 bg-black text-white text-[10px] uppercase font-bold tracking-widest rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[60] shadow-xl border border-border">
+            {item.label}
+          </div>
+        </button>
+      );
+    }
+
+    // Standard item (not messaging)
+    return (
+      <button
+        key={item.id}
+        onClick={() => handleItemClick(item.id)}
+        className={cn(
+          "w-full flex items-center gap-3 transition-all duration-300 group relative shrink-0",
+          isCollapsed ? "w-11 h-11 justify-center rounded-2xl" : "px-4 py-2 rounded-xl",
+          isActive 
+            ? "sidebar-item-active" 
+            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        )}
+      >
+        <Icon className={cn(
+          "w-5 h-5 transition-transform duration-300 shrink-0",
+          isActive ? "scale-110" : "group-hover:scale-110"
+        )} />
+        {!isCollapsed && (
+          <span className="font-bold text-base tracking-tight">{item.label}</span>
+        )}
+        {!isCollapsed && isActive && (
+          <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)] transition-all duration-200" />
+        )}
+        {isCollapsed && (
+          <div className="absolute left-full ml-4 px-2 py-1 bg-black text-white text-[10px] uppercase font-bold tracking-widest rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[60] shadow-xl border border-border">
+            {item.label}
+          </div>
+        )}
+      </button>
+    );
+  };
 
   return (
     <>
@@ -192,48 +389,14 @@ export const Sidebar = memo(({
         "w-full flex-1 flex flex-col gap-0.5 overflow-y-auto overflow-x-hidden mt-1 px-2 scrollbar-none",
         isCollapsed ? "items-center" : "pr-1"
       )}>
-        {dynamicMenuItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              onClick={() => {
-                startTransition(() => setActiveTab(item.id));
-                if (isMobile) requestAnimationFrame(() => setIsCollapsed(true));
-              }}
-              className={cn(
-                "w-full flex items-center gap-3 transition-all duration-300 group relative shrink-0",
-                isCollapsed ? "w-11 h-11 justify-center rounded-2xl" : "px-4 py-2 rounded-xl",
-                activeTab === item.id 
-                  ? "sidebar-item-active" 
-                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              )}
-            >
-              <Icon className={cn(
-                "w-5 h-5 transition-transform duration-300 shrink-0",
-                activeTab === item.id ? "scale-110" : "group-hover:scale-110"
-              )} />
-              {!isCollapsed && (
-                <span className="font-bold text-base tracking-tight">{item.label}</span>
-              )}
-              {!isCollapsed && activeTab === item.id && (
-                <span className="absolute right-3 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)] transition-all duration-200" />
-              )}
-              {isCollapsed && (
-                <div className="absolute left-full ml-4 px-2 py-1 bg-black text-white text-[10px] uppercase font-bold tracking-widest rounded-md opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[60] shadow-xl border border-border">
-                  {item.label}
-                </div>
-              )}
-            </button>
-          );
-        })}
+        {topMenu.map((item, idx) => renderSidebarItem(item, idx))}
       </div>
 
       <div className={cn(
         "w-full mt-auto flex flex-col gap-1 pt-4 border-t border-sidebar-border/30 px-2 pb-6 shrink-0",
         isCollapsed ? "items-center" : ""
       )}>
-        {dynamicBottomItems.map((item) => {
+        {bottomMenu.map((item) => {
           const Icon = item.icon;
           return (
             <button

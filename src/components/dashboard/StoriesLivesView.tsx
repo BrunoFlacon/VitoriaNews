@@ -1144,7 +1144,7 @@ export const StoriesLivesView = () => {
 
       {/* Create Dialog — Integrated */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {createType === "story" ? <Radio className="w-5 h-5 text-primary" /> : <Video className="w-5 h-5 text-red-500" />}
@@ -1374,7 +1374,7 @@ export const StoriesLivesView = () => {
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteConfirmId} onOpenChange={(open) => { if (!open) setDeleteConfirmId(null); }}>
-        <DialogContent className="sm:max-w-sm" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-500">
               <Trash2 className="w-5 h-5" /> Confirmar Exclusão

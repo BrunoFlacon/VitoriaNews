@@ -21,6 +21,7 @@ interface ChatWindowProps {
   onDeleteConversation: (id: string) => void;
   onOpenInfo: (chat: any) => void;
   onSync: (platform: string) => void;
+  onExport?: (chatId: string, format?: string) => void;
   getPlatformStyles: (platform: string | null) => any;
   getTypeLabel: (type: string) => string;
   user: any;
@@ -296,6 +297,11 @@ export const ChatWindow = ({
               <DropdownMenuItem onClick={() => onOpenInfo(activeChat)} className="cursor-pointer">
                 <MessageCircle className="w-4 h-4 mr-2" /> Ver Informações
               </DropdownMenuItem>
+              {onExport && (
+                <DropdownMenuItem onClick={() => onExport(activeChat.id)} className="cursor-pointer">
+                  <Download className="w-4 h-4 mr-2" /> Exportar Conversa
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onDeleteConversation(activeChat.id)} className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer">
                 <Trash2 className="w-4 h-4 mr-2" /> Excluir Histórico

@@ -10,7 +10,7 @@ export const MatrixBackground: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$+-*/=%"\'#&_(),.;:?!\\|{}<>[]^~';
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$+-*/=';
     const fontSize = 14;
     let width = 0;
     let height = 0;
@@ -18,8 +18,8 @@ export const MatrixBackground: React.FC = () => {
     let drops: number[] = [];
 
     const initCanvas = () => {
-      width = canvas.width = document.documentElement.clientWidth;
-      height = canvas.height = document.documentElement.clientHeight;
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
       columns = Math.ceil(width / fontSize);
       drops = new Array(columns).fill(0).map(() => Math.random() * -height);
     };
@@ -27,11 +27,19 @@ export const MatrixBackground: React.FC = () => {
     initCanvas();
 
     let animationFrameId: number;
+    let skipFrame = false;
 
     const draw = () => {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-      ctx.fillRect(0, 0, width, height);
+      skipFrame = !skipFrame;
+      if (skipFrame) {
+        animationFrameId = requestAnimationFrame(draw);
+        return;
+      }
 
+      ctx.globalAlpha = 0.05;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 0.5;
       ctx.fillStyle = '#0F0';
       ctx.font = `${fontSize}px monospace`;
 
@@ -48,7 +56,7 @@ export const MatrixBackground: React.FC = () => {
       animationFrameId = requestAnimationFrame(draw);
     };
 
-    draw();
+    animationFrameId = requestAnimationFrame(draw);
 
     const handleResize = () => {
       requestAnimationFrame(() => {
@@ -67,8 +75,8 @@ export const MatrixBackground: React.FC = () => {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 z-0 pointer-events-none opacity-20"
-      style={{ filter: 'brightness(0.5) contrast(1.2)' }}
+      className="fixed inset-0 z-0 pointer-events-none"
+      style={{ opacity: 0.15, willChange: 'transform' }}
     />
   );
 };

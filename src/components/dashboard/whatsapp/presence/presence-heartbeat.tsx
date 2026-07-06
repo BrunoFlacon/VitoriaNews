@@ -36,16 +36,37 @@ export function PresenceHeartbeat() {
       return "online";
     };
 
+    // Check if the RPC exists on first call only; if not, silently disable.
+    let rpcAvailable: boolean | null = null;
+
     const beat = async () => {
       if (cancelled) return;
       const t = Date.now();
       if (t - lastBeatAt < 1_000) return;
       lastBeatAt = t;
+
+      if (rpcAvailable === false) return; // RPC confirmed missing — skip silently
+
       const { error } = await supabase.rpc("touch_presence", {
         p_status: currentStatus(),
       });
-      if (error && !cancelled) {
-        console.error("[PresenceHeartbeat] touch_presence failed:", error.message);
+
+      if (error) {
+        if (error.code === "PGRST202" || error.message?.includes("function not found")) {
+          // RPC doesn't exist in this Supabase instance (migration not applied).
+          // Log once, then disable further beats.
+          if (rpcAvailable === null) {
+            console.info("[PresenceHeartbeat] touch_presence RPC not available — presence tracking disabled.");
+          }
+          rpcAvailable = false;
+          return;
+        }
+        // Other unexpected error
+        if (!cancelled) {
+          console.warn("[PresenceHeartbeat] touch_presence failed:", error.message);
+        }
+      } else {
+        rpcAvailable = true;
       }
     };
 

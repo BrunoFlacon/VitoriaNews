@@ -91,13 +91,12 @@ serve(async (req: Request) => {
       });
     }
 
-    let body: { members?: any[]; googleToken?: string };
+    let body: { members?: any[]; contacts?: any[]; googleToken?: string; table?: string } = {};
     try {
-      body = await req.json();
+      const text = await req.text();
+      if (text) body = JSON.parse(text);
     } catch {
-      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-        status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
-      });
+      // Ignore parse errors — use defaults
     }
 
     let googleToken = body.googleToken;
@@ -105,57 +104,82 @@ serve(async (req: Request) => {
       googleToken = await resolveGoogleToken(supabase, user.id);
     }
     if (!googleToken) {
-      return new Response(JSON.stringify({ error: "API do Google Contatos bloqueada. Conecte sua Conta Google ou YouTube em Configurações > APIs." }), {
-        status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+      return new Response(JSON.stringify({ status: 'skipped', message: 'Nenhum token Google configurado. Conecte sua Conta Google em Configurações.' }), {
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
       });
     }
 
-    let members = body.members || [];
-    if (members.length === 0) {
+    // Support both messaging_members and contacts table
+    const sourceTable = body.table || 'messaging_members';
+    let items = body.members || body.contacts || [];
+    
+    if (items.length === 0 && sourceTable === 'contacts') {
+      const { data: allContacts } = await supabase
+        .from('contacts')
+        .select('*')
+        .eq('user_id', user.id);
+      if (allContacts?.length) items = allContacts;
+    } else if (items.length === 0 && sourceTable === 'messaging_members') {
       const { data: allMembers } = await supabase
         .from('messaging_members')
         .select('*')
         .eq('user_id', user.id);
-      if (allMembers?.length) members = allMembers;
+      if (allMembers?.length) items = allMembers;
+    }
+
+    if (items.length === 0) {
+      return new Response(JSON.stringify({ success: true, count: 0, message: 'Nenhum item para sincronizar' }), {
+        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+      });
     }
 
     const results: any[] = [];
     let allFailed = true;
 
-    for (let i = 0; i < members.length; i += BATCH_SIZE) {
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
       if (i > 0) await delay(RATE_LIMIT_DELAY_MS);
-      const batch = members.slice(i, i + BATCH_SIZE);
+      const batch = items.slice(i, i + BATCH_SIZE);
 
-      await Promise.all(batch.map(async (member: any) => {
+      await Promise.all(batch.map(async (item: any) => {
         try {
           const contactBody: any = {};
-          if (member.full_name) {
+          const name = item.full_name || item.name;
+          const phone = item.phone_number || item.phone;
+          const email = item.email;
+          const company = item.company;
+          const platform = item.platform || 'contacts';
+
+          if (name) {
+            const parts = name.split(' ');
             contactBody.names = [{
-              displayName: member.full_name,
-              givenName: member.first_name || member.full_name.split(" ")[0] || member.full_name,
-              familyName: member.last_name || member.full_name.split(" ").slice(1).join(" ") || "",
+              displayName: name,
+              givenName: parts[0] || name,
+              familyName: parts.slice(1).join(' ') || '',
             }];
           }
-          if (member.phone_number) {
-            contactBody.phoneNumbers = [{ value: member.phone_number, type: "mobile" }];
+          if (phone) {
+            contactBody.phoneNumbers = [{ value: phone, type: "mobile" }];
+          }
+          if (email) {
+            contactBody.emailAddresses = [{ value: email, type: "work" }];
+          }
+          if (company) {
+            contactBody.organizations = [{ name: company }];
           }
           contactBody.biographies = [{
-            value: `Sincronizado via Social Canvas Hub - ${member.platform} - @${member.username || ""}`,
+            value: `Sincronizado via Social Canvas Hub - ${platform}`,
             contentType: "TEXT_PLAIN",
           }];
           contactBody.userDefined = [
-            { key: "platform", value: member.platform },
-            { key: "channel", value: member.channel_id || "" },
-            { key: "role", value: member.role || "member" },
+            { key: "platform", value: platform },
+            { key: "source", value: sourceTable },
           ];
-          if (member.username) {
-            contactBody.userDefined.push({ key: "username", value: `@${member.username}` });
-          }
 
           let response;
-          if (member.google_contact_id) {
+          const existingGoogleId = item.google_contact_id;
+          if (existingGoogleId) {
             response = await fetchWithTimeout(
-              `https://people.googleapis.com/v1/${member.google_contact_id}:updateContact?updatePersonFields=names,phoneNumbers,biographies,userDefined`,
+              `https://people.googleapis.com/v1/${existingGoogleId}:updateContact?updatePersonFields=names,phoneNumbers,emailAddresses,organizations,biographies,userDefined`,
               {
                 method: "PATCH",
                 headers: { Authorization: `Bearer ${googleToken}`, "Content-Type": "application/json" },
@@ -174,22 +198,31 @@ serve(async (req: Request) => {
           if (response.ok) {
             allFailed = false;
             const resourceName = data.resourceName;
-            await supabase.from("messaging_members").update({
-              google_contact_id: resourceName,
-              updated_at: new Date().toISOString(),
-            }).eq("user_id", user.id).eq("phone_number", member.phone_number).eq("platform", member.platform);
+            
+            // Write back google_contact_id to the correct table
+            if (sourceTable === 'contacts') {
+              await supabase.from("contacts").update({
+                google_contact_id: resourceName,
+                updated_at: new Date().toISOString(),
+              }).eq("id", item.id);
+            } else {
+              await supabase.from("messaging_members").update({
+                google_contact_id: resourceName,
+                updated_at: new Date().toISOString(),
+              }).eq("user_id", user.id).eq("phone_number", phone).eq("platform", platform);
+            }
 
-            results.push({ member: member.full_name || member.phone_number, success: true, googleContactId: resourceName });
+            results.push({ name: name || phone, success: true, googleContactId: resourceName });
           } else {
-            results.push({ member: member.full_name || member.phone_number, success: false, error: data.error?.message });
+            results.push({ name: name || phone, success: false, error: data.error?.message });
           }
         } catch (err: any) {
-          results.push({ member: member.full_name || member.phone_number, success: false, error: err.message });
+          results.push({ name: item.full_name || item.name || item.phone_number || item.phone, success: false, error: err.message });
         }
       }));
     }
 
-    return new Response(JSON.stringify({ success: !allFailed, results }), {
+    return new Response(JSON.stringify({ success: !allFailed, count: results.filter(r => r.success).length, results }), {
       status: allFailed ? 500 : 200,
       headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });

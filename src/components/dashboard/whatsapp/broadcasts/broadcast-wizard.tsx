@@ -69,7 +69,7 @@ export function BroadcastWizard({ open, onClose, onComplete }: BroadcastWizardPr
         template_name: selectedTemplate.name,
         template_language: selectedTemplate.language || "pt_BR",
         template_variables: variables,
-        audience_config: audience,
+        audience_filter: audience,
         header_media_url: headerMediaUrl || null,
         status: "draft",
       });
@@ -93,13 +93,13 @@ export function BroadcastWizard({ open, onClose, onComplete }: BroadcastWizardPr
 
     try {
       // 1. Determine contacts
-      let contactPhones: { phone: string; name?: string }[] = [];
+      let contactPhones: { id?: string; phone: string; name?: string }[] = [];
 
       if (audience.type === "all") {
         const { data } = await supabase
           .from("contacts")
-          .select("phone, name");
-        contactPhones = (data ?? []).map((c: any) => ({ phone: c.phone, name: c.name }));
+          .select("id, phone, name");
+        contactPhones = (data ?? []).map((c: any) => ({ id: c.id, phone: c.phone, name: c.name }));
       } else if (audience.type === "tags" && audience.tagIds?.length) {
         const { data: contactTags } = await supabase
           .from("contact_tags")
@@ -121,12 +121,13 @@ export function BroadcastWizard({ open, onClose, onComplete }: BroadcastWizardPr
         if (contactIds.length > 0) {
           const { data: contacts } = await supabase
             .from("contacts")
-            .select("phone, name")
+            .select("id, phone, name")
             .in("id", contactIds);
-          contactPhones = (contacts ?? []).map((c: any) => ({ phone: c.phone, name: c.name }));
+          contactPhones = (contacts ?? []).map((c: any) => ({ id: c.id, phone: c.phone, name: c.name }));
         }
       } else if (audience.type === "csv" && audience.csvContacts?.length) {
-        contactPhones = audience.csvContacts;
+        // CSV contacts don't have IDs yet — we'll pass phone/name and skip contact_id
+        contactPhones = audience.csvContacts.map(c => ({ phone: c.phone, name: c.name }));
       }
 
       // 2. Create broadcast record
@@ -138,10 +139,10 @@ export function BroadcastWizard({ open, onClose, onComplete }: BroadcastWizardPr
           template_name: selectedTemplate.name,
           template_language: selectedTemplate.language || "pt_BR",
           template_variables: variables,
-          audience_config: audience,
+          audience_filter: audience,
           header_media_url: headerMediaUrl || null,
           status: "sending",
-          recipient_count: contactPhones.length,
+          total_recipients: contactPhones.length,
         })
         .select()
         .single();
@@ -170,17 +171,15 @@ export function BroadcastWizard({ open, onClose, onComplete }: BroadcastWizardPr
 
           await supabase.from("broadcast_recipients").insert({
             broadcast_id: broadcast.id,
-            contact_phone: contact.phone,
-            contact_name: contact.name || null,
-            whatsapp_message_id: result.data?.messageId || null,
+            contact_id: contact.id || null,
             status: result.error ? "failed" : "sent",
+            whatsapp_message_id: result.data?.messageId || null,
             error_message: result.error?.message || null,
           });
         } catch (sendErr) {
           await supabase.from("broadcast_recipients").insert({
             broadcast_id: broadcast.id,
-            contact_phone: contact.phone,
-            contact_name: contact.name || null,
+            contact_id: contact.id || null,
             status: "failed",
             error_message: sendErr instanceof Error ? sendErr.message : "Erro de envio",
           });

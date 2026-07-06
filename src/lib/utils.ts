@@ -52,7 +52,7 @@ export function sanitizeHtml(input: string | null | undefined): string {
   if (!input) return "";
   
   // Basic cleanup: remove script tags and on* attributes
-  let sanitized = input
+  const sanitized = input
     .replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "")
     .replace(/on\w+="[^"]*"/gim, "")
     .replace(/on\w+='[^']*'/gim, "")

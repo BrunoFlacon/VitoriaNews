@@ -87,7 +87,7 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const rawBody = await req.text();
-    let body = JSON.parse(rawBody);
+    const body = JSON.parse(rawBody);
 
     // Verificar X-LI-Signature
     const liSignature = req.headers.get("X-LI-Signature") || "";

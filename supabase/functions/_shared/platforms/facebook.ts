@@ -44,7 +44,7 @@ export async function publishToFacebook(supabase: any, payload: PublishPayload):
     const endpoint = `/${meta.pageId}/feed`; // Always post to the page's feed
     const url = `https://graph.facebook.com/v17.0${endpoint}`;
 
-    let body: any = {
+    const body: any = {
       message: content,
       access_token: meta.accessToken
     };

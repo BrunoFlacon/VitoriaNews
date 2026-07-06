@@ -113,7 +113,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       const [statsResult, credsResult, channelsResult, messagesResult, scheduledResult, demographicsResult] = await Promise.all([
         run(supabase
           .from('social_accounts')
-          .select('id, platform, platform_user_id, username, page_name, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, engagement_rate, updated_at, chat_id, metadata')
+          .select('id, platform, platform_user_id, username, page_name, profile_picture, followers, followers_count, posts_count, views, likes, shares, comments, engagement_rate, updated_at, metadata')
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false })),
         run(supabase

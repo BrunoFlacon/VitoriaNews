@@ -31,6 +31,7 @@ export function VideoViewer({ videos, initialIndex, onClose }: VideoViewerProps)
   const isPinching = useRef(false);
   const isSwiping = useRef(false);
   const touchState = useRef({ startX: 0, startY: 0, startDist: 0, startScale: 1 });
+  const touchRAFRef = useRef<number | null>(null);
 
   const current = videos[index];
 
@@ -68,8 +69,19 @@ export function VideoViewer({ videos, initialIndex, onClose }: VideoViewerProps)
   }, [current]);
 
   useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    const styleId = 'video-viewer-style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = 'body.video-viewer-open { overflow: hidden !important; }';
+      document.head.appendChild(style);
+    }
+    document.body.classList.add('video-viewer-open');
+    return () => {
+      document.body.classList.remove('video-viewer-open');
+      const s = document.getElementById(styleId);
+      if (s) s.remove();
+    };
   }, []);
 
   const goTo = useCallback((i: number) => {
@@ -109,38 +121,49 @@ export function VideoViewer({ videos, initialIndex, onClose }: VideoViewerProps)
   }, [transform.scale]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (touchRAFRef.current) return;
     if (e.touches.length === 2 && isPinching.current) {
       e.preventDefault();
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
       const touches = e.touches;
       const dx = touches[0].clientX - touches[1].clientX;
       const dy = touches[0].clientY - touches[1].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const newScale = Math.max(1, Math.min(4, touchState.current.startScale * (dist / touchState.current.startDist)));
-      // Pan: track midpoint movement
-      const midX = (touches[0].clientX + touches[1].clientX) / 2;
-      const midY = (touches[0].clientY + touches[1].clientY) / 2;
-      const panX = midX - touchState.current.startX;
-      const panY = midY - touchState.current.startY;
-      setTransform(prev => ({ scale: newScale, x: prev.x + panX / newScale, y: prev.y + panY / newScale }));
-      touchState.current.startX = midX;
-      touchState.current.startY = midY;
-      setZoomed(newScale > 1.1);
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      touchRAFRef.current = requestAnimationFrame(() => {
+        touchRAFRef.current = null;
+        const newScale = Math.max(1, Math.min(4, touchState.current.startScale * (dist / touchState.current.startDist)));
+        const panX = midX - touchState.current.startX;
+        const panY = midY - touchState.current.startY;
+        setTransform(prev => ({ scale: newScale, x: prev.x + panX / newScale, y: prev.y + panY / newScale }));
+        touchState.current.startX = midX;
+        touchState.current.startY = midY;
+        setZoomed(newScale > 1.1);
+      });
     } else if (e.touches.length === 1 && !isPinching.current) {
-      const deltaX = e.touches[0].clientX - touchState.current.startX;
-      const deltaY = e.touches[0].clientY - touchState.current.startY;
-      // If already zoomed, pan with single finger instead of swipe
-      if (zoomed) {
-        e.preventDefault();
-        setTransform(prev => ({ ...prev, x: prev.x + deltaX / transform.scale, y: prev.y + deltaY / transform.scale }));
-        touchState.current.startX = e.touches[0].clientX;
-        touchState.current.startY = e.touches[0].clientY;
-      } else if (Math.abs(deltaX) > 10) {
-        isSwiping.current = true;
-      }
+      const t = e.touches[0];
+      touchRAFRef.current = requestAnimationFrame(() => {
+        touchRAFRef.current = null;
+        const deltaX = t.clientX - touchState.current.startX;
+        const deltaY = t.clientY - touchState.current.startY;
+        if (zoomed) {
+          setTransform(prev => ({ ...prev, x: prev.x + deltaX / transform.scale, y: prev.y + deltaY / transform.scale }));
+          touchState.current.startX = t.clientX;
+          touchState.current.startY = t.clientY;
+        } else if (Math.abs(deltaX) > 10) {
+          isSwiping.current = true;
+        }
+      });
     }
   }, [zoomed, transform.scale]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchRAFRef.current) {
+      cancelAnimationFrame(touchRAFRef.current);
+      touchRAFRef.current = null;
+    }
     if (isPinching.current) {
       isPinching.current = false;
       const s = transform.scale;

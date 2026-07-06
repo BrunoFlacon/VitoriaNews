@@ -38,7 +38,7 @@ async function getCredentials(supabase: any, userId: string, platform: string): 
 async function processPlatform(conn: any, supabase: any) {
   try {
   let metrics: any = null;
-  let recentPostsMetrics: any[] = [];
+  const recentPostsMetrics: any[] = [];
 
   // Skip if synced within last 5 minutes (avoids rapid re-syncs)
   // Exception: WhatsApp always syncs (profile photos may be missing)

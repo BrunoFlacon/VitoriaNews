@@ -7,7 +7,7 @@ export async function exchangeWebsite(url: string): Promise<any[]> {
     domain = urlObj.hostname;
   } catch {}
 
-  let favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+  const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
   let postsCount = 0;
 
   try {

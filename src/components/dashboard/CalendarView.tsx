@@ -718,7 +718,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
 
       {/* Post Details Dialog */}
       <Dialog open={showPostDetails} onOpenChange={setShowPostDetails}>
-        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Detalhes do Post</DialogTitle>
             <DialogDescription>Informações completas sobre a publicação</DialogDescription>
@@ -832,7 +832,7 @@ export const CalendarView = ({ posts, loading, deletePost, submitForApproval, ap
 
       {/* Reject Reason Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent className="max-w-md" aria-describedby={undefined}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ShieldX className="w-5 h-5 text-red-500" />

@@ -126,10 +126,10 @@ export const DashboardHomeView = memo(({
 
   return (
     <>
-      <div className="flex items-center justify-between mb-8 sticky top-0 md:relative bg-background/80 backdrop-blur-md z-10 py-1">
+      <div className="flex items-center justify-between mb-8 py-1">
         <div>
           <h1 className="font-display font-bold text-2xl md:text-3xl mb-0.5 md:mb-1 lcp-target">
-            Dashboard Principal 👋
+            Dashboard Principal
           </h1>
           <p className="text-muted-foreground text-[10px] md:text-sm truncate">
             Visão geral e desempenho consolidado de todas as suas redes

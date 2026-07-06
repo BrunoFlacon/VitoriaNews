@@ -69,7 +69,7 @@ serve(async (req: Request) => {
     console.log(`Fetching AI config for user ${user.id}...`);
     
     // Fallback search: try api_credentials first, then bot_settings
-    let { data: aiCreds, error: aiCredsError } = await supabase
+    const { data: aiCreds, error: aiCredsError } = await supabase
       .from("api_credentials")
       .select("credentials")
       .eq("user_id", user.id)
@@ -172,7 +172,7 @@ CTA: [call-to-action sugerido]`;
     }
 
     let fetchUrl = `${baseUrl}/chat/completions`;
-    let fetchMethod = "POST";
+    const fetchMethod = "POST";
     let fetchHeaders: any = {
       "Content-Type": "application/json",
     };

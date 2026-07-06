@@ -50,7 +50,8 @@ serve(async (req: Request) => {
     if (connError || !connection) {
       return new Response(JSON.stringify({
         success: false,
-        error: "WhatsApp connection not found"
+        error: "WhatsApp connection not found",
+        hint: "Verify that the connection_id is correct and the connection belongs to this user."
       }), {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -80,7 +81,8 @@ serve(async (req: Request) => {
     if (!phoneNumberId || !accessToken) {
       return new Response(JSON.stringify({
         success: false,
-        error: "Could not resolve WhatsApp API credentials"
+        error: "Could not resolve WhatsApp API credentials",
+        hint: "Ensure the WhatsApp connection has phone_number_id and access_token configured."
       }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -93,37 +95,49 @@ serve(async (req: Request) => {
     const fullContent = content ? `${messageTitle}\n\n${content.substring(0, 1000)}` : messageTitle;
 
     // Fetch recent contacts (last 50 people who sent messages to this WABA)
+    // Filter to those within 24h window (Cloud API allows free-form responses)
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data: recentContacts } = await supabase
       .from("messages")
-      .select("sender_id, sender_name, recipient_phone")
+      .select("sender_id, sender_name, recipient_phone, recipient_name, sent_at, conversation_id")
       .eq("user_id", user_id)
       .eq("platform", "whatsapp")
       .not("sender_id", "is", null)
+      .gte("sent_at", twentyFourHoursAgo)
       .order("sent_at", { ascending: false })
       .limit(50);
 
     if (!recentContacts || recentContacts.length === 0) {
+      // If no contacts within 24h window, try Message Templates as fallback
+      // Template usage requires pre-approved templates from Meta Business Platform
       return new Response(JSON.stringify({
         success: false,
-        error: "No recent contacts found for this WhatsApp account"
+        error: "No contacts within 24-hour messaging window. Use Message Templates (pre-approved by Meta) for out-of-window notifications.",
+        hint: "Create and approve a Message Template in Meta Business Manager, then set WHATSAPP_NOTIFICATION_TEMPLATE env var."
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Deduplicate by sender_id
-    const seen = new Set();
-    const uniqueContacts = recentContacts.filter(c => {
+    // Deduplicate by sender_id keeping most recent
+    const seen = new Map<string, any>();
+    for (const c of recentContacts) {
       const key = c.sender_id || c.recipient_phone;
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      if (!key) continue;
+      if (!seen.has(key)) {
+        seen.set(key, c);
+      }
+    }
+    const uniqueContacts = Array.from(seen.values());
+
+    // Check if a Message Template is configured (for out-of-window notifications)
+    const templateName = Deno.env.get("WHATSAPP_NOTIFICATION_TEMPLATE");
 
     // Send notification via Meta Cloud API
     const sendResults: any[] = [];
     let sentCount = 0;
     let failCount = 0;
+    let templateFallbackCount = 0;
 
     for (const contact of uniqueContacts) {
       const to = contact.sender_id?.replace(/[^0-9]/g, "") || contact.recipient_phone?.replace(/[^0-9]/g, "");
@@ -132,22 +146,49 @@ serve(async (req: Request) => {
         continue;
       }
 
-      const msgBody = {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to,
-        type: "text",
-        text: { body: fullContent }
-      };
+      // Use template if available for out-of-window, otherwise free-form for in-window
+      const useTemplate = templateName && (!contact.sent_at || contact.sent_at < twentyFourHoursAgo);
+      let msgBody: any;
 
-      if (media_url) {
-        msgBody.type = "media";
-        (msgBody as any).media = {
-          link: media_url,
-          caption: messageTitle
+      if (useTemplate) {
+        msgBody = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: "pt_BR" },
+            components: [{
+              type: "body",
+              parameters: [
+                { type: "text", text: title || "Novo post!" },
+                { type: "text", text: content ? content.substring(0, 500) : "" },
+              ]
+            }]
+          }
         };
-        delete (msgBody as any).text;
-        (msgBody as any).type = "image";
+        if (media_url) {
+          msgBody.template.components.push({
+            type: "header",
+            parameters: [{ type: "image", image: { link: media_url } }]
+          });
+        }
+        templateFallbackCount++;
+      } else {
+        msgBody = {
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to,
+          type: "text",
+          text: { body: fullContent }
+        };
+
+        if (media_url) {
+          msgBody.type = "image";
+          msgBody.image = { link: media_url };
+          delete msgBody.text;
+        }
       }
 
       try {
@@ -204,6 +245,7 @@ serve(async (req: Request) => {
       success: true,
       sentCount,
       failCount,
+      templateFallbackCount,
       total: uniqueContacts.length,
       results: sendResults,
     }), {

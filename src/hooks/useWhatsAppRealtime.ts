@@ -161,6 +161,16 @@ export function useWhatsAppRealtime(
             setConversations(updatedConvs as WhatsAppConversation[]);
           }
 
+          // Limpar mensagens órfãs quando uma conversa é deletada
+          if (payload.eventType === 'DELETE' && payload.old?.id) {
+            const deletedConvId = payload.old.id;
+            setConversationMessages(prev => {
+              const next = new Map(prev);
+              next.delete(deletedConvId);
+              return next;
+            });
+          }
+
           // Se uma nova conversa foi criada, buscar suas mensagens
           if (payload.eventType === 'INSERT' && payload.new?.id) {
             const newConvId = payload.new.id;

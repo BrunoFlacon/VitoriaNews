@@ -29,6 +29,7 @@ export const PlatformDetailTab = memo(({ dateRange, onBack, initialPlatform }: P
     accounts,
     metrics,
     posts,
+    demographics,
     loading,
     selectedAccountId: resolvedAccountId,
     refetch,
@@ -81,12 +82,7 @@ export const PlatformDetailTab = memo(({ dateRange, onBack, initialPlatform }: P
   }
 
   const info = accounts.find((a) => a.id === resolvedAccountId);
-
   const latestMetric = metrics[metrics.length - 1];
-  const demographics = latestMetric ? {
-    topCountries: [] as { name: string; value: number; pct?: number }[],
-    topCities: [] as { name: string; value: number }[],
-  } : null;
 
   return (
     <div className="space-y-6">
@@ -147,6 +143,7 @@ export const PlatformDetailTab = memo(({ dateRange, onBack, initialPlatform }: P
       <PlatformAudienceGeo
         topCountries={demographics?.topCountries}
         topCities={demographics?.topCities}
+        loading={loading}
       />
 
       <div>

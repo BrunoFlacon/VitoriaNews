@@ -43,7 +43,7 @@ serve(async (req) => {
     }
 
     // Fetch user API key for OpenAI
-    let { data: aiCreds } = await supabaseClient
+    const { data: aiCreds } = await supabaseClient
       .from("api_credentials")
       .select("credentials")
       .eq("user_id", user.id)

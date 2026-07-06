@@ -21,7 +21,7 @@ export async function getSmartResponse(config: BotEngineConfig) {
   console.log(`[BOT-ENGINE] [${platform}] Processing message for User ${userId}, Chat ${chatId}. isGroup: ${isGroup}. connectionId: ${connectionId || 'none'}`);
 
   let settings: any = null;
-  let settingsQuery = supabase
+  const settingsQuery = supabase
     .from('bot_settings')
     .select('*')
     .eq('user_id', userId)
@@ -300,22 +300,37 @@ export async function sendMetaGraphMessage(
 ) {
   const GRAPH_VERSION = Deno.env.get("META_GRAPH_VERSION") || "v21.0";
 
-  let accessToken = Deno.env.get("META_SYSTEM_USER_TOKEN");
+  let accessToken: string | null = null;
+  let tokenSource = "";
 
-  if (options?.supabase && options?.connectionId && options?.userId && msg.platform === "whatsapp") {
+  if (options?.supabase && options?.connectionId && options?.userId) {
     try {
-      const meta = await getMetaCredentials(options.supabase, options.userId, "whatsapp", options.connectionId);
+      const meta = await getMetaCredentials(options.supabase, options.userId, msg.platform, options.connectionId);
       if (meta.accessToken) {
         accessToken = meta.accessToken;
+        tokenSource = `per-connection (${options.connectionId})`;
         console.log(`[BOT-SENDER] Using per-connection token for connection ${options.connectionId}`);
       }
     } catch (e) {
-      console.warn(`[BOT-SENDER] Failed to resolve per-connection token, falling back to SYSTEM_TOKEN:`, e);
+      console.warn(`[BOT-SENDER] Failed to resolve per-connection token:`, e);
     }
   }
 
   if (!accessToken) {
-    throw new Error("Nenhum token disponível para enviar mensagem");
+    accessToken = Deno.env.get("META_SYSTEM_USER_TOKEN") || null;
+    tokenSource = "META_SYSTEM_USER_TOKEN env";
+    if (accessToken) {
+      console.log(`[BOT-SENDER] Using fallback token from ${tokenSource}`);
+    }
+  }
+
+  if (!accessToken) {
+    if (options?.connectionId) {
+      console.error(`[BOT-SENDER] No token available for connection ${options.connectionId} and no META_SYSTEM_USER_TOKEN env configured.`);
+    } else {
+      console.error(`[BOT-SENDER] No META_SYSTEM_USER_TOKEN env configured.`);
+    }
+    return null;
   }
 
   let url = `https://graph.facebook.com/${GRAPH_VERSION}`;
@@ -436,7 +451,7 @@ export async function processOmnichannelMessage(supabase: any, msg: NormalizedMe
       post_id: msg.postId,
       connection_id: connectionId,
       wa_message_id: msg.waMessageId,
-      referral: msg.rawPayload?.referral || null,
+      ad_referral: msg.rawPayload?.referral || null,
       ...mediaMetadata
     }
   });

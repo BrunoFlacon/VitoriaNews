@@ -35,66 +35,13 @@ interface MessageDeliveryLogsProps {
 }
 
 export const MessageDeliveryLogs = memo(({ messageStats, dataSource }: MessageDeliveryLogsProps) => {
-  const isDemo = dataSource === "demo" || !messageStats || messageStats.recentMessages.length === 0;
-
-  // Fallback data matching screenshot
-  const mockMessages: Message[] = [
-    {
-      id: "m1",
-      platform: "whatsapp",
-      content: "Olá Felipe! Seu boletim informativo diário do Vitória News já está pronto. Confira os principais destaques da região hoje.",
-      recipient: "+5527999814400 (Felipe)",
-      status: "sent",
-      created_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "m2",
-      platform: "whatsapp",
-      content: "Prezado assinante, informamos que a transmissão ao vivo da Rádio Vitória News começará em 10 minutos. Fique sintonizado!",
-      recipient: "+5527999814400 (Felipe)",
-      status: "sent",
-      created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "m3",
-      platform: "whatsapp",
-      content: "Olá, seu código de verificação para o portal Vitória News é 8492. Válido por 5 minutos.",
-      recipient: "+5527999814400 (Felipe)",
-      status: "sent",
-      created_at: new Date(Date.now() - 32 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "m4",
-      platform: "whatsapp",
-      content: "Obrigado por se cadastrar no Vitória News! Use o link a seguir para confirmar seu endereço de e-mail e ativar sua conta.",
-      recipient: "+5527999814400 (Felipe)",
-      status: "sent",
-      created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "m5",
-      platform: "whatsapp",
-      content: "Olá! Gostaria de receber nosso resumo semanal de notícias direto no seu WhatsApp? Responda SIM para ativar gratuitamente.",
-      recipient: "+5527999814400 (Felipe)",
-      status: "sent",
-      created_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "m6",
-      platform: "whatsapp",
-      content: "Alerta de Trânsito: A avenida principal está interditada devido a obras. Utilize rotas alternativas. Saiba mais no portal.",
-      recipient: "+5527999814400 (Felipe)",
-      status: "sent",
-      created_at: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
-    },
-  ];
-
-  const displayMessages = isDemo ? mockMessages : messageStats.recentMessages;
-  const totalSent = isDemo ? 9 : (messageStats?.totalSent || 0);
-  const totalFailed = isDemo ? 0 : (messageStats?.totalFailed || 0);
+  const hasRealData = !!(messageStats && messageStats.recentMessages.length > 0);
+  const displayMessages = hasRealData ? messageStats.recentMessages : [];
+  const totalSent = messageStats?.totalSent || 0;
+  const totalFailed = messageStats?.totalFailed || 0;
   const totalDelivered = totalSent;
-  const totalRead = isDemo ? 0 : Math.round(totalSent * 0.7);
-  const successRate = isDemo ? 100 : (messageStats?.successRate || 0);
+  const totalRead = messageStats?.totalReceived || 0;
+  const successRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

@@ -101,3 +101,21 @@ import_map = "./functions/proxy-media/deno.json"
 
 [functions.whatsapp-upload-photo]
 verify_jwt = true
+
+[functions.export-whatsapp-conversation]
+verify_jwt = false
+
+[functions.validate-whatsapp-connection]
+verify_jwt = false
+
+[functions.backup-whatsapp-conversations]
+verify_jwt = false
+
+[functions.cleanup-expired-backups]
+verify_jwt = false
+
+[functions.notify-new-post-whatsapp]
+verify_jwt = false
+
+[functions.pull-google-contacts]
+verify_jwt = false

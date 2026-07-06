@@ -464,7 +464,8 @@ export const MessagingView = () => {
       .from("messaging_channels")
       .select("*")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
     if (!error && data) setChannels(data as unknown as MessagingChannel[]);
     setLoading(false);
   };
@@ -475,7 +476,8 @@ export const MessagingView = () => {
       .from("messages")
       .select("*")
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(100);
     if (!error && data) setMessages(data as unknown as Message[]);
     setMessagesLoading(false);
   };
@@ -2337,7 +2339,7 @@ export const MessagingView = () => {
 
       {/* Add/Edit Channel Dialog */}
       <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) { setShowAddDialog(false); resetAddForm(); } else { setShowAddDialog(true); } }}>
-        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{editingChannel ? "Editar Canal" : "Adicionar Canal"}</DialogTitle>
           </DialogHeader>
@@ -2399,7 +2401,7 @@ export const MessagingView = () => {
 
       {/* Edit Message Dialog */}
       <Dialog open={!!editingMessage} onOpenChange={(open) => { if (!open) setEditingMessage(null); }}>
-        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Mensagem</DialogTitle>
           </DialogHeader>
@@ -2435,7 +2437,7 @@ export const MessagingView = () => {
 
       {/* ===== Avatar Full-size Modal ===== */}
       <Dialog open={showAvatarModal} onOpenChange={setShowAvatarModal}>
-        <DialogContent className="sm:max-w-md p-0 bg-black/95 border-none" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md p-0 bg-black/95 border-none">
           <DialogHeader className="sr-only">
             <DialogTitle>Foto do Perfil</DialogTitle>
           </DialogHeader>
@@ -2461,7 +2463,7 @@ export const MessagingView = () => {
 
       {/* ===== Discover Telegram/WhatsApp Channels Dialog ===== */}
       <Dialog open={showDiscoverDialog} onOpenChange={setShowDiscoverDialog}>
-        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Search className="w-5 h-5 text-primary" />
@@ -2635,7 +2637,7 @@ export const MessagingView = () => {
         <DialogContent className={cn(
           "sm:max-w-2xl p-0 overflow-hidden border-none shadow-2xl",
           selectedInfoChannel?.platform === "whatsapp" ? "bg-[#0b141a]" : "bg-[#17212b]"
-        )} aria-describedby={undefined}>
+        )}>
           <DialogHeader className="sr-only">
             <DialogTitle>{selectedInfoChannel?.channel_name || "Informações do Canal"}</DialogTitle>
           </DialogHeader>
@@ -2808,7 +2810,7 @@ export const MessagingView = () => {
 
       {/* ===== Add People Dialog (Contact Picker) ===== */}
       <Dialog open={showAddPeopleDialog} onOpenChange={setShowAddPeopleDialog}>
-        <DialogContent className="sm:max-w-md bg-[#17212b] border border-white/10 p-0 overflow-hidden" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md bg-[#17212b] border border-white/10 p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-2">
             <DialogTitle className="text-white flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-primary" /> Selecionar Contato

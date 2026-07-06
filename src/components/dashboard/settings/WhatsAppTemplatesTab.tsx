@@ -16,7 +16,9 @@ import {
   X,
   Pencil,
   RotateCcw,
+  FileText,
 } from "lucide-react";
+import { WhatsAppQuickRepliesTab } from "./WhatsAppQuickRepliesTab";
 
 const CATEGORIES = ["Marketing", "Utility", "Authentication"] as const;
 type HeaderFormat = "none" | "text" | "image" | "video" | "document";
@@ -130,7 +132,7 @@ function emptyButton(type: ButtonType): TemplateButton {
   }
 }
 
-export function WhatsAppTemplatesTab() {
+function TemplatesContent() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -797,6 +799,28 @@ export function WhatsAppTemplatesTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export function WhatsAppTemplatesTab() {
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header com descrição */}
+      <div className="bg-gradient-to-r from-blue-950/30 to-indigo-950/20 border-b border-border/50 px-4 py-3">
+        <h3 className="font-semibold text-sm flex items-center gap-2">
+          <FileText className="h-4 w-4 text-blue-400" />
+          Templates
+        </h3>
+        <p className="text-xs text-muted-foreground/70 mt-1">
+          Templates são mensagens aprovadas pelo Meta para transmissões e notificações.
+        </p>
+      </div>
+
+      {/* Conteúdo */}
+      <div className="flex-1 overflow-y-auto">
+        <TemplatesContent />
+      </div>
     </div>
   );
 }

@@ -49,15 +49,29 @@ export interface PostMetric {
   collected_at: string;
 }
 
+export interface GeoEntry {
+  name: string;
+  value: number;
+  pct?: number;
+}
+
+export interface DemographicsInfo {
+  topCountries: GeoEntry[];
+  topCities: GeoEntry[];
+  ageGroups: { range: string; pct: number }[];
+  gender: { label: string; pct: number }[];
+}
+
 export interface PlatformDetailData {
   accounts: PlatformAccount[];
   metrics: AccountMetric[];
   posts: PostMetric[];
+  demographics: DemographicsInfo | null;
   loading: boolean;
 }
 
 function createEmptyResult(platformId: string): PlatformDetailData {
-  return { accounts: [], metrics: [], posts: [], loading: false };
+  return { accounts: [], metrics: [], posts: [], demographics: null, loading: false };
 }
 
 export function usePlatformDetail(
@@ -166,6 +180,32 @@ export function usePlatformDetail(
     staleTime: 5 * 60 * 1000,
   });
 
+  const demographicsQuery = useQuery({
+    queryKey: ["audience-demographics", user?.id, platformId],
+    queryFn: async () => {
+      if (!user || !platformId) return null;
+      const { data } = await supabase
+        .from("audience_demographics")
+        .select("top_countries, top_cities, age_groups, gender")
+        .eq("user_id", user.id)
+        .eq("platform", platformId)
+        .order("collected_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data) return null;
+
+      return {
+        topCountries: (data.top_countries as Array<{ name: string; value: number; pct?: number }>) ?? [],
+        topCities: (data.top_cities as Array<{ name: string; value: number }>) ?? [],
+        ageGroups: (data.age_groups as Array<{ range: string; pct: number }>) ?? [],
+        gender: (data.gender as Array<{ label: string; pct: number }>) ?? [],
+      } satisfies DemographicsInfo;
+    },
+    enabled: !!user && !!platformId,
+    staleTime: 30 * 60 * 1000,
+  });
+
   const result = useMemo<PlatformDetailData>(() => {
     if (!platformId) return createEmptyResult(platformId || "");
 
@@ -173,9 +213,11 @@ export function usePlatformDetail(
       accounts: accountsQuery.data || [],
       metrics: metricsQuery.data || [],
       posts: postsQuery.data || [],
-      loading: accountsQuery.isLoading || metricsQuery.isLoading || postsQuery.isLoading,
+      demographics: demographicsQuery.data ?? null,
+      loading: accountsQuery.isLoading || metricsQuery.isLoading || postsQuery.isLoading || demographicsQuery.isLoading,
     };
-  }, [platformId, accountsQuery.data, metricsQuery.data, postsQuery.data, accountsQuery.isLoading, metricsQuery.isLoading, postsQuery.isLoading]);
+  }, [platformId, accountsQuery.data, metricsQuery.data, postsQuery.data, demographicsQuery.data,
+      accountsQuery.isLoading, metricsQuery.isLoading, postsQuery.isLoading, demographicsQuery.isLoading]);
 
   return {
     ...result,
@@ -184,6 +226,7 @@ export function usePlatformDetail(
       accountsQuery.refetch();
       metricsQuery.refetch();
       postsQuery.refetch();
+      demographicsQuery.refetch();
     },
   };
 }

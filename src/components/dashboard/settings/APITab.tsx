@@ -127,9 +127,7 @@ export const APITab = memo(({
   }, [credentials, saveCredentials]);
 
   return (
-    <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
-      {/* Hidden username field for browser accessibility / password manager compliance */}
-      <input type="text" name="username" value={user?.email || ""} readOnly autoComplete="username" className="sr-only" tabIndex={-1} />
+    <div className="space-y-3">
               {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
                 const platformStats = socialStats.find(s => s.platform === config.id);
                 // isVerified = true if any Telegram entry has followers > 0 OR there's any bot entry saved
@@ -752,7 +750,8 @@ export const APITab = memo(({
                                       </Badge>
                                     )}
                                   </div>
-                                  <div className="grid gap-3">
+                                  <form className="grid gap-3" onSubmit={e => e.preventDefault()} autoComplete="on">
+                                    <input type="text" name="username" autoComplete="username" className="hidden" aria-hidden="true" />
                                     {fields.map((field) => {
                                       const fieldId = `${config.id}-${field.key}`;
                                       const isVisible = visibleFields[fieldId] ?? false;
@@ -788,7 +787,7 @@ export const APITab = memo(({
                                         </div>
                                       );
                                     })}
-                                  </div>
+                                  </form>
                                 </div>
                               )}
 
@@ -1065,7 +1064,7 @@ export const APITab = memo(({
               })}
             
 
-    </form>
+    </div>
   );
 });
 

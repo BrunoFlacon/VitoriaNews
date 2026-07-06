@@ -120,7 +120,11 @@ serve(async (req: Request) => {
       postType = "post", 
       mediaType: explicitMediaType,
       recipientPhone,
-      chatId
+      chatId,
+      templateName,
+      templateLanguage,
+      templateVariables,
+      templateHeaderMediaUrl
     } = await req.json();
 
     const userId = user?.id || "system";
@@ -150,7 +154,17 @@ serve(async (req: Request) => {
           content,
           mediaUrls,
           userId,
-          options: { postType, postId, recipientPhone, chatId, targetProfileId }
+          options: {
+            postType,
+            postId,
+            recipientPhone,
+            chatId,
+            targetProfileId,
+            templateName,
+            templateLanguage,
+            templateVariables,
+            templateHeaderMediaUrl
+          }
         };
 
         const result = await dispatchPost(supabase, payload);

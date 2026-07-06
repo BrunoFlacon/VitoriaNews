@@ -2005,7 +2005,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
       {/* Bulk Upload Dialog */}
       {/* Image Generation Dialog */}
       <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
-        <DialogContent className="sm:max-w-[500px]" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ImageIcon className="w-5 h-5 text-cyan-400" />
@@ -2041,7 +2041,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
       {/* Audio Generation Dialog */}
       <Dialog open={showAudioDialog} onOpenChange={setShowAudioDialog}>
-        <DialogContent className="sm:max-w-[500px]" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Music className="w-5 h-5 text-amber-400" />

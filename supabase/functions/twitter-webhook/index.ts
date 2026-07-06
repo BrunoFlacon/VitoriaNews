@@ -92,7 +92,7 @@ serve(async (req: Request) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const rawBody = await req.text();
-    let body = JSON.parse(rawBody);
+    const body = JSON.parse(rawBody);
 
     // Verificar x-twitter-webhooks-signature (plural, conforme docs oficiais)
     const signature = req.headers.get("x-twitter-webhooks-signature") || "";

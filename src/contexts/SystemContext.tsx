@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface SystemSettings {
@@ -53,9 +53,9 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, []);
 
-  const CACHE_KEY = 'sc_system_settings';
-  const CACHE_NAV_KEY = 'sc_system_nav';
-  const CACHE_PERMS_KEY = 'sc_system_perms';
+  const CACHE_KEY = 'sc_system_settings_v2';
+  const CACHE_NAV_KEY = 'sc_system_nav_v2';
+  const CACHE_PERMS_KEY = 'sc_system_perms_v2';
 
   const loadFromCache = useCallback(() => {
     try {
@@ -158,16 +158,18 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
     return allowed.includes(userRole);
   };
 
+  const value = useMemo(() => ({
+    settings,
+    navSettings,
+    sectionPermissions,
+    loading,
+    refreshSettings,
+    updateSettingsOptimistic,
+    canAccessSection
+  }), [settings, navSettings, sectionPermissions, loading, refreshSettings, updateSettingsOptimistic, canAccessSection]);
+
   return (
-    <SystemContext.Provider value={{ 
-      settings, 
-      navSettings, 
-      sectionPermissions,
-      loading, 
-      refreshSettings, 
-      updateSettingsOptimistic,
-      canAccessSection
-    }}>
+    <SystemContext.Provider value={value}>
       {children}
     </SystemContext.Provider>
   );

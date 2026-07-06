@@ -1,0 +1,434 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { useFetchWhatsAppPhotos } from "@/hooks/useFetchWhatsAppPhotos";
+import { cn } from "@/lib/utils";
+import { WhatsAppInboxView } from "./WhatsAppInboxView";
+import { WhatsAppContactsTab } from "./WhatsAppContactsTab";
+import { WhatsAppBroadcastsTab } from "./WhatsAppBroadcastsTab";
+import { WhatsAppBotSettingsTab } from "./WhatsAppBotSettingsTab";
+import { WhatsAppSettingsView } from "./WhatsAppSettingsView";
+import { WhatsAppTemplatesTab } from "../settings/WhatsAppTemplatesTab";
+import { WhatsAppQuickRepliesTab } from "./WhatsAppQuickRepliesTab";
+import { WhatsAppFlowsTab } from "./WhatsAppFlowsTab";
+import { WhatsAppMetricsTab } from "./WhatsAppMetricsTab";
+import { WhatsAppBackupsTab } from "./WhatsAppBackupsTab";
+import { PipelineTabContent } from "./pipeline-tab-content";
+import {
+  MessageCircle, Users, Kanban, Send, Settings,
+  Camera, Smartphone, FileText, Zap, Workflow, BarChart3, MessageSquare,
+  ChevronLeft, ChevronRight,
+} from "lucide-react";
+import { AutomationsList } from "@/components/automations/automations-list";
+import { AutomationBuilder, toApiSteps, type BuilderInitial, fromServerSteps, type ServerStepNode } from "@/components/automations/automation-builder";
+import { AutomationLogs } from "@/components/automations/automation-logs";
+import { getTemplate } from "@/lib/automations/templates";
+import { BroadcastDetailView } from "@/components/dashboard/whatsapp/broadcasts/broadcast-detail-view";
+import { supabase } from "@/integrations/supabase/client";
+interface WhatsAppHubViewProps {
+  defaultTab?: string;
+  onBackToInbox?: () => void;
+}
+
+const TABS = [
+  { id: "inbox", label: "Inbox", icon: MessageCircle },
+  { id: "contacts", label: "Contatos", icon: Users },
+  { id: "pipeline", label: "Pipeline", icon: Kanban },
+  { id: "broadcasts", label: "Transmissões", icon: Send },
+  { id: "flows", label: "Fluxos", icon: Workflow },
+  { id: "metrics", label: "Métricas", icon: BarChart3 },
+  { id: "settings", label: "Configurações", icon: Settings },
+] as const;
+
+const FLOWS_SUB_TABS = [
+  { id: "flows", label: "Fluxos", icon: Workflow },
+  { id: "templates", label: "Templates", icon: FileText },
+  { id: "quick_replies", label: "Respostas Rápidas", icon: MessageSquare },
+  { id: "automations", label: "Automações", icon: Zap },
+] as const;
+
+export function WhatsAppHubView({ defaultTab, onBackToInbox }: WhatsAppHubViewProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const { fetchPhotos, loading: photosLoading } = useFetchWhatsAppPhotos();
+  const [activeTab, setActiveTab] = useState<TabId>((defaultTab as TabId) || "inbox");
+  const [activeFlowsSubTab, setActiveFlowsSubTab] = useState<FlowsSubTabId>("flows");
+
+  useEffect(() => {
+    if (defaultTab && TABS.some(t => t.id === defaultTab)) {
+      setActiveTab(defaultTab as TabId);
+    }
+  }, [defaultTab]);
+
+  const handleFetchPhotos = useCallback(async () => {
+    const result = await fetchPhotos();
+    if (result) {
+      const updated = result.results.reduce((acc: number, r: any) => acc + r.conversations_updated, 0);
+      toast({ title: `Fotos atualizadas: ${updated} conversas` });
+    }
+  }, [fetchPhotos, toast]);
+
+  const [navigateToPhone, setNavigateToPhone] = useState<string | null>(null);
+
+  // Broadcasts sub-navigation
+  const [broadcastView, setBroadcastView] = useState<"list" | "detail">("list");
+  const [viewingBroadcastId, setViewingBroadcastId] = useState<string | null>(null);
+
+  // Reset broadcasts sub-view when tab changes
+  useEffect(() => {
+    if (activeTab !== "broadcasts") {
+      setBroadcastView("list");
+      setViewingBroadcastId(null);
+    }
+  }, [activeTab]);
+
+  // Automations sub-navigation
+  const [automationView, setAutomationView] = useState<"list" | "new" | "edit" | "logs">("list");
+  const [editingAutomationId, setEditingAutomationId] = useState<string | null>(null);
+  const [editingAutomationInitial, setEditingAutomationInitial] = useState<BuilderInitial | null>(null);
+  const [loggingAutomationId, setLoggingAutomationId] = useState<string | null>(null);
+  const [loggingAutomationName, setLoggingAutomationName] = useState("");
+
+  // Tab scroll navigation
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollButtons = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    updateScrollButtons();
+    el.addEventListener("scroll", updateScrollButtons, { passive: true });
+    const ro = new ResizeObserver(updateScrollButtons);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateScrollButtons);
+      ro.disconnect();
+    };
+  }, [updateScrollButtons]);
+
+  const scrollTabs = (direction: "left" | "right") => {
+    scrollRef.current?.scrollBy({
+      left: direction === "left" ? -220 : 220,
+      behavior: "smooth",
+    });
+  };
+
+  const handleNavigateToChat = useCallback((phone: string) => {
+    setNavigateToPhone(phone);
+    setActiveTab("inbox");
+  }, []);
+
+  // Load automation data for editing
+  useEffect(() => {
+    if (activeTab === "automations" && automationView === "edit" && editingAutomationId) {
+      let cancelled = false;
+      (async () => {
+        try {
+          // Load automation record
+          const { data: auto, error: autoErr } = await supabase
+            .from("automations")
+            .select("*")
+            .eq("id", editingAutomationId)
+            .single();
+          if (autoErr || !auto) throw autoErr || new Error("Not found");
+
+          // Load steps tree
+          const { data: steps } = await supabase
+            .from("automation_steps")
+            .select("*")
+            .eq("automation_id", editingAutomationId)
+            .order("position");
+
+          // Build tree from flat steps
+          const tree = buildStepTree(steps ?? []);
+          const builderSteps = fromServerSteps(tree);
+
+          if (!cancelled) {
+            setEditingAutomationInitial({
+              id: auto.id,
+              name: auto.name || "",
+              description: auto.description || "",
+              trigger_type: auto.trigger_type,
+              trigger_config: auto.trigger_config || {},
+              is_active: auto.is_active,
+              steps: builderSteps,
+            });
+          }
+        } catch (err: any) {
+          if (!cancelled) {
+            console.error("Failed to load automation for editing:", err);
+            setAutomationView("list");
+          }
+        }
+      })();
+      return () => { cancelled = true };
+    }
+  }, [activeTab, automationView, editingAutomationId]);
+
+  const isInboxActive = activeTab === "inbox";
+
+  // Open automation builder for a template
+  const handleCreateFromTemplate = (slug: string) => {
+    const tmpl = getTemplate(slug);
+    if (!tmpl) return;
+    // Expand template seed steps into BuilderStep tree
+    const expandedSteps = (tmpl.steps ?? []).filter(s => !s.parent_index && !s.branch).map((seed) => {
+      const step: any = {
+        cid: `c_${Math.random().toString(36).slice(2)}`,
+        step_type: seed.step_type,
+        step_config: seed.step_config as Record<string, unknown>,
+      };
+      // Handle condition branches
+      if (seed.step_type === "condition") {
+        const children = (tmpl.steps ?? []).filter(s => s.parent_index === tmpl.steps.indexOf(seed));
+        step.branches = {
+          yes: children.filter(s => s.branch === "yes").map((s) => ({
+            cid: `c_${Math.random().toString(36).slice(2)}`,
+            step_type: s.step_type,
+            step_config: s.step_config as Record<string, unknown>,
+          })),
+          no: children.filter(s => s.branch === "no").map((s) => ({
+            cid: `c_${Math.random().toString(36).slice(2)}`,
+            step_type: s.step_type,
+            step_config: s.step_config as Record<string, unknown>,
+          })),
+        };
+      }
+      return step;
+    });
+
+    setEditingAutomationInitial({
+      name: tmpl.name,
+      description: tmpl.description,
+      trigger_type: tmpl.trigger_type,
+      trigger_config: tmpl.trigger_config as Record<string, unknown>,
+      is_active: false,
+      steps: expandedSteps,
+    });
+    setEditingAutomationId(null);
+    setAutomationView("new");
+  };
+
+  // Build nested step tree from flat DB rows
+  function buildStepTree(rows: any[]): ServerStepNode[] {
+    const childrenOf = new Map<string | null, any[]>();
+    for (const row of rows) {
+      const parent = row.parent_step_id ?? "__root__";
+      if (!childrenOf.has(parent)) childrenOf.set(parent, []);
+      childrenOf.get(parent)!.push(row);
+    }
+
+    function build(parentId: string | null, branch: "yes" | "no" | null = null): ServerStepNode[] {
+      const key = parentId ?? "__root__";
+      const myChildren = (childrenOf.get(key) ?? [])
+        .filter((r) => r.branch === branch || (branch === null && r.branch === null));
+      return myChildren.map((row: any) => ({
+        id: row.id,
+        step_type: row.step_type,
+        step_config: row.step_config ?? {},
+        branches: row.step_type === "condition"
+          ? { yes: build(row.id, "yes"), no: build(row.id, "no") }
+          : { yes: [], no: [] },
+      }));
+    }
+
+    return build(null);
+  }
+
+  return (
+    <div className="flex flex-col h-full w-full overflow-hidden">
+      {!isInboxActive && (
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border/50 bg-card shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[#25D366] flex items-center justify-center">
+              <Smartphone className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-bold text-sm">WhatsApp CRM</span>
+          </div>
+          <div className="ml-auto text-xs text-muted-foreground capitalize">
+            {TABS.find(t => t.id === activeTab)?.label}
+          </div>
+        </div>
+      )}
+
+      <div className="relative flex items-center border-b border-border/50 bg-muted/30 shrink-0">
+        {/* Scroll left */}
+        {canScrollLeft && (
+          <button
+            onClick={() => scrollTabs("left")}
+            className="absolute left-0 z-10 flex items-center justify-center w-6 h-full bg-gradient-to-r from-muted/30 to-transparent text-muted-foreground hover:text-foreground"
+            aria-label="Rolar para a esquerda"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+        )}
+
+        <div
+          ref={scrollRef}
+          className="flex gap-1 px-2 py-1.5 overflow-x-auto scrollbar-none scroll-smooth flex-1"
+        >
+          {TABS.map(tab => {
+            const Icon = tab.icon;
+            const isCurrent = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors shrink-0",
+                  isCurrent
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {tab.label}
+              </button>
+            );
+          })}
+          <div className="flex-1 min-w-4" />
+          <button
+            onClick={handleFetchPhotos}
+            disabled={photosLoading}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-accent shrink-0"
+            title="Buscar fotos de perfil do WhatsApp"
+          >
+            <Camera className={cn("w-3.5 h-3.5", photosLoading && "animate-pulse")} />
+            <span className="hidden sm:inline">Fotos</span>
+          </button>
+        </div>
+
+        {/* Scroll right */}
+        {canScrollRight && (
+          <button
+            onClick={() => scrollTabs("right")}
+            className="absolute right-0 z-10 flex items-center justify-center w-6 h-full bg-gradient-to-l from-muted/30 to-transparent text-muted-foreground hover:text-foreground"
+            aria-label="Rolar para a direita"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Flows sub-tabs */}
+      {activeTab === "flows" && (
+        <div className="flex gap-1 px-2 py-1.5 border-b border-border/50 bg-muted/30 shrink-0 overflow-x-auto scrollbar-none">
+          {FLOWS_SUB_TABS.map(subTab => {
+            const Icon = subTab.icon;
+            const isCurrent = activeFlowsSubTab === subTab.id;
+            return (
+              <button
+                key={subTab.id}
+                onClick={() => setActiveFlowsSubTab(subTab.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors shrink-0",
+                  isCurrent
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {subTab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex-1 overflow-hidden">
+        {activeTab === "inbox" && (
+          <WhatsAppInboxView
+            onBack={onBackToInbox}
+            initialPhone={navigateToPhone}
+            onChatConsumed={() => setNavigateToPhone(null)}
+          />
+        )}
+        {activeTab === "contacts" && (
+          <WhatsAppContactsTab onNavigateToChat={handleNavigateToChat} />
+        )}
+        {activeTab === "pipeline" && <PipelineTabContent onOpenChat={handleNavigateToChat} />}
+        {activeTab === "broadcasts" && broadcastView === "list" && (
+          <WhatsAppBroadcastsTab
+            onViewDetail={(id) => {
+              setViewingBroadcastId(id);
+              setBroadcastView("detail");
+            }}
+          />
+        )}
+        {activeTab === "broadcasts" && broadcastView === "detail" && viewingBroadcastId && (
+          <BroadcastDetailView
+            broadcastId={viewingBroadcastId}
+            onBack={() => {
+              setBroadcastView("list");
+              setViewingBroadcastId(null);
+            }}
+          />
+        )}
+        {activeTab === "flows" && activeFlowsSubTab === "flows" && <WhatsAppFlowsTab />}
+        {activeTab === "flows" && activeFlowsSubTab === "templates" && <WhatsAppTemplatesTab />}
+        {activeTab === "flows" && activeFlowsSubTab === "quick_replies" && <WhatsAppQuickRepliesTab />}
+        {activeTab === "flows" && activeFlowsSubTab === "automations" && automationView === "list" && (
+          <AutomationsList
+            onCreateNew={() => {
+              setEditingAutomationInitial({
+                name: "",
+                description: "",
+                trigger_type: "new_message_received",
+                trigger_config: {},
+                is_active: false,
+                steps: [],
+              });
+              setEditingAutomationId(null);
+              setAutomationView("new");
+            }}
+            onEdit={(id) => {
+              setEditingAutomationId(id);
+              setAutomationView("edit");
+            }}
+            onViewLogs={(id) => {
+              setLoggingAutomationId(id);
+              setAutomationView("logs");
+            }}
+          />
+        )}
+        {activeTab === "flows" && activeFlowsSubTab === "automations" && (automationView === "new" || automationView === "edit") && editingAutomationInitial && (
+          <AutomationBuilder
+            initial={editingAutomationInitial}
+            onBack={() => {
+              setAutomationView("list");
+              setEditingAutomationInitial(null);
+              setEditingAutomationId(null);
+            }}
+            onSaved={() => {
+              setAutomationView("list");
+              setEditingAutomationInitial(null);
+              setEditingAutomationId(null);
+            }}
+          />
+        )}
+        {activeTab === "flows" && activeFlowsSubTab === "automations" && automationView === "logs" && loggingAutomationId && (
+          <AutomationLogs
+            automationId={loggingAutomationId}
+            automationName=""
+            onBack={() => {
+              setAutomationView("list");
+              setLoggingAutomationId(null);
+            }}
+          />
+        )}
+        {activeTab === "metrics" && <WhatsAppMetricsTab onNavigate={(tab, subTab) => { if (subTab) setActiveSubTab(subTab); else setActiveTab(tab as TabId); }} />}
+        {activeTab === "settings" && <WhatsAppSettingsView userId={user?.id} />}
+      </div>
+    </div>
+  );
+}

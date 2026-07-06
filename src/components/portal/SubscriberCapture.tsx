@@ -156,7 +156,7 @@ export const SubscriberCapture = ({
     };
 
     if (step === 3 && txid && !pixPaid) {
-      timer = setInterval(checkStatus, 5000);
+      timer = setInterval(checkStatus, 15000);
     }
 
     return () => {

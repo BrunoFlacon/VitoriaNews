@@ -121,7 +121,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
   const topContentQuery = useQuery({
     queryKey: ['platform_top_content', platform, period],
     queryFn: async (): Promise<PostMetric[]> => {
-      let query = supabase
+      const query = supabase
         .from('scheduled_posts')
         .select('id, content, platforms, media_type, published_at, status')
         .eq('user_id', user!.id)
@@ -173,7 +173,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
   const bestTimesQuery = useQuery({
     queryKey: ['platform_best_times', platform, period],
     queryFn: async (): Promise<HourlyPerformance[]> => {
-      let query = supabase
+      const query = supabase
         .from('scheduled_posts')
         .select('id, platforms, scheduled_at, published_at, status')
         .eq('user_id', user!.id)
@@ -228,7 +228,7 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
   const formatRecsQuery = useQuery({
     queryKey: ['platform_format_recs', platform, period],
     queryFn: async (): Promise<FormatRecommendation[]> => {
-      let query = supabase
+      const query = supabase
         .from('scheduled_posts')
         .select('id, platforms, media_type, scheduled_at, published_at, status')
         .eq('user_id', user!.id)

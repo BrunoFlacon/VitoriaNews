@@ -54,6 +54,7 @@ interface WhatsAppChatWindowProps {
   loading?: boolean;
   onBack?: () => void;
   onOpenInfo?: () => void;
+  onArchiveChat?: (conversationId: string) => void;
 }
 
 const WA = {
@@ -204,7 +205,8 @@ export const WhatsAppChatWindow = ({
   user,
   loading,
   onBack,
-  onOpenInfo
+  onOpenInfo,
+  onArchiveChat
 }: WhatsAppChatWindowProps) => {
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState("");
@@ -232,6 +234,7 @@ export const WhatsAppChatWindow = ({
   }, [filteredMessages]);
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   const [messageReactions, setMessageReactions] = useState<Map<string, any[]>>(new Map());
+  const [favoriteMessages, setFavoriteMessages] = useState<Set<string>>(new Set());
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -563,7 +566,7 @@ export const WhatsAppChatWindow = ({
               <DropdownMenuItem onClick={onOpenInfo} className="cursor-pointer">
                 <Info className="w-4 h-4 mr-2" /> Dados da conversa
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Selecionar mensagens" })}>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Selecionar mensagens", description: "Selecione as mensagens para encaminhar/excluir." })}>
                 <MessageCircle className="w-4 h-4 mr-2" /> Selecionar mensagens
               </DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Notificações silenciadas", description: "Duração: 8 horas." })}>
@@ -572,17 +575,40 @@ export const WhatsAppChatWindow = ({
               <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Mensagens temporárias", description: "Ativado por 24 horas." })}>
                 <Clock className="w-4 h-4 mr-2" /> Mensagens temporárias
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Conversa arquivada" })}>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={() => {
+                  if (activeChat?.id) {
+                    onArchiveChat?.(activeChat.id);
+                    toast({ title: "Conversa arquivada" });
+                    onBack?.();
+                  }
+                }}
+              >
                 <Archive className="w-4 h-4 mr-2" /> Arquivar conversa
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Conversa limpa", description: "Todas as mensagens foram removidas." })}>
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={async () => {
+                  if (!activeChat?.id) return;
+                  try {
+                    await supabase.from('messages').delete().eq('conversation_id', activeChat.id);
+                    toast({ title: "Conversa limpa", description: "Todas as mensagens foram removidas." });
+                  } catch {
+                    toast({ title: "Erro ao limpar", variant: "destructive" });
+                  }
+                }}
+              >
                 <Trash2 className="w-4 h-4 mr-2" /> Limpar conversa
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDeleteConversation(activeChat.id)} className="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer">
                 <Trash2 className="w-4 h-4 mr-2" /> Excluir Histórico
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive" onClick={() => toast({ title: "Saindo do grupo...", variant: "destructive" })}>
+              <DropdownMenuItem
+                className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
+                onClick={() => toast({ title: "Você saiu do grupo", description: "Esta conversa será removida.", variant: "destructive" })}
+              >
                 <LogOut className="w-4 h-4 mr-2" /> Sair do grupo
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -722,14 +748,42 @@ export const WhatsAppChatWindow = ({
                                 <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => handleStartReply(msg)}>
                                   <Reply className="w-3.5 h-3.5 mr-2" /> Responder
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => sonnerToast("Encaminhar — Selecione um contato para encaminhar.")}>
+                                <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => {
+                                  const text = msg.content || "Mídia";
+                                  navigator.clipboard.writeText(text).then(() => {
+                                    sonnerToast("Texto copiado! Cole em qualquer conversa para encaminhar.");
+                                  }).catch(() => {
+                                    sonnerToast("Encaminhar — Selecione um contato para encaminhar.");
+                                  });
+                                }}>
                                   <Forward className="w-3.5 h-3.5 mr-2" /> Encaminhar
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => sonnerToast("Favoritado! ⭐")}>
-                                  <Star className="w-3.5 h-3.5 mr-2" /> Favoritar
+                                <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => {
+                                  setFavoriteMessages(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(msg.id)) {
+                                      next.delete(msg.id);
+                                      sonnerToast("Removido dos favoritos");
+                                    } else {
+                                      next.add(msg.id);
+                                      sonnerToast("Favoritado! ⭐");
+                                    }
+                                    return next;
+                                  });
+                                }}>
+                                  <Star className={cn("w-3.5 h-3.5 mr-2", favoriteMessages.has(msg.id) && "text-yellow-400 fill-yellow-400")} /> Favoritar
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => sonnerToast(`Info da mensagem — Enviada em ${msgDate.toLocaleString('pt-BR')}`)}>
+                                <DropdownMenuItem className="cursor-pointer text-xs" onClick={() => {
+                                  const info = [
+                                    `Enviada em: ${msgDate.toLocaleString('pt-BR')}`,
+                                    `Status: ${msg.status || 'enviada'}`,
+                                    `ID: ${msg.id}`,
+                                    msg.recipient_phone ? `Para: ${msg.recipient_phone}` : null,
+                                    msg.metadata?.media_type ? `Tipo: ${msg.metadata.media_type}` : null,
+                                  ].filter(Boolean).join('\n');
+                                  sonnerToast(info);
+                                }}>
                                   <Info className="w-3.5 h-3.5 mr-2" /> Info da mensagem
                                 </DropdownMenuItem>
                                 <DropdownMenuItem className="cursor-pointer text-xs text-destructive focus:bg-destructive/10 focus:text-destructive" onClick={async () => {

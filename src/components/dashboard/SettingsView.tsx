@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   User, Bell, Key, Shield, Globe, Save, Camera, Check, AlertCircle, Loader2, Unplug, Info,
   Eye, EyeOff, ChevronDown, ChevronUp, Trash2, Users, RefreshCw, Heart, Share2, TrendingUp, Plus, X,
-  Phone, MessageSquare, Calendar, Mail, Image as ImageIcon, Link2, LogOut, Pencil, Laptop, Clock,
-  UserCircle2, FileText, Target, Search, Sparkles, Brain, Palette, Database
+  Phone, Calendar, Mail, Image as ImageIcon, Link2, LogOut, Pencil, Laptop, Clock,
+  UserCircle2, FileText, Target, Search, Sparkles, Brain, Palette
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,8 +29,7 @@ import { ProfileTab } from "./settings/ProfileTab";
 import { SecurityTab } from "./settings/SecurityTab";
 import { SEOTab } from "./settings/SEOTab";
 import { APITab } from "./settings/APITab";
-import { WhatsAppBackupTab } from "./settings/WhatsAppBackupTab";
-import { WhatsAppQuickRepliesTab } from "./settings/WhatsAppQuickRepliesTab";
+
 import { BrandsTab } from "./BrandsTab";
 import { useSystem } from "@/hooks/useSystem";
 import { useSocialStats } from "@/hooks/useSocialStats";
@@ -748,17 +747,19 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     setVisibleFields(prev => ({ ...prev, [fieldKey]: !prev[fieldKey] }));
   }, []);
   const toggleExpand = useCallback((platform: string) => {
-    if (expandedPlatform === platform) {
-      setExpandedPlatform(null);
-    } else {
-      setExpandedPlatform(platform);
-      if (!formValues[platform]) {
-        setFormValues(prev => ({
-          ...prev,
-          [platform]: credentials[platform] || {}
-        }));
+    startTransition(() => {
+      if (expandedPlatform === platform) {
+        setExpandedPlatform(null);
+      } else {
+        setExpandedPlatform(platform);
+        if (!formValues[platform]) {
+          setFormValues(prev => ({
+            ...prev,
+            [platform]: credentials[platform] || {}
+          }));
+        }
       }
-    }
+    });
   }, [expandedPlatform, formValues, credentials]);
   const maskValue = useCallback((value: string) => {
     if (!value || value.length <= 6) return "••••••";
@@ -811,8 +812,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           <TabsTrigger value="notifications" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Bell className="w-4 h-4 mr-2" />Notificações</TabsTrigger>
           <TabsTrigger value="api" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Key className="w-4 h-4 mr-2" />APIs Sociais & Dev</TabsTrigger>
           <TabsTrigger value="security" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Shield className="w-4 h-4 mr-2" />Segurança</TabsTrigger>
-          <TabsTrigger value="whatsapp_backups" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><Database className="w-4 h-4 mr-2" />Backups</TabsTrigger>
-          <TabsTrigger value="quick_replies" className="rounded-lg data-[state=active]:bg-background py-2 px-4 shadow-sm transition-all"><MessageSquare className="w-4 h-4 mr-2" />Respostas</TabsTrigger>
+
           {can('system.access') && (
             <>
               <TabsTrigger value="system_dash" className="rounded-lg data-[state=active]:bg-background border-l border-primary/20 ml-2 py-2 px-4 shadow-[0_0_10px_rgba(139,92,246,0.1)] transition-all">
@@ -1145,14 +1145,6 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
               </Button>
             </motion.div>
           </div>
-        </TabsContent>
-
-        <TabsContent value="whatsapp_backups" className="outline-none focus-visible:ring-0">
-          <WhatsAppBackupTab />
-        </TabsContent>
-
-        <TabsContent value="quick_replies" className="outline-none focus-visible:ring-0">
-          <WhatsAppQuickRepliesTab />
         </TabsContent>
 
         <TabsContent value="system_dash">

@@ -1,11 +1,59 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { verifyHmacSignature } from "../_shared/security/verifyMetaSignature.ts";
+import { getSmartResponse, sendMetaGraphMessage, logInteraction } from "../_shared/bot-engine.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-hub-signature-256',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+}
+
+function normalizePhone(raw: string): string {
+  return raw.replace(/\D/g, "");
+}
+
+async function findOrCreateContact(
+  supabase: any,
+  userId: string,
+  phone: string,
+  name: string | null
+): Promise<string | null> {
+  const normalized = normalizePhone(phone);
+  
+  // Check if contact exists by phone
+  const { data: existing } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("user_id", userId)
+    .or(`phone.eq.${phone},phone_normalized.eq.${normalized}`)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    // Update name if it changed and we have a real name
+    if (name && name !== phone) {
+      await supabase
+        .from("contacts")
+        .update({ name, updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+        .is("name", null);
+    }
+    return existing.id;
+  }
+
+  // Create new contact
+  const { data: newContact } = await supabase
+    .from("contacts")
+    .insert({
+      user_id: userId,
+      phone: phone,
+      name: name && name !== phone ? name : null,
+    })
+    .select("id")
+    .maybeSingle();
+
+  return newContact?.id || null;
 }
 
 serve(async (req) => {
@@ -103,6 +151,79 @@ serve(async (req) => {
 
             const contact = change.value.contacts?.find((c: any) => c.wa_id === msg.from);
 
+            // Auto-create contact in contacts table
+            let contactId: string | null = null;
+            if (resolvedUserId && from) {
+              try {
+                contactId = await findOrCreateContact(
+                  supabase,
+                  resolvedUserId,
+                  from,
+                  contact?.profile?.name || null
+                );
+              } catch (contactErr) {
+                console.error("[WA-WEBHOOK] Error creating contact:", contactErr);
+              }
+            }
+
+            // Seção 6.4: Upsert whatsapp_conversations
+            let convId: string | null = null;
+            let resolvedConnId: string | null = null;
+            if (phoneNumberId && resolvedUserId) {
+              // Resolve connection_id
+              const { data: waConn } = await supabase
+                .from("social_connections")
+                .select("id")
+                .eq("platform", "whatsapp")
+                .eq("phone_number_id", phoneNumberId)
+                .maybeSingle();
+              resolvedConnId = waConn?.id || null;
+
+              if (waConn?.id) {
+                const contactName = contact?.profile?.name || from;
+                const preview = text;
+
+                // Primeiro tenta SELECT p/ ver se já existe
+                const { data: existingConv } = await supabase
+                  .from("whatsapp_conversations")
+                  .select("id, unread_count")
+                  .eq("connection_id", waConn.id)
+                  .eq("contact_wa_id", from)
+                  .maybeSingle();
+
+                if (existingConv) {
+                  convId = existingConv.id;
+                  await supabase
+                    .from("whatsapp_conversations")
+                    .update({
+                      contact_name: contactName,
+                      last_message_preview: preview,
+                      last_message_at: new Date().toISOString(),
+                      unread_count: existingConv.unread_count + 1,
+                      ...(contactId ? { contact_id: contactId } : {}),
+                    })
+                    .eq("id", existingConv.id);
+                } else {
+                  const { data: newConv } = await supabase
+                    .from("whatsapp_conversations")
+                    .insert({
+                      user_id: resolvedUserId,
+                      connection_id: waConn.id,
+                      contact_wa_id: from,
+                      contact_name: contactName,
+                      last_message_preview: preview,
+                      last_message_at: new Date().toISOString(),
+                      unread_count: 1,
+                      ...(contactId ? { contact_id: contactId } : {}),
+                    })
+                    .select("id")
+                    .maybeSingle();
+                  convId = newConv?.id || null;
+                }
+              }
+            }
+
+            // Store incoming message
             await supabase.from("messages").insert({
               content: text,
               recipient_phone: from,
@@ -112,10 +233,11 @@ serve(async (req) => {
               created_at: timestamp,
               user_id: resolvedUserId,
               media_url: null,
+              conversation_id: convId,
               metadata: {
                 wa_message_id: msgId,
-                referral,
-                connection_id: null,
+                ad_referral: referral,
+                connection_id: resolvedConnId,
                 phone_number_id: phoneNumberId,
                 media_id: mediaId,
                 mime_type: mimeType,
@@ -125,6 +247,75 @@ serve(async (req) => {
 
             if (referral) {
               console.log(`[WA-WEBHOOK] Click-to-WhatsApp referral from ${from}`);
+            }
+
+            // Bot response — only for non-echo, non-referral messages
+            if (!referral) {
+              try {
+                const reply = await getSmartResponse({
+                  supabaseUrl: Deno.env.get("SUPABASE_URL")!,
+                  supabaseServiceKey: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+                  userId: resolvedUserId,
+                  platform: "whatsapp",
+                  chatId: from,
+                  message: text,
+                  isGroup: from.includes("@g.us") || from.length > 15,
+                  connectionId: resolvedConnId || undefined
+                });
+
+                if (reply && typeof reply === "string") {
+                  console.log(`[WA-WEBHOOK] Bot reply: "${reply.slice(0, 50)}..."`);
+                  
+                  const msgPayload = {
+                    platform: "whatsapp" as const,
+                    chatId: from,
+                    recipientId: phoneNumberId,
+                    text: text,
+                    timestamp: parseInt(msg.timestamp || "0"),
+                    senderName: contact?.profile?.name || from,
+                    isGroup: from.includes("@g.us") || from.length > 15,
+                    isComment: false,
+                    mediaId,
+                    mimeType,
+                    filename,
+                    waMessageId: msgId,
+                    conversationId: convId || undefined
+                  };
+
+                  let sentWaMessageId: string | undefined;
+                  try {
+                    const sentResult = await sendMetaGraphMessage(msgPayload, reply, {
+                      supabase,
+                      connectionId: resolvedConnId || undefined,
+                      userId: resolvedUserId
+                    });
+                    if (sentResult?.messages?.[0]?.id) {
+                      sentWaMessageId = sentResult.messages[0].id;
+                    }
+                  } catch (sendErr) {
+                    console.error("[WA-WEBHOOK] Error sending bot reply:", sendErr);
+                  }
+
+                  await supabase.from("messages").insert({
+                    content: reply,
+                    recipient_phone: from,
+                    recipient_name: contact?.profile?.name || from,
+                    status: "sent",
+                    platform: "whatsapp",
+                    user_id: resolvedUserId,
+                    conversation_id: convId,
+                    metadata: {
+                      bot_reply: true,
+                      wa_message_id: sentWaMessageId,
+                      connection_id: resolvedConnId,
+                    }
+                  });
+                } else if (reply && typeof reply === "object" && reply.error) {
+                  console.log(`[WA-WEBHOOK] Bot silenced: ${reply.error}`);
+                }
+              } catch (botErr) {
+                console.error("[WA-WEBHOOK] Bot engine error:", botErr);
+              }
             }
           }
 

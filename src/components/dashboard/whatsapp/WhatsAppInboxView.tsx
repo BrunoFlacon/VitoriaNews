@@ -1,17 +1,23 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Smartphone, ArrowLeft, X, User, Phone, Tag, FileText, MessageCircle, Clock, Image, ShoppingBag, MessageSquare, Timer, Send, ChevronRight, Camera } from "lucide-react";
+import { Smartphone, X, User, Phone, Tag, FileText, MessageCircle, Clock, Image, ShoppingBag, MessageSquare, Timer, Send, ChevronRight, Users, Plus, Archive } from "lucide-react";
 import { cn, getProxyUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useWhatsAppRealtime } from "@/hooks/useWhatsAppRealtime";
 import { useFetchWhatsAppPhotos } from "@/hooks/useFetchWhatsAppPhotos";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { WhatsAppChatList } from "./WhatsAppChatList";
 import { WhatsAppChatWindow } from "./WhatsAppChatWindow";
 import { WhatsAppNavIcons } from "./WhatsAppNavIcons";
 import { WhatsAppSettingsView } from "./WhatsAppSettingsView";
 import { ContactSidebar } from "./ContactSidebar";
+import { ContactForm } from "./ContactForm";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { WhatsAppStatusView } from "./WhatsAppStatusView";
+import { WhatsAppCommunitiesTab } from "./WhatsAppCommunitiesTab";
+import { WhatsAppContactsTab } from "./WhatsAppContactsTab";
 
 const resolvePhoto = (url: string | null | undefined) => {
   if (!url) return null;
@@ -27,18 +33,26 @@ interface WhatsAppInboxViewProps {
   onBack?: () => void;
   initialPhone?: string | null;
   onChatConsumed?: () => void;
+  onNavigateTab?: (tab: string) => void;
+  showSearch?: boolean;
+  onSearchToggle?: () => void;
 }
 
-export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: WhatsAppInboxViewProps) {
+export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed, onNavigateTab, showSearch: showSearchProp, onSearchToggle }: WhatsAppInboxViewProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const { conversations, conversationMessages, loading, refresh } = useWhatsAppRealtime(user?.id);
 
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState("all");
+  const [showArchived, setShowArchived] = useState(false);
   const [chatSearchQuery, setChatSearchQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState("chats");
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [selectedStatusContact, setSelectedStatusContact] = useState<string | undefined>(undefined);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const composeRef = useRef<HTMLTextAreaElement>(null);
   const { fetchPhotos, loading: photosLoading } = useFetchWhatsAppPhotos();
   const photosFetchedRef = useRef(false);
@@ -111,6 +125,7 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: What
         photo: c.avatar_url,
         photoUrl,
         platform: "whatsapp",
+        status: c.status || 'active',
         is_online: false,
         unreadCount: c.unread_count || 0,
       };
@@ -119,12 +134,15 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: What
 
   const filteredChats = useMemo(() => {
     let list = waChats;
+    if (!showArchived) {
+      list = list.filter(c => c.status !== 'archived');
+    }
     if (chatSearchQuery.trim()) {
       const q = chatSearchQuery.toLowerCase();
       list = list.filter(c => c.name.toLowerCase().includes(q));
     }
     return list;
-  }, [waChats, chatSearchQuery]);
+  }, [waChats, chatSearchQuery, showArchived]);
 
   const activeChat = useMemo(() => {
     if (!activeChatId) return null;
@@ -286,6 +304,20 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: What
     }
   }, [user, refresh]);
 
+  const handleArchiveConversation = useCallback(async (conversationId: string) => {
+    try {
+      const { error } = await supabase
+        .from('whatsapp_conversations')
+        .update({ status: showArchived ? 'active' : 'archived' })
+        .eq('id', conversationId);
+      if (error) throw error;
+      toast({ title: showArchived ? "Conversa restaurada" : "Conversa arquivada" });
+      refresh();
+    } catch (e: any) {
+      toast({ title: "Erro ao arquivar", variant: "destructive" });
+    }
+  }, [refresh, toast, showArchived]);
+
   const handleSync = useCallback(async (_platform: string) => {
     toast({ title: "Sincronizando WhatsApp..." });
     try {
@@ -318,36 +350,23 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: What
         <>
           <div className={cn(
             "flex flex-col shrink-0",
-            activeChat ? "hidden md:flex md:w-[300px]" : "w-full md:w-[300px]"
+            activeChat ? "hidden md:flex md:w-[420px]" : "w-full md:w-[420px]"
           )}>
-            {onBack && (
-              <div className="flex items-center gap-2 px-4 pt-3 pb-1">
-                <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0">
-                  <ArrowLeft className="w-5 h-5" />
-                </Button>
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#25D366] flex items-center justify-center">
-                    <Smartphone className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="font-bold text-sm">WhatsApp</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="ml-auto h-7 w-7"
-                  onClick={async () => {
-                    const result = await fetchPhotos();
-                    if (result) {
-                      const updated = result.results.reduce((acc, r) => acc + r.conversations_updated, 0);
-                      toast({ title: `Fotos atualizadas: ${updated} conversas` });
-                      refresh();
+            {(showSearchProp !== undefined ? showSearchProp : showSearch) && (
+              <div className="px-5 pb-3 pt-2">
+                <Input
+                  ref={searchInputRef}
+                  placeholder="Pesquisar conversas..."
+                  value={chatSearchQuery}
+                  onChange={(e) => setChatSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (onSearchToggle) onSearchToggle();
+                      else setShowSearch(false);
                     }
                   }}
-                  disabled={photosLoading}
-                  title="Buscar fotos de perfil do WhatsApp"
-                >
-                  <Camera className={cn("w-4 h-4", photosLoading && "animate-pulse")} />
-                </Button>
+                  className="bg-[#202C33] border-0 rounded-lg text-[15px] text-white placeholder:text-[#8696a0] h-9 focus-visible:ring-0"
+                />
               </div>
             )}
             <WhatsAppChatList
@@ -356,11 +375,16 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: What
               onSelectChat={handleSelectChat}
               sidebarTab={sidebarTab}
               setSidebarTab={setSidebarTab}
-              chatSearchQuery={chatSearchQuery}
-              setChatSearchQuery={setChatSearchQuery}
               loading={loading}
               onStartNewChat={handleStartNewChat}
               onDeleteChat={handleDeleteConversation}
+              onNavigateTab={onNavigateTab}
+              onNavigateInbox={setActiveNav}
+              onShowContactModal={() => setShowContactModal(true)}
+              onToggleArchived={() => setShowArchived(v => !v)}
+              showArchived={showArchived}
+              onArchiveChat={handleArchiveConversation}
+              onViewStatus={(contactName) => { setSelectedStatusContact(contactName); setActiveNav("status"); }}
             />
           </div>
 
@@ -380,6 +404,7 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: What
                 loading={loading}
                 onBack={() => setActiveChatId(null)}
                 onOpenInfo={() => setSidebarOpen(o => !o)}
+                onArchiveChat={handleArchiveConversation}
               />
             ) : (
     <div className="flex-1 flex items-center justify-center bg-[#0B141A]">
@@ -404,14 +429,26 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed }: What
           )}
         </>
       ) : activeNav === "status" ? (
-        renderPlaceholder("Status", "Visualize e compartilhe atualizações de status com seus contatos.")
+        <WhatsAppStatusView initialContact={selectedStatusContact} />
       ) : activeNav === "newsletter" ? (
         renderPlaceholder("Novidades", "Gerencie suas newsletters e transmissões.")
       ) : activeNav === "communities" ? (
-        renderPlaceholder("Comunidades", "Crie e gerencie grupos e comunidades.")
+        <WhatsAppCommunitiesTab />
+      ) : activeNav === "contacts" ? (
+        <WhatsAppContactsTab onNavigateToChat={(phone) => { handleStartNewChat(phone); setActiveNav("chats"); }} />
       ) : (
         <WhatsAppSettingsView userId={user?.id} />
       )}
+
+      {/* Modal para adicionar novo contato */}
+      <ContactForm
+        open={showContactModal}
+        onOpenChange={setShowContactModal}
+        onSaved={() => {
+          toast({ title: "Contato salvo!" });
+          onNavigateTab?.("contacts");
+        }}
+      />
     </div>
   );
 }

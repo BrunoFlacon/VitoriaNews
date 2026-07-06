@@ -240,7 +240,7 @@ export default function PresentationPage() {
         const { data, error } = await (supabase as any)
           .from('profiles')
           .select('profile_content')
-          .eq('id', user.id)
+          .eq('user_id', user.id)
           .single();
 
         if (error) throw error;
@@ -348,7 +348,7 @@ export default function PresentationPage() {
           profile_content: content as any,
           updated_at: new Date().toISOString()
         })
-        .eq('id', user.id);
+        .eq('user_id', user.id);
 
       if (error) throw error;
 

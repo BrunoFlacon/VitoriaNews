@@ -30,15 +30,19 @@ interface Broadcast {
   id: string;
   name: string;
   template_name: string;
-  status: "draft" | "sent" | "sending" | "failed";
-  recipient_count: number;
+  status: "draft" | "scheduled" | "sending" | "sent" | "failed";
+  total_recipients: number;
   delivered_count: number;
   read_count: number;
   failed_count: number;
   created_at: string;
 }
 
-export function WhatsAppBroadcastsTab() {
+interface WhatsAppBroadcastsTabProps {
+  onViewDetail?: (broadcastId: string) => void;
+}
+
+export function WhatsAppBroadcastsTab({ onViewDetail }: WhatsAppBroadcastsTabProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -60,6 +64,18 @@ export function WhatsAppBroadcastsTab() {
       if (error) throw error;
       setBroadcasts(data ?? []);
     } catch (err: unknown) {
+      // Table doesn't exist or other schema issue → show empty state quietly
+      if (
+        err instanceof Error &&
+        (err.message?.includes("relation") ||
+         err.message?.includes("does not exist") ||
+         err.message?.includes("Could not find") ||
+         err.message?.includes("404"))
+      ) {
+        setBroadcasts([]);
+        console.info("Broadcasts table not available yet — showing empty state.");
+        return;
+      }
       toast({
         title: "Erro ao carregar transmissões",
         description: err instanceof Error ? err.message : "Erro desconhecido",
@@ -106,6 +122,9 @@ export function WhatsAppBroadcastsTab() {
 
   return (
     <div className="space-y-4">
+      <div className="px-4 pt-2 pb-1">
+        <p className="text-xs text-muted-foreground/70">Transmissões: envie mensagens em massa para listas de contatos.</p>
+      </div>
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div>
@@ -138,7 +157,11 @@ export function WhatsAppBroadcastsTab() {
       ) : isMobile ? (
         <div className="space-y-2">
           {broadcasts.map((b) => (
-            <Card key={b.id} className="overflow-hidden">
+            <Card
+              key={b.id}
+              className="overflow-hidden cursor-pointer hover:bg-accent/50 transition-colors"
+              onClick={() => onViewDetail?.(b.id)}
+            >
               <CardContent className="p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -150,7 +173,7 @@ export function WhatsAppBroadcastsTab() {
                       Template: {b.template_name}
                     </p>
                     <div className="flex items-center gap-3 mt-2 text-[10px] text-muted-foreground/50">
-                      <span>{b.recipient_count ?? 0} destinatário(s)</span>
+                      <span>{b.total_recipients ?? 0} destinatário(s)</span>
                       <span>{b.delivered_count ?? 0} entregue(s)</span>
                       {b.read_count ? <span>{b.read_count} lida(s)</span> : null}
                     </div>
@@ -188,13 +211,17 @@ export function WhatsAppBroadcastsTab() {
               </TableHeader>
               <TableBody>
                 {broadcasts.map((b) => (
-                  <TableRow key={b.id}>
+                  <TableRow
+                    key={b.id}
+                    className="cursor-pointer hover:bg-accent/50 transition-colors"
+                    onClick={() => onViewDetail?.(b.id)}
+                  >
                     <TableCell>{getStatusIcon(b.status)}</TableCell>
                     <TableCell className="font-medium text-sm">{b.name}</TableCell>
                     <TableCell className="text-sm text-muted-foreground/70">
                       {b.template_name}
                     </TableCell>
-                    <TableCell className="text-right text-sm">{b.recipient_count ?? 0}</TableCell>
+                    <TableCell className="text-right text-sm">{b.total_recipients ?? 0}</TableCell>
                     <TableCell className="text-right text-sm text-green-600">
                       {b.delivered_count ?? 0}
                     </TableCell>

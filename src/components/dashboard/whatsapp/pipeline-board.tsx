@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -17,7 +17,7 @@ import {
 import type { Deal, PipelineStage } from "@/types";
 import { DealCard } from "./deal-card";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 interface PipelineBoardProps {
   stages: PipelineStage[];
@@ -37,6 +37,32 @@ export function PipelineBoard({
   onOpenChat,
 }: PipelineBoardProps) {
   const [activeDealId, setActiveDealId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollButtons = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  const scrollBy = useCallback((direction: "left" | "right") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const amount = direction === "left" ? -320 : 320;
+    el.scrollBy({ left: amount, behavior: "smooth" });
+    // Update buttons after scroll animation
+    setTimeout(updateScrollButtons, 350);
+  }, [updateScrollButtons]);
+
+  // Initialize scroll buttons on mount and when stages change
+  useEffect(() => {
+    // Small delay to let the DOM render
+    const timer = setTimeout(updateScrollButtons, 100);
+    return () => clearTimeout(timer);
+  }, [stages, updateScrollButtons]);
 
   const sortedStages = useMemo(
     () => [...stages].sort((a, b) => a.position - b.position),
@@ -92,27 +118,54 @@ export function PipelineBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 lg:snap-none"
-        style={{ scrollBehavior: 'smooth' }}
-      >
-        {sortedStages.map((stage) => {
-          const stageDeals = dealsByStage.get(stage.id) ?? [];
-          const totalValue = stageDeals.reduce(
-            (s, d) => s + Number(d.value || 0),
-            0,
-          );
-          return (
-            <StageColumn
-              key={stage.id}
-              stage={stage}
-              deals={stageDeals}
-              totalValue={totalValue}
-              onAddDeal={onAddDeal}
-              onEditDeal={onEditDeal}
-              onOpenChat={onOpenChat}
-            />
-          );
-        })}
+      <div className="relative">
+        {/* Left scroll button */}
+        {canScrollLeft && (
+          <button
+            onClick={() => scrollBy("left")}
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background shadow-md hover:bg-muted transition-all"
+            aria-label="Scroll left"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* Scrollable container */}
+        <div
+          ref={scrollRef}
+          onScroll={updateScrollButtons}
+          className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 scrollbar-hide lg:snap-none"
+        >
+          {sortedStages.map((stage) => {
+            const stageDeals = dealsByStage.get(stage.id) ?? [];
+            const totalValue = stageDeals.reduce(
+              (s, d) => s + Number(d.value || 0),
+              0,
+            );
+            return (
+              <StageColumn
+                key={stage.id}
+                stage={stage}
+                deals={stageDeals}
+                totalValue={totalValue}
+                onAddDeal={onAddDeal}
+                onEditDeal={onEditDeal}
+                onOpenChat={onOpenChat}
+              />
+            );
+          })}
+        </div>
+
+        {/* Right scroll button */}
+        {canScrollRight && (
+          <button
+            onClick={() => scrollBy("right")}
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background shadow-md hover:bg-muted transition-all"
+            aria-label="Scroll right"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       <DragOverlay
