@@ -102,14 +102,15 @@ export const APITab = memo(({
   
   const [pixelList, updatePixels] = useState<string[]>(['']);
 
-  // Auto-repair AI config if api_key is missing but openrouter_api_key exists
+  // Auto-repair AI config if api_key is missing/stale but openrouter_api_key exists
   // This is crucial because the current live Edge Function only looks at 'api_key'
   useEffect(() => {
     const aiCreds = credentials?.['ai_config'];
-    const needsKeySync = aiCreds && aiCreds.openrouter_api_key && !aiCreds.api_key;
-    const needsUrlSync = aiCreds && aiCreds.provider === 'openrouter' && !aiCreds.base_url;
+    const aiProvider = String(aiCreds?.provider || '').trim().toLowerCase();
+    const needsKeySync = aiCreds && aiCreds.openrouter_api_key && aiCreds.api_key !== aiCreds.openrouter_api_key;
+    const needsUrlSync = aiCreds && aiProvider === 'openrouter' && !aiCreds.base_url;
     const needsProviderSync = aiCreds && aiCreds.openrouter_api_key && !aiCreds.provider;
-    const needsModelSync = aiCreds && aiCreds.provider === 'openrouter' && !aiCreds.openrouter_model;
+    const needsModelSync = aiCreds && aiProvider === 'openrouter' && !aiCreds.openrouter_model;
 
     if (needsKeySync || needsUrlSync || needsProviderSync || needsModelSync) {
       console.log("Auto-repairing AI config: syncing keys, model, provider and base_url for legacy support...");
@@ -118,8 +119,8 @@ export const APITab = memo(({
       if (needsUrlSync) updated.base_url = 'https://openrouter.ai/api/v1';
       if (needsProviderSync) updated.provider = 'openrouter';
       if (needsModelSync) {
-        updated.openrouter_model = 'google/gemini-2.0-flash-001';
-        updated.text_model = 'google/gemini-2.0-flash-001';
+        updated.openrouter_model = 'google/gemini-2.5-flash';
+        updated.text_model = 'google/gemini-2.5-flash';
       }
       
       saveCredentials('ai_config', updated);

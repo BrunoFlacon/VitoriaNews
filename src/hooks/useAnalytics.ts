@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient, useMutation, keepPreviousData } from '@tanstack/react-query';
+import { isNetworkAbortError, logNetworkError } from '@/utils/errorHandling';
 
 interface EngagementData {
   views: number;
@@ -119,7 +120,13 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
 
   const fetchAnalyticsData = async (): Promise<AnalyticsData> => {
     if (!user) throw new Error("No user available");
-    
+
+    // Em modo local, Edge Functions não estão disponíveis — retorna dados demo imediatamente
+    const isLocalMode = import.meta.env.VITE_USE_LOCAL_DB === 'true' || import.meta.env.USE_LOCAL_DB === 'true';
+    if (isLocalMode) {
+      return getDemoAnalyticsData(period);
+    }
+
     try {
       setFetchError(null);
       const body: Record<string, any> = { period, platform, type: postType, source: 'all' };
@@ -130,7 +137,7 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       });
 
       if (aErr) {
-        console.error('[Analytics] Edge Function error:', aErr.message, 'context:', aErr.context, 'body:', body);
+        logNetworkError('Analytics Edge Function', aErr, true);
         throw aErr;
       }
       const result = aData as AnalyticsData;
@@ -147,26 +154,30 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       const underlying = err?.context?.message || err?.context || '';
       const errMsg = err?.message || String(err);
       setFetchError(`${errMsg}${underlying ? ' | ' + underlying : ''}`);
-      console.error('[Analytics] Fetch failed:', errMsg, '| underlying:', underlying);
+      logNetworkError('Analytics Fetch', err, true);
       const key = ['analytics', user?.id, period, platform, postType];
       const cached = queryClient.getQueryData<AnalyticsData>(key);
       if (cached) {
         return cached;
       }
-      return {
-        overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, followersGrowth: 0 },
-        engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: 0, growth: 0 },
-        chartData: [],
-        platformBreakdown: {},
-        topContent: [],
-        bestTimes: [],
-        followerData: [],
-        period,
-        generatedAt: new Date().toISOString(),
-        dataSource: 'demo'
-      } as AnalyticsData;
+      return getDemoAnalyticsData(period);
     }
   };
+
+  function getDemoAnalyticsData(p: string): AnalyticsData {
+    return {
+      overview: { totalPosts: 0, publishedPosts: 0, scheduledPosts: 0, failedPosts: 0, draftPosts: 0, publishRate: 0, totalFollowers: 0, followersGrowth: 0 },
+      engagement: { views: 0, likes: 0, comments: 0, shares: 0, reach: 0, engagementRate: 0, growth: 0 },
+      chartData: [],
+      platformBreakdown: {},
+      topContent: [],
+      bestTimes: [],
+      followerData: [],
+      period: p,
+      generatedAt: new Date().toISOString(),
+      dataSource: 'demo'
+    };
+  }
 
   const { data, isLoading, refetch } = useQuery<AnalyticsData, Error>({
     queryKey: ['analytics', user?.id, period, platform, postType],

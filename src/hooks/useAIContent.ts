@@ -71,8 +71,8 @@ export const TTS_VOICES = [
 
 // Available AI models on OpenRouter (curated for content)
 export const OPENROUTER_MODELS = [
-  { id: "google/gemini-2.5-flash-preview", label: "Gemini 2.5 Flash (rápido)" },
-  { id: "google/gemini-2.0-flash-001",     label: "Gemini 2.0 Flash" },
+  { id: "google/gemini-2.5-flash",         label: "Gemini 2.5 Flash (recomendado)" },
+  { id: "google/gemini-2.5-flash-lite",    label: "Gemini 2.5 Flash-Lite (rápido)" },
   { id: "anthropic/claude-sonnet-4",       label: "Claude Sonnet 4" },
   { id: "anthropic/claude-haiku-4-5",      label: "Claude Haiku 4.5 (rápido)" },
   { id: "openai/gpt-4o-mini",              label: "GPT-4o Mini" },

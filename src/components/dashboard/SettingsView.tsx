@@ -868,20 +868,53 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
 
 
         <TabsContent value="notifications">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6">
-            <h3 className="font-display font-bold text-lg mb-6">Preferências de Notificação</h3>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-2xl border border-border p-6 font-sans">
+            <h3 className="font-display font-bold text-xl mb-6 text-foreground">Preferências de Notificação</h3>
+            
             <div className="space-y-6">
+              {/* Notificações por Email */}
               <div>
-                <h4 className="font-medium mb-4">Notificações por Email</h4>
-                <div className="space-y-4">
+                <h4 className="font-bold text-sm text-foreground mb-4">Notificações por Email</h4>
+                <div className="space-y-5">
                   {[
                     { key: 'emailPosts', title: 'Posts publicados', desc: 'Receba confirmação quando posts forem publicados' },
                     { key: 'emailEngagement', title: 'Engajamento', desc: 'Alertas de likes, comentários e compartilhamentos' },
                     { key: 'weeklyReport', title: 'Relatório semanal', desc: 'Resumo de performance das suas redes' },
                   ].map(item => (
-                    <div key={item.key} className="flex items-center justify-between">
-                      <div><p className="font-medium">{item.title}</p><p className="text-sm text-muted-foreground">{item.desc}</p></div>
-                      <Switch checked={notifications[item.key as keyof typeof notifications]} onCheckedChange={(checked) => handleNotificationToggle(item.key, checked)} />
+                    <div key={item.key} className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-sm text-foreground">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                      </div>
+                      <Switch 
+                        checked={notifications[item.key as keyof typeof notifications]} 
+                        onCheckedChange={(checked) => handleNotificationToggle(item.key, checked)} 
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="border-t border-border/60 pt-6" />
+
+              {/* Notificações Push */}
+              <div>
+                <h4 className="font-bold text-sm text-foreground mb-4">Notificações Push</h4>
+                <div className="space-y-5">
+                  {[
+                    { key: 'pushPosts', title: 'Posts publicados', desc: 'Notificação instantânea de publicações' },
+                    { key: 'pushEngagement', title: 'Engajamento em tempo real', desc: 'Alertas instantâneos de interações' },
+                    { key: 'pushSchedule', title: 'Lembretes de agendamento', desc: 'Aviso antes de posts agendados' },
+                  ].map(item => (
+                    <div key={item.key} className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-bold text-sm text-foreground">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                      </div>
+                      <Switch 
+                        checked={notifications[item.key as keyof typeof notifications]} 
+                        onCheckedChange={(checked) => handleNotificationToggle(item.key, checked)} 
+                      />
                     </div>
                   ))}
                 </div>

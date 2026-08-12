@@ -12,6 +12,7 @@ import { useSocialStats } from "@/hooks/useSocialStats";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { cn, normalizePlatform } from "@/lib/utils";
 import { useQuery } from '@tanstack/react-query';
+import { logNetworkError } from "@/utils/errorHandling";
 
 // Core UI Components
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -94,7 +95,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         .select('*')
         .eq('user_id', user.id)
         .order('collected_at', { ascending: true });
-      if (error) { console.warn('[Dashboard] account_metrics query failed:', error); return []; }
+      if (error) { logNetworkError('Dashboard account_metrics', error, false); return []; }
       return data || [];
     },
     enabled: isDashboardTab && !!user?.id,

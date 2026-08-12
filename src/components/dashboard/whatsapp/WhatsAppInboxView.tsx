@@ -22,7 +22,7 @@ import { WhatsAppContactsTab } from "./WhatsAppContactsTab";
 const resolvePhoto = (url: string | null | undefined) => {
   if (!url) return null;
   if (url.startsWith('http')) return getProxyUrl(url);
-  if (url.startsWith('blob:') || url.startsWith('data:')) return url;
+  if (url.startsWith('/api/') || url.startsWith('blob:') || url.startsWith('data:')) return url;
   try {
     const { data } = supabase.storage.from("media").getPublicUrl(url);
     return data.publicUrl;
@@ -110,6 +110,13 @@ export function WhatsAppInboxView({ onBack, initialPhone, onChatConsumed, onNavi
       }
     }
   }, [user?.id]);
+
+  // Listen for global refresh events (from pin, mute, delete, etc.)
+  useEffect(() => {
+    const handler = () => refresh();
+    window.addEventListener("whatsapp:refresh", handler);
+    return () => window.removeEventListener("whatsapp:refresh", handler);
+  }, [refresh]);
 
   const waChats = useMemo(() => {
     return (conversations || []).map(c => {

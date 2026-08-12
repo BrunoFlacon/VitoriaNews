@@ -78,8 +78,23 @@ export function getWhatsAppMediaUrl(mediaId: string, userId: string): string | n
 export function getProxyUrl(url: string | null | undefined): string {
   if (!url) return "";
 
-  // URLs já proxied ou do nosso storage não precisam de proxy
+  // URLs já proxied ou locais não precisam de novo proxy
+  if (url.startsWith('/api/')) return url;
+  if (url.includes('/api/proxy-image?url=')) return url;
   if (url.includes('media-relay?url=') || url.includes('proxy-media?url=')) return url;
+
+  const isLocalMode = import.meta.env.VITE_USE_LOCAL_DB === 'true';
+  const localProxyBase = '/api/proxy-image';
+
+  function toLocalProxy(originalUrl: string): string {
+    return `${localProxyBase}?url=${encodeURIComponent(originalUrl)}`;
+  }
+
+  // Em modo local, TODO storage do Supabase é redirecionado para o proxy local
+  if (isLocalMode && url.includes('supabase.co/storage/')) {
+    return toLocalProxy(url);
+  }
+  // Em modo remoto, URLs do storage do Supabase são servidas diretamente
   if (url.includes('supabase.co/storage/')) return url;
 
   const problematicDomains = [
@@ -106,6 +121,10 @@ export function getProxyUrl(url: string | null | undefined): string {
   const shouldProxy = problematicDomains.some(domain => url.includes(domain));
   
   if (shouldProxy) {
+    if (isLocalMode) {
+      // Em modo local, proxy direto sem passar pelo Supabase
+      return toLocalProxy(url);
+    }
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     if (!supabaseUrl) return url;

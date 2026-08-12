@@ -1,0 +1,5 @@
+Local DB API rodando em http://localhost:3001
+Database: ghtkdkauseesambzqfrd@localhost:5433
+Scheduler de tokens: a cada 10 min
+Tabela webhook_events pronta.
+[cron] token refreshed: youtube (38cd9720-494e-406a-853d-19d81ae85e99)

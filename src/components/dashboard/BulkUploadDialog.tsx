@@ -10,7 +10,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getFunctionsBase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -122,7 +122,7 @@ export const BulkUploadDialog = ({ open, onOpenChange, onComplete }: BulkUploadD
       setProgress(30);
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bulk-import-posts`,
+        `${getFunctionsBase()}/bulk-import-posts`,
         {
           method: "POST",
           headers: {

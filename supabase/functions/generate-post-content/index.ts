@@ -104,14 +104,29 @@ serve(async (req: Request) => {
     }
 
     // Determine Provider and Key
-    const isOpenrouterProvider = aiConfig.provider === "openrouter" || aiConfig.base_url?.includes("openrouter");
-    const openrouterKey = aiConfig.openrouter_api_key 
+    const looksLikeOpenRouterKey = typeof aiConfig.api_key === "string" && aiConfig.api_key.startsWith("sk-or-v1-");
+    const hasOpenRouterKey = !!aiConfig.openrouter_api_key || looksLikeOpenRouterKey;
+    // An explicit provider wins, except "lovable"/undefined when an OpenRouter key is present.
+    // This prevents sending a (possibly old) api_key to the wrong endpoint.
+    const provider = String(
+      (aiConfig.provider && (String(aiConfig.provider).toLowerCase() !== "lovable" || !hasOpenRouterKey))
+        ? aiConfig.provider
+        : (hasOpenRouterKey ? "openrouter" : aiConfig.provider || "lovable")
+    ).toLowerCase();
+    const isOpenrouterProvider = provider === "openrouter" || aiConfig.base_url?.includes("openrouter");
+    const openrouterKey = aiConfig.openrouter_api_key
+      || (looksLikeOpenRouterKey ? aiConfig.api_key : null)
       || (isOpenrouterProvider ? aiConfig.api_key : null)
       || Deno.env.get("OPENROUTER_API_KEY");
-    
-    const provider = aiConfig.provider || (openrouterKey ? "openrouter" : "lovable");
-    const apiKey = aiConfig.api_key || openrouterKey || Deno.env.get("LOVABLE_API_KEY");
-    const model = body.model || aiConfig.openrouter_model || aiConfig.text_model || (provider === "openrouter" ? "google/gemini-2.0-flash-001" : "gpt-4o-mini");
+    const apiKey = (isOpenrouterProvider
+      ? (openrouterKey || aiConfig.api_key)
+      : (aiConfig.api_key || openrouterKey))
+      || Deno.env.get("LOVABLE_API_KEY");
+    let model = body.model || aiConfig.openrouter_model || aiConfig.text_model || (provider === "openrouter" ? "google/gemini-2.5-flash" : "gpt-4o-mini");
+    // Retired model ids that now return 404 — auto-replace with a current one.
+    if (model === "google/gemini-2.0-flash-001" || model === "google/gemini-2.5-flash-preview") {
+      model = "google/gemini-2.5-flash";
+    }
     const baseUrl = aiConfig.base_url || (provider === "openrouter" ? "https://openrouter.ai/api/v1" : "https://ai.gateway.lovable.dev/v1");
 
     console.log(`Using AI Provider: ${provider}, Model: ${model}, BaseUrl: ${baseUrl}, Mode: ${mode}`);
@@ -243,26 +258,49 @@ CTA: [call-to-action sugerido]`;
           { role: "user", content: messageContent },
         ],
         temperature: 0.7,
+        max_tokens: 1000,
       };
     }
 
     console.log(`[AI] Calling ${provider} API with model ${model}...`);
     
-    const aiResponse = await fetch(fetchUrl, {
+    // If both key fields exist and differ, keep an alternate key for a single
+    // automatic retry on 401/402 — protects against a stale key in either field.
+    // Only trust an alternate that matches the provider's key format (sk-or-v1-).
+    const alternateRaw = (aiConfig.api_key && aiConfig.openrouter_api_key && aiConfig.api_key !== aiConfig.openrouter_api_key)
+      ? (isOpenrouterProvider ? aiConfig.api_key : aiConfig.openrouter_api_key)
+      : null;
+    const alternateKey = alternateRaw && (!isOpenrouterProvider || String(alternateRaw).startsWith("sk-or-v1-"))
+      ? alternateRaw
+      : null;
+
+    let aiResponse = await fetch(fetchUrl, {
       method: fetchMethod,
       headers: fetchHeaders,
       body: JSON.stringify(fetchBody),
     });
 
+    if (!aiResponse.ok && alternateKey && (aiResponse.status === 401 || aiResponse.status === 402)) {
+      console.log(`[AI] ${provider} returned ${aiResponse.status} with primary key — retrying with alternate key.`);
+      fetchHeaders["Authorization"] = `Bearer ${alternateKey}`;
+      aiResponse = await fetch(fetchUrl, {
+        method: fetchMethod,
+        headers: fetchHeaders,
+        body: JSON.stringify(fetchBody),
+      });
+    }
+
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
       console.error(`[AI] ${provider} API Error (${aiResponse.status}):`, errorText);
       
+      const usedKey = alternateKey && (fetchHeaders["Authorization"] === `Bearer ${alternateKey}`) ? alternateKey : apiKey;
+      const keyMask = usedKey && usedKey.length > 8 ? `${usedKey.substring(0, 5)}...${usedKey.slice(-4)}` : "(ausente)";
       let errorMessage = `Erro na API da IA (${provider}).`;
       if (aiResponse.status === 429) errorMessage = "Limite de requisições excedido na API da IA.";
-      if (aiResponse.status === 401) errorMessage = "API Key de IA inválida ou expirada.";
-      if (aiResponse.status === 402) errorMessage = "Créditos de IA insuficientes.";
-      if (aiResponse.status === 404) errorMessage = "Modelo de IA não encontrado.";
+      if (aiResponse.status === 401) errorMessage = `API Key de IA inválida (chave usada: ${keyMask} via ${provider}). Corrija a chave em Configurações > APIs.`;
+      if (aiResponse.status === 402) errorMessage = `Créditos de IA insuficientes (chave usada: ${keyMask} via ${provider}). Adicione créditos em https://openrouter.ai/settings/credits.`;
+      if (aiResponse.status === 404) errorMessage = `Modelo de IA não encontrado (${model} via ${provider}). Verifique o nome do modelo em Configurações > APIs.`;
       
       return new Response(
         JSON.stringify({ error: errorMessage, details: errorText }),

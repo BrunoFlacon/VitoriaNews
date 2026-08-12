@@ -241,6 +241,63 @@ export const WhatsAppChatWindow = ({
   const audioChunksRef = useRef<Blob[]>([]);
   const timerIntervalRef = useRef<number | null>(null);
 
+  // ── Message selection mode ──
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set());
+
+  const toggleSelectionMode = useCallback(() => {
+    if (selectionMode) {
+      setSelectionMode(false);
+      setSelectedMessages(new Set());
+    } else {
+      setSelectionMode(true);
+    }
+  }, [selectionMode]);
+
+  const toggleMessageSelection = useCallback((msgId: string) => {
+    setSelectedMessages(prev => {
+      const next = new Set(prev);
+      if (next.has(msgId)) {
+        next.delete(msgId);
+      } else {
+        next.add(msgId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleDeleteSelected = useCallback(async () => {
+    if (selectedMessages.size === 0) return;
+    const ids = Array.from(selectedMessages);
+    try {
+      await supabase.from('messages').delete().in('id', ids);
+      toast({ title: `${ids.length} mensagens excluídas` });
+      setSelectionMode(false);
+      setSelectedMessages(new Set());
+      window.dispatchEvent(new CustomEvent('whatsapp:refresh'));
+    } catch (err: any) {
+      toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' });
+    }
+  }, [selectedMessages, toast]);
+
+  const handleForwardSelected = useCallback(() => {
+    if (selectedMessages.size === 0) return;
+    const ids = Array.from(selectedMessages);
+    // Copy message texts to clipboard for forwarding
+    const texts = filteredMessages
+      .filter(m => ids.includes(m.id))
+      .map(m => m.content || '[Mídia]')
+      .filter(Boolean)
+      .join('\n---\n');
+    navigator.clipboard.writeText(texts).then(() => {
+      sonnerToast(`${ids.length} mensagens copiadas! Cole em qualquer conversa para encaminhar.`);
+      setSelectionMode(false);
+      setSelectedMessages(new Set());
+    }).catch(() => {
+      toast({ title: 'Erro ao copiar', variant: 'destructive' });
+    });
+  }, [selectedMessages, filteredMessages, toast]);
+
   const EMOJIS = ["😀","😁","😂","🤣","😃","😄","😅","😆","😉","😊","😋","😎","😍","😘","🥰","😗","😙","😚","🙂","🤗","🤩","🤔","🤨","😐","😑","😶","🙄","😏","😣","😥","😮","🤐","😯","😪","😫","😴","😌","😛","😜","😝","🤤","😒","😓","😔","😕","🙃","🤑","😲","☹️","🙁","😖","😞","😟","😤","😢","😭","😦","😧","😨","😩","🤯","😬","😰","😱","🥵","🥶","😳","🤪","😵","😡","😠","🤬","👍","👎","👌","✌️","🤞","🤟","🤘","🤙","👋","🤚","🖐","✋","🖖","👏","🙌","🤲","🤝","🙏","💪","❤️","🧡","💛","💚","💙","💜","🖤","💔","💯","🔥","✨","⭐","🌟","💫","🎉","🎊","🎈","🎁","💝","💖","💗","💓"];
 
   const insertEmoji = (emoji: string) => {
@@ -566,13 +623,35 @@ export const WhatsAppChatWindow = ({
               <DropdownMenuItem onClick={onOpenInfo} className="cursor-pointer">
                 <Info className="w-4 h-4 mr-2" /> Dados da conversa
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Selecionar mensagens", description: "Selecione as mensagens para encaminhar/excluir." })}>
-                <MessageCircle className="w-4 h-4 mr-2" /> Selecionar mensagens
+              <DropdownMenuItem className="cursor-pointer" onClick={toggleSelectionMode}>
+                <MessageCircle className="w-4 h-4 mr-2" /> {selectionMode ? "Cancelar seleção" : "Selecionar mensagens"}
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Notificações silenciadas", description: "Duração: 8 horas." })}>
+              <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                if (!activeChat?.id) return;
+                try {
+                  await supabase.rpc("mute_conversation", {
+                    p_conversation_id: activeChat.id,
+                    p_duration_hours: 8,
+                  });
+                  toast({ title: "Notificações silenciadas", description: "Duração: 8 horas." });
+                } catch (err: any) {
+                  toast({ title: "Erro", description: err.message, variant: "destructive" });
+                }
+              }}>
                 <X className="w-4 h-4 mr-2" /> Silenciar notificações
               </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Mensagens temporárias", description: "Ativado por 24 horas." })}>
+              <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                if (!activeChat?.id) return;
+                try {
+                  const result = await supabase.rpc("toggle_disappearing_mode", {
+                    p_conversation_id: activeChat.id,
+                    p_duration: 86400,
+                  });
+                  toast({ title: result.data ? "Mensagens temporárias ativadas" : "Mensagens temporárias desativadas", description: "Duração: 24 horas." });
+                } catch (err: any) {
+                  toast({ title: "Erro", description: err.message, variant: "destructive" });
+                }
+              }}>
                 <Clock className="w-4 h-4 mr-2" /> Mensagens temporárias
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -607,7 +686,19 @@ export const WhatsAppChatWindow = ({
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive"
-                onClick={() => toast({ title: "Você saiu do grupo", description: "Esta conversa será removida.", variant: "destructive" })}
+                onClick={async () => {
+                  if (!activeChat?.id) return;
+                  try {
+                    await supabase
+                      .from('whatsapp_conversations')
+                      .update({ status: 'left_group' })
+                      .eq('id', activeChat.id);
+                    toast({ title: "Você saiu do grupo", description: "Esta conversa será removida.", variant: "destructive" });
+                    setTimeout(() => onBack?.(), 1500);
+                  } catch (err: any) {
+                    toast({ title: "Erro ao sair do grupo", description: err.message, variant: "destructive" });
+                  }
+                }}
               >
                 <LogOut className="w-4 h-4 mr-2" /> Sair do grupo
               </DropdownMenuItem>
@@ -677,11 +768,31 @@ export const WhatsAppChatWindow = ({
                         <div className="flex-1 h-px bg-white/10" />
                       </div>
                     )}
-                    <MessageActions
-                      message={{ ...msg, content_text: msg.content, sender_type: msg.status !== "received" ? "agent" : "customer" }}
-                      onReply={() => handleStartReply(msg)}
-                      onReact={(emoji) => handleReact(msg.id, emoji)}
-                    >
+                    <div className={cn("flex items-start gap-2", isSelf ? "flex-row-reverse" : "flex-row")}>
+                      {/* Selection checkbox */}
+                      {selectionMode && (
+                        <div className="flex items-center justify-center pt-3 shrink-0">
+                          <div
+                            className={cn(
+                              "w-5 h-5 rounded-full border-2 flex items-center justify-center cursor-pointer transition-colors",
+                              selectedMessages.has(msg.id)
+                                ? "bg-[#00A884] border-[#00A884]"
+                                : "border-[#8696a0] hover:border-white"
+                            )}
+                            onClick={(e) => { e.stopPropagation(); toggleMessageSelection(msg.id); }}
+                          >
+                            {selectedMessages.has(msg.id) && (
+                              <span className="text-white text-[10px] font-bold">✓</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <MessageActions
+                        message={{ ...msg, content_text: msg.content, sender_type: msg.status !== "received" ? "agent" : "customer" }}
+                        onReply={() => handleStartReply(msg)}
+                        onReact={(emoji) => handleReact(msg.id, emoji)}
+                      >
                       <div className={cn("flex flex-col", isSelf ? "items-end" : "items-start")}>
                         <div className={cn(
                           "max-w-[95%] sm:max-w-[85%] px-3 md:px-4 py-2.5 rounded-2xl text-[14px] relative shadow-xl group/msg transition-opacity duration-150",
@@ -811,6 +922,7 @@ export const WhatsAppChatWindow = ({
                         />
                       </div>
                     </MessageActions>
+                  </div> {/* fecha selection wrapper */}
                   </div>
                 );
               });
@@ -907,6 +1019,36 @@ export const WhatsAppChatWindow = ({
       )}
 
       {/* Input Bar — non-floating */}
+      {selectionMode ? (
+        /* ── Selection toolbar ── */
+        <div className="flex justify-center py-2 px-4 md:px-6 z-10 shrink-0 bg-[#0B141A] shadow-[0_2px_10px_rgba(11,20,26,0.16)]">
+          <div className="w-full max-w-[487px] flex items-center justify-between bg-[#1F2C33] rounded-[26px] px-4 h-[50px]">
+            <span className="text-sm text-white font-medium">{selectedMessages.size} selecionada(s)</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleForwardSelected}
+                disabled={selectedMessages.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#00A884] hover:bg-[#06CF9C] disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors"
+              >
+                <Forward className="w-3.5 h-3.5" /> Encaminhar
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={selectedMessages.size === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/80 hover:bg-red-500 disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-bold transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Excluir
+              </button>
+              <button
+                onClick={toggleSelectionMode}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#2a3942] hover:bg-[#364147] text-white text-xs font-bold transition-colors"
+              >
+                <X className="w-3.5 h-3.5" /> Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="flex justify-center py-2 px-4 md:px-6 z-10 shrink-0 bg-[#0B141A] shadow-[0_2px_10px_rgba(11,20,26,0.16)]">
         <div className="w-full max-w-[487px] flex items-center gap-1 bg-[#1F2C33] rounded-[26px] px-2 h-[50px]">
           <div className="relative">
@@ -1024,6 +1166,7 @@ export const WhatsAppChatWindow = ({
           )}
         </div>
       </div>
+      )}
 
       <TemplatePicker
         open={templatePickerOpen}

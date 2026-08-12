@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface SystemSettings {
@@ -38,6 +38,9 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
   const [sectionPermissions, setSectionPermissions] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
 
+  const isFetchingRef = useRef(false);
+  const retryCountRef = useRef(0);
+
   const applyThemeStyles = useCallback((data: SystemSettings) => {
     if (data.platform_name) {
       document.title = data.platform_name;
@@ -73,6 +76,14 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
   }, [applyThemeStyles]);
 
   const fetchSettings = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    if (retryCountRef.current > 3) {
+      if (import.meta.env.DEV) console.warn("SystemContext max retries reached - usando cache local");
+      loadFromCache();
+      setLoading(false);
+      return;
+    }
+    isFetchingRef.current = true;
     try {
       const { data: allData, error } = await (supabase as any)
         .from("system_settings")
@@ -120,23 +131,36 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
       }
       setSectionPermissions(permsMap);
       localStorage.setItem(CACHE_PERMS_KEY, JSON.stringify(permsMap));
+      retryCountRef.current = 0; // Reset count on success
 
     } catch (e) {
-      if (import.meta.env.DEV) console.warn("SystemContext fetch error - usando cache local");
+      retryCountRef.current++;
+      if (import.meta.env.DEV) console.warn(`SystemContext fetch error (tentativa ${retryCountRef.current}) - usando cache local`);
       loadFromCache();
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   }, [applyThemeStyles, loadFromCache]);
 
   useEffect(() => {
     loadFromCache();
-    const id = typeof requestIdleCallback === 'function'
-      ? requestIdleCallback(() => fetchSettings(), { timeout: 3000 })
-      : setTimeout(fetchSettings, 1000);
+    let idleId: number | undefined;
+    let timerId: number | undefined;
+
+    if (typeof requestIdleCallback === 'function') {
+      idleId = requestIdleCallback(() => fetchSettings(), { timeout: 3000 });
+    } else {
+      timerId = window.setTimeout(fetchSettings, 1000);
+    }
+
     return () => {
-      if (typeof id === 'number') clearTimeout(id);
-      else if (id) cancelIdleCallback(id);
+      if (idleId !== undefined) {
+        cancelIdleCallback(idleId);
+      }
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId);
+      }
     };
   }, [fetchSettings, loadFromCache]);
 

@@ -57,7 +57,7 @@ import {
   XLikeCard, 
   LinkedInCard
 } from "@/components/dashboard/PostPreview";
-import { getMediaUrl, saveSelectedAccounts } from "@/utils/mediaUtils";
+import { getMediaUrl, saveSelectedAccounts, fileOrUrlToBase64 } from "@/utils/mediaUtils";
 import { PostsFeedView } from "@/components/dashboard/PostsFeedView";
 import { ScheduledPost, CreatePostInput } from "@/hooks/useScheduledPosts";
 import { useNotifications } from "@/contexts/NotificationContext";
@@ -301,7 +301,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   
   // AI Generation States
   const [aiMode, setAiMode] = useState<'post' | 'caption' | 'article' | 'translate' | 'social_adapt'>('post');
-  const [aiModel, setAiModel] = useState('google/gemini-2.0-flash-001');
+  const [aiModel, setAiModel] = useState('google/gemini-2.5-flash');
   const [aiLanguage, setAiLanguage] = useState('pt-BR');
   const [aiInputText, setAiInputText] = useState("");
   const [aiTargetLanguage, setAiTargetLanguage] = useState('en-US');
@@ -343,7 +343,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
       setOrientation((editingPost.orientation as "horizontal" | "vertical") || "horizontal");
       setScheduledDate(
         editingPost.scheduled_at
-          ? new Date(editingPost.scheduled_at).toISOString().slice(0, 16)
+          ? formatDateForInput(editingPost.scheduled_at)
           : ""
       );
       if (editingPost.media_ids && editingPost.media_ids.length > 0) {
@@ -448,6 +448,18 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     setShowHashtags(false);
   };
 
+  const formatDateForInput = (d: string | Date) => {
+    if (!d) return "";
+    const dateObj = typeof d === "string" ? new Date(d) : d;
+    if (isNaN(dateObj.getTime())) return "";
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dateNum = String(dateObj.getDate()).padStart(2, '0');
+    const hh = String(dateObj.getHours()).padStart(2, '0');
+    const mm = String(dateObj.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${dateNum}T${hh}:${mm}`;
+  };
+
   const applyBestTime = (day: string, time: string) => {
     // Calculate next occurrence of the day
     const dayMap: Record<string, number> = {
@@ -456,10 +468,10 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     };
     
     const today = new Date();
-    const targetDay = dayMap[day];
+    const targetDay = dayMap[day] ?? today.getDay();
     const currentDay = today.getDay();
     let daysUntil = targetDay - currentDay;
-    if (daysUntil <= 0) daysUntil += 7;
+    if (daysUntil < 0) daysUntil += 7;
     
     const targetDate = new Date(today);
     targetDate.setDate(today.getDate() + daysUntil);
@@ -467,10 +479,15 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     // Parse time (handle ranges like "10:00-12:00")
     const timePart = time.split("-")[0].trim();
     const [hours, minutes] = timePart.split(":").map(Number);
-    targetDate.setHours(hours, minutes, 0, 0);
+    targetDate.setHours(hours || 0, minutes || 0, 0, 0);
     
-    // Format for datetime-local input
-    const formatted = targetDate.toISOString().slice(0, 16);
+    // Se a data for hoje e o horário já tiver passado, agenda para a próxima semana
+    if (daysUntil === 0 && targetDate.getTime() <= today.getTime()) {
+      targetDate.setDate(targetDate.getDate() + 7);
+    }
+    
+    // Formata a data para o input datetime-local no fuso horário local
+    const formatted = formatDateForInput(targetDate);
     setScheduledDate(formatted);
     setShowBestTimes(false);
     
@@ -626,17 +643,22 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
 
   const handleGenerateHashtags = async () => {
     const result = await generateContent({
-      inputText: content,
+      inputText: content.trim() || "notícias e redes sociais",
       platforms: selectedPlatforms,
       mode: "hashtags",
       model: aiModel
     });
-    if (result && result.hashtags) {
+    const tags = result?.hashtags || result?.post || result?.raw;
+    if (tags) {
       setContent(prev => {
         const text = prev.trim();
-        return text ? `${text}\n\n${result.hashtags}` : result.hashtags;
+        return text ? `${text}\n\n${tags}` : tags;
       });
       setShowHashtags(false);
+      toast({
+        title: "Hashtags geradas!",
+        description: "Hashtags inteligentes inseridas no conteúdo.",
+      });
     }
   };
 
@@ -1262,12 +1284,18 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                               className="h-7 text-[10px] md:text-xs"
                               disabled={generating}
                               onClick={async () => {
+                                let mediaUrl = "";
+                                try {
+                                  mediaUrl = await fileOrUrlToBase64((file as any).file, getMediaUrl(file.file_url));
+                                } catch {
+                                  mediaUrl = getMediaUrl(file.file_url);
+                                }
                                 const result = await generateContent({
-                                  inputText: "Analise esta imagem e crie uma legenda atraente.",
+                                  inputText: "Analise esta imagem e crie uma legenda atraente e descritiva para redes sociais.",
                                   platforms: selectedPlatforms,
                                   mode: "caption",
                                   model: aiModel,
-                                  mediaUrls: [getMediaUrl(file.file_url)]
+                                  mediaUrls: mediaUrl ? [mediaUrl] : []
                                 });
                                 if (result?.post) {
                                   setContent(prev => prev.trim() ? `${prev}\n\n${result.post}` : result.post);
@@ -1364,7 +1392,6 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             <Popover open={showHashtags} onOpenChange={setShowHashtags}>
               <PopoverTrigger asChild>
                 <button 
-                  disabled={selectedPlatforms.length === 0}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-muted hover:bg-muted/80 text-[10px] md:text-sm font-bold text-muted-foreground hover:text-foreground transition-all active:scale-95 shrink-0"
                   title="Hashtags"
                 >
@@ -1400,7 +1427,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     size="sm"
                     variant="outline"
                     onClick={handleGenerateHashtags}
-                    disabled={generating || content.length < 10}
+                    disabled={generating}
                     className="w-full border-primary/20 text-primary hover:bg-primary/10"
                   >
                     {generating ? (

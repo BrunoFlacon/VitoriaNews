@@ -8,8 +8,10 @@
 // resolves to offline without an unload write.
 // ============================================================
 
-/** How often the active client heartbeats its own presence row. */
-export const HEARTBEAT_MS = 30_000;
+/** How often the active client heartbeats its own presence row.
+ *  30s → 3min para reduzir consumo de quota no free tier do Supabase.
+ *  (era 30_000, queimou cached egress quota — 402 Payment Required) */
+export const HEARTBEAT_MS = 180_000;
 
 /**
  * A member whose last heartbeat is older than this is treated as

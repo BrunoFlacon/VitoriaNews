@@ -147,17 +147,22 @@ export function useMediaUpload() {
 
     try {
       // Extract file path from URL
+      let filePath = "";
       const urlParts = fileUrl.split('/media/');
       if (urlParts.length > 1) {
-        const filePath = urlParts[1];
-        
+        filePath = urlParts[1].split('?')[0];
+      } else if (fileUrl && !fileUrl.startsWith('http')) {
+        filePath = fileUrl;
+      }
+
+      if (filePath) {
         // Delete from storage
         await supabase.storage
           .from('media')
           .remove([filePath]);
       }
 
-      // Delete from database
+      // Delete from database (server also removes the physical file)
       const { error } = await supabase
         .from('media')
         .delete()

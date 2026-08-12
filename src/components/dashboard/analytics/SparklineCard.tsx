@@ -20,6 +20,27 @@ export const SparklineCard = ({
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const rafRef = useRef<number | null>(null);
 
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (rafRef.current !== null) return;
+    const target = e.currentTarget;
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      const svgX = ((clientX - rect.left) / rect.width) * width;
+      const idx = Math.round((svgX / width) * ((data?.length || 0) - 1));
+      const clamped = Math.max(0, Math.min((data?.length || 0) - 1, idx));
+      setHoverIndex(clamped);
+      setTooltipPos({ x: clientX - rect.left, y: clientY - rect.top });
+    });
+  }, [data?.length, width]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverIndex(null);
+  }, []);
+
   if (!Array.isArray(data) || data.length < 2) return null;
 
   const min = Math.min(...data);
@@ -34,27 +55,6 @@ export const SparklineCard = ({
 
   const pathD = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
   const areaD = `${pathD} L${width},${height + 2} L0,${height + 2} Z`;
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (rafRef.current !== null) return;
-    const target = e.currentTarget;
-    const clientX = e.clientX;
-    const clientY = e.clientY;
-    rafRef.current = requestAnimationFrame(() => {
-      rafRef.current = null;
-      if (!target) return;
-      const rect = target.getBoundingClientRect();
-      const svgX = ((clientX - rect.left) / rect.width) * width;
-      const idx = Math.round((svgX / width) * (data.length - 1));
-      const clamped = Math.max(0, Math.min(data.length - 1, idx));
-      setHoverIndex(clamped);
-      setTooltipPos({ x: clientX - rect.left, y: clientY - rect.top });
-    });
-  }, [data.length, width]);
-
-  const handleMouseLeave = useCallback(() => {
-    setHoverIndex(null);
-  }, []);
 
   return (
     <div className="relative">

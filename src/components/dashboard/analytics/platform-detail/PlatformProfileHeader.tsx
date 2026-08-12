@@ -37,7 +37,7 @@ export const PlatformProfileHeader = memo(({
       <Avatar className="w-12 h-12 border-2 border-border">
         <AvatarImage src={account.profile_picture || ""} alt={account.username || ""} />
         <AvatarFallback className={cn("text-white text-lg", platform?.color || "bg-primary")}>
-          {(account.username || "?")[0]?.toUpperCase()}
+          {(account.username || "")[0]?.toUpperCase()}
         </AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">

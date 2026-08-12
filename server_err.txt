@@ -1,0 +1,1 @@
+[cron] refresh failed google: Bad Request

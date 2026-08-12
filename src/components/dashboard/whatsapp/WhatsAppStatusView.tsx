@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { SafeImage } from "@/components/ui/SafeImage";
-import { X, ChevronLeft, ChevronRight, Plus, User, Camera, Smile, Send, ImageIcon } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { X, ChevronLeft, ChevronRight, Plus, User, Camera, Smile, Send, ImageIcon, Loader2 } from "lucide-react";
 
 interface StatusEntry {
+  id: string;
   url?: string;
   text?: string;
   timestamp: string;
@@ -17,37 +20,6 @@ interface StatusContact {
   viewed: boolean;
   statuses: StatusEntry[];
 }
-
-const MOCK_STATUSES: StatusContact[] = [
-  {
-    id: "1",
-    name: "Aliza",
-    timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
-    viewed: false,
-    statuses: [{ text: "Bom dia! 🌅", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString() }],
-  },
-  {
-    id: "2",
-    name: "Tahir",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    viewed: false,
-    statuses: [{ text: "Trabalhando no novo projeto 🚀", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() }],
-  },
-  {
-    id: "3",
-    name: "Smantha",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    viewed: true,
-    statuses: [{ text: "Vamos marcar um café? ☕", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString() }],
-  },
-  {
-    id: "4",
-    name: "Bruno",
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    viewed: true,
-    statuses: [{ text: "Novo artigo publicado! 📝", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() }],
-  },
-];
 
 function formatStatusTime(timestamp: string): string {
   const diff = Date.now() - new Date(timestamp).getTime();
@@ -64,21 +36,116 @@ interface WhatsAppStatusViewProps {
 }
 
 export function WhatsAppStatusView({ initialContact }: WhatsAppStatusViewProps) {
+  const { user } = useAuth();
   const [myStatuses, setMyStatuses] = useState<StatusContact[]>([
     {
       id: "me",
       name: "Meu status",
-      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+      timestamp: new Date().toISOString(),
       viewed: false,
       statuses: [],
     },
   ]);
+  const [remoteStatuses, setRemoteStatuses] = useState<StatusContact[]>([]);
   const [viewingContact, setViewingContact] = useState<StatusContact | null>(null);
   const [currentStatusIndex, setCurrentStatusIndex] = useState(0);
   const [creatingText, setCreatingText] = useState(false);
   const [textInput, setTextInput] = useState("");
+  const [loading, setLoading] = useState(true);
   const autoAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load remote statuses from Supabase
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    const loadStatuses = async () => {
+      setLoading(true);
+      try {
+        const { data: myDbStatuses, error: myErr } = await supabase
+          .from("whatsapp_statuses")
+          .select("*")
+          .eq("user_id", user.id)
+          .is("contact_wa_id", null)
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false });
+
+        if (myErr) console.error("Error loading my statuses:", myErr);
+
+        const { data: contactDbStatuses, error: contactErr } = await supabase
+          .from("whatsapp_statuses")
+          .select("*")
+          .eq("user_id", user.id)
+          .not("contact_wa_id", "is", null)
+          .gt("expires_at", new Date().toISOString())
+          .order("created_at", { ascending: false });
+
+        if (contactErr) console.error("Error loading contact statuses:", contactErr);
+
+        if (cancelled) return;
+
+        // Build "Meu status" from DB
+        if (myDbStatuses && myDbStatuses.length > 0) {
+          setMyStatuses([{
+            id: "me",
+            name: "Meu status",
+            timestamp: myDbStatuses[0].created_at,
+            viewed: false,
+            statuses: myDbStatuses.map((s: any) => ({
+              id: s.id,
+              text: s.text_content || undefined,
+              url: s.media_url || undefined,
+              timestamp: s.created_at,
+            })),
+          }]);
+        } else {
+          setMyStatuses([{
+            id: "me",
+            name: "Meu status",
+            timestamp: new Date().toISOString(),
+            viewed: false,
+            statuses: [],
+          }]);
+        }
+
+        // Build contact statuses grouped by contact_wa_id
+        if (contactDbStatuses && contactDbStatuses.length > 0) {
+          const grouped = new Map<string, StatusContact>();
+          for (const s of contactDbStatuses) {
+            const key = s.contact_wa_id || s.id;
+            if (!grouped.has(key)) {
+              grouped.set(key, {
+                id: key,
+                name: s.contact_name || s.contact_wa_id || "Desconhecido",
+                photoUrl: s.photo_url,
+                timestamp: s.created_at,
+                viewed: s.viewed,
+                statuses: [],
+              });
+            }
+            const contact = grouped.get(key)!;
+            contact.statuses.push({
+              id: s.id,
+              text: s.text_content || undefined,
+              url: s.media_url || undefined,
+              timestamp: s.created_at,
+            });
+          }
+          setRemoteStatuses(Array.from(grouped.values()));
+        } else {
+          setRemoteStatuses([]);
+        }
+      } catch (err) {
+        console.error("Error loading statuses:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStatuses();
+    return () => { cancelled = true; };
+  }, [user]);
 
   const clearAutoAdvance = useCallback(() => {
     if (autoAdvanceRef.current) {
@@ -91,27 +158,45 @@ export function WhatsAppStatusView({ initialContact }: WhatsAppStatusViewProps) 
     setViewingContact(contact);
     setCurrentStatusIndex(0);
     clearAutoAdvance();
-  }, [clearAutoAdvance]);
+
+    // Mark as viewed in DB
+    if (contact.id !== "me" && user) {
+      supabase
+        .from("whatsapp_statuses")
+        .update({ viewed: true })
+        .eq("user_id", user.id)
+        .eq("contact_wa_id", contact.id)
+        .then(({ error }) => {
+          if (error) console.error("Error marking status as viewed:", error);
+        });
+    }
+  }, [clearAutoAdvance, user]);
 
   const handleClose = useCallback(() => {
     setViewingContact(null);
     clearAutoAdvance();
   }, [clearAutoAdvance]);
 
+  const allContacts = [...myStatuses, ...remoteStatuses];
+
+  // Navigate between contacts/statuses
+  const findContactIndex = useCallback((contactId: string) => {
+    return allContacts.findIndex(s => s.id === contactId);
+  }, [allContacts]);
+
   const handleNext = useCallback(() => {
     if (!viewingContact) return;
     if (currentStatusIndex < viewingContact.statuses.length - 1) {
       setCurrentStatusIndex(i => i + 1);
     } else {
-      const allContacts = [...myStatuses, ...MOCK_STATUSES];
-      const currentIdx = allContacts.findIndex(s => s.id === viewingContact.id);
+      const currentIdx = findContactIndex(viewingContact.id);
       if (currentIdx < allContacts.length - 1) {
         handleViewStatus(allContacts[currentIdx + 1]);
       } else {
         handleClose();
       }
     }
-  }, [viewingContact, currentStatusIndex, myStatuses, handleViewStatus, handleClose]);
+  }, [viewingContact, currentStatusIndex, allContacts, findContactIndex, handleViewStatus, handleClose]);
 
   const handlePrev = useCallback(() => {
     if (!viewingContact) return;
@@ -119,15 +204,14 @@ export function WhatsAppStatusView({ initialContact }: WhatsAppStatusViewProps) 
     if (currentStatusIndex > 0) {
       setCurrentStatusIndex(i => i - 1);
     } else {
-      const allContacts = [...myStatuses, ...MOCK_STATUSES];
-      const currentIdx = allContacts.findIndex(s => s.id === viewingContact.id);
+      const currentIdx = findContactIndex(viewingContact.id);
       if (currentIdx > 0) {
         const prevContact = allContacts[currentIdx - 1];
         handleViewStatus(prevContact);
         setCurrentStatusIndex(prevContact.statuses.length - 1);
       }
     }
-  }, [viewingContact, currentStatusIndex, myStatuses, clearAutoAdvance, handleViewStatus]);
+  }, [viewingContact, currentStatusIndex, allContacts, findContactIndex, clearAutoAdvance, handleViewStatus]);
 
   // Auto-advance every 5 seconds
   useEffect(() => {
@@ -143,42 +227,71 @@ export function WhatsAppStatusView({ initialContact }: WhatsAppStatusViewProps) 
     if (initialContact === "Meu status") {
       setCreatingText(true);
     } else {
-      const found = MOCK_STATUSES.find(s => s.name === initialContact);
+      const found = remoteStatuses.find(s => s.name === initialContact);
       if (found) handleViewStatus(found);
     }
-  }, [initialContact, handleViewStatus]);
+  }, [initialContact, handleViewStatus, remoteStatuses]);
 
-  // Create a text status
-  const handleCreateTextStatus = () => {
-    if (!textInput.trim()) return;
+  // Create a text status (persisted to Supabase)
+  const handleCreateTextStatus = async () => {
+    if (!textInput.trim() || !user) return;
+
     const newStatus = {
       text: textInput.trim(),
       timestamp: new Date().toISOString(),
     };
+
+    // Optimistic update
     setMyStatuses(prev => prev.map(s =>
-      s.id === "me" ? { ...s, statuses: [...s.statuses, newStatus], timestamp: newStatus.timestamp } : s
+      s.id === "me" ? { ...s, statuses: [...s.statuses, { ...newStatus, id: `temp_${Date.now()}` }], timestamp: newStatus.timestamp } : s
     ));
     setTextInput("");
     setCreatingText(false);
+
+    // Persist to Supabase
+    try {
+      await supabase.from("whatsapp_statuses").insert({
+        user_id: user.id,
+        text_content: newStatus.text,
+        media_type: "text",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      });
+    } catch (err) {
+      console.error("Error saving status:", err);
+    }
   };
 
   // Handle camera/file selection
-  const handleCameraFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCameraFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !user) return;
+
     const url = URL.createObjectURL(file);
-    const newStatus = {
-      url,
-      text: "📸 Novo status",
-      timestamp: new Date().toISOString(),
-    };
+
+    // Optimistic update
     setMyStatuses(prev => prev.map(s =>
-      s.id === "me" ? { ...s, statuses: [...s.statuses, newStatus], timestamp: newStatus.timestamp } : s
+      s.id === "me" ? {
+        ...s,
+        statuses: [...s.statuses, { id: `temp_${Date.now()}`, url, text: "📸 Novo status", timestamp: new Date().toISOString() }],
+        timestamp: new Date().toISOString(),
+      } : s
     ));
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // TODO: Upload file to Supabase Storage and save reference
+    // For now, we save a text status as fallback
+    try {
+      await supabase.from("whatsapp_statuses").insert({
+        user_id: user.id,
+        text_content: "📸 Novo status (imagem)",
+        media_type: "text",
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      });
+    } catch (err) {
+      console.error("Error saving status:", err);
+    }
   };
 
-  const allContacts = [...myStatuses, ...MOCK_STATUSES];
   const hasMyStatus = myStatuses[0]?.statuses.length > 0;
 
   return (
@@ -309,50 +422,62 @@ export function WhatsAppStatusView({ initialContact }: WhatsAppStatusViewProps) 
         <div className="px-6 pt-3 pb-1">
           <span className="text-[11px] font-bold uppercase tracking-widest text-[#6D6D6D]">ATUALIZAÇÕES RECENTES</span>
         </div>
-        {allContacts.map((contact) => (
-          <div
-            key={contact.id}
-            onClick={() => {
-              if (contact.id === "me" && contact.statuses.length > 0) {
-                handleViewStatus(contact);
-              } else if (contact.id !== "me") {
-                handleViewStatus(contact);
-              } else {
-                setCreatingText(true);
-              }
-            }}
-            className="flex items-center gap-3 mx-2 px-3 py-2.5 rounded-xl hover:bg-[#202C33] transition-colors cursor-pointer"
-          >
-            <div className="relative shrink-0">
-              <div className={cn(
-                "w-12 h-12 rounded-full bg-[#2a3942] flex items-center justify-center text-sm font-bold text-white overflow-hidden",
-                contact.viewed
-                  ? "ring-2 ring-[#364147] ring-offset-2 ring-offset-[#111B21]"
-                  : "ring-2 ring-[#00A884] ring-offset-2 ring-offset-[#111B21]"
-              )}>
-                {contact.photoUrl ? (
-                  <SafeImage src={contact.photoUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="bg-gradient-to-br from-[#364147] to-[#2a3942] w-full h-full flex items-center justify-center">
-                    {contact.name[0]}
-                  </div>
-                )}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-[#8696a0]" />
+          </div>
+        ) : allContacts.length === 1 && !hasMyStatus ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center px-8">
+            <Camera className="h-10 w-10 text-[#8696a0]/40 mb-3" />
+            <p className="text-sm text-[#8696a0]">Nenhum status disponível</p>
+            <p className="text-xs text-[#8696a0]/60 mt-1">Toque em "Meu status" para criar o primeiro</p>
+          </div>
+        ) : (
+          allContacts.map((contact) => (
+            <div
+              key={contact.id}
+              onClick={() => {
+                if (contact.id === "me" && contact.statuses.length > 0) {
+                  handleViewStatus(contact);
+                } else if (contact.id !== "me") {
+                  handleViewStatus(contact);
+                } else {
+                  setCreatingText(true);
+                }
+              }}
+              className="flex items-center gap-3 mx-2 px-3 py-2.5 rounded-xl hover:bg-[#202C33] transition-colors cursor-pointer"
+            >
+              <div className="relative shrink-0">
+                <div className={cn(
+                  "w-12 h-12 rounded-full bg-[#2a3942] flex items-center justify-center text-sm font-bold text-white overflow-hidden",
+                  contact.viewed
+                    ? "ring-2 ring-[#364147] ring-offset-2 ring-offset-[#111B21]"
+                    : "ring-2 ring-[#00A884] ring-offset-2 ring-offset-[#111B21]"
+                )}>
+                  {contact.photoUrl ? (
+                    <SafeImage src={contact.photoUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="bg-gradient-to-br from-[#364147] to-[#2a3942] w-full h-full flex items-center justify-center">
+                      {contact.name[0]}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={cn("text-sm truncate", contact.viewed ? "text-[#B8B8B8]" : "text-white font-bold")}>
+                  {contact.name}
+                </p>
+                <p className="text-[11px] text-[#8696a0]">
+                  {contact.id === "me"
+                    ? contact.statuses.length > 0
+                      ? formatStatusTime(contact.timestamp)
+                      : "Nenhum status"
+                    : formatStatusTime(contact.timestamp)}
+                </p>
               </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className={cn("text-sm truncate", contact.viewed ? "text-[#B8B8B8]" : "text-white font-bold")}>
-                {contact.name}
-              </p>
-              <p className="text-[11px] text-[#8696a0]">
-                {contact.id === "me"
-                  ? contact.statuses.length > 0
-                    ? formatStatusTime(contact.timestamp)
-                    : "Nenhum status"
-                  : formatStatusTime(contact.timestamp)}
-              </p>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
 
       {/* Visualizador de stories em tela cheia */}

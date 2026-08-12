@@ -184,6 +184,8 @@ export const SafeImage = memo(({
   if (shouldSkip) {
     if (fallback) return <img src={fallback} alt={alt} className={className} {...props} />;
 
+    const letter = fallbackLetter || alt?.substring(0, 1).toUpperCase() || "";
+
     return (
       <div 
         className={cn(
@@ -193,9 +195,11 @@ export const SafeImage = memo(({
       >
         {placeholderIcon || (
           <div className="flex items-center justify-center text-muted-foreground/40">
-            <span className="text-xs font-black uppercase tracking-tighter">
-              {fallbackLetter || alt?.substring(0, 1).toUpperCase() || "?"}
-            </span>
+            {letter && (
+              <span className="text-xs font-black uppercase tracking-tighter">
+                {letter}
+              </span>
+            )}
           </div>
         )}
       </div>

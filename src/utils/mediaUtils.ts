@@ -26,25 +26,69 @@ export const loadSelectedAccounts = (): string[] => {
   return [];
 };
 
-export const getMediaUrl = (raw: string) => {
+export const encodeStoragePath = (path: string): string => {
+  if (!path) return "";
+  return path
+    .split('/')
+    .map(seg => encodeURIComponent(decodeURIComponent(seg)))
+    .join('/');
+};
+
+export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
   if (!raw) return "";
 
-  // Signed URLs expiradas — extrair o path e gerar public URL fresca
-  if (raw.includes("/object/sign/")) {
+  // URLs absolutas, blobs, data URIs e proxies
+  if (
+    raw.startsWith("http://") || 
+    raw.startsWith("https://") || 
+    raw.startsWith("blob:") || 
+    raw.startsWith("data:") || 
+    raw.startsWith("/api/")
+  ) {
     try {
       const url = new URL(raw);
-      const m = url.pathname.match(/\/object\/sign\/([^/]+)\/(.+)/);
-      if (m) {
-        const { data } = supabase.storage.from(m[1]).getPublicUrl(m[2]);
+      url.pathname = url.pathname.split('/').map(s => encodeURIComponent(decodeURIComponent(s))).join('/');
+      return url.toString();
+    } catch {
+      return raw;
+    }
+  }
+
+  // Caminhos de proxy local já formatados
+  if (raw.startsWith("/supabase/") || raw.startsWith("/storage/")) {
+    return raw;
+  }
+
+  // Tratar URLs /object/public/ ou /object/sign/
+  if (raw.includes("/object/public/") || raw.includes("/object/sign/")) {
+    try {
+      const match = raw.match(/\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/);
+      if (match) {
+        const bucket = match[1];
+        const path = encodeStoragePath(match[2]);
+        const { data } = supabase.storage.from(bucket).getPublicUrl(path);
         return data.publicUrl;
       }
     } catch { /* fall through */ }
+    return raw;
   }
 
-  if (raw.startsWith("http") || raw.startsWith("blob:") || raw.startsWith("data:")) return raw;
+  // Remover prefixo de bucket duplicado se já estiver no início do caminho
+  let cleanPath = raw.trim();
+  let targetBucket = defaultBucket;
+
+  if (cleanPath.startsWith("media/")) {
+    cleanPath = cleanPath.slice(6);
+    targetBucket = "media";
+  } else if (cleanPath.startsWith("documents/")) {
+    cleanPath = cleanPath.slice(10);
+    targetBucket = "documents";
+  }
+
+  const encodedPath = encodeStoragePath(cleanPath);
 
   try {
-    const { data } = supabase.storage.from("media").getPublicUrl(raw);
+    const { data } = supabase.storage.from(targetBucket).getPublicUrl(encodedPath);
     return data.publicUrl;
   } catch {
     return raw;
@@ -56,4 +100,31 @@ export const formatNum = (num: number) => {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
   if (num >= 1000) return (num / 1000).toFixed(1) + "K";
   return num.toString();
+};
+
+export const fileOrUrlToBase64 = async (fileObj?: File, url?: string): Promise<string> => {
+  if (fileObj) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (err) => reject(err);
+      reader.readAsDataURL(fileObj);
+    });
+  }
+  if (url) {
+    if (url.startsWith("data:image")) return url;
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return url;
+    }
+  }
+  return "";
 };

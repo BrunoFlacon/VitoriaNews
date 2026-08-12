@@ -611,7 +611,7 @@ export function WhatsAppContactsTab({ onNavigateToChat }: { onNavigateToChat?: (
                           contact.avatar_url ? "hidden" : ""
                         }`}
                       >
-                        {(contact.name || contact.phone || "?").charAt(0).toUpperCase()}
+                        {(contact.name || contact.phone || "").charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0">
                         <span className="font-medium text-sm truncate block">{contact.name || "—"}</span>

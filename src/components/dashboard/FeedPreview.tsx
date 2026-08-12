@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 import {
   X, Instagram, Facebook, Twitter, Linkedin, MessageCircle, Play,
-  Heart, MessageSquare, Share2, Bookmark, Send, MoreHorizontal,
+  Heart, MessageSquare, Share2, Bookmark, Send, MoreVertical,
   ChevronLeft, ChevronRight, CheckCircle2, Clock, Calendar,
   BarChart3, DollarSign, TrendingUp, Tv, Coins, Music,
   Trash2, Eye, Globe, Zap, Image, AlertTriangle, Smile, PenLine
@@ -234,7 +234,7 @@ const SlideCarousel = memo(({
                 <SafeImage
                   src={url}
                   alt={`mídia ${i + 1}`}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                   loading="eager"
                   fetchPriority={i === 0 ? 'high' : 'low'}
                 />
@@ -324,6 +324,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
   const [showMenu, setShowMenu] = useState(false);
   const [showTools, setShowTools] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [isSlideshowActive, setIsSlideshowActive] = useState(false);
   const [localPosterUrl, setLocalPosterUrl] = useState<string | null>(post.thumbnail_url || null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -366,6 +367,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
       setShowMenu(false);
       setShowTools(false);
       setShowInsights(false);
+      setShowShareModal(false);
       setIsSlideshowActive(false);
       setLocalPosterUrl(post.thumbnail_url || null);
     }
@@ -577,7 +579,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
 
   const handleMenuEdit = () => {
     setShowMenu(false);
-    setShowTools(true);
+    handleEditPost();
   };
 
   const handleMenuGoToPost = () => {
@@ -588,29 +590,58 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
     });
   };
 
-  const handleMenuShare = () => {
-    setShowMenu(false);
-    toast({
-      title: "Compartilhar",
-      description: "Link de compartilhamento gerado com sucesso!",
-    });
-  };
+  const getPostShareUrl = useCallback(() => {
+    const baseDomain = "https://webradiovitoria.com.br";
+    const pId = selectedEntry?.platformId || "facebook";
+    const st = status || post.status || "draft";
+    return `${baseDomain}/posts/${post.id}?platform=${encodeURIComponent(pId)}&status=${encodeURIComponent(st)}`;
+  }, [post.id, post.status, selectedEntry, status]);
 
-  const handleMenuCopyLink = () => {
+  const handleShare = useCallback(() => {
     setShowMenu(false);
-    navigator.clipboard.writeText(`https://socialhub.pro/posts/${post.id}`).then(() => {
-      toast({
-        title: "Link Copiado",
-        description: "Link copiado para a área de transferência.",
+    const shareUrl = getPostShareUrl();
+    const shareTitle = post.content ? post.content.slice(0, 60) + '...' : 'Publicação Web Rádio Vitória';
+    const shareText = `${post.content || 'Confira esta publicação no Web Rádio Vitória!'}`;
+
+    if (typeof navigator !== 'undefined' && (navigator as any).share) {
+      (navigator as any).share({
+        title: shareTitle,
+        text: shareText,
+        url: shareUrl,
+      }).catch(() => {
+        setShowShareModal(true);
       });
-    }).catch(() => {
-      toast({
-        title: "Erro ao copiar",
-        description: "Não foi possível copiar o link.",
-        variant: "destructive"
+    } else {
+      setShowShareModal(true);
+    }
+  }, [getPostShareUrl, post.content]);
+
+  const handleMenuShare = useCallback(() => {
+    handleShare();
+  }, [handleShare]);
+
+  const handleMenuCopyLink = useCallback(() => {
+    setShowMenu(false);
+    const shareUrl = getPostShareUrl();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareUrl).then(() => {
+        toast({
+          title: "Link Copiado com Sucesso!",
+          description: shareUrl,
+        });
+      }).catch(() => {
+        toast({
+          title: "Link da Publicação",
+          description: shareUrl,
+        });
       });
-    });
-  };
+    } else {
+      toast({
+        title: "Link da Publicação",
+        description: shareUrl,
+      });
+    }
+  }, [getPostShareUrl, toast]);
 
   const handleMenuMetrics = () => {
     setShowMenu(false);
@@ -798,9 +829,9 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
     return (
       <div className={cn("flex flex-col h-full overflow-hidden text-left select-none relative", containerBg, textColor)}>
         {/* Profile Header */}
-        <div className={cn("p-4 border-b shrink-0 flex flex-col gap-2.5", borderColor)}>
+        <div className={cn("p-4 border-b shrink-0 flex flex-col gap-2", borderColor)}>
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-850 border border-zinc-700 shrink-0">
                 {account?.profile_picture ? (
                   <img src={account.profile_picture} alt="profile" className="w-full h-full object-cover" />
@@ -810,22 +841,22 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                   </div>
                 )}
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-1">
-                  <span className="text-xs font-bold truncate max-w-[120px]">
+                  <span className="text-xs font-bold truncate max-w-[140px]">
                     {platformId === 'tiktok' || platformId === 'instagram' ? `@${account?.username || 'seu_perfil'}` : (account?.username || 'Web Rádio Vitória')}
                   </span>
                   {isVerified && <VerifiedBadge className="w-3 h-3 text-[#1877F2] dark:text-sky-400" />}
                 </div>
-                <span className="text-[9px] text-zinc-400 uppercase font-semibold">
+                <span className="text-[9px] text-zinc-400 uppercase font-semibold truncate">
                   Publicado por {account?.username || 'Web Rádio Vitória'}
                 </span>
               </div>
             </div>
 
-            {/* Actions: Seguir, Slideshow, Editar, and Three-dots options menu */}
-            <div className="flex items-center gap-1 shrink-0">
-              <button className={cn("px-2 py-1.5 rounded-full text-[10px] font-bold text-white border-0 cursor-pointer transition-colors shrink-0", 
+            {/* Actions: Apenas botão de Seguir e 3 Pontos Verticais sem background */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button className={cn("px-3 py-1.5 rounded-full text-xs font-bold text-white border-0 cursor-pointer transition-colors shrink-0", 
                 platformId === 'facebook' ? "bg-[#1877f2] hover:bg-[#166fe5]" :
                 platformId === 'instagram' ? "bg-[#0095f6] hover:bg-[#1877f2]" :
                 platformId === 'tiktok' ? "bg-[#fe2c55] hover:bg-[#e0224a]" :
@@ -836,35 +867,17 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
 
               <button
                 type="button"
-                onClick={() => setIsSlideshowActive(prev => !prev)}
-                className={cn("px-2 py-1.5 rounded-lg text-[10px] font-bold border-0 cursor-pointer transition-all shrink-0",
-                  isSlideshowActive ? "bg-red-500 hover:bg-red-650 text-white animate-pulse" : "bg-[#3a3b3c]/80 hover:bg-zinc-700 text-zinc-300"
-                )}
-                title="Modo Apresentação (Slideshow de redes a cada 5s)"
-              >
-                {isSlideshowActive ? "⏹ Parar" : "▶ Auto"}
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setShowMenu(true)}
-                className="px-2.5 py-1.5 rounded-lg bg-[#3a3b3c]/80 hover:bg-zinc-755 text-white hover:text-white transition-colors text-[10px] font-bold border-0 cursor-pointer shrink-0"
+                className="p-1.5 rounded-full bg-transparent hover:bg-zinc-800/80 text-zinc-400 hover:text-white transition-colors border-0 cursor-pointer shrink-0"
+                title="Mais opções"
               >
-                Editar
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowMenu(true)}
-                className="p-1.5 rounded-lg bg-[#3a3b3c]/80 hover:bg-zinc-755 text-zinc-300 hover:text-white transition-colors border-0 cursor-pointer shrink-0"
-              >
-                <MoreHorizontal className="w-4 h-4" />
+                <MoreVertical className="w-5 h-5" />
               </button>
             </div>
           </div>
 
           {/* Date, Status and Metrics Bar */}
-          <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-2 px-1 border-t border-zinc-800/40 pt-2 shrink-0">
+          <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-1 px-0.5 border-t border-zinc-800/40 pt-2 shrink-0">
             <span className="truncate">
               {scheduledDate ? new Date(scheduledDate).toLocaleString('pt-BR', { dateStyle: 'long', timeStyle: 'short' }) : '01 de julho de 2026 às 09:22'}
             </span>
@@ -887,9 +900,12 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
               </button>
             </div>
           </div>
+        </div>
 
+        {/* Scrollable Comments & Content Viewport (Barra de Rolagem para todo o texto e comentários) */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 scrollbar-dark">
           {/* Post Description / Caption */}
-          <div className="mt-1">
+          <div className="pb-3 border-b border-zinc-800/40">
             <p className="text-sm leading-relaxed whitespace-pre-wrap font-medium">
               {post.content ? post.content.split(' ').map((word, idx) => {
                 if (word.startsWith('#')) {
@@ -986,57 +1002,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
             </div>
           )}
 
-          {/* Dashboard de Insights e Monetização (Fase 5) */}
-          {showInsights && (
-            <div className="mt-3 p-3.5 bg-zinc-950 border border-zinc-800 rounded-xl space-y-3 relative animate-in slide-in-from-top-4 duration-200">
-              <button 
-                type="button"
-                onClick={() => setShowInsights(false)} 
-                className="absolute top-2.5 right-2.5 text-zinc-500 hover:text-white transition-colors bg-transparent border-0 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-              
-              <div className="space-y-3 text-left">
-                <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-400">Desempenho e Insights</h4>
-                <div className="grid grid-cols-2 gap-2 text-center">
-                  <div className="bg-[#242526] p-2 rounded-lg border border-zinc-800">
-                    <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Alcance</span>
-                    <span className="text-xs font-black text-white">25.4K</span>
-                  </div>
-                  <div className="bg-[#242526] p-2 rounded-lg border border-zinc-800">
-                    <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Impressões</span>
-                    <span className="text-xs font-black text-white">34.1K</span>
-                  </div>
-                  <div className="bg-[#242526] p-2 rounded-lg border border-zinc-800">
-                    <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Engajamento</span>
-                    <span className="text-xs font-black text-[#1877F2]">12.8%</span>
-                  </div>
-                  <div className="bg-[#242526] p-2 rounded-lg border border-zinc-800">
-                    <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Retenção de Vídeo</span>
-                    <span className="text-xs font-black text-green-500">64.5%</span>
-                  </div>
-                </div>
 
-                <div className="pt-2 border-t border-zinc-800/60">
-                  <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-400 mb-1.5">Monetização Estimada</h4>
-                  <div className="bg-[#242526] p-2.5 rounded-lg border border-zinc-800 space-y-1 text-[11px]">
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-400 font-semibold">RPM Estimado:</span>
-                      <span className="text-white font-bold">R$ 6.50 / 1K views</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-zinc-400 font-semibold">Ganhos Acumulados:</span>
-                      <span className="text-green-500 font-black">R$ 157,40</span>
-                    </div>
-                    <div className="mt-2 w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
-                      <div className="bg-green-500 h-full rounded-full" style={{ width: '68%' }} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Scrollable Comments Viewport */}
@@ -1125,7 +1091,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                   <button type="button" className="border-0 bg-transparent text-zinc-400 hover:text-white cursor-pointer p-0">
                     <MessageSquare className="w-5 h-5" />
                   </button>
-                  <button type="button" className="border-0 bg-transparent text-zinc-400 hover:text-white cursor-pointer p-0">
+                  <button type="button" onClick={handleShare} className="border-0 bg-transparent text-zinc-400 hover:text-white cursor-pointer p-0" title="Compartilhar">
                     <Send className="w-5 h-5" />
                   </button>
                 </div>
@@ -1147,10 +1113,10 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                   <Bookmark className="w-4 h-4 fill-current text-zinc-400" />
                   <span>2.5K</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-zinc-400">
+                <button type="button" onClick={handleShare} className="flex items-center gap-1.5 text-xs font-bold text-zinc-400 bg-transparent border-0 cursor-pointer hover:text-white" title="Compartilhar">
                   <Share2 className="w-4 h-4" />
                   <span>142</span>
-                </div>
+                </button>
               </div>
             ) : (
               // Facebook, LinkedIn and default
@@ -1163,7 +1129,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span>Comentar</span>
                 </button>
-                <button type="button" className="flex-1 flex items-center justify-center gap-1.5 py-1.5 hover:bg-zinc-800 rounded-lg text-xs font-bold text-zinc-400 border-0 bg-transparent cursor-pointer transition-colors">
+                <button type="button" onClick={handleShare} className="flex-1 flex items-center justify-center gap-1.5 py-1.5 hover:bg-zinc-800 rounded-lg text-xs font-bold text-zinc-400 border-0 bg-transparent cursor-pointer transition-colors">
                   <Share2 className="w-3.5 h-3.5" />
                   <span>Compartilhar</span>
                 </button>
@@ -1218,6 +1184,20 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
               </button>
               <button
                 type="button"
+                onClick={() => {
+                  setShowMenu(false);
+                  setIsSlideshowActive(prev => !prev);
+                  toast({
+                    title: "Modo Apresentação",
+                    description: !isSlideshowActive ? "Slideshow automático de redes ativado." : "Slideshow automático pausado.",
+                  });
+                }}
+                className="py-3.5 text-zinc-100 font-semibold text-[13px] hover:bg-zinc-800/50 transition-colors border-0 bg-transparent cursor-pointer font-sans flex items-center justify-center gap-1.5"
+              >
+                {isSlideshowActive ? "⏹ Parar Modo Apresentação" : "▶ Modo Apresentação (Auto)"}
+              </button>
+              <button
+                type="button"
                 onClick={handleMenuAlterarCapa}
                 className="py-3.5 text-zinc-100 font-semibold text-[13px] hover:bg-zinc-800/50 transition-colors border-0 bg-transparent cursor-pointer font-sans"
               >
@@ -1257,6 +1237,230 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
                 className="py-3.5 text-zinc-400 font-semibold text-[13px] hover:bg-zinc-800/50 transition-colors border-0 bg-transparent cursor-pointer font-sans"
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Painel Overlay de Estatísticas e Métricas (Frente do texto) */}
+        {showInsights && (
+          <div className="absolute inset-0 z-40 bg-[#121214]/95 backdrop-blur-xl p-4 flex flex-col justify-between overflow-y-auto animate-in fade-in zoom-in-95 duration-200 font-sans text-left">
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-[#1877F2]" />
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Estatísticas & Métricas</h3>
+                    <span className="text-[10px] text-zinc-400 font-mono block truncate max-w-[180px]">
+                      webradiovitoria.com.br
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowInsights(false)}
+                  className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors bg-transparent border-0 cursor-pointer"
+                >
+                  <X className="w-4.5 h-4.5" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 text-[10px] font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-[#1877F2]/20 text-[#1877F2] border border-[#1877F2]/30 uppercase">
+                  {selectedEntry?.platformId || 'Geral'}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/30 uppercase">
+                  {status}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-center pt-0.5">
+                <div className="bg-[#1c1c1e] p-2.5 rounded-xl border border-zinc-800">
+                  <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Alcance</span>
+                  <span className="text-xs font-black text-white">25.4K</span>
+                </div>
+                <div className="bg-[#1c1c1e] p-2.5 rounded-xl border border-zinc-800">
+                  <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Impressões</span>
+                  <span className="text-xs font-black text-white">34.1K</span>
+                </div>
+                <div className="bg-[#1c1c1e] p-2.5 rounded-xl border border-zinc-800">
+                  <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Engajamento</span>
+                  <span className="text-xs font-black text-[#1877F2]">12.8%</span>
+                </div>
+                <div className="bg-[#1c1c1e] p-2.5 rounded-xl border border-zinc-800">
+                  <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Curtidas</span>
+                  <span className="text-xs font-black text-red-500">{likeCount}</span>
+                </div>
+                <div className="bg-[#1c1c1e] p-2.5 rounded-xl border border-zinc-800">
+                  <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Comentários</span>
+                  <span className="text-xs font-black text-amber-400">{activeComments.length}</span>
+                </div>
+                <div className="bg-[#1c1c1e] p-2.5 rounded-xl border border-zinc-800">
+                  <span className="text-[9px] text-zinc-400 block font-semibold uppercase">Retenção Vídeo</span>
+                  <span className="text-xs font-black text-green-500">64.5%</span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-zinc-800/80">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-400 mb-1.5">Monetização Estimada</h4>
+                <div className="bg-[#1c1c1e] p-2.5 rounded-xl border border-zinc-800 space-y-1 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400 font-semibold">RPM Estimado:</span>
+                    <span className="text-white font-bold">R$ 6.50 / 1K views</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400 font-semibold">Ganhos Acumulados:</span>
+                    <span className="text-green-500 font-black">R$ 157,40</span>
+                  </div>
+                  <div className="mt-1.5 w-full bg-zinc-800 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-green-500 h-full rounded-full" style={{ width: '68%' }} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-zinc-800/80">
+                <h4 className="text-[10px] font-black uppercase tracking-wider text-zinc-400 mb-1.5">Link da Publicação Vinculado</h4>
+                <div className="flex items-center gap-2 bg-[#1c1c1e] p-2 rounded-xl border border-zinc-800">
+                  <input
+                    type="text"
+                    readOnly
+                    value={getPostShareUrl()}
+                    className="bg-transparent text-[10px] text-zinc-300 font-mono outline-none flex-1 truncate px-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleMenuCopyLink}
+                    className="px-2.5 py-1 bg-[#1877F2] hover:bg-[#166fe5] text-white text-[10px] font-bold rounded-lg border-0 cursor-pointer shrink-0 transition-colors"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-3 mt-auto">
+              <button
+                type="button"
+                onClick={() => setShowInsights(false)}
+                className="w-full py-2.5 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs rounded-xl border-0 cursor-pointer transition-colors shadow-lg"
+              >
+                Fechar Estatísticas
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Desktop / Fallback Share Modal */}
+        {showShareModal && (
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4 transition-all animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-full max-w-[320px] bg-[#1c1c1e] text-white rounded-2xl p-4 shadow-2xl border border-zinc-800/90 text-left flex flex-col gap-3 font-sans relative">
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className="absolute top-3 right-3 text-zinc-400 hover:text-white transition-colors bg-transparent border-0 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div>
+                <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <Share2 className="w-4 h-4 text-[#1877F2]" />
+                  Compartilhar Publicação
+                </h3>
+                <p className="text-[10px] text-zinc-400 mt-0.5">
+                  Selecione um aplicativo para compartilhar o link.
+                </p>
+              </div>
+
+              {/* URL Display */}
+              <div className="flex items-center gap-1.5 bg-[#242526] p-1.5 rounded-xl border border-zinc-800">
+                <input
+                  type="text"
+                  readOnly
+                  value={getPostShareUrl()}
+                  className="bg-transparent text-[10px] text-zinc-300 font-mono outline-none flex-1 truncate px-1"
+                />
+                <button
+                  type="button"
+                  onClick={handleMenuCopyLink}
+                  className="px-2.5 py-1 bg-[#1877F2] hover:bg-[#166fe5] text-white text-[10px] font-bold rounded-lg border-0 cursor-pointer shrink-0 transition-colors"
+                >
+                  Copiar
+                </button>
+              </div>
+
+              {/* Apps Grid */}
+              <div className="grid grid-cols-3 gap-2 pt-1">
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent((post.content ? post.content + "\n\n" : "") + getPostShareUrl())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setShowShareModal(false)}
+                  className="flex flex-col items-center justify-center p-2.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 rounded-xl text-white transition-all text-[10px] font-bold gap-1 no-underline"
+                >
+                  <MessageCircle className="w-4.5 h-4.5 text-[#25D366]" />
+                  <span>WhatsApp</span>
+                </a>
+
+                <a
+                  href={`https://t.me/share/url?url=${encodeURIComponent(getPostShareUrl())}&text=${encodeURIComponent(post.content || 'Web Rádio Vitória')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setShowShareModal(false)}
+                  className="flex flex-col items-center justify-center p-2.5 bg-[#0088CC]/10 hover:bg-[#0088CC]/20 border border-[#0088CC]/30 rounded-xl text-white transition-all text-[10px] font-bold gap-1 no-underline"
+                >
+                  <Send className="w-4.5 h-4.5 text-[#0088CC]" />
+                  <span>Telegram</span>
+                </a>
+
+                <a
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getPostShareUrl())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setShowShareModal(false)}
+                  className="flex flex-col items-center justify-center p-2.5 bg-[#1877F2]/10 hover:bg-[#1877F2]/20 border border-[#1877F2]/30 rounded-xl text-white transition-all text-[10px] font-bold gap-1 no-underline"
+                >
+                  <Facebook className="w-4.5 h-4.5 text-[#1877F2]" />
+                  <span>Facebook</span>
+                </a>
+
+                <a
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.content ? post.content.slice(0, 100) : '')}&url=${encodeURIComponent(getPostShareUrl())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setShowShareModal(false)}
+                  className="flex flex-col items-center justify-center p-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-white transition-all text-[10px] font-bold gap-1 no-underline"
+                >
+                  <Twitter className="w-4.5 h-4.5 text-white" />
+                  <span>Twitter / X</span>
+                </a>
+
+                <a
+                  href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(getPostShareUrl())}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setShowShareModal(false)}
+                  className="flex flex-col items-center justify-center p-2.5 bg-[#0A66C2]/10 hover:bg-[#0A66C2]/20 border border-[#0A66C2]/30 rounded-xl text-white transition-all text-[10px] font-bold gap-1 no-underline"
+                >
+                  <Linkedin className="w-4.5 h-4.5 text-[#0A66C2]" />
+                  <span>LinkedIn</span>
+                </a>
+
+                <a
+                  href={`mailto:?subject=${encodeURIComponent('Publicação Web Rádio Vitória')}&body=${encodeURIComponent((post.content || '') + '\n\n' + getPostShareUrl())}`}
+                  onClick={() => setShowShareModal(false)}
+                  className="flex flex-col items-center justify-center p-2.5 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl text-white transition-all text-[10px] font-bold gap-1 no-underline"
+                >
+                  <Send className="w-4.5 h-4.5 text-purple-400" />
+                  <span>E-mail</span>
+                </a>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs rounded-xl border-0 cursor-pointer transition-colors mt-1"
+              >
+                Fechar
               </button>
             </div>
           </div>

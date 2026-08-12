@@ -190,7 +190,7 @@ export async function loadActivity(db: DB, limit = 20): Promise<ActivityItem[]> 
   const [msgs, contacts, deals, broadcasts, autoLogs] = await Promise.all([
     db
       .from("messages")
-      .select("id, content_text, sender_type, created_at, conversation_id, whatsapp_conversations!conversation_id(contact_id, contacts!contact_id(name, phone))")
+      .select("id, content, sender_type, created_at, conversation_id, whatsapp_conversations!conversation_id(contact_id, contacts!contact_id(name, phone))")
       .eq("sender_type", "customer")
       .order("created_at", { ascending: false })
       .limit(10),
@@ -207,7 +207,7 @@ export async function loadActivity(db: DB, limit = 20): Promise<ActivityItem[]> 
   const items: ActivityItem[] = [];
 
   for (const m of (msgs.data ?? []) as unknown as Array<{
-    id: string; content_text: string | null; created_at: string; conversation_id: string;
+    id: string; content: string | null; created_at: string; conversation_id: string;
     whatsapp_conversations: { contact_id: string | null; contacts: { name: string | null; phone: string }[] | { name: string | null; phone: string } | null }[] | { contact_id: string | null; contacts: { name: string | null; phone: string }[] | { name: string | null; phone: string } | null } | null;
   }>) {
     const conv = Array.isArray(m.whatsapp_conversations) ? m.whatsapp_conversations[0] : m.whatsapp_conversations;

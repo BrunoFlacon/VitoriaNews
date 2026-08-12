@@ -20,7 +20,7 @@ export function getThreadsOAuthUrl() {
 
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getFunctionsBase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
@@ -71,7 +71,7 @@ const OAuthCallback = () => {
         }
 
         const response = await fetch(
-`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/social-oauth-callback`,
+          `${getFunctionsBase()}/social-oauth-callback`,
           {
             method: "POST",
             headers: {

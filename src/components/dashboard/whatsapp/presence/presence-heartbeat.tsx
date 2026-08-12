@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { HEARTBEAT_MS, IDLE_AFTER_MS, type StoredPresence } from "@/lib/presence";
+import { isNetworkAbortError, logNetworkError } from "@/utils/errorHandling";
 
 /**
  * PresenceHeartbeat — headless. Mount ONCE per signed-in dashboard tab.
@@ -18,6 +19,8 @@ export function PresenceHeartbeat() {
   const { user } = useAuth();
 
   const lastActivityRef = useRef<number>(0);
+  const lastQuotaWarningRef = useRef<number>(0);
+  const quotaExceededRef = useRef(false);
 
   useEffect(() => {
     if (!user) return;
@@ -46,12 +49,20 @@ export function PresenceHeartbeat() {
       lastBeatAt = t;
 
       if (rpcAvailable === false) return; // RPC confirmed missing — skip silently
+      if (quotaExceededRef.current) {
+        // Retry once every 5 minutes in case quota is restored
+        if (t - lastQuotaWarningRef.current < 300_000) return;
+        quotaExceededRef.current = false;
+      }
 
       const { error } = await supabase.rpc("touch_presence", {
         p_status: currentStatus(),
       });
 
       if (error) {
+        if (isNetworkAbortError(error)) {
+          return;
+        }
         if (error.code === "PGRST202" || error.message?.includes("function not found")) {
           // RPC doesn't exist in this Supabase instance (migration not applied).
           // Log once, then disable further beats.
@@ -61,12 +72,34 @@ export function PresenceHeartbeat() {
           rpcAvailable = false;
           return;
         }
-        // Other unexpected error
+        // 402 Payment Required = quota exceeded (Supabase)
+        if (error.code === "402" || error.message?.includes("402") || error.message?.includes("quota") || error.message?.includes("exceed_cached_egress_quota")) {
+          if (!quotaExceededRef.current) {
+            console.warn("[PresenceHeartbeat] touch_presence unavailable — Supabase quota exceeded. Presence tracking paused.");
+          }
+          quotaExceededRef.current = true;
+          lastQuotaWarningRef.current = t;
+          return;
+        }
+        // 401/403 = not authenticated — silently disable, likely local mode without login
+        if (error.status === 401 || error.status === 403 || error.message?.includes("401") || error.message?.includes("403") || error.message?.includes("Not authenticated")) {
+          if (rpcAvailable === null) {
+            console.info("[PresenceHeartbeat] touch_presence requires authentication — presence tracking disabled in local mode.");
+          }
+          rpcAvailable = false;
+          return;
+        }
+        // Other unexpected error — throttle to once per minute max
         if (!cancelled) {
-          console.warn("[PresenceHeartbeat] touch_presence failed:", error.message);
+          const sinceLastWarn = t - lastQuotaWarningRef.current;
+          if (sinceLastWarn > 60_000) {
+            logNetworkError("PresenceHeartbeat", error, true);
+            lastQuotaWarningRef.current = t;
+          }
         }
       } else {
         rpcAvailable = true;
+        quotaExceededRef.current = false;
       }
     };
 

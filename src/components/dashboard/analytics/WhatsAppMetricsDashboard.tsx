@@ -73,7 +73,21 @@ export function WhatsAppMetricsDashboard({ userId, connectionId }: { userId?: st
       );
 
       if (fnErr) throw fnErr;
-      setMetrics(data as WhatsAppMetrics);
+      // Ensure data matches the expected shape even if the edge function returns a minimal response
+      if (data && typeof data === "object") {
+        setMetrics({
+          total: (data as any).total ?? 0,
+          period: (data as any).period ?? "-",
+          byStatus: (data as any).byStatus ?? {},
+          bySender: (data as any).bySender ?? { bot: 0, human: 0 },
+          conversations: (data as any).conversations ?? 0,
+          responseRate: (data as any).responseRate ?? 0,
+          botzap: (data as any).botzap ?? { enviadas: 0, respondidas: 0, apagadas: 0 },
+          byConnection: (data as any).byConnection ?? {},
+        } as WhatsAppMetrics);
+      } else {
+        setMetrics(null);
+      }
     } catch (err: any) {
       setError(err.message || "Erro ao carregar métricas");
     } finally {

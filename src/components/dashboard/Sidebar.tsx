@@ -102,8 +102,6 @@ export const Sidebar = memo(({
       { id: "networks", icon: Share2, label: "Redes Sociais" },
       { id: "robot", icon: Bot, label: "Artesão de Bots" },
       { id: "monitoring", icon: Activity, label: "Monitoramento" },
-      { id: "trends", icon: TrendingUp, label: "Tendências" },
-      { id: "preview", icon: Eye, label: "Prévia de Plataformas" },
     ];
 
     const mandatoryBottom = [

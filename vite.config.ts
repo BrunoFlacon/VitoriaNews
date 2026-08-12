@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => {
         overlay: false,
       },
       proxy: {
+        '/api': {
+          target: 'http://localhost:3001',
+          changeOrigin: true,
+        },
         '/supabase': {
           target: env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co',
           changeOrigin: true,

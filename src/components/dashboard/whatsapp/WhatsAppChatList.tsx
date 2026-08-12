@@ -354,10 +354,26 @@ export const WhatsAppChatList = ({
                       <DropdownMenuItem className="cursor-pointer" onClick={() => { onArchiveChat?.(chat.id); toast({ title: chat.status === 'archived' ? "Conversa restaurada" : "Conversa arquivada" }); }}>
                         <ArchiveX className="w-4 h-4 mr-2" /> {chat.status === 'archived' ? "Desarquivar" : "Arquivar"} conversa
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: "Marcada como lida" })}>
+                      <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                        try {
+                          await supabase.rpc("mark_conversation_read", { p_conversation_id: chat.id });
+                          toast({ title: "Marcada como lida" });
+                        } catch (err: any) {
+                          toast({ title: "Erro", description: err.message, variant: "destructive" });
+                        }
+                      }}>
                         <MessageCircle className="w-4 h-4 mr-2" /> Marcar como lida
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="cursor-pointer" onClick={() => toast({ title: chat.pinned ? "Desfixada" : "Fixada" })}>
+                      <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                        try {
+                          const newPinned = await supabase.rpc("toggle_pin_conversation", { p_conversation_id: chat.id });
+                          toast({ title: newPinned.data ? "Fixada" : "Desfixada" });
+                          // Recarregar lista para refletir mudança de ordem
+                          window.dispatchEvent(new CustomEvent("whatsapp:refresh"));
+                        } catch (err: any) {
+                          toast({ title: "Erro", description: err.message, variant: "destructive" });
+                        }
+                      }}>
                         <Pin className="w-4 h-4 mr-2" /> {chat.pinned ? "Desfixar" : "Fixar"} conversa
                       </DropdownMenuItem>
                       <DropdownMenuItem

@@ -100,7 +100,7 @@ const getChatPhoto = (url: string | null | undefined) => {
   if (url.startsWith('http')) {
     return getProxyUrl(url);
   }
-  if (url.startsWith('blob:') || url.startsWith('data:')) {
+  if (url.startsWith('/api/') || url.startsWith('blob:') || url.startsWith('data:')) {
     return url;
   }
   // Try to resolve from Supabase storage if it's just a path
@@ -243,7 +243,7 @@ export const MessagingView = () => {
       // Pre-calculate photo URL to avoid storage calls in render loop
       let photoUrl = null;
       if (ch.profile_picture) {
-        if (ch.profile_picture.startsWith('http') || ch.profile_picture.startsWith('data:')) {
+        if (ch.profile_picture.startsWith('http') || ch.profile_picture.startsWith('/api/') || ch.profile_picture.startsWith('data:')) {
           photoUrl = ch.profile_picture;
         } else {
           photoUrl = supabase.storage.from("media").getPublicUrl(ch.profile_picture).data.publicUrl;
@@ -322,7 +322,7 @@ export const MessagingView = () => {
         
         let photoUrl = null;
         if (rawPhoto) {
-          if (rawPhoto.startsWith('http') || rawPhoto.startsWith('data:')) {
+          if (rawPhoto.startsWith('http') || rawPhoto.startsWith('/api/') || rawPhoto.startsWith('data:')) {
             photoUrl = rawPhoto;
           } else {
             photoUrl = supabase.storage.from("media").getPublicUrl(rawPhoto).data.publicUrl;
@@ -2781,7 +2781,7 @@ export const MessagingView = () => {
                        {member.profile_picture ? (
                          <SafeImage src={member.profile_picture} className="w-full h-full object-cover" />
                        ) : (
-                         <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/20 font-bold">{member.full_name?.charAt(0) || "?"}</div>
+                         <div className="w-full h-full bg-white/10 flex items-center justify-center text-white/20 font-bold">{member.full_name?.charAt(0) || ""}</div>
                        )}
                     </div>
                     <div className="flex-1 min-w-0">

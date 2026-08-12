@@ -90,6 +90,16 @@ function clearCachedProfile(): void {
   try { sessionStorage.removeItem(CACHE_KEY); } catch {}
 }
 
+// Local DB (node-postgres) serializes `date` columns as full ISO datetimes
+// (e.g. "1987-08-22T03:00:00Z"). <input type="date"> only accepts "YYYY-MM-DD".
+function toDateOnly(value: any): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   // Restore optimistic profile cache from sessionStorage (instant load)
   const cachedProfile = loadCachedProfile();
@@ -116,8 +126,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     
     if (!error && data) {
       const p = data as unknown as Profile;
-      setProfile(p);
-      saveCachedProfile(p);
+      const normalized = { ...p, birthdate: toDateOnly(p.birthdate) };
+      setProfile(normalized);
+      saveCachedProfile(normalized);
       supabase
         .from('profiles')
         .update({ is_online: true, online_status: 'online', updated_at: new Date().toISOString() })

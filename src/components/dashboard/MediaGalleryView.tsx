@@ -161,15 +161,36 @@ export const MediaGalleryView = () => {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const handleDelete = async (id: string, fileUrl: string) => {
+  const handleDelete = async (id: string, fileUrl: string, name?: string) => {
     try {
-      const urlParts = fileUrl.split('/media/');
-      if (urlParts.length > 1) {
-        await supabase.storage.from('media').remove([urlParts[1]]);
+      let rawPath = fileUrl || "";
+      if (rawPath.includes("/object/")) {
+        const match = rawPath.match(/\/object\/(?:public|sign)\/[^/]+\/(.+?)(?:\?|$)/);
+        if (match) rawPath = match[1];
       }
-      await supabase.from('media').delete().eq('id', id);
-      setMedia(prev => prev.filter(item => item.id !== id));
-      toast({ title: "Arquivo excluído", description: "O arquivo foi removido da galeria." });
+      rawPath = rawPath.split('?')[0];
+      if (rawPath.startsWith("media/")) rawPath = rawPath.slice(6);
+      if (rawPath.startsWith("documents/")) rawPath = rawPath.slice(10);
+      const cleanStoragePath = decodeURIComponent(rawPath);
+
+      if (cleanStoragePath && !cleanStoragePath.startsWith("http://") && !cleanStoragePath.startsWith("https://")) {
+        await Promise.allSettled([
+          supabase.storage.from('media').remove([cleanStoragePath]),
+          supabase.storage.from('documents').remove([cleanStoragePath])
+        ]);
+      }
+
+      if (user) {
+        await Promise.allSettled([
+          supabase.from('media').delete().eq('user_id', user.id).or(`id.eq.${id},file_url.eq.${fileUrl}${name ? `,name.eq.${name}` : ''}`),
+          supabase.from('documents').delete().eq('user_id', user.id).or(`id.eq.${id},file_url.eq.${fileUrl}${name ? `,name.eq.${name}` : ''}`)
+        ]);
+      } else {
+        await supabase.from('media').delete().eq('id', id);
+      }
+
+      setMedia(prev => prev.filter(item => item.id !== id && item.file_url !== fileUrl));
+      toast({ title: "Arquivo excluído", description: "O arquivo foi removido do servidor e banco de dados." });
     } catch {
       toast({ title: "Erro ao excluir", description: "Não foi possível remover o arquivo.", variant: "destructive" });
     }

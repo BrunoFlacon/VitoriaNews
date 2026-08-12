@@ -1,9 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import {
   X, Phone, Search, ArrowLeft, Users, MessageCircle,
-  Delete, Hash, UserPlus, Contact
+  Delete, Hash, UserPlus, Contact, Loader2
 } from "lucide-react";
 
 interface DialPadProps {
@@ -28,14 +30,9 @@ const KEYPAD_KEYS = [
   ["*", "", "0", "+", "#", ""],
 ];
 
-const MOCK_CONTACTS: ContactItem[] = [
-  { id: "c1", name: "Aliza", phone: "5511999991111" },
-  { id: "c2", name: "Tahir", phone: "5511999992222" },
-  { id: "c3", name: "Smantha", phone: "5511999993333" },
-  { id: "c4", name: "Bruno", phone: "5511999994444" },
-  { id: "c5", name: "Equipe Vendas", phone: "", isGroup: true },
-  { id: "c6", name: "TI & Suporte", phone: "", isGroup: true },
-];
+function normalizePhone(phone: string): string {
+  return phone ? phone.replace(/\D/g, "") : "";
+}
 
 function formatPhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
@@ -45,10 +42,77 @@ function formatPhone(raw: string): string {
 }
 
 export function DialPad({ open, onClose, onStartConversation, onStartGroup }: DialPadProps) {
+  const { user } = useAuth();
   const [phone, setPhone] = useState("");
   const [showKeypad, setShowKeypad] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [contacts, setContacts] = useState<ContactItem[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Load contacts from Supabase when dialpad opens
+  const loadContacts = useCallback(async () => {
+    if (!user) return;
+    setLoadingContacts(true);
+    try {
+      const { data: dbContacts, error } = await supabase
+        .from("contacts")
+        .select("id, name, phone, avatar_url")
+        .eq("user_id", user.id)
+        .order("name", { ascending: true });
+
+      if (error) {
+        console.error("Error loading contacts:", error);
+        setContacts([]);
+        return;
+      }
+
+      if (dbContacts && dbContacts.length > 0) {
+        const mapped: ContactItem[] = dbContacts.map((c: any) => ({
+          id: c.id,
+          name: c.name || "Sem nome",
+          phone: normalizePhone(c.phone || ""),
+          avatar_url: c.avatar_url,
+          isGroup: false,
+        }));
+        setContacts(mapped);
+        return;
+      }
+
+      // Fallback: load from whatsapp_conversations
+      const { data: conversations } = await supabase
+        .from("whatsapp_conversations")
+        .select("id, contact_wa_id, contact_name")
+        .eq("user_id", user.id)
+        .order("last_message_at", { ascending: false });
+
+      if (conversations && conversations.length > 0) {
+        const mapped: ContactItem[] = conversations
+          .filter((c: any) => c.contact_wa_id)
+          .map((c: any) => ({
+            id: c.id,
+            name: c.contact_name || c.contact_wa_id,
+            phone: normalizePhone(c.contact_wa_id),
+            avatar_url: null,
+            isGroup: false,
+          }));
+        setContacts(mapped);
+      } else {
+        setContacts([]);
+      }
+    } catch (err) {
+      console.error("Error loading contacts for dial pad:", err);
+      setContacts([]);
+    } finally {
+      setLoadingContacts(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (open) {
+      loadContacts();
+    }
+  }, [open, loadContacts]);
 
   // Focus input when opening
   useEffect(() => {
@@ -91,11 +155,11 @@ export function DialPad({ open, onClose, onStartConversation, onStartGroup }: Di
   const filteredContacts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim() || phone.toLowerCase();
     if (!q) return [];
-    return MOCK_CONTACTS.filter(c => {
+    return contacts.filter(c => {
       if (c.isGroup) return c.name.toLowerCase().includes(q);
       return c.name.toLowerCase().includes(q) || c.phone.includes(q);
     });
-  }, [searchQuery, phone]);
+  }, [searchQuery, phone, contacts]);
 
   const showResults = searchQuery || phone.length > 0;
 
@@ -158,7 +222,11 @@ export function DialPad({ open, onClose, onStartConversation, onStartGroup }: Di
             {/* Results de busca numérica */}
             {showResults && (
               <div className="max-h-[120px] overflow-y-auto border-b border-white/5">
-                {filteredContacts.length > 0 && (
+                {loadingContacts ? (
+                  <div className="flex items-center justify-center py-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-[#8696a0]" />
+                  </div>
+                ) : filteredContacts.length > 0 && (
                   <div className="px-4 py-1">
                     <span className="text-[9px] font-bold uppercase tracking-widest text-[#6D6D6D]">CONTATOS</span>
                   </div>
@@ -265,7 +333,17 @@ export function DialPad({ open, onClose, onStartConversation, onStartGroup }: Di
               <span className="text-[9px] font-bold uppercase tracking-widest text-[#6D6D6D]">CONTATOS</span>
             </div>
             <div className="flex-1 overflow-y-auto">
-              {MOCK_CONTACTS.map(c => (
+              {loadingContacts ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-5 w-5 animate-spin text-[#8696a0]" />
+                </div>
+              ) : contacts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Contact className="h-8 w-8 text-[#8696a0]/40 mb-2" />
+                  <p className="text-xs text-[#8696a0]">Nenhum contato encontrado</p>
+                  <p className="text-[10px] text-[#8696a0]/60 mt-1">Adicione contatos na aba de contatos</p>
+                </div>
+              ) : contacts.map(c => (
                 <div
                   key={c.id}
                   onClick={() => {

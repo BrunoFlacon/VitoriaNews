@@ -53,8 +53,13 @@ serve(async (req) => {
       .maybeSingle();
 
     const aiConfig = aiCreds?.credentials || {};
-    const provider = aiConfig.provider || "lovable";
-    const apiKey = aiConfig.api_key || Deno.env.get("LOVABLE_API_KEY");
+    const hasOpenRouterKey = !!aiConfig.openrouter_api_key;
+    const provider = (aiConfig.provider && (aiConfig.provider !== "lovable" || !hasOpenRouterKey))
+      ? aiConfig.provider
+      : (hasOpenRouterKey ? "openrouter" : aiConfig.provider || "lovable");
+    const apiKey = (hasOpenRouterKey && provider === "openrouter")
+      ? aiConfig.openrouter_api_key
+      : (aiConfig.api_key || aiConfig.openrouter_api_key || Deno.env.get("LOVABLE_API_KEY"));
     
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "API Key de IA não configurada." }), {

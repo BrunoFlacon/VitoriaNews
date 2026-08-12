@@ -582,6 +582,18 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
                     return;
                   }
 
+                  // Invalid redirect_uri in local mode means the bridge needs production setup
+                  if (isLocal && errorMsg.includes("Invalid redirect_uri")) {
+                    console.warn("[OAUTH] redirect_uri inválido em modo local — a conexão precisa ser concluída em produção.");
+                    await finalize(true);
+                    toast({
+                      title: "Modo local detectado",
+                      description: `A conexão com ${platform} requer deploy em produção para finalizar.`,
+                    });
+                    await refetch();
+                    return;
+                  }
+
                   console.error("[OAUTH CALLBACK ERROR] Erro detalhado:", errorMsg);
                   throw new Error(errorMsg);
                 }

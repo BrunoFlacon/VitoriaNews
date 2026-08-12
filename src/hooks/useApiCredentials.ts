@@ -117,7 +117,7 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "Provedor de IA (openrouter, openai, google, anthropic, lovable)", key: "provider", placeholder: "Ex: openrouter" },
     { label: "API Key Principal (OpenAI / Lovable / Anthropic)", key: "api_key", masked: true, placeholder: "Cole sua chave de API" },
     { label: "OpenRouter API Key (recomendado)", key: "openrouter_api_key", masked: true, placeholder: "sk-or-v1-..." },
-    { label: "Modelo OpenRouter (texto)", key: "openrouter_model", placeholder: "Ex: google/gemini-2.0-flash-001" },
+    { label: "Modelo OpenRouter (texto)", key: "openrouter_model", placeholder: "Ex: google/gemini-2.5-flash" },
     { label: "Modelo de Texto (legado)", key: "text_model", placeholder: "Ex: gpt-4o-mini" },
     { label: "Modelo de Imagem (DALL-E)", key: "image_model", placeholder: "Ex: dall-e-3" },
     { label: "ElevenLabs API Key (Texto-para-Áudio)", key: "audio_api_key", masked: true },
@@ -238,8 +238,24 @@ export function useApiCredentials() {
           tokens,
         } as any;
       } else if (platform === "ai_config") {
+        // Normalize provider to lowercase — the DB may contain "OpenRouter"/"OpenAI" etc.
+        if (sanitizedCreds.provider) {
+          sanitizedCreds.provider = String(sanitizedCreds.provider).trim().toLowerCase();
+        }
+        
+        // Ensure provider is set if openrouter_api_key is present
+        if (!sanitizedCreds.provider && sanitizedCreds.openrouter_api_key) {
+          sanitizedCreds.provider = 'openrouter';
+        }
+        
+        // Always sync api_key with the OpenRouter key when provider is openrouter.
+        // This prevents a stale/old api_key from overriding the updated key server-side.
+        if (sanitizedCreds.provider === 'openrouter' && sanitizedCreds.openrouter_api_key) {
+          sanitizedCreds.api_key = sanitizedCreds.openrouter_api_key;
+        }
+        
         // Ensure api_key is populated from openrouter_api_key for backward compatibility 
-        // with the current live Edge Function that only checks 'api_key'
+        // with legacy Edge Functions that only check 'api_key'
         if (!sanitizedCreds.api_key && sanitizedCreds.openrouter_api_key) {
           sanitizedCreds.api_key = sanitizedCreds.openrouter_api_key;
         }
@@ -249,16 +265,11 @@ export function useApiCredentials() {
         if (sanitizedCreds.provider === 'openrouter' && !sanitizedCreds.base_url) {
           sanitizedCreds.base_url = 'https://openrouter.ai/api/v1';
         }
-        
-        // Ensure provider is set if openrouter_api_key is present
-        if (!sanitizedCreds.provider && sanitizedCreds.openrouter_api_key) {
-          sanitizedCreds.provider = 'openrouter';
-        }
 
         // Ensure a default model is set for OpenRouter to avoid legacy function fallbacks
         if (sanitizedCreds.provider === 'openrouter' && !sanitizedCreds.openrouter_model) {
-          sanitizedCreds.openrouter_model = 'google/gemini-2.0-flash-001';
-          sanitizedCreds.text_model = 'google/gemini-2.0-flash-001';
+          sanitizedCreds.openrouter_model = 'google/gemini-2.5-flash';
+          sanitizedCreds.text_model = 'google/gemini-2.5-flash';
         }
         
         finalCreds = sanitizedCreds;
