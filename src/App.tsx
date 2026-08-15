@@ -92,6 +92,20 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
   );
 };
 
+// Restaura rota salva pelo public/404.html (SPA fallback do GitHub Pages)
+const SpaRedirectRestore = () => {
+  useEffect(() => {
+    try {
+      const target = sessionStorage.getItem('spa-redirect');
+      if (target && target.startsWith('/')) {
+        sessionStorage.removeItem('spa-redirect');
+        window.history.replaceState(null, '', target);
+      }
+    } catch {}
+  }, []);
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <SystemProvider>
@@ -104,6 +118,7 @@ const App = () => (
               <ThemeEngine />
               <ErrorBoundary>
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <SpaRedirectRestore />
                 <Suspense fallback={<LoadingFallback />}>
                   <Routes>
                     <Route path="/" element={<PortalLanding />} />
