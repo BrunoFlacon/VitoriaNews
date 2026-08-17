@@ -27,6 +27,7 @@ const ArticlePage = lazy(() => import("./pages/ArticlePage"));
 const SystemEvolutionPage = lazy(() => import("./pages/SystemEvolutionPage"));
 const Radar2 = lazy(() => import("./pages/radar2"));
 const RadarNews = lazy(() => import("./pages/radarnews"));
+const DataDeletion = lazy(() => import("./pages/DataDeletion"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -136,6 +137,7 @@ const App = () => (
                     <Route path="/system-history" element={<ProtectedRoute><SystemEvolutionPage /></ProtectedRoute>} />
                     <Route path="/radar2" element={<ProtectedRoute><Radar2 /></ProtectedRoute>} />
                     <Route path="/radarnews" element={<ProtectedRoute><RadarNews /></ProtectedRoute>} />
+                    <Route path="/datadeletion" element={<DataDeletion />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>

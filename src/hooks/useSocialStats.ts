@@ -467,6 +467,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       sharedChannels.set(channelName, entry);
 
       const debouncedInvalidate = () => {
+        if (document.hidden) return;
         if (invalidatingRef.current) return;
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => {

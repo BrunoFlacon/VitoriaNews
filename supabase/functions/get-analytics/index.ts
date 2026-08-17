@@ -3,6 +3,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isSystemAccess as checkSystemAccess } from "../_shared/system-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -53,11 +54,25 @@ serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
     const authHeader = req.headers.get("Authorization") || req.headers.get("X-Authorization");
-    if (!authHeader) throw new Error("Unauthorized");
-    
-    const { data, error: authErr } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authErr || !data?.user) throw new Error("Unauthorized");
-    const userId = data.user.id;
+    const apikeyHeader = req.headers.get("apikey");
+
+    // Acesso de sistema (cron): aceita chaves do ambiente ou das settings
+    const systemAccess = await checkSystemAccess(supabase, apikeyHeader, authHeader);
+
+    let userId: string | null = null;
+    if (authHeader) {
+      const { data: authData, error: authErr } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+      if (!authErr && authData?.user) userId = authData.user.id;
+    }
+
+    if (!userId && !systemAccess) throw new Error("Unauthorized");
+
+    // Chamada de sistema (cron): usa o primeiro perfil disponível
+    if (!userId) {
+      const { data: firstProfile } = await supabase.from("profiles").select("id").limit(1).maybeSingle();
+      userId = firstProfile?.id || null;
+      if (!userId) throw new Error("No user found for system sync");
+    }
     const body = await req.json().catch(() => ({}));
     const period = body.period || "30d";
     const platform = body.platform || "all";
@@ -102,6 +117,9 @@ serve(async (req: Request) => {
       return v;
     };
 
+    // Check for demographics_data table
+    const credDemRes = await supabase.from("demographics_data").select("*").eq("user_id", userId).limit(1).maybeSingle();
+
     // Check which services are configured with credentials
     const [credMetaRes, credGcloudRes, credOAuthRes] = await Promise.allSettled([
       supabase.from("api_credentials").select("credentials").eq("user_id", userId).eq("platform", "meta_ads").maybeSingle(),
@@ -118,7 +136,10 @@ serve(async (req: Request) => {
     const searchConsoleConfigured = gcloudCreds?.search_console_id && hasOAuth ? true : false;
     const youtubeConfigured = hasOAuth ? true : false;
 
-    const [postsRes, socialRes, accMetRes, postMetRes, msgRes, adsRes, gaRes, ytRes, mChanRes, googleAdsRes] = await Promise.allSettled([
+    // Demographics data from demographics_data table
+    const demographicsData = credDemRes?.data || null;
+
+    const [postsRes, socialRes, accMetRes, postMetRes, msgRes, adsRes, gaRes, ytRes, mChanRes, googleAdsRes, demoRes, retentionRes, formatRes, viralRes] = await Promise.allSettled([
       supabase.from("scheduled_posts").select("id, status, platforms, created_at, content").eq("user_id", userId).gte("created_at", startISO).order("created_at", { ascending: false }).limit(500),
       supabase.from("social_accounts").select("id, platform, page_name, display_name, username, followers, followers_count, subscribers_count, posts_count, profile_picture, last_synced_at, updated_at, platform_user_id, page_id").eq("user_id", userId),
       supabase.from("account_metrics").select("social_account_id, followers, collected_at").eq("user_id", userId).gte("collected_at", startISO).order("collected_at", { ascending: true }).limit(1000),
@@ -129,6 +150,10 @@ serve(async (req: Request) => {
       supabase.from("youtube_analytics").select("views,likes,comments,date,subscribers_gained,watch_time_minutes,estimated_minutes_watched,title,metadata").eq("user_id", userId).gte("date", startDate10).limit(500),
       supabase.from("messaging_channels").select("id, platform, channel_name, page_name, username, channel_id, members_count, profile_picture, updated_at").eq("user_id", userId),
       supabase.from("google_ads_campaigns").select("impressions,clicks,cost_micros,conversions,date").eq("user_id", userId).gte("date", startDate10).limit(200),
+      supabase.from("demographics_data").select("age_groups, gender, devices, top_cities, top_countries").eq("user_id", userId).limit(1).maybeSingle(),
+      supabase.from("video_retention").select("duration, views").eq("user_id", userId).gte("date", startDate10).limit(500),
+      supabase.from("format_reach_data").select("*").eq("user_id", userId).gte("collected_at", startISO).limit(500),
+      supabase.from("viral_potential").select("*").eq("user_id", userId).gte("collected_at", startISO).limit(500),
     ]);
 
     const getD = (r: any) => r.status === "fulfilled" ? (r.value.data || []) : [];
@@ -142,6 +167,10 @@ serve(async (req: Request) => {
     const ytData = getD(ytRes);
     const msgChannels = getD(mChanRes);
     const googleAds = getD(googleAdsRes);
+    const demographicsData = (demoRes?.data as any) || null;
+    const retentionData = getD(retentionRes);
+    const formatReachData = getD(formatRes);
+    const viralPotentialData = getD(viralRes);
 
     console.log(`Dados encontrados: Posts: ${rawPosts.length}, Contas: ${socialAccounts.length}, Mensagens: ${messages.length}, Canais: ${msgChannels.length}`);
 
@@ -215,9 +244,6 @@ serve(async (req: Request) => {
     const dashboardPostIds = new Set(rawPosts.map(p => p.id));
     const metrics = postMetrics.filter(m => {
       if (normPlatform !== "all" && normalizePlatform(m.platform) !== normPlatform) return false;
-      if (source === "dashboard") {
-        return m.post_id && dashboardPostIds.has(m.post_id);
-      }
       return true;
     });
     
@@ -306,11 +332,14 @@ serve(async (req: Request) => {
     const ytAccount = socialAccounts.find((a: any) => a.platform === "youtube");
     const ytSubscribers = ytAccount?.subscribers_count || 0;
 
-    // Só incluir YouTube/GA nos totais e chartData quando o filtro de plataforma for 'all' ou corresponder
-    const includeYouTube = normPlatform === "all" || normPlatform === "youtube";
-    const includeGA = normPlatform === "all" || normPlatform === "ga" || normPlatform === "googleanalytics";
-    if (includeYouTube) tViews += ytViews;
-    if (includeGA) tViews += gaViews;
+    const ytViewsTotal = ytData.reduce((s, y) => s + (y.views || 0), 0);
+    const ytLikesTotal = ytData.reduce((s, y) => s + (y.likes || 0), 0);
+    const ytCommentsTotal = ytData.reduce((s, y) => s + (y.comments || 0), 0);
+    const gaViewsTotal = gaData.reduce((s, g) => s + (g.metric_name === "screenPageViews" ? Number(g.metric_value) : 0), 0);
+
+    tViews += ytViewsTotal;
+    tLikes += ytLikesTotal;
+    tComms += ytCommentsTotal;
 
     // Optimize chart data generation by pre-grouping metrics/messages by date
     const metricsByDate = new Map();
@@ -368,13 +397,13 @@ serve(async (req: Request) => {
       const dayMetrics = metricsByDate.get(key) || [];
       const dayGa = gaByDate.get(key) || [];
       const dayYt = ytByDate.get(key) || [];
-      const dayMsg = (source === "dashboard" || source === "all") ? (msgByDate.get(key) || []) : [];
+      const dayMsg = msgByDate.get(key) || [];
 
-      const gaViewsDay = includeGA ? dayGa.reduce((s,g)=>s+(g.metric_name === "screenPageViews" ? Number(g.metric_value) : 0), 0) : 0;
-      const ytViewsDay = includeYouTube ? dayYt.reduce((s,y)=>s+(y.views||0), 0) : 0;
-      const ytEngDay = includeYouTube ? dayYt.reduce((s,y)=>s+(y.likes||0)+(y.comments||0), 0) : 0;
-      const ytLikesDay = includeYouTube ? dayYt.reduce((s,y)=>s+(y.likes||0),0) : 0;
-      const ytCommentsDay = includeYouTube ? dayYt.reduce((s,y)=>s+(y.comments||0),0) : 0;
+      const gaViewsDay = dayGa.reduce((s,g)=>s+(g.metric_name === "screenPageViews" ? Number(g.metric_value) : 0), 0);
+      const ytViewsDay = dayYt.reduce((s,y)=>s+(y.views||0), 0);
+      const ytEngDay = dayYt.reduce((s,y)=>s+(y.likes||0)+(y.comments||0), 0);
+      const ytLikesDay = dayYt.reduce((s,y)=>s+(y.likes||0),0);
+      const ytCommentsDay = dayYt.reduce((s,y)=>s+(y.comments||0),0);
 
       chartData.push({
         name: is24h ? targetDate.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}) : targetDate.toLocaleDateString("pt-BR",{day:"numeric",month:"short"}),
@@ -394,7 +423,7 @@ serve(async (req: Request) => {
     }).sort((a,b) => b.engagement - a.engagement).slice(0, 3);
 
     // Final normalization check for message stats platforms
-    const messageStatsByPlatform = { "whatsapp": { sent: 0, failed: 0 }, "telegram": { sent: 0, failed: 0 } };
+    const messageStatsByPlatform: Record<string, { sent: number; failed: number }> = {};
     messages.forEach(m => {
       const rawP = m.platform || "unknown";
       const p = normalizePlatform(rawP);
@@ -435,15 +464,15 @@ serve(async (req: Request) => {
         }),
         adsStats: metaAdsConfigured ? ads.reduce((acc, ad) => ({ impressions: acc.impressions + (ad.impressions || 0), reach: acc.reach + (ad.reach || 0), clicks: acc.clicks + (ad.clicks || 0), spend: acc.spend + (ad.amount_spent || 0) }), { impressions: 0, reach: 0, clicks: 0, spend: 0 }) : null,
         googleAdsStats: googleAdsConfigured ? googleAds.reduce((acc: any, g: any) => ({ impressions: acc.impressions + (g.impressions || 0), clicks: acc.clicks + (g.clicks || 0), cost: acc.cost + ((g.cost_micros || 0) / 1000000), conversions: acc.conversions + (g.conversions || 0) }), { impressions: 0, clicks: 0, cost: 0, conversions: 0 }) : null,
-        youtubeStats: youtubeConfigured && includeYouTube ? {
-          views: ytViews,
-          likes: ytData.reduce((s,y)=>s+(y.likes||0),0),
-          comments: ytData.reduce((s,y)=>s+(y.comments||0),0),
+        youtubeStats: youtubeConfigured ? {
+          views: ytViewsTotal,
+          likes: ytLikesTotal,
+          comments: ytCommentsTotal,
           subscribersGained: ytSubscribersGained,
           watchTimeMinutes: ytWatchTimeMinutes,
           subscribers: ytSubscribers,
         } : null,
-        gaStats: ga4Configured && includeGA ? { views: gaViews } : null,
+        gaStats: ga4Configured ? { views: gaViewsTotal } : null,
         adsConfigured: googleAdsConfigured,
         searchConsoleStats,
         messageStats: { 

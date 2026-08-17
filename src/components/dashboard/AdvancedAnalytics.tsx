@@ -385,18 +385,6 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     return breakdown;
   }, [localStats]);
 
-  // Consolidate platformBreakdown to ensure it never displays empty or seeded data when local data is available
-  const platformBreakdown = useMemo(() => {
-    const apiBreakdown = data.platformBreakdown || {};
-    const localHasData = Object.values(localPlatformBreakdown).some(
-      (v: any) => v.posts > 0 || v.engagement > 0 || v.views > 0
-    );
-    if (localHasData) {
-      return localPlatformBreakdown;
-    }
-    return apiBreakdown;
-  }, [data.platformBreakdown, localPlatformBreakdown]);
-
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [platformActiveProfile, setPlatformActiveProfile] = useState<Record<string, string>>({});
   const [activeView, setActiveView] = useState<'analytics' | 'platform-detail'>('analytics');
@@ -410,6 +398,27 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
   const [pieSelectedPlatform, setPieSelectedPlatform] = useState<string | null>(null);
   const [activeSubTab, setActiveSubTab] = useState<"overview" | "social" | "messaging" | "traffic">("overview");
 
+  // Consolidate platformBreakdown to ensure it never displays empty or seeded data when local data is available
+  // Also filter by searchQuery
+  const platformBreakdown = useMemo(() => {
+    const apiBreakdown = data.platformBreakdown || {};
+    const localHasData = Object.values(localPlatformBreakdown).some(
+      (v: any) => v.posts > 0 || v.engagement > 0 || v.views > 0
+    );
+    let breakdown = localPlatformBreakdown;
+    if (!localHasData) {
+      breakdown = apiBreakdown;
+    }
+    // Filter by searchQuery if provided
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase();
+      breakdown = Object.fromEntries(
+        Object.entries(breakdown).filter(([key]) => key.toLowerCase().includes(searchLower))
+      );
+    }
+    return breakdown;
+  }, [data.platformBreakdown, localPlatformBreakdown, searchQuery]);
+
   // Derived data for new analytic components
   const isRealtime = data.dataSource === 'real' || !!fetchedData;
   const hasYoutubeData = !!(data.youtubeStats && (data.youtubeStats.views > 0 || data.youtubeStats.likes > 0 || data.youtubeStats.comments > 0));
@@ -420,11 +429,14 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
   const formatReachData = useMemo(() => {
     if (!platformBreakdown || Object.keys(platformBreakdown).length === 0) return undefined;
-    return Object.entries(platformBreakdown).map(([key, val]) => ({
+    const filtered = Object.entries(platformBreakdown).filter(([key]) =>
+      key.toLowerCase().includes(searchQuery)
+    );
+    return filtered.length > 0 ? filtered.map(([key, val]) => ({
       name: key.charAt(0).toUpperCase() + key.slice(1),
       value: val.views || 0,
-    }));
-  }, [platformBreakdown]);
+    })) : undefined;
+  }, [platformBreakdown, searchQuery]);
 
   const viralPotentialData = useMemo(() => {
     const seguidores = totalFollowerCount;
@@ -505,7 +517,16 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
 
   const handleExportCSV = useCallback(() => {
     const demoData = demographics ? { ageGroups: demographics.ageGroups, gender: demographics.gender, devices: demographics.devices, topCities: demographics.topCities, topCountries: demographics.topCountries } : undefined;
-    exportToXLSX({ ...data, platform, period, demographics: demoData }, 'analytics');
+    const exportData = {
+      ...data,
+      platform,
+      period,
+      demographics: demoData,
+      youtubeStats: data.youtubeStats,
+      gaStats: data.gaStats,
+      adsStats: data.adsStats,
+    };
+    exportToXLSX(exportData as any, 'analytics');
     toast({ title: "XLSX Exportado", description: "Dados exportados com sucesso." });
   }, [data, platform, period, demographics, toast]);
 
@@ -631,7 +652,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
         refetch={refetch}
       />
 
-      {data.dataSource === 'demo' && !data.chartData.some(d => d.views > 0 || d.engagement > 0) && (
+      {data.dataSource === 'demo' && !fetchedData && (
         <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
           Dados de conectividade indisponíveis. Configure APIs Sociais para coletar métricas.
         </div>

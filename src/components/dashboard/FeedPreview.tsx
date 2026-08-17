@@ -436,6 +436,28 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
 
   const getAccount = (entry: typeof platformEntries[number]) => {
     if (!entry) return null;
+
+    // 📌 1º) Perfil REAL que publicou (published_posts.metadata.targetProfileId)
+    if (post.status === 'published' && post.published_details?.length) {
+      const pd = post.published_details.find(d => d.platform === entry.platformId);
+      const realProfileId = pd?.metadata?.targetProfileId || pd?.metadata?.connectionId || null;
+      if (realProfileId) {
+        const realConn = connections.find(c => c.id === realProfileId)
+          || connections.find(c => c.platform_user_id === realProfileId)
+          || connections.find(c => c.page_id === realProfileId);
+        if (realConn) {
+          return {
+            id: realConn.id,
+            username: realConn.page_name || realConn.username || realConn.platform,
+            profile_picture: realConn.profile_picture || realConn.profile_image_url || null,
+            followers_count: realConn.followers_count ?? 0,
+            posts_count: realConn.posts_count ?? 0,
+            platform: realConn.platform,
+          } as any;
+        }
+      }
+    }
+
     if (entry.accountId) {
       const conn = connections.find(c => c.id === entry.accountId);
       if (conn) {
@@ -652,6 +674,12 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
   const platformId = selectedEntry?.platformId || 'facebook';
   const hasMedia = post.media_urls && post.media_urls.length > 0;
   const isVerified = !!(account?.metadata?.is_verified || account?.metadata?.verified || account?.metadata?.verified_account || false);
+
+  // Link real da publicação (published_posts.url)
+  const publishedLink =
+    post.published_details?.find((pd) => pd.url)?.url ||
+    post.published_details?.[0]?.url ||
+    null;
 
   const getAspectClass = () => {
     const isVertical = platformId === 'tiktok' || platformId === 'whatsapp' || platformId === 'telegram' || post.media_type === 'reel' || post.media_type === 'story';
@@ -898,6 +926,19 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
               >
                 <BarChart3 className="w-3.5 h-3.5" />
               </button>
+              {status === 'published' && publishedLink && (
+                <a
+                  href={publishedLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-500/15 text-green-400 hover:bg-green-500/25 text-[9px] font-black uppercase tracking-wider border-0 cursor-pointer transition-colors"
+                  title="Abrir publicação na rede social"
+                >
+                  <Eye className="w-3 h-3" />
+                  Ver publicação
+                </a>
+              )}
             </div>
           </div>
         </div>

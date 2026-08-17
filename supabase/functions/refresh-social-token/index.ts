@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveCorsOrigin } from "../_shared/cors.ts";
-import { fetchWithTimeout } from "../_shared/fetchWithTimeout.ts";
+import { refreshConnectionToken } from "../_shared/credentials.ts";
 
 const corsHeaders = (req: Request) => ({
   'Access-Control-Allow-Origin': resolveCorsOrigin(req),
@@ -53,81 +53,18 @@ serve(async (req: Request) => {
       );
     }
 
-    if (!connection.refresh_token) {
+    // Para Meta/Threads o refresh funciona sem refresh_token (fb_exchange/th_refresh)
+    const needsRefreshToken = !["facebook", "instagram", "whatsapp", "threads"].includes(platform);
+    if (needsRefreshToken && !connection.refresh_token) {
       return new Response(
         JSON.stringify({ error: "No refresh token available. Please reconnect." }),
         { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
-    let newAccessToken = "";
-    let newExpiresIn = 3600;
+    const fresh = await refreshConnectionToken(supabase, connection);
 
-    switch (platform) {
-      case "google":
-      case "youtube": {
-        const googleClientId = Deno.env.get("GOOGLE_CLIENT_ID")!;
-        const googleClientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
-        
-        const res = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            client_id: googleClientId,
-            client_secret: googleClientSecret,
-            refresh_token: connection.refresh_token,
-            grant_type: "refresh_token",
-          }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error_description || data.error);
-        newAccessToken = data.access_token;
-        newExpiresIn = data.expires_in || 3600;
-        break;
-      }
-      case "twitter": {
-        const twitterKey = Deno.env.get("TWITTER_CONSUMER_KEY")!;
-        const twitterSecret = Deno.env.get("TWITTER_CONSUMER_SECRET")!;
-        
-        const res = await fetchWithTimeout("https://api.x.com/2/oauth2/token", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            Authorization: `Basic ${btoa(`${twitterKey}:${twitterSecret}`)}`,
-          },
-          body: new URLSearchParams({
-            refresh_token: connection.refresh_token,
-            grant_type: "refresh_token",
-          }),
-        });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error_description || data.error);
-        newAccessToken = data.access_token;
-        newExpiresIn = data.expires_in || 7200;
-        break;
-      }
-      default:
-        return new Response(
-          JSON.stringify({ error: `Token refresh not supported for ${platform}` }),
-          { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
-        );
-    }
-
-    const newExpiresAt = new Date(Date.now() + newExpiresIn * 1000).toISOString();
-
-    await supabase
-      .from("social_connections")
-      .update({
-        access_token: newAccessToken,
-        token_expires_at: newExpiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", user.id)
-      .eq("platform", platform);
-
-    // console.log(`Token refreshed for ${platform}, user: ${user.id}`);
-
-    return new Response(JSON.stringify({ success: true, expiresAt: newExpiresAt }), {
+    return new Response(JSON.stringify({ success: true, expiresAt: fresh.expiresAt }), {
       headers: { ...corsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (error) {

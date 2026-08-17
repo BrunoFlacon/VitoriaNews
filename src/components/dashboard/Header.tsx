@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Search, ChevronDown, User, Shield, Camera, Key, Settings, LogOut, X } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -17,9 +17,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { NetworkHealthIndicator } from "@/components/dashboard/NetworkHealthIndicator";
 import { DateTimeWeather } from "@/components/dashboard/DateTimeWeather";
 import { OmniSearch } from "@/components/search/OmniSearch";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface HeaderProps {
   onNotificationsClick?: () => void;
@@ -39,6 +39,20 @@ export const Header = memo(({
   const { settings } = useSystem();
   const isMobile = useIsMobile();
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Debounced search handler
+  const debouncedSearch = useCallback((query: string) => {
+    const event = new CustomEvent("system-search", { detail: { query } });
+    window.dispatchEvent(event);
+  }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      debouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [searchQuery, debouncedSearch]);
 
   const displayName = profile?.name || user?.email?.split('@')[0] || "Usuário";
   const initials = displayName.charAt(0).toUpperCase();

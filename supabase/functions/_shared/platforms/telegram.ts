@@ -1,4 +1,5 @@
 import { PublishPayload } from './dispatcher.ts';
+import { detectMediaType, MediaKind } from '../media.ts';
 
 export async function publishToTelegram(supabase: any, payload: PublishPayload): Promise<any> {
   const { content, mediaUrls, userId, options } = payload;
@@ -27,32 +28,69 @@ export async function publishToTelegram(supabase: any, payload: PublishPayload):
     throw new Error('Telegram Bot Token is missing in credentials.');
   }
 
-  let url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-  let body: any = {
-    chat_id: chatId,
-    text: content,
-  };
+  const base = `https://api.telegram.org/bot${botToken}`;
 
-  // Se houver anexo (foto), mudar o endpoint e o payload
-  if (mediaUrls && mediaUrls.length > 0) {
-    url = `https://api.telegram.org/bot${botToken}/sendPhoto`;
-    body = {
-      chat_id: chatId,
-      photo: mediaUrls[0],
-      caption: content || "",
+  async function call(method: string, body: Record<string, unknown>) {
+    const response = await fetch(`${base}/${method}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json();
+    if (!result.ok) {
+      throw new Error(`Telegram API Error (${method}): ${result.description}`);
+    }
+    return result.result;
+  }
+
+  // Sem anexo → mensagem de texto
+  if (!mediaUrls || mediaUrls.length === 0) {
+    const result = await call('sendMessage', { chat_id: chatId, text: content });
+    return { success: true, platform: 'telegram', messageId: result.message_id, profileId: null, url: null };
+  }
+
+  // Telegram aceita álbum apenas com fotos/vídeos misturados (sendMediaGroup)
+  const kinds: MediaKind[] = mediaUrls.map(detectMediaType);
+  const allAlbumCompatible = kinds.every((k) => k === 'image' || k === 'video');
+
+  // ✅ ALBUM (2+ fotos/vídeos)
+  if (mediaUrls.length > 1 && allAlbumCompatible) {
+    const media = mediaUrls.map((url, i) => ({
+      type: kinds[i] === 'video' ? 'video' : 'photo',
+      media: url,
+      ...(i === 0 && content ? { caption: content } : {}),
+    }));
+    const result = await call('sendMediaGroup', { chat_id: chatId, media });
+    return {
+      success: true,
+      platform: 'telegram',
+      messageId: Array.isArray(result) ? result[0]?.message_id : result?.message_id,
+      mediaGroup: true,
+      profileId: null,
+      url: null,
     };
   }
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  // ✅ MÍDIA ÚNICA → endpoint por tipo
+  const kind = kinds[0];
+  const method =
+    kind === 'audio' ? 'sendAudio'
+    : kind === 'video' ? 'sendVideo'
+    : kind === 'document' ? 'sendDocument'
+    : 'sendPhoto';
+  const field =
+    kind === 'audio' ? 'audio'
+    : kind === 'video' ? 'video'
+    : kind === 'document' ? 'document'
+    : 'photo';
 
-  const result = await response.json();
-  if (!result.ok) {
-    throw new Error(`Telegram API Error: ${result.description}`);
+  const body: Record<string, unknown> = { chat_id: chatId, [field]: mediaUrls[0] };
+  if (content) body.caption = content;
+  if (kind === 'document') {
+    const fileName = mediaUrls[0].split('/').pop()?.split('?')[0] || 'arquivo';
+    body.filename = fileName;
   }
 
-  return { success: true, platform: 'telegram', messageId: result.result.message_id };
+  const result = await call(method, body);
+  return { success: true, platform: 'telegram', messageId: result.message_id, profileId: null, url: null };
 }

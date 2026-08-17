@@ -6,6 +6,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 declare const Deno: any;
 import { dispatchPost, PublishPayload } from '../_shared/platforms/dispatcher.ts';
+import { detectMediaType } from '../_shared/media.ts';
+import { isSystemAccess as checkSystemAccess } from '../_shared/system-auth.ts';
 
 async function triggerAnalyticsUpdate(userId: string): Promise<void> {
   try {
@@ -17,6 +19,67 @@ async function triggerAnalyticsUpdate(userId: string): Promise<void> {
     });
   } catch (e) {
     console.error("[publish-post] Error triggering analytics update:", e);
+  }
+}
+
+// Normaliza o ID do post publicado a partir do retorno do adapter.
+function extractPlatformPostId(result: any): string | null {
+  return String(
+    result?.messageId ?? result?.tweetId ?? result?.postId ?? result?.videoId ?? result?.mediaContainerId ?? result?.id ?? ''
+  ) || null;
+}
+
+// Persiste uma linha em published_posts para cada plataforma publicada
+// com sucesso — base para a ferramenta editar/apagar (sync com as plataformas)
+// e para analytics.
+async function persistPublishedPost(
+  supabase: any,
+  userId: string,
+  postId: string | undefined,
+  platform: string,
+  result: any,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  try {
+    const platformPostId = extractPlatformPostId(result);
+    if (!platformPostId || !postId) return;
+
+    // Remove registros prévios do mesmo post+plataforma (idempotência em re-publicação)
+    await supabase
+      .from("published_posts")
+      .delete()
+      .eq("user_id", userId)
+      .eq("post_id", postId)
+      .eq("platform", platform);
+
+    await supabase
+      .from("published_posts")
+      .insert({
+        user_id: userId,
+        post_id: postId,
+        platform,
+        platform_post_id: platformPostId,
+        published_at: new Date().toISOString(),
+        status: "active",
+        url: result?.url || null,
+        metadata,
+      });
+
+    // Auditoria da operação de publicação
+    await supabase
+      .from("post_sync_log")
+      .insert({
+        user_id: userId,
+        post_id: postId,
+        platform,
+        operation: "publish",
+        platform_post_id: platformPostId,
+        status: "success",
+        message: "Post publicado com sucesso.",
+        metadata: { targetProfileId: metadata.targetProfileId || null },
+      });
+  } catch (e) {
+    console.error(`[publish-post] Error persisting published post (${platform}):`, e);
   }
 }
 
@@ -100,7 +163,7 @@ serve(async (req: Request) => {
       authError = error;
     }
 
-    const isSystemAccess = apikeyHeader && (apikeyHeader === (Deno as any).env.get('SUPABASE_ANON_KEY') || apikeyHeader === (Deno as any).env.get('SUPABASE_SERVICE_ROLE_KEY'));
+    const isSystemAccess = await checkSystemAccess(supabase, apikeyHeader, authHeader);
 
     if (!user && !isSystemAccess) {
       return new Response(JSON.stringify({ 
@@ -117,27 +180,24 @@ serve(async (req: Request) => {
       platforms, 
       content, 
       mediaUrls, 
+      title,
       postType = "post", 
       mediaType: explicitMediaType,
+      contentType: explicitContentType,
       recipientPhone,
       chatId,
       templateName,
       templateLanguage,
       templateVariables,
-      templateHeaderMediaUrl
+      templateHeaderMediaUrl,
+      userId: bodyUserId
     } = await req.json();
 
-    const userId = user?.id || "system";
-    let mediaType = explicitMediaType;
+    const userId = user?.id || bodyUserId || "system";
+    // Aceita contentType do body (story/carousel/live) como override do mediaType
+    let mediaType = explicitMediaType || explicitContentType;
     if (!mediaType && mediaUrls && mediaUrls.length > 0) {
-      const url = mediaUrls[0].toLowerCase();
-      if (url.endsWith('.mp4') || url.endsWith('.mov') || url.endsWith('.webm')) {
-        mediaType = 'video';
-      } else if (url.endsWith('.mp3') || url.endsWith('.wav') || url.endsWith('.ogg')) {
-        mediaType = 'audio';
-      } else {
-        mediaType = 'image';
-      }
+      mediaType = detectMediaType(mediaUrls[0]);
     } else if (!mediaType) {
       mediaType = 'text'; 
     }
@@ -157,6 +217,7 @@ serve(async (req: Request) => {
           options: {
             postType,
             postId,
+            title: title || null,
             recipientPhone,
             chatId,
             targetProfileId,
@@ -169,6 +230,19 @@ serve(async (req: Request) => {
 
         const result = await dispatchPost(supabase, payload);
         results.push({ platform: rawPlatform, ...result });
+
+        // Persiste no published_posts para permitir editar/apagar via UI (sync)
+        if (result.success && postId) {
+          await persistPublishedPost(supabase, userId, postId, platform, result, {
+            targetProfileId: result.profileId || targetProfileId || null,
+            title: title || null,
+            chatId: chatId || null,
+            recipientPhone: recipientPhone || null,
+            postType,
+            mediaType,
+            pendingUrn: result.pendingUrn || null,
+          });
+        }
 
         // Track successful Facebook publishes to refresh posts_count
         if (result.success && platform === 'facebook' && targetProfileId) {
@@ -184,6 +258,23 @@ serve(async (req: Request) => {
     if (facebookPageIds.length > 0) {
       // Fire-and-forget — não bloqueia a resposta
       updateFacebookPostsCount(supabase, userId, facebookPageIds);
+    }
+
+    // Mark the scheduled post as published so it won't be re-picked by the scheduler
+    if (postId && results.some(r => r.success)) {
+      try {
+        await supabase
+          .from("scheduled_posts")
+          .update({
+            status: "published",
+            published_at: new Date().toISOString(),
+            error_message: null,
+          })
+          .eq("id", postId)
+          .eq("user_id", userId);
+      } catch (e) {
+        console.error("[publish-post] Error updating scheduled post status:", e);
+      }
     }
 
     // Fire-and-forget — atualiza métricas de todas as plataformas após publicação

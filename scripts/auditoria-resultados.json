@@ -1,0 +1,202 @@
+[
+  {
+    "caso": "T01",
+    "title": "Facebook Texto",
+    "postId": null,
+    "success": true,
+    "detail": "{\"platform\":\"facebook\",\"success\":true,\"postId\":\"323348644425052_1677918014333813\"}",
+    "httpOk": true,
+    "error": null,
+    "ms": 12041
+  },
+  {
+    "caso": "T02",
+    "title": "Facebook Foto",
+    "postId": null,
+    "success": null,
+    "detail": "{\"0\":{\"success\":true,\"platform\":\"facebook\",\"postId\":\"1677918074333807\",\"mediaUrl\":\"https://ghtkdkauseesambzqfrd.supabase.co/storage/v1/object/public/media/38cd9720-494e-406a-853d-19d81ae85e99/b09c0f8b-9c68-41ba-a688-21bdbb7d0078.jpg\"},\"platform\":\"facebook|c8d691ac-8814-49f5-a569-2dfb5e26eadc\"}",
+    "httpOk": true,
+    "error": null,
+    "ms": 8746
+  },
+  {
+    "caso": "T03",
+    "title": "Facebook Video",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"facebook|c8d691ac-8814-49f5-a569-2dfb5e26eadc\",\"success\":false,\"error\":\"Facebook API Error: Invalid parameter\"}",
+    "httpOk": true,
+    "error": "Facebook API Error: Invalid parameter",
+    "ms": 4379
+  },
+  {
+    "caso": "T04",
+    "title": "Instagram Foto",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"instagram|11df6dcd-9f04-43bf-b045-7f5d51e7010f\",\"success\":false,\"error\":\"Instagram Media Container Error: Unsupported post request. Object with ID '323348644425052' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api\"}",
+    "httpOk": true,
+    "error": "Instagram Media Container Error: Unsupported post request. Object with ID '323348644425052' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api",
+    "ms": 5428
+  },
+  {
+    "caso": "T05",
+    "title": "Instagram Reels (video)",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"instagram|11df6dcd-9f04-43bf-b045-7f5d51e7010f\",\"success\":false,\"error\":\"Instagram Media Container Error: Unsupported post request. Object with ID '323348644425052' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api\"}",
+    "httpOk": true,
+    "error": "Instagram Media Container Error: Unsupported post request. Object with ID '323348644425052' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api",
+    "ms": 9895
+  },
+  {
+    "caso": "T06",
+    "title": "Instagram Story",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"instagram|11df6dcd-9f04-43bf-b045-7f5d51e7010f\",\"success\":false,\"error\":\"Instagram Media Container Error: Unsupported post request. Object with ID '323348644425052' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api\"}",
+    "httpOk": true,
+    "error": "Instagram Media Container Error: Unsupported post request. Object with ID '323348644425052' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api",
+    "ms": 2200
+  },
+  {
+    "caso": "T07",
+    "title": "Threads Texto",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"threads|1694f354-98d9-4105-abaa-df4dc995c189\",\"success\":false,\"error\":\"Access token do Threads ausente\"}",
+    "httpOk": true,
+    "error": "Access token do Threads ausente",
+    "ms": 1321
+  },
+  {
+    "caso": "T08",
+    "title": "Threads Foto",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"threads|1694f354-98d9-4105-abaa-df4dc995c189\",\"success\":false,\"error\":\"Access token do Threads ausente\"}",
+    "httpOk": true,
+    "error": "Access token do Threads ausente",
+    "ms": 3310
+  },
+  {
+    "caso": "T09",
+    "title": "WhatsApp Texto",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"whatsapp|ee7ffa1d-d032-433c-a747-b4639d529c9a\",\"success\":false,\"error\":\"WhatsApp API Error: (#133010) Account not registered\"}",
+    "httpOk": true,
+    "error": "WhatsApp API Error: (#133010) Account not registered",
+    "ms": 8924
+  },
+  {
+    "caso": "T10",
+    "title": "WhatsApp Foto",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"whatsapp|ee7ffa1d-d032-433c-a747-b4639d529c9a\",\"success\":false,\"error\":\"WhatsApp API Error: (#133010) Account not registered\"}",
+    "httpOk": true,
+    "error": "WhatsApp API Error: (#133010) Account not registered",
+    "ms": 4870
+  },
+  {
+    "caso": "T11",
+    "title": "WhatsApp Video",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"whatsapp|ee7ffa1d-d032-433c-a747-b4639d529c9a\",\"success\":false,\"error\":\"WhatsApp API Error: (#133010) Account not registered\"}",
+    "httpOk": true,
+    "error": "WhatsApp API Error: (#133010) Account not registered",
+    "ms": 2740
+  },
+  {
+    "caso": "T12",
+    "title": "WhatsApp Audio",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"whatsapp|ee7ffa1d-d032-433c-a747-b4639d529c9a\",\"success\":false,\"error\":\"WhatsApp API Error: (#133010) Account not registered\"}",
+    "httpOk": true,
+    "error": "WhatsApp API Error: (#133010) Account not registered",
+    "ms": 15983
+  },
+  {
+    "caso": "T13",
+    "title": "WhatsApp PDF",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"whatsapp|ee7ffa1d-d032-433c-a747-b4639d529c9a\",\"success\":false,\"error\":\"WhatsApp API Error: (#133010) Account not registered\"}",
+    "httpOk": true,
+    "error": "WhatsApp API Error: (#133010) Account not registered",
+    "ms": 2218
+  },
+  {
+    "caso": "T14",
+    "title": "Telegram Texto",
+    "postId": null,
+    "success": true,
+    "detail": "{\"platform\":\"telegram\",\"success\":true,\"messageId\":14}",
+    "httpOk": true,
+    "error": null,
+    "ms": 6556
+  },
+  {
+    "caso": "T15",
+    "title": "Telegram Foto",
+    "postId": null,
+    "success": true,
+    "detail": "{\"platform\":\"telegram\",\"success\":true,\"messageId\":15}",
+    "httpOk": true,
+    "error": null,
+    "ms": 4882
+  },
+  {
+    "caso": "T16",
+    "title": "YouTube Video longo",
+    "postId": null,
+    "success": true,
+    "detail": "{\"platform\":\"youtube\",\"success\":true,\"info\":\"YouTube post metadata ready. Final integration requires raw file stream.\",\"metadata\":{\"snippet\":{\"title\":\"TESTE-AUDITORIA-2026-08-13 [T16 - YouTube Video longo] Verificacao de publicacao do Social Canvas Hu\",\"description\":\"TESTE-AUDITORIA-2026-08-13 [T16 - YouTube Video longo] Verificacao de publicacao do Social Canvas Hub. Conteudo de auditoria tecnica automatizada.\",\"categoryId\":\"22\"},\"status\":{\"privacyStatus\":\"public\"}}}",
+    "httpOk": true,
+    "error": null,
+    "ms": 12997
+  },
+  {
+    "caso": "T17",
+    "title": "YouTube Short",
+    "postId": null,
+    "success": true,
+    "detail": "{\"platform\":\"youtube\",\"success\":true,\"info\":\"YouTube post metadata ready. Final integration requires raw file stream.\",\"metadata\":{\"snippet\":{\"title\":\"TESTE-AUDITORIA-2026-08-13 [T17 - YouTube Short] Verificacao de publicacao do Social Canvas Hub. Con\",\"description\":\"TESTE-AUDITORIA-2026-08-13 [T17 - YouTube Short] Verificacao de publicacao do Social Canvas Hub. Conteudo de auditoria tecnica automatizada.\",\"categoryId\":\"22\"},\"status\":{\"privacyStatus\":\"public\"}}}",
+    "httpOk": true,
+    "error": null,
+    "ms": 7525
+  },
+  {
+    "caso": "T18",
+    "title": "TikTok Video",
+    "postId": null,
+    "success": true,
+    "detail": "{\"platform\":\"tiktok\",\"success\":true,\"info\":\"TikTok API implementation pending.\"}",
+    "httpOk": true,
+    "error": null,
+    "ms": 3468
+  },
+  {
+    "caso": "T19",
+    "title": "LinkedIn Texto",
+    "postId": null,
+    "success": false,
+    "detail": "{\"platform\":\"linkedin|75b990f3-35c3-4be6-bbb7-55f534058770\",\"success\":false,\"error\":\"LinkedIn access token not found. Please configure it in Settings.\"}",
+    "httpOk": true,
+    "error": "LinkedIn access token not found. Please configure it in Settings.",
+    "ms": 3230
+  },
+  {
+    "caso": "T20",
+    "title": "Twitter (nao conectado)",
+    "postId": null,
+    "success": true,
+    "detail": "{\"platform\":\"twitter\",\"success\":true}",
+    "httpOk": true,
+    "error": null,
+    "ms": 7439
+  }
+]

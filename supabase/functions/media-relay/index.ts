@@ -102,6 +102,10 @@ serve(async (req: Request) => {
     const allowedDomains = [
       "whatsapp.net",
       "googleusercontent.com",
+      "ggpht.com",
+      "ytimg.com",
+      "googlevideo.com",
+      "storage.googleapis.com",
       "fbsbx.com",
       "fbcdn.net",
       "facebook.com",

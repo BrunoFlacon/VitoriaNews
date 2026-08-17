@@ -19,6 +19,7 @@ interface UseOmniSearchReturn {
   setIsOpen: (isOpen: boolean) => void;
   clearSearch: () => void;
   refresh: () => void;
+  performSearch: (query: string) => Promise<void>;
 }
 
 export function useOmniSearch(options: UseOmniSearchOptions = {}): UseOmniSearchReturn {
@@ -114,6 +115,7 @@ export function useOmniSearch(options: UseOmniSearchOptions = {}): UseOmniSearch
     setQuery,
     setIsOpen,
     clearSearch,
-    refresh
+    refresh,
+    performSearch
   };
 }

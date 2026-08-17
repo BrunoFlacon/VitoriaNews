@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => {
           ws: true,
           rewrite: (path) => path.replace(/^\/supabase/, ''),
           configure: (proxy) => {
+            // Edge functions com cold start podem demorar >30s (default do proxy Vite)
+            proxy.proxyTimeout = 180000;
+            proxy.timeout = 180000;
             proxy.on('proxyReq', (proxyReq, req) => {
               proxyReq.setHeader('origin', env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co');
             });

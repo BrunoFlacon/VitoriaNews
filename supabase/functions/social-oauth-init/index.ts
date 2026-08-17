@@ -21,6 +21,16 @@ function validateOAuthConfig(provider: string, creds: any) {
       throw new Error(`Configuração ${provider.toUpperCase()} incompleta: app_id ou app_secret ausentes nas configurações.`);
     }
   }
+  if (provider === "linkedin") {
+    if (!creds.client_id || !creds.client_secret) {
+      throw new Error("Configuração LINKEDIN incompleta: client_id ou client_secret ausentes nas configurações.");
+    }
+  }
+  if (provider === "tiktok") {
+    if (!creds.client_key || !creds.client_secret) {
+      throw new Error("Configuração TIKTOK incompleta: client_key ou client_secret ausentes nas configurações.");
+    }
+  }
 }
 
 async function logOAuth(supabase: any, data: { user_id: string; provider: string; stage: string; request_payload?: any; response_payload?: any }) {
@@ -95,12 +105,22 @@ serve(async (req: Request) => {
     };
 
     // Format credentials for validation
+    // ⚠️ client_id SÓ com fallback do Google quando a plataforma é google/youtube
     const formattedCreds: any = {
       client_id: getVal("client_id", "GOOGLE_CLIENT_ID") || getVal("youtube_id", "GOOGLE_CLIENT_ID"),
       client_secret: getVal("client_secret", "GOOGLE_CLIENT_SECRET"),
-      app_id: getVal("app_id", "META_APP_ID") || getVal("client_id", "THREADS_CLIENT_ID"),
-      app_secret: getVal("app_secret", "META_APP_SECRET") || getVal("client_secret", "THREADS_CLIENT_SECRET"),
+      client_key: getVal("client_key", "TIKTOK_CLIENT_KEY"),
+      app_id: getVal("app_id", "META_APP_ID"),
+      app_secret: getVal("app_secret", "META_APP_SECRET"),
     };
+
+    // LinkedIn/TikTok leem do próprio banco, sem fallback genérico de outras plataformas
+    if (platform === "linkedin" || platform === "tiktok") {
+      const ownCreds = await getPlatformCreds(platform) || {};
+      formattedCreds.client_id = ownCreds.client_id || formattedCreds.client_id || Deno.env.get("LINKEDIN_CLIENT_ID");
+      formattedCreds.client_key = ownCreds.client_key || formattedCreds.client_key || Deno.env.get("TIKTOK_CLIENT_KEY");
+      formattedCreds.client_secret = ownCreds.client_secret || formattedCreds.client_secret || Deno.env.get(`${platform.toUpperCase()}_CLIENT_SECRET`);
+    }
 
     validateOAuthConfig(platform, formattedCreds);
 
@@ -111,8 +131,10 @@ serve(async (req: Request) => {
     let authUrl = "";
 
     if (platform === "google" || platform === "youtube") {
-      // Unifica os escopos do YouTube e do Google Business (Maps, etc) para pedir tudo numa única vez
-      const scopes = "openid profile email https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/business.manage";
+      // Escopos do YouTube apenas. NÃO incluir business.manage (Google Business Profile):
+      // é um escopo restrito do Google que retorna "servicerestricted / Serviço indisponível"
+      // na tela de consentimento para contas sem permissão — bloqueando a conexão.
+      const scopes = "openid profile email https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube";
 
       authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` + new URLSearchParams({
         client_id: formattedCreds.client_id,
@@ -218,14 +240,37 @@ serve(async (req: Request) => {
         code_challenge: challenge,
         code_challenge_method: "S256"
       });
+    } else if (platform === "linkedin") {
+      // LinkedIn usa client_id (NUNCA app_id do Meta — corrige contaminação do fallback)
+      const linkedinId = getVal("client_id", "LINKEDIN_CLIENT_ID");
+      if (!linkedinId) throw new Error("Client ID do LinkedIn não configurado. Salve client_id/client_secret na aba de APIs ou configure LINKEDIN_CLIENT_ID nos Secrets.");
+
+      authUrl = `https://www.linkedin.com/oauth/v2/authorization?` + new URLSearchParams({
+        client_id: linkedinId,
+        redirect_uri: redirect_uri,
+        response_type: "code",
+        scope: "openid profile email w_member_social",
+        state: state
+      });
+    } else if (platform === "tiktok") {
+      // TikTok usa client_key (NUNCA app_id/client_id — parâmetro correto do endpoint)
+      const tiktokKey = getVal("client_key", "TIKTOK_CLIENT_KEY") || getVal("client_id", "TIKTOK_CLIENT_ID");
+      if (!tiktokKey) throw new Error("Client Key do TikTok não configurado. Salve client_key/client_secret na aba de APIs ou configure TIKTOK_CLIENT_KEY nos Secrets.");
+
+      authUrl = `https://www.tiktok.com/v2/auth/authorize/?` + new URLSearchParams({
+        client_key: tiktokKey,
+        redirect_uri: redirect_uri,
+        response_type: "code",
+        scope: "user.info.basic,video.list,video.publish",
+        state: state
+      });
     } else {
-      // Fallback para as outras (LinkedIn, TikTok, etc - mantendo a lógica anterior simplificada)
-      const clientId = formattedCreds.app_id || formattedCreds.client_id || getVal("client_id", `${platform.toUpperCase()}_CLIENT_ID`);
+      // Fallback para as outras (Pinterest, Snapchat — mantendo a lógica anterior simplificada)
+      // ⚠️ NUNCA usar formattedCreds.app_id aqui (cai no META_APP_ID e contamina outras plataformas)
+      const clientId = getVal("client_id", `${platform.toUpperCase()}_CLIENT_ID`);
       if (!clientId) throw new Error(`Client ID para ${platform} não encontrado.`);
       
       const endpoints: any = {
-        linkedin: "https://www.linkedin.com/oauth/v2/authorization",
-        tiktok: "https://www.tiktok.com/v2/auth/authorize/",
         pinterest: "https://www.pinterest.com/oauth/",
         snapchat: "https://accounts.snapchat.com/login/oauth2/authorize"
       };
@@ -237,7 +282,7 @@ serve(async (req: Request) => {
         redirect_uri: redirect_uri,
         state: state,
         response_type: "code",
-        scope: platform === "linkedin" ? "openid profile email w_member_social" : ""
+        scope: platform === "pinterest" ? "boards:read,pins:read,pins:write,boards:write" : ""
       });
     }
 

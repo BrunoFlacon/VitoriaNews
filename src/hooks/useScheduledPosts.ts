@@ -45,6 +45,20 @@ export interface ScheduledPost {
   } | null;
   platform_metrics?: PlatformMetricDetail[] | null;
   thumbnail_url?: string | null;
+  /**
+   * Registros de published_posts (url real, platform_post_id, metadata com
+   * targetProfileId/connectionId do perfil que PUBLICOU de verdade).
+   */
+  published_details?: Array<{
+    id: string;
+    post_id: string;
+    platform: string;
+    platform_post_id: string | null;
+    status: string | null;
+    url: string | null;
+    metadata: Record<string, any> | null;
+    published_at: string | null;
+  }> | null;
 }
 
 export interface CreatePostInput {
@@ -56,6 +70,42 @@ export interface CreatePostInput {
   scheduled_at?: Date;
   status?: ScheduledPost['status'];
   published_at?: string;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Resolve o file_url de uma mídia em URL de exibição:
+ * - URLs absolutas de terceiros (ex: dummy.pdf externo) → usa direto;
+ * - URLs do nosso storage (signed/public) → extrai o path e monta publicUrl;
+ * - Paths relativos → publicUrl padrão.
+ */
+function resolveMediaUrl(fileUrl: string | null | undefined): string | null {
+  if (!fileUrl) return null;
+
+  // URL absoluta de terceiros (não é do nosso storage): usar direto
+  if (/^https?:\/\//i.test(fileUrl) && !fileUrl.includes('supabase.co/storage/')) {
+    return fileUrl;
+  }
+
+  // URL do nosso storage → extrai o path (evita concatenar URL inteira)
+  if (fileUrl.includes('supabase.co/storage/')) {
+    const signMarker = '/object/sign/media/';
+    const publicMarker = '/object/public/media/';
+    let path = fileUrl;
+    if (path.includes(signMarker)) {
+      path = decodeURIComponent(path.split(signMarker)[1]?.split('?')[0] ?? '');
+    } else if (path.includes(publicMarker)) {
+      path = decodeURIComponent(path.split(publicMarker)[1]?.split('?')[0] ?? '');
+    }
+    if (path.startsWith('/')) path = path.substring(1);
+    if (!path) return null;
+    const { data: pub } = supabase.storage.from('media').getPublicUrl(path);
+    return pub.publicUrl;
+  }
+
+  // Path relativo simples (UUID.ext) → publicUrl padrão
+  const { data: pub } = supabase.storage.from('media').getPublicUrl(fileUrl);
+  return pub.publicUrl;
 }
 
 export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}) {
@@ -153,7 +203,7 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
       }
     }
 
-    // Resolve media_ids UUIDs → signed URLs
+    // Resolve media_ids UUIDs → URLs (absolutas de terceiros ou do storage)
     const allMediaIds = [...new Set((postsData || []).flatMap(p => p.media_ids || []))];
     const mediaUrlMap: Record<string, string | null> = {};
 
@@ -165,19 +215,24 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
 
       if (mediaRecords) {
         mediaRecords.forEach((m) => {
-          let path = m.file_url;
-          if (path.includes('supabase.co/storage/')) {
-            const signMarker = '/object/sign/media/';
-            const publicMarker = '/object/public/media/';
-            if (path.includes(signMarker)) {
-              path = decodeURIComponent(path.split(signMarker)[1]?.split('?')[0] ?? '');
-            } else if (path.includes(publicMarker)) {
-              path = decodeURIComponent(path.split(publicMarker)[1]?.split('?')[0] ?? '');
-            }
-            if (path.startsWith('/')) path = path.substring(1);
-          }
-          const { data: pub } = supabase.storage.from('media').getPublicUrl(path);
-          mediaUrlMap[m.id] = pub.publicUrl;
+          mediaUrlMap[m.id] = resolveMediaUrl(m.file_url);
+        });
+      }
+    }
+
+    // Resolve published_posts → links reais + perfil que publicou (metadata.targetProfileId)
+    const publishedMap: Record<string, any[]> = {};
+    if (postIds.length > 0) {
+      const { data: publishedData } = await supabase
+        .from('published_posts')
+        .select('*')
+        .in('post_id', postIds)
+        .order('published_at', { ascending: false });
+
+      if (publishedData) {
+        publishedData.forEach((pp) => {
+          if (!publishedMap[pp.post_id]) publishedMap[pp.post_id] = [];
+          publishedMap[pp.post_id].push(pp);
         });
       }
     }
@@ -192,7 +247,8 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
         status: post.status as ScheduledPost['status'],
         media_urls: (post.media_ids || []).map(id => mediaUrlMap[id] ?? null),
         metrics: metrics,
-        platform_metrics: platformMetrics
+        platform_metrics: platformMetrics,
+        published_details: publishedMap[post.id] || null,
       };
     });
   };
@@ -257,6 +313,7 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
           orientation: input.orientation || 'horizontal',
           status,
           scheduled_at: input.scheduled_at?.toISOString() || null,
+          metadata: input.metadata || {},
         })
         .select()
         .single();
@@ -316,6 +373,16 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
       }
       if (updates.status !== undefined) updateData.status = updates.status;
       if (updates.published_at !== undefined) updateData.published_at = updates.published_at;
+      if (updates.metadata !== undefined) {
+        // Merge com metadata existente (não sobrescreve tudo)
+        const { data: existing } = await supabase
+          .from('scheduled_posts')
+          .select('metadata')
+          .eq('id', postId)
+          .eq('user_id', user.id)
+          .maybeSingle();
+        updateData.metadata = { ...(existing?.metadata || {}), ...updates.metadata };
+      }
 
       const { error } = await supabase
         .from('scheduled_posts')

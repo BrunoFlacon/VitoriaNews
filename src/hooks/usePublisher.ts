@@ -28,7 +28,8 @@ export function usePublisher() {
     postId: string,
     platforms: string[],
     content: string,
-    mediaUrls: string[] = []
+    mediaUrls: string[] = [],
+    title?: string
   ): Promise<PublishResponse | null> => {
     if (!postId || !platforms.length || !content) {
       toast({
@@ -60,6 +61,7 @@ export function usePublisher() {
             platforms,
             content,
             mediaUrls,
+            title,
           }),
         }
       );
@@ -116,7 +118,8 @@ export function usePublisher() {
   const publishNow = async (
     content: string,
     platforms: string[],
-    mediaUrls: string[] = []
+    mediaUrls: string[] = [],
+    title?: string
   ): Promise<string | null> => {
     // First create the post, then publish immediately
     try {
@@ -143,7 +146,7 @@ export function usePublisher() {
       if (error) throw error;
 
       // Then publish
-      await publishPost(post.id, platforms, content, mediaUrls);
+      await publishPost(post.id, platforms, content, mediaUrls, title);
 
       return post.id;
     } catch (error) {

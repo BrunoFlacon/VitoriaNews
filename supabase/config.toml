@@ -52,6 +52,9 @@ verify_jwt = false
 [functions.publish-post]
 verify_jwt = false
 
+[functions.process-scheduled-posts]
+verify_jwt = false
+
 [functions.sync-telegram-info]
 verify_jwt = false
 

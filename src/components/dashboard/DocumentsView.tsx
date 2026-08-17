@@ -422,21 +422,24 @@ export const DocumentsView = () => {
     setUploading(true);
     try {
       let count = 0;
+      const failedUploads: string[] = [];
       for (const file of Array.from(uploadedFilesList)) {
         const fileExt = file.name.split(".").pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
 
-        // Upload to storage
+        // Upload to storage primeiro — sem arquivo no bucket, o registro no banco seria órfão
         const { error: uploadError } = await supabase.storage
           .from("documents")
           .upload(filePath, file);
 
         if (uploadError) {
-          console.warn("Upload de storage falhou, tentando salvar registro direto:", uploadError.message);
+          console.warn("Upload de storage falhou:", uploadError.message);
+          failedUploads.push(`${file.name}: ${uploadError.message}`);
+          continue;
         }
 
-        // Save to 'documents' table
+        // Só registra no banco se o arquivo existe no bucket
         const { error: dbError } = await supabase
           .from("documents")
           .insert({
@@ -448,14 +451,26 @@ export const DocumentsView = () => {
             author_id: user.id
           });
 
-        if (dbError) throw dbError;
+        if (dbError) {
+          // Remove o arquivo físico para não deixar órfão no bucket
+          await supabase.storage.from("documents").remove([filePath]);
+          throw dbError;
+        }
         count++;
       }
 
-      toast({
-        title: "Upload concluído!",
-        description: `${count} arquivo(s) registrado(s) no banco de dados com sucesso.`
-      });
+      if (count === 0 && failedUploads.length > 0) {
+        toast({
+          variant: "destructive" as any,
+          title: "Nenhum arquivo foi enviado",
+          description: failedUploads.slice(0, 3).join(" | "),
+        });
+      } else {
+        toast({
+          title: "Upload concluído!",
+          description: `${count} arquivo(s) registrado(s) no banco de dados com sucesso.${failedUploads.length > 0 ? ` ${failedUploads.length} falharam no storage.` : ""}`
+        });
+      }
       fetchAllFiles();
     } catch (error: any) {
       toast({

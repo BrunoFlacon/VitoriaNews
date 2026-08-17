@@ -254,6 +254,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       sharedChannels.set(channelName, entry);
 
       const invalidateConnections = () => {
+        if (document.hidden) return;
         Promise.resolve().then(() =>
           queryClient.invalidateQueries({ queryKey: ['social_connections_all', user!.id] })
         );
@@ -379,6 +380,16 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       localStorage.setItem("oauth_platform", platform);
 
+      // Guarda o token da sessão p/ as páginas de callback (mesmo origin) finalizarem
+      // a conexão com autorização real de usuário (não anonKey → 400 Invalid authentication).
+      try {
+        if (session?.session?.access_token) {
+          localStorage.setItem("oauth_user_token", session.session.access_token);
+        }
+      } catch (e) {
+        console.warn("[OAuth] Falha ao salvar token de sessão para o callback:", e);
+      }
+
       const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       
       let origin = window.location.origin;
@@ -410,6 +421,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       // Abre popup IMEDIATAMENTE (síncrono com o clique do usuário) p/ evitar bloqueio
       const LOADING_HTML = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;background:#f5f5f5"><p>Aguardando autoriza&ccedil;&atilde;o...</p></body></html>';
       let popup: Window | null = null;
+      let popupIsCrossOrigin = false;
       try {
         popup = window.open('about:blank', `oauth_${platform}`, `width=${width},height=${height},left=${left},top=${top},toolbar=no,menubar=no,scrollbars=yes,resizable=yes`);
       } catch (e) {
@@ -520,6 +532,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           popup = window.open(finalUrl, '_blank', `width=${width},height=${height},left=${left},top=${top}`);
         }
 
+        // A popup agora está em origem cruzada (threads.net, accounts.google.com, x.com, ...).
+        // Ler popup.closed daqui em diante dispara warnings de COOP no console e o estado
+        // é inobservável por design — o polling abaixo usa a fonte de verdade do servidor.
+        popupIsCrossOrigin = true;
+
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";
         toast({ title: "Erro de rede", description: errorMessage, variant: "destructive" });
@@ -582,13 +599,17 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
                     return;
                   }
 
-                  // Invalid redirect_uri in local mode means the bridge needs production setup
-                  if (isLocal && errorMsg.includes("Invalid redirect_uri")) {
-                    console.warn("[OAUTH] redirect_uri inválido em modo local — a conexão precisa ser concluída em produção.");
+                  // Invalid redirect_uri — mostra o erro real do provider + redirect_uri usado
+                  if (errorMsg.includes("Invalid redirect_uri")) {
+                    console.warn("[OAUTH] redirect_uri rejeitado pelo provider. URI enviada:", redirectUri, "| Erro:", errorMsg);
                     await finalize(true);
+                    const threadsHelp = platform === 'threads'
+                      ? `O Threads (Meta) exige o redirect_uri registrado EXATAMENTE no painel: developers.facebook.com → Apps → seu app → Use cases → Threads → Settings → "Redirect callback URLs". O erro 191 significa que a URI cadastrada lá é diferente de: ${redirectUri} (confira barra final "/", "www", http/https).`
+                      : `${errorMsg} — Redirect URI enviada: ${redirectUri}. Verifique se este endereço está cadastrado exatamente no painel do app (Meta/X/etc.).`;
                     toast({
-                      title: "Modo local detectado",
-                      description: `A conexão com ${platform} requer deploy em produção para finalizar.`,
+                      title: `Erro ao conectar ${platform}`,
+                      description: threadsHelp,
+                      variant: "destructive",
                     });
                     await refetch();
                     return;
@@ -649,25 +670,60 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       };
 
       let pendingCloseCheck = false;
-      const pollInterval = setInterval(() => {
+      const pollInterval = setInterval(async () => {
         if (pendingCloseCheck) return;
         pendingCloseCheck = true;
         try {
-          if (!popup || popup.closed) {
-            clearInterval(pollInterval);
-            finalize().catch(() => {});
-            return;
+          // 1) Acelerador: popup fechada (origem acessível, ex.: sem COOP)
+          //    Só é observável antes de navegar para o provider (about:blank).
+          if (!popupIsCrossOrigin) {
+            try {
+              if (!popup || popup.closed) {
+                clearInterval(pollInterval);
+                await finalize();
+                return;
+              }
+            } catch (e) {
+              // COOP (TikTok/Google/Facebook...): o estado da popup é inobservável.
+              // NÃO finalizar por aqui — continuar esperando a fonte de verdade abaixo.
+            }
           }
-        } catch (e) {
-          // Accessing popup.closed can throw a SecurityError if the popup is on a different origin
-          // with COOP (Cross-Origin-Opener-Policy). This means the popup is still open.
-          // Do not clear the interval or finalize yet. Keep polling.
+
+          // 2) Fonte de verdade: a conexão criada no servidor (cobre COOP e popups cross-origin)
+          try {
+            const { data: conns } = await (supabase as any)
+              .from('social_connections')
+              .select('id')
+              .eq('user_id', user!.id)
+              .eq('platform', platform)
+              .eq('is_connected', true);
+            if (conns && conns.length > 0) {
+              clearInterval(pollInterval);
+              await finalize(true);
+              toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
+              return;
+            }
+          } catch (pollErr) {
+            // Continua o polling na próxima rodada
+          }
         } finally {
           pendingCloseCheck = false;
         }
       }, 4000);
 
-      setTimeout(() => finalize(), 300000);
+      // Encerra com mensagem útil (em vez de ficar preso em "Aguardando autorização...")
+      setTimeout(() => {
+        if (isFinalized) return;
+        isFinalized = true;
+        clearInterval(pollInterval);
+        window.removeEventListener("message", handleMessage);
+        localStorage.removeItem("oauth_platform");
+        refetch().catch(() => {});
+        toast({
+          title: "Aguardando confirmação",
+          description: `Se você autorizou ${platform}, a conexão é concluída em instantes — confira a lista de conexões. Em modo local, conclua pela ponte de produção (webradiovitoria.com.br).`,
+        });
+      }, 120000);
 
     } catch (error) {
       toast({

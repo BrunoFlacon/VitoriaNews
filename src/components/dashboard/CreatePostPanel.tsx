@@ -585,6 +585,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           media_type: selectedMedia || "image",
           orientation,
           scheduled_at: scheduledAt,
+          metadata: { videoTitle: videoTitle.trim() || null },
         });
 
         if (success) {
@@ -605,6 +606,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           media_type: selectedMedia || "image",
           orientation,
           scheduled_at: scheduledAt,
+          metadata: { videoTitle: videoTitle.trim() || null },
         });
 
         if (post) {
@@ -1962,6 +1964,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     media_type: selectedMedia || "image",
                     orientation,
                     scheduled_at: scheduledDate ? new Date(scheduledDate) : undefined,
+                    metadata: { videoTitle: videoTitle.trim() || null },
                   });
                   if (success) {
                     await submitForApproval(editingPost.id);
@@ -1974,6 +1977,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     platforms: selectedPlatforms,
                     media_type: selectedMedia || "image",
                     orientation,
+                    metadata: { videoTitle: videoTitle.trim() || null },
                   });
                   if (post) {
                     await submitForApproval(post.id);
@@ -1997,7 +2001,12 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                 onClick={async () => {
                   if (!content.trim() || selectedPlatforms.length === 0) return;
                   const mediaUrls = uploadedFiles.map(f => f.file_url);
-                  const result = await publishNow(content.trim(), selectedPlatforms, mediaUrls);
+                  const result = await publishNow(
+                    content.trim(),
+                    selectedPlatforms,
+                    mediaUrls,
+                    videoTitle.trim() || undefined
+                  );
                   if (result) {
                     setContent("");
                     setSelectedPlatforms([]);

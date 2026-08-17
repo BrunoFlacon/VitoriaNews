@@ -1,0 +1,50 @@
+[
+  {
+    "caso": "T04R",
+    "title": "Instagram Foto (corrigido)",
+    "success": false,
+    "detail": "{\"platform\":\"instagram|11df6dcd-9f04-43bf-b045-7f5d51e7010f\",\"success\":false,\"error\":\"Instagram Publish Error: Media ID is not available\"}",
+    "ms": 10694,
+    "error": "Instagram Publish Error: Media ID is not available"
+  },
+  {
+    "caso": "T05R",
+    "title": "Instagram Reels (corrigido)",
+    "success": false,
+    "detail": "{\"platform\":\"instagram|11df6dcd-9f04-43bf-b045-7f5d51e7010f\",\"success\":false,\"error\":\"Instagram Publish Error: Media ID is not available\"}",
+    "ms": 4037,
+    "error": "Instagram Publish Error: Media ID is not available"
+  },
+  {
+    "caso": "T06R",
+    "title": "Instagram Story (corrigido)",
+    "success": false,
+    "detail": "{\"platform\":\"instagram|11df6dcd-9f04-43bf-b045-7f5d51e7010f\",\"success\":false,\"error\":\"Instagram Publish Error: Media ID is not available\"}",
+    "ms": 20545,
+    "error": "Instagram Publish Error: Media ID is not available"
+  },
+  {
+    "caso": "T07R",
+    "title": "Threads Texto (corrigido)",
+    "success": false,
+    "detail": "{\"platform\":\"threads|1694f354-98d9-4105-abaa-df4dc995c189\",\"success\":false,\"error\":\"Invalid OAuth access token - Cannot parse access token\"}",
+    "ms": 1907,
+    "error": "Invalid OAuth access token - Cannot parse access token"
+  },
+  {
+    "caso": "T19R",
+    "title": "LinkedIn Texto (corrigido)",
+    "success": true,
+    "detail": "{\"platform\":\"linkedin\",\"success\":true,\"info\":\"PENDENTE: token OK, mas Person URN não configurada — publicação real não enviada.\",\"pendingUrn\":true}",
+    "ms": 1102,
+    "error": null
+  },
+  {
+    "caso": "T20R",
+    "title": "Twitter (corrigido)",
+    "success": false,
+    "detail": "{\"platform\":\"twitter|514d7df2-5fc4-43c4-9d3b-f110e6be7814\",\"success\":false,\"error\":\"X (Twitter) não conectado. Conecte sua conta em Configurações.\"}",
+    "ms": 1583,
+    "error": "X (Twitter) não conectado. Conecte sua conta em Configurações."
+  }
+]

@@ -63,6 +63,9 @@ export const AudienceTracking = ({
 
   const allChannels = audienceBreakdown.flatMap(b => b.channels || []);
   const availablePlatforms = [...new Set(allChannels.map(ch => ch.platform).filter(Boolean))] as string[];
+  // Common social media platforms fallback if no channels detected yet
+  const commonPlatforms = ['instagram', 'facebook', 'twitter', 'linkedin', 'tiktok'];
+  const allAvailablePlatforms = availablePlatforms.length > 0 ? availablePlatforms : commonPlatforms;
   const displayPlatformName = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
 
   const filtered = allChannels.filter(ch => {
@@ -108,7 +111,7 @@ export const AudienceTracking = ({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas</SelectItem>
-                  {availablePlatforms.map(p => (
+                  {allAvailablePlatforms.map(p => (
                     <SelectItem key={p} value={p}>{displayPlatformName(p)}</SelectItem>
                   ))}
                 </SelectContent>

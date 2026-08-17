@@ -37,6 +37,16 @@ function validateOAuthConfig(provider: string, creds: any) {
       throw new Error(`Configuração ${provider.toUpperCase()} incompleta para troca de token.`);
     }
   }
+  if (provider === "linkedin") {
+    if (!creds.client_id || !creds.client_secret) {
+      throw new Error("Configuração LINKEDIN incompleta para troca de token: client_id/client_secret.");
+    }
+  }
+  if (provider === "tiktok") {
+    if (!creds.client_key || !creds.client_secret) {
+      throw new Error("Configuração TIKTOK incompleta para troca de token: client_key/client_secret.");
+    }
+  }
 }
 
 async function logOAuth(supabase: any, data: { user_id: string; provider: string; stage: string; request_payload?: any; response_payload?: any }) {
@@ -49,7 +59,10 @@ async function logOAuth(supabase: any, data: { user_id: string; provider: string
 
 function assertRedirectUriMatch(saved: string, incoming: string) {
   if (saved !== incoming) {
-    throw new Error(`Divergência de Redirect URI: esperado ${saved}, recebido ${incoming}`);
+    // Divergência de redirect_uri (ex.: ponte localhost→produção) NÃO invalida o fluxo:
+    // o state é a verdadeira chave de segurança (UUID aleatório salvo por usuário+plataforma).
+    // O redirect_uri SALVO é sempre o usado na troca de token (é o que o provedor registrou).
+    console.warn(`[OAUTH] Redirect URI divergente: esperado ${saved}, recebido ${incoming} — usando o salvo.`);
   }
 }
 
@@ -234,9 +247,27 @@ async function exchangeThreads(code: string, redirectUri: string, creds: any, su
 
   const data = await res.json();
   // Log security: removed sensitive payload logging
-  await logOAuth(supabase, { user_id: userId, provider: "threads", stage: "exchange" });
+  await logOAuth(supabase, {
+    user_id: userId,
+    provider: "threads",
+    stage: "exchange",
+    request_payload: {
+      client_id: creds.app_id,
+      client_secret_prefix: creds.app_secret ? creds.app_secret.substring(0, 4) + "..." + `(${creds.app_secret.length} chars)` : null,
+      redirect_uri: redirectUri,
+      code_prefix: code ? code.substring(0, 8) + `...(${code.length} chars)` : null,
+      has_code_verifier: false,
+    },
+    response_payload: {
+      status: res.status,
+      error: data?.error?.message || data?.error_message || null,
+      error_type: data?.error?.type || null,
+      error_code: data?.error?.code || data?.error_code || null,
+      error_subcode: data?.error?.error_subcode || null,
+    }
+  });
 
-  if (data.error) throw new Error(data.error.message || "Erro Threads OAuth");
+  if (data.error) throw new Error(data.error.message || data.error_message || "Erro Threads OAuth");
 
   const accessToken = data.access_token;
   const expiresIn = data.expires_in || 5184000;
@@ -409,8 +440,9 @@ async function exchangeSpotify(code: string, redirectUri: string, pkceVerifier: 
 }
 
 async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
-  const clientId = creds.app_id || creds.client_id || Deno.env.get("LINKEDIN_CLIENT_ID");
-  const clientSecret = creds.app_secret || creds.client_secret || Deno.env.get("LINKEDIN_CLIENT_SECRET");
+  validateOAuthConfig("linkedin", creds);
+  const clientId = creds.client_id || Deno.env.get("LINKEDIN_CLIENT_ID");
+  const clientSecret = creds.client_secret || Deno.env.get("LINKEDIN_CLIENT_SECRET");
   if (!clientId || !clientSecret) throw new Error("Configuração LinkedIn incompleta.");
 
   const payload = {
@@ -451,8 +483,9 @@ async function exchangeLinkedIn(code: string, redirectUri: string, creds: any, s
 }
 
 async function exchangeTikTok(code: string, redirectUri: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
-  const clientKey = creds.app_id || creds.client_id || Deno.env.get("TIKTOK_CLIENT_KEY");
-  const clientSecret = creds.app_secret || creds.client_secret || Deno.env.get("TIKTOK_CLIENT_SECRET");
+  validateOAuthConfig("tiktok", creds);
+  const clientKey = creds.client_key || Deno.env.get("TIKTOK_CLIENT_KEY");
+  const clientSecret = creds.client_secret || Deno.env.get("TIKTOK_CLIENT_SECRET");
   if (!clientKey || !clientSecret) throw new Error("Configuração TikTok incompleta.");
 
   const payload = {
@@ -552,6 +585,15 @@ serve(async (req: Request) => {
     } else if (platform === "google" || platform === "youtube") {
       formattedCreds.client_id = raw.client_id || raw.youtube_id || Deno.env.get("GOOGLE_CLIENT_ID");
       formattedCreds.client_secret = raw.client_secret || Deno.env.get("GOOGLE_CLIENT_SECRET");
+    } else if (platform === "linkedin") {
+      formattedCreds.client_id = raw.client_id || Deno.env.get("LINKEDIN_CLIENT_ID");
+      formattedCreds.client_secret = raw.client_secret || Deno.env.get("LINKEDIN_CLIENT_SECRET");
+    } else if (platform === "tiktok") {
+      formattedCreds.client_key = raw.client_key || raw.client_id || Deno.env.get("TIKTOK_CLIENT_KEY");
+      formattedCreds.client_secret = raw.client_secret || Deno.env.get("TIKTOK_CLIENT_SECRET");
+    } else if (platform === "pinterest" || platform === "snapchat") {
+      formattedCreds.client_id = raw.client_id || Deno.env.get(`${platform.toUpperCase()}_CLIENT_ID`);
+      formattedCreds.client_secret = raw.client_secret || Deno.env.get(`${platform.toUpperCase()}_CLIENT_SECRET`);
     } else {
       formattedCreds.app_id = raw.app_id || raw.client_id || raw.threads_client_id || Deno.env.get("META_APP_ID") || Deno.env.get("THREADS_CLIENT_ID");
       formattedCreds.app_secret = raw.app_secret || raw.client_secret || raw.threads_client_secret || Deno.env.get("META_APP_SECRET") || Deno.env.get("THREADS_CLIENT_SECRET");

@@ -38,7 +38,6 @@ export const DateTimeWeather = () => {
     forecast?: { day: string; temp: number; icon: any }[];
   } | null>(null);
   const [showGreeting, setShowGreeting] = useState(true);
-  const [lastPeriod, setLastPeriod] = useState("");
   const [provider, setProvider] = useState<WeatherProvider>("open-meteo");
   const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
 
@@ -48,6 +47,8 @@ export const DateTimeWeather = () => {
     if (hour < 18) return "Boa tarde";
     return "Boa noite";
   };
+
+  const lastPeriodRef = useRef(getGreeting(new Date()));
 
   const displayName = profile?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || "Usuário";
 
@@ -65,13 +66,13 @@ export const DateTimeWeather = () => {
       const now = new Date();
       setTime(now);
       const currentPeriod = getGreeting(now);
-      if (currentPeriod !== lastPeriod) {
-        setLastPeriod(currentPeriod);
+      if (currentPeriod !== lastPeriodRef.current) {
+        lastPeriodRef.current = currentPeriod;
         setShowGreeting(true);
       }
     }, 60000);
     return () => clearInterval(timer);
-  }, [lastPeriod]);
+  }, []);
 
   useEffect(() => {
     const hideTimer = setTimeout(() => setShowGreeting(false), 300000);

@@ -128,22 +128,50 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
   const StatusIcon = status.icon;
   const MediaIcon = mediaTypeIcon[post.media_type as keyof typeof mediaTypeIcon] || FileText;
 
+  // 📌 Perfis que PUBLICARAM de verdade (metadata.targetProfileId em published_posts)
+  const publishedMap: Record<string, string | null> = {};
+  if (post.published_details?.length) {
+    post.published_details.forEach((pd) => {
+      const pid = pd.metadata?.targetProfileId || pd.metadata?.connectionId || null;
+      // Preferir o registro mais recente (published_details já vem ordenado desc)
+      if (!publishedMap[pd.platform]) publishedMap[pd.platform] = pid;
+    });
+  }
+
   const platforms = post.platforms
     .map(pId => {
       const [platformId, accountId] = pId.split("|");
       const platform = socialPlatforms.find(sp => sp.id === platformId);
-      let account = accountId ? connections.find(c => c.id === accountId) : undefined;
-      
+      let account: any;
+
+      // 1º) Perfil real publicado (evita cair no "primeiro conectado" das configurações)
+      const realProfileId = post.status === 'published' ? publishedMap[platformId] : null;
+      if (realProfileId) {
+        account = connections.find(c => c.id === realProfileId)
+          || connections.find(c => c.platform_user_id === realProfileId)
+          || connections.find(c => c.page_id === realProfileId);
+      }
+      // 2º) Perfil explícito no platforms (accountId)
+      if (!account && accountId) {
+        account = connections.find(c => c.id === accountId);
+      }
+      // 3º) Fallback: primeira conexão ativa
       if (!account) {
         account = connections.find(c => c.platform === platformId && c.is_connected);
       }
-      
+
       return { platform, account };
     })
     .filter(p => p.platform);
 
   const primaryPlatform = platforms[0];
   const metrics = (post as any).metrics || { likes: 0, comments: 0, shares: 0, views: 0 };
+
+  // Link real da publicação (published_posts.url) — prioriza a 1ª plataforma do post
+  const publishedLink =
+    post.published_details?.find((pd) => pd.url)?.url ||
+    post.published_details?.[0]?.url ||
+    null;
 
   return (
     <motion.div
@@ -225,6 +253,24 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
           {/* Media Preview */}
           {post.media_ids?.length > 0 && (
             <MediaPreview mediaIds={post.media_ids} mediaType={post.media_type} />
+          )}
+
+          {/* Link real da publicação */}
+          {post.status === 'published' && publishedLink && (
+            <a
+              href={publishedLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded-full transition-colors border-0"
+              title="Abrir publicação na rede social"
+            >
+              <Eye className="w-3 h-3" />
+              Ver publicação
+              <span className="text-primary/60 font-medium truncate max-w-[140px]">
+                {publishedLink.replace(/^https?:\/\/(www\.)?/, '')}
+              </span>
+            </a>
           )}
         </div>
 

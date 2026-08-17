@@ -23,7 +23,7 @@ function isNetworkAbortError(err: any): boolean {
 }
 
 const EDGE_FUNCTION_TIMEOUT_MS = 90000;
-const REGULAR_TIMEOUT_MS = 120000;
+const REGULAR_TIMEOUT_MS = 45000;
 
 const fetchWithTimeout: typeof fetch = (url, options) => {
   const controller = new AbortController();

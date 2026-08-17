@@ -1,6 +1,6 @@
 export interface PublishPayload {
   platform: string;
-  contentType: 'text' | 'image' | 'video' | 'audio' | 'carousel' | 'story' | 'live';
+  contentType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'carousel' | 'story' | 'live';
   content: string;
   mediaUrls?: string[];
   userId?: string;

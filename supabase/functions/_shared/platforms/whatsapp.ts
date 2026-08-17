@@ -1,6 +1,69 @@
 import { PublishPayload } from './dispatcher.ts';
 import { getMetaCredentials } from "../credentials.ts";
 
+// Limite de caption da Cloud API do WhatsApp
+const CAPTION_LIMIT = 1024;
+
+// Sobe a mídia para o WhatsApp (media_id) — elimina dependência de URL pública
+async function uploadWhatsAppMedia(
+  accessToken: string,
+  phoneNumberId: string,
+  mediaUrl: string,
+  mimeType: string,
+  fileName: string
+): Promise<string> {
+  const fileRes = await fetch(mediaUrl);
+  if (!fileRes.ok) {
+    throw new Error(`WhatsApp media: não foi possível baixar o arquivo da URL (HTTP ${fileRes.status}).`);
+  }
+  const bytes = new Uint8Array(await fileRes.arrayBuffer());
+  if (bytes.byteLength === 0) {
+    throw new Error("WhatsApp media: arquivo vazio (0 bytes).");
+  }
+
+  const boundary = `----SocialCanvasHub${Date.now().toString(36)}`;
+  const encoder = new TextEncoder();
+  const lines: Uint8Array[] = [];
+  const push = (s: string) => lines.push(encoder.encode(s));
+
+  push(`--${boundary}\r\n`);
+  push(`Content-Disposition: form-data; name="messaging_product"\r\n\r\nwhatsapp\r\n`);
+  push(`--${boundary}\r\n`);
+  push(`Content-Disposition: form-data; name="type"\r\n\r\n${mimeType}\r\n`);
+  push(`--${boundary}\r\n`);
+  push(`Content-Disposition: form-data; name="file"; filename="${fileName.replace(/[^\w.\-]/g, "_")}"\r\n`);
+  push(`Content-Type: ${mimeType}\r\n\r\n`);
+  lines.push(bytes);
+  push(`\r\n--${boundary}--\r\n`);
+
+  let totalLength = 0;
+  for (const l of lines) totalLength += l.byteLength;
+  const body = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const l of lines) {
+    body.set(l, offset);
+    offset += l.byteLength;
+  }
+
+  const uploadRes = await fetch(
+    `https://graph.facebook.com/v21.0/${phoneNumberId}/media`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": String(totalLength),
+      },
+      body,
+    }
+  );
+  const uploadData = await uploadRes.json().catch(() => ({}));
+  if (!uploadRes.ok || !uploadData?.id) {
+    throw new Error(`WhatsApp media upload error: ${uploadData?.error?.message || `HTTP ${uploadRes.status}`}`);
+  }
+  return uploadData.id;
+}
+
 async function ensureWhatsAppConversation(
   supabase: any,
   phoneNumberId: string,

@@ -6,9 +6,9 @@ export function getThreadsOAuthUrl(customClientId?: string) {
   }
 
   // Threads uses a specific redirect structure in some Meta Apps configurations
-  const redirectUri = `${window.location.origin}/oauth/callback/threads`;
+  const redirectUri = `${window.location.origin}/oauth/callback/threads`; // NOTE: Make sure this is exactly registered in the Meta App settings, sometimes with trailing slash.
 
-  const url = new URL("https://www.facebook.com/v21.0/dialog/oauth");
+  const url = new URL("https://threads.net/oauth/authorize");
 
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", redirectUri);

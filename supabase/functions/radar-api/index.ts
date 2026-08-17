@@ -3,6 +3,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { isSystemAccess as checkSystemAccess } from '../_shared/system-auth.ts';
 
 // Access Deno global
 declare const Deno: any;
@@ -36,7 +37,7 @@ serve(async (req: Request) => {
       authError = error;
     }
 
-    const isSystemAccess = apikeyHeader && (apikeyHeader === Deno.env.get('SUPABASE_ANON_KEY') || apikeyHeader === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'));
+    const isSystemAccess = await checkSystemAccess(supabaseClient, apikeyHeader, authHeader);
 
     if (!user && !isSystemAccess) {
       return new Response(JSON.stringify({ 
@@ -88,7 +89,7 @@ serve(async (req: Request) => {
 
           let targetUserId: string | null = null;
           
-          if (token === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
+          if (await checkSystemAccess(supabaseClient, null, 'Bearer ' + token)) {
               const { data: firstProfile } = await supabaseClient.from('profiles').select('id').limit(1).maybeSingle();
               targetUserId = firstProfile?.id || null;
               

@@ -2,13 +2,10 @@ import React from "react";
 import { Lightbulb, BarChart3 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
-interface FormatData {
-  type: string;
-  count: number;
-}
+import { FormatRecommendation } from "@/hooks/usePlatformMetrics";
 
 interface FormatRecommendationsProps {
-  data?: FormatData[];
+  data?: FormatRecommendation[];
 }
 
 export const FormatRecommendations = (props: FormatRecommendationsProps = {}) => {
@@ -35,7 +32,7 @@ export const FormatRecommendations = (props: FormatRecommendationsProps = {}) =>
           {data?.slice(0, 4).map((item, i) => (
             <div key={i} className="p-4 rounded-xl bg-muted/10 border border-border/30">
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-xs font-bold uppercase text-muted-foreground">{item.type}</span>
+                <span className="text-xs font-bold uppercase text-muted-foreground">{item.media_type || "Geral"}</span>
               </div>
               <p className="text-2xl font-bold text-white">{item.count.toLocaleString("pt-BR")}</p>
               <p className="text-xs text-muted-foreground">publicações</p>

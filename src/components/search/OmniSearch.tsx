@@ -5,6 +5,7 @@ import { SearchResults } from './SearchResults';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useCallback } from 'react';
 
 interface OmniSearchProps {
   isExpanded?: boolean;
@@ -20,7 +21,8 @@ export function OmniSearch({ isExpanded, setIsExpanded }: OmniSearchProps) {
     setQuery,
     setIsOpen,
     clearSearch,
-    duration
+    duration,
+    performSearch
   } = useOmniSearch({ limit: 8 });
 
   const isMobile = useIsMobile();
@@ -71,6 +73,15 @@ export function OmniSearch({ isExpanded, setIsExpanded }: OmniSearchProps) {
     }
   };
 
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      performSearch(query);
+      const event = new CustomEvent("system-search", { detail: { query } });
+      window.dispatchEvent(event);
+    }
+  }, [query, performSearch]);
+
   return (
     <div ref={containerRef} className="relative w-full max-w-2xl z-50">
       <div className={cn(
@@ -86,7 +97,11 @@ export function OmniSearch({ isExpanded, setIsExpanded }: OmniSearchProps) {
           onChange={(e) => {
             setQuery(e.target.value);
             if (!isOpen && e.target.value.length >= 2) setIsOpen(true);
+            // Dispatch system-search event for live filtering in AdvancedAnalytics
+            const event = new CustomEvent("system-search", { detail: { query: e.target.value.toLowerCase() } });
+            window.dispatchEvent(event);
           }}
+          onKeyDown={handleKeyDown}
           onFocus={() => {
             if (query.length >= 2) setIsOpen(true);
           }}
