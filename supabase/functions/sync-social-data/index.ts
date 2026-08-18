@@ -90,7 +90,7 @@ serve(async (req: Request) => {
             
             if (!data.error) {
               const followers = data.followers_count || data.fan_count || 0;
-              const profilePic = data.picture?.data?.url || conn.profile_image_url || "";
+              let profilePic = data.picture?.data?.url || conn.profile_image_url || "";
 
               // 2. Count Facebook posts via /feed (includes shared + own content)
               let postsCount: number | null = null;
@@ -177,7 +177,7 @@ serve(async (req: Request) => {
               );
               const data = await res.json();
               if (data && !data.error) {
-                const profilePic = data.profile_picture_url || conn.profile_image_url || "";
+                let profilePic = data.profile_picture_url || conn.profile_image_url || "";
                 const followersCount = data.followers_count || 0;
                 const postsCount = data.media_count || 0;
 
