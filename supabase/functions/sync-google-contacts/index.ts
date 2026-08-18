@@ -223,7 +223,7 @@ serve(async (req: Request) => {
     }
 
     return new Response(JSON.stringify({ success: !allFailed, count: results.filter(r => r.success).length, results }), {
-      status: allFailed ? 500 : 200,
+      status: 200,
       headers: { ...corsHeaders(req), "Content-Type": "application/json" }
     });
 

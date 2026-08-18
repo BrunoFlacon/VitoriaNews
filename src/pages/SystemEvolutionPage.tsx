@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { PresentationMode } from "@/components/PresentationMode";
+import { useSystem } from "@/contexts/SystemContext";
 interface Milestone {
   id: string;
   date: string;
@@ -104,6 +105,7 @@ const MilestoneItem = React.memo(({ m, showTech }: { m: Milestone, showTech: boo
 export default function SystemEvolutionPage() {
   const { profile, user } = useAuth();
   const { toast } = useToast();
+  const { settings } = useSystem();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [password, setPassword] = useState("");
@@ -312,7 +314,7 @@ export default function SystemEvolutionPage() {
                <span className="w-1.5 h-1.5 bg-theme/30 rotate-45" />
                <span>Out/2025 Social Hub</span>
                <span className="w-1.5 h-1.5 bg-theme/30 rotate-45" />
-               <span>© Jan/2026 Vitória Net</span>
+                <span>© Jan/2026 {settings?.platform_name || "Vitória News"}</span>
             </div>
 
             {/* Linha Inferior (Links menores à Esquerda sem copyright na direita) */}

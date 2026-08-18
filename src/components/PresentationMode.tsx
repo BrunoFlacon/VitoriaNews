@@ -130,7 +130,7 @@ export const PresentationMode: React.FC<PresentationModeProps> = ({ milestones, 
            )}
            
            <div className="text-transparent bg-clip-text bg-gradient-to-r from-[#4F8AFF] to-[#8B5CF6] font-display font-black tracking-tight text-4xl whitespace-nowrap">
-              {settings?.platform_name || "Vitória Net"}
+               {settings?.platform_name || "Vitória News"}
            </div>
         </div>
       </div>

@@ -115,6 +115,28 @@ serve(async (req: Request) => {
               const finalPostsCount = postsCount !== null ? postsCount : (conn.posts_count || 0);
               console.log(`[FB] ${conn.page_name}: finalPostsCount=${finalPostsCount}, conn.posts_count=${conn.posts_count}`);
 
+              // Upload profile photo to Supabase Storage for permanent serving
+              if (profilePic && profilePic.startsWith("http")) {
+                try {
+                  const imgResp = await fetch(profilePic);
+                  if (imgResp.ok) {
+                    const imgBlob = await imgResp.blob();
+                    const ct = imgResp.headers.get("content-type") || "image/jpeg";
+                    const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+                    const fileName = `facebook/${conn.platform_user_id || conn.id}.${ext}`;
+                    const { error: uploadError } = await supabase.storage
+                      .from("profile-photos")
+                      .upload(fileName, imgBlob, { contentType: ct, upsert: true });
+                    if (!uploadError) {
+                      const { data: pubUrl } = supabase.storage.from("profile-photos").getPublicUrl(fileName);
+                      profilePic = pubUrl.publicUrl;
+                    }
+                  }
+                } catch (e) {
+                  console.error(`[FB-PHOTO] image upload error:`, String(e));
+                }
+              }
+
               stats = {
                 user_id: conn.user_id,
                 platform: conn.platform,
@@ -158,6 +180,28 @@ serve(async (req: Request) => {
                 const profilePic = data.profile_picture_url || conn.profile_image_url || "";
                 const followersCount = data.followers_count || 0;
                 const postsCount = data.media_count || 0;
+
+                // Upload profile photo to Supabase Storage for permanent serving
+                if (profilePic && profilePic.startsWith("http")) {
+                  try {
+                    const imgResp = await fetch(profilePic);
+                    if (imgResp.ok) {
+                      const imgBlob = await imgResp.blob();
+                      const ct = imgResp.headers.get("content-type") || "image/jpeg";
+                      const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+                      const fileName = `instagram/${conn.platform_user_id || conn.id}.${ext}`;
+                      const { error: uploadError } = await supabase.storage
+                        .from("profile-photos")
+                        .upload(fileName, imgBlob, { contentType: ct, upsert: true });
+                      if (!uploadError) {
+                        const { data: pubUrl } = supabase.storage.from("profile-photos").getPublicUrl(fileName);
+                        profilePic = pubUrl.publicUrl;
+                      }
+                    }
+                  } catch (e) {
+                    console.error(`[IG-PHOTO] image upload error:`, String(e));
+                  }
+                }
 
                 stats = {
                   user_id: conn.user_id, platform: conn.platform, platform_user_id: igUserId,

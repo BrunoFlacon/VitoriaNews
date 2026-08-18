@@ -9,6 +9,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { SystemFooter } from "@/components/SystemFooter";
+import { useSystem } from "@/hooks/useSystem";
 
 const loginSchema = z.object({
   email: z.string().email("Email inválido"),
@@ -30,6 +31,7 @@ const Login = () => {
   const { login, user, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { settings } = useSystem();
   useEffect(() => {
     if (user) {
       navigate("/dashboard", { replace: true });
@@ -70,7 +72,7 @@ const Login = () => {
           toast({ title: "Erro ao enviar 2FA", description: otpRes.error, variant: "destructive" });
         }
       } else {
-        toast({ title: "Bem-vindo ao Vitória Net.", description: "Login realizado com sucesso." });
+        toast({ title: `Bem-vindo ao ${settings?.platform_name || "Vitória News"}.`, description: "Login realizado com sucesso." });
         navigate("/dashboard", { replace: true });
       }
     } else {

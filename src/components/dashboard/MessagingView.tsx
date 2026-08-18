@@ -29,6 +29,7 @@ import { SafeImage } from "@/components/ui/SafeImage";
 import { ChatList } from "./messaging/ChatList";
 import { ChatWindow } from "./messaging/ChatWindow";
 import { useWhatsAppRealtime } from "@/hooks/useWhatsAppRealtime";
+import { useSystem } from "@/contexts/SystemContext";
 
 
 interface MessagingChannel {
@@ -166,6 +167,7 @@ const getPlatformStyles = (platformId: string|null) => {
 export const MessagingView = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { settings } = useSystem();
   const { addNotification } = useNotifications();
   const { connections } = useSocialConnections();
   const queryClient = useQueryClient();
@@ -2803,7 +2805,7 @@ export const MessagingView = () => {
           </div>
 
           <div className="p-4 border-t border-white/5 text-center">
-             <p className="text-[9px] text-white/20 font-medium uppercase tracking-[0.2em]">Vitória Net Advanced Messaging Business Module v3.4</p>
+             <p className="text-[9px] text-white/20 font-medium uppercase tracking-[0.2em]">{settings?.platform_name || "Vitória News"} Advanced Messaging Business Module v3.4</p>
           </div>
         </DialogContent>
       </Dialog>

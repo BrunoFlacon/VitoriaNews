@@ -378,7 +378,7 @@ export const Sidebar = memo(({
             transition={{ duration: 0.22, ease: "easeOut" }}
             className="font-display font-black text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[#4F8AFF] to-[#8B5CF6] truncate"
           >
-            {settings?.platform_name || "Vitória Net"}
+            {settings?.platform_name || "Vitória News"}
           </motion.span>
         )}
       </div>

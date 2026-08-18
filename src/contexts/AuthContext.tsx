@@ -184,59 +184,51 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return;
     }
 
+    let cancelled = false;
+
+    const setupPresence = async () => {
+      // Remove any existing channel first (prevents "cannot add presence callbacks after subscribe")
+      if (presenceChannelRef.current) {
+        await supabase.removeChannel(presenceChannelRef.current).catch(() => {});
+        presenceChannelRef.current = null;
+      }
+      if (cancelled) return;
+
+      const channel = supabase.channel('online-users', {
+        config: { presence: { key: user.id } },
+      });
+
+      channel
+        .on('presence', { event: 'sync' }, () => {
+          const newState = channel.presenceState();
+          const onlineIds: Record<string, any> = {};
+          Object.keys(newState).forEach(key => {
+            const presenceEntry = newState[key][0] as any;
+            if (presenceEntry.user_id) {
+              onlineIds[presenceEntry.user_id] = presenceEntry;
+            }
+          });
+          setOnlineUsersMap(onlineIds);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            channel.track({ user_id: user.id, online_at: new Date().toISOString() }).catch(() => {});
+          }
+        });
+
+      if (cancelled) {
+        await supabase.removeChannel(channel).catch(() => {});
+        return;
+      }
+      presenceChannelRef.current = channel;
+    };
+
     const id = typeof requestIdleCallback === 'function'
-      ? requestIdleCallback(() => {
-          const channel = supabase.channel('online-users', {
-            config: { presence: { key: user.id } },
-          });
-
-          channel
-            .on('presence', { event: 'sync' }, () => {
-              const newState = channel.presenceState();
-              const onlineIds: Record<string, any> = {};
-              Object.keys(newState).forEach(key => {
-                const presenceEntry = newState[key][0] as any;
-                if (presenceEntry.user_id) {
-                  onlineIds[presenceEntry.user_id] = presenceEntry;
-                }
-              });
-              setOnlineUsersMap(onlineIds);
-            })
-            .subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                channel.track({ user_id: user.id, online_at: new Date().toISOString() }).catch(() => {});
-              }
-            });
-
-          presenceChannelRef.current = channel;
-        }, { timeout: 5000 })
-      : setTimeout(() => {
-          const channel = supabase.channel('online-users', {
-            config: { presence: { key: user.id } },
-          });
-
-          channel
-            .on('presence', { event: 'sync' }, () => {
-              const newState = channel.presenceState();
-              const onlineIds: Record<string, any> = {};
-              Object.keys(newState).forEach(key => {
-                const presenceEntry = newState[key][0] as any;
-                if (presenceEntry.user_id) {
-                  onlineIds[presenceEntry.user_id] = presenceEntry;
-                }
-              });
-              setOnlineUsersMap(onlineIds);
-            })
-            .subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                channel.track({ user_id: user.id, online_at: new Date().toISOString() }).catch(() => {});
-              }
-            });
-
-          presenceChannelRef.current = channel;
-        }, 2000);
+      ? requestIdleCallback(() => { setupPresence(); }, { timeout: 5000 })
+      : setTimeout(() => { setupPresence(); }, 2000);
 
     return () => {
+      cancelled = true;
       if (typeof id === 'number') clearTimeout(id);
       else if (id) cancelIdleCallback(id);
       if (presenceChannelRef.current) {

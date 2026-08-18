@@ -131,11 +131,17 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
             >
               {isConnected && selectedAccount?.profile_image_url ? (
                 <>
-                  <img
+                  <SafeImage
                     src={selectedAccount.profile_image_url}
                     alt={selectedAccount.page_name || platform.name}
                     className="w-full h-full rounded-2xl object-cover"
                     referrerPolicy="no-referrer"
+                    isExternal
+                    placeholderIcon={
+                      <div className={cn("w-full h-full flex items-center justify-center rounded-2xl", platform.color)}>
+                        <Icon className="w-8 h-8 text-white" />
+                      </div>
+                    }
                   />
                   <div
                     className={cn(

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useSystem } from '@/contexts/SystemContext';
 import { 
   Bot, Target, Search, Filter, Activity, Clock, 
   ChevronRight, Play, Settings, ShieldCheck, PenTool, 
@@ -117,6 +118,7 @@ const TOP_TAGS = [
 ];
 
 export default function SocialHubDashboard() {
+  const { settings } = useSystem();
   const [darkMode, setDarkMode] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -272,7 +274,7 @@ export default function SocialHubDashboard() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white flex items-center gap-2">
-                Vitória Net <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded text-[10px] font-bold uppercase tracking-wider">Radar AI</span>
+                 {settings?.platform_name || "Vitória News"} <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded text-[10px] font-bold uppercase tracking-wider">Radar AI</span>
               </h1>
             </div>
           </div>

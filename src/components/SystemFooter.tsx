@@ -12,7 +12,7 @@ export const SystemFooter = () => {
       <div className="max-w-7xl mx-auto">
         {/* DESKTOP FOOTER (Single Horizontal Line) */}
         <div className="hidden md:flex items-center justify-center gap-4 text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/40">
-          <span className="whitespace-nowrap font-black">© 2026 {settings?.platform_name || "VITÓRIA NET"}</span>
+          <span className="whitespace-nowrap font-black">© 2026 {settings?.platform_name || "Vitória News"}</span>
           <span className="opacity-20">•</span>
           <div className="flex items-center gap-1.5 whitespace-nowrap">
             DESENVOLVIDO COM 

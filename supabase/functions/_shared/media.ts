@@ -47,3 +47,76 @@ export function detectOrientation(url: string): 'vertical' | 'square' | 'horizon
   if (/(landscape|horizontal|16x9|16_9|16:9|1920x1080|1280x720|16x10)/.test(base)) return 'horizontal';
   return 'horizontal';
 }
+
+/**
+ * Baixa uma imagem de URL externa e armazena no Supabase Storage.
+ * Retorna a URL pública do storage ou null em caso de falha.
+ */
+export async function cacheProfileImage(
+  adminClient: any,
+  userId: string,
+  platform: string,
+  imageUrl: string | null | undefined,
+  identifier: string
+): Promise<string | null> {
+  if (!imageUrl) return null;
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(imageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+      },
+      signal: controller.signal,
+      redirect: "follow"
+    });
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      console.warn(`[CACHE-IMG] Fetch failed (${response.status}) for ${imageUrl}`);
+      return null;
+    }
+    
+    const contentType = response.headers.get("content-type") || "image/jpeg";
+    if (!contentType.startsWith("image/")) {
+      console.warn(`[CACHE-IMG] Not an image (${contentType}) for ${imageUrl}`);
+      return null;
+    }
+    
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength === 0) return null;
+    
+    const ext = contentType.split("/")[1]?.split(";")[0] || "jpg";
+    const filePath = `profiles/${platform}/${identifier}.${ext}`;
+    
+    const { error } = await adminClient.storage
+      .from('media')
+      .upload(filePath, buffer, { contentType, upsert: true });
+    
+    if (error) {
+      console.error(`[CACHE-IMG] Upload failed:`, error.message);
+      return null;
+    }
+    
+    const { data: urlData } = adminClient.storage.from('media').getPublicUrl(filePath);
+    const publicUrl = urlData?.publicUrl;
+    
+    if (publicUrl) {
+      // Update social_connections.profile_image_url for this platform/user
+      await adminClient
+        .from("social_connections")
+        .update({ profile_image_url: publicUrl, profile_picture: publicUrl })
+        .eq("user_id", userId)
+        .eq("platform", platform)
+        .eq("platform_user_id", identifier);
+    }
+    
+    console.log(`[CACHE-IMG] Cached ${platform}:${identifier} → ${publicUrl}`);
+    return publicUrl;
+  } catch (err: any) {
+    console.error(`[CACHE-IMG] Exception:`, err.message);
+    return null;
+  }
+}

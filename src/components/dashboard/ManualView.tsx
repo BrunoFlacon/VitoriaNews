@@ -25,7 +25,7 @@ const SECTIONS = [
     icon: Zap,
     content: (
       <div className="space-y-4">
-        <p>Bem-vindo ao Vitória Net! Este guia ajudará você a configurar sua presença digital em poucos minutos.</p>
+        <p>Bem-vindo ao {settings?.platform_name || "Vitória News"}! Este guia ajudará você a configurar sua presença digital em poucos minutos.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
             <h4 className="font-bold text-sm mb-2 text-primary">Passo 1: Redes Sociais</h4>
@@ -120,7 +120,7 @@ export const ManualView = () => {
 
   const openWhatsApp = () => {
     const phone = masterPhone || "5511999999999"; // Fallback or user profile
-    const text = encodeURIComponent(`Olá! Preciso de ajuda com o sistema ${settings?.platform_name || "Vitória Net"}.`);
+    const text = encodeURIComponent(`Olá! Preciso de ajuda com o sistema ${settings?.platform_name || "Vitória News"}.`);
     window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
   };
 
@@ -213,7 +213,7 @@ export const ManualView = () => {
          
          <footer className="h-14 border-t border-border bg-muted/5 flex items-center px-10 justify-between">
             <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground opacity-50">
-              {settings?.platform_name || "Vitória Net"} • Manual v1.0
+               {settings?.platform_name || "Vitória News"} • Manual v1.0
             </span>
             <div className="flex gap-4">
                {/* Nav controls if needed */}

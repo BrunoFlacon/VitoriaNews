@@ -13,6 +13,7 @@ import { SubscriberCapture } from "@/components/portal/SubscriberCapture";
 export default function TermsPage() {
   const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
+  const { settings } = useSystem();
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -47,7 +48,7 @@ export default function TermsPage() {
             <div className="space-y-6 text-slate-300 leading-relaxed font-medium">
               <section className="space-y-3">
                 <h2 className="text-xl font-bold text-white">1. Propriedade Intelectual</h2>
-                <p>O sistema Vitória Net é de propriedade exclusiva de Bruno Flacon e seus licenciadores, protegida por leis nacionais e internacionais de direitos autorais.</p>
+                <p>O sistema {settings?.platform_name || "Vitória News"} é de propriedade exclusiva de Bruno Flacon e seus licenciadores, protegida por leis nacionais e internacionais de direitos autorais.</p>
               </section>
 
               <section className="space-y-3">

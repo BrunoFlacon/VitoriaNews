@@ -185,20 +185,21 @@ serve(async (req: Request) => {
     const isGraphFacebook = new URL(finalTargetUrl).hostname === "graph.facebook.com";
 
     console.log(`[PROXY] Fetching: ${finalTargetUrl}`);
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
     let response: Response;
     try {
       response = await fetchWithTimeout(finalTargetUrl, {
         method: "GET",
         headers: fetchHeaders,
         redirect: isGraphFacebook ? "follow" : "follow"
-      }, 3000);
+      }, 5000);
     } catch (e: any) {
       console.warn(`[PROXY] Initial fetch failed or timed out:`, e.message);
       response = new Response(null, { status: 504 });
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     // 3. Telegram Expiry Recovery
     if (!response.ok && targetUrlObj.hostname === "api.telegram.org" && targetUrlObj.pathname.includes("/file/bot")) {
@@ -405,7 +406,9 @@ serve(async (req: Request) => {
       }
     }
 
-    // 6. fbcdn.net Expiry Recovery (Facebook & WhatsApp CDN)
+    // 6. fbcdn.net Expiry Recovery (Facebook, Instagram & WhatsApp CDN)
+    //    fbcdn.net hosts images for Facebook, Instagram (t51.*) and WhatsApp.
+    //    Instagram Business IDs do NOT support /picture — must use ?fields=profile_picture_url.
     if (!response.ok && targetUrlObj.hostname.includes("fbcdn.net")) {
       console.log(`[PROXY] fbcdn.net image expired (status ${response.status}). Attempting recovery...`);
       try {
@@ -413,12 +416,28 @@ serve(async (req: Request) => {
         if (!pathPart) throw new Error("No path to match");
         if (supabaseUrl && supabaseKey) {
           const adminClient = createClient(supabaseUrl, supabaseKey);
-          const { data: conns } = await adminClient
+
+          // Search 1: match by stored URL path (fast, specific)
+          let { data: conns } = await adminClient
             .from("social_connections")
             .select("user_id, platform, platform_user_id")
             .or(`profile_image_url.ilike.%${pathPart}%,profile_picture.ilike.%${pathPart}%`)
             .limit(5);
-          const conn = conns?.find(c => c.platform_user_id) || conns?.[0];
+          let conn = conns?.find(c => c.platform_user_id) || conns?.[0];
+
+          // Search 2: if no path match, find any Instagram/Threads connection (fbcdn t51.* = Instagram CDN)
+          if (!conn && pathPart.includes("t51.")) {
+            console.log(`[PROXY] No path match, falling back to Instagram/Threads connections...`);
+            const { data: igConns } = await adminClient
+              .from("social_connections")
+              .select("user_id, platform, platform_user_id")
+              .in("platform", ["instagram", "threads"])
+              .eq("is_connected", true)
+              .order("updated_at", { ascending: false })
+              .limit(5);
+            conn = igConns?.[0] || null;
+          }
+
           if (conn && conn.platform_user_id) {
             let token = conn.access_token;
             if (!token) {
@@ -430,17 +449,38 @@ serve(async (req: Request) => {
                 .maybeSingle();
               token = credsData?.credentials?.access_token;
             }
+
+            // Use platform-specific Graph API endpoint
+            // Instagram Business IDs: ?fields=profile_picture_url  (no /picture endpoint!)
+            // Threads: graph.threads.net with threads_profile_picture_url
+            // Facebook/WhatsApp: /picture endpoint works
             let freshUrl: string | null = null;
             if (token) {
-              const pr = await fetchWithTimeout(
-                `https://graph.facebook.com/v21.0/${conn.platform_user_id}/picture?type=large&redirect=false`,
-                { headers: { "Authorization": `Bearer ${token}` } }, 2500);
-              if (pr.ok) { const d = await pr.json(); freshUrl = d.data?.url; }
+              if (conn.platform === "instagram") {
+                const metaResp = await fetchWithTimeout(
+                  `https://graph.facebook.com/v21.0/${conn.platform_user_id}?fields=profile_picture_url`,
+                  { headers: { "Authorization": `Bearer ${token}` } }, 2500);
+                if (metaResp.ok) { const d = await metaResp.json(); freshUrl = d.profile_picture_url; }
+              } else if (conn.platform === "threads") {
+                const metaResp = await fetchWithTimeout(
+                  `https://graph.threads.net/v1.0/me?fields=threads_profile_picture_url`,
+                  { headers: { "Authorization": `Bearer ${token}` } }, 2500);
+                if (metaResp.ok) { const d = await metaResp.json(); freshUrl = d.threads_profile_picture_url; }
+              } else {
+                // Facebook / WhatsApp — /picture endpoint works
+                const pr = await fetchWithTimeout(
+                  `https://graph.facebook.com/v21.0/${conn.platform_user_id}/picture?type=large&redirect=false`,
+                  { headers: { "Authorization": `Bearer ${token}` } }, 2500);
+                if (pr.ok) { const d = await pr.json(); freshUrl = d.data?.url; }
+              }
             }
+
             if (freshUrl) {
               console.log(`[PROXY] Recovered ${conn.platform} URL: ${freshUrl}`);
               response = await fetchWithTimeout(freshUrl, { method: "GET", headers: fetchHeaders }, 3000);
               if (response.ok) await cacheImageToStorage(adminClient, conn.platform, conn.platform_user_id, freshUrl, fetchHeaders);
+            } else {
+              console.warn(`[PROXY] All fbcdn recovery attempts failed for platform=${conn.platform} puid=${conn.platform_user_id}`);
             }
           }
         }
@@ -449,9 +489,14 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
       console.error(`[PROXY] Failed to fetch after all recovery attempts. Status: ${response.status} URL: ${finalTargetUrl}`);
-      return new Response(JSON.stringify({ error: "Image fetch failed" }), {
-        status: 502,
-        headers: { ...corsHeaders(req), "Content-Type": "application/json" }
+      // Return a transparent 1x1 pixel SVG instead of JSON error — prevents broken <img> tags
+      const pixel = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+      const img = atob(pixel);
+      const buf = new Uint8Array(img.length);
+      for (let i = 0; i < img.length; i++) buf[i] = img.charCodeAt(i);
+      return new Response(buf, {
+        status: 200,
+        headers: { ...corsHeaders(req), "Content-Type": "image/gif", "Cache-Control": "public, max-age=300" }
       });
     }
 

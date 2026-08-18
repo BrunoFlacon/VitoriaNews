@@ -153,6 +153,18 @@ serve(async (req: Request) => {
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id,platform,platform_user_id" });
 
+        // Also update social_connections with latest profile picture and stats
+        const freshProfilePic = cachedAvatar || snippet.thumbnails?.high?.url || "";
+        if (freshProfilePic) {
+          await supabase.from("social_connections").update({
+            profile_image_url: freshProfilePic,
+            profile_picture: freshProfilePic,
+            page_name: snippet.title || "",
+            followers_count: currentSubscribers,
+            posts_count: parseInt(stats.videoCount || "0"),
+          }).eq("user_id", userId).eq("platform", "youtube").eq("platform_user_id", channelId);
+        }
+
         results.push({
           type: "channel_stats",
           channel_id: channelId,
@@ -275,6 +287,18 @@ serve(async (req: Request) => {
           is_connected: true,
           updated_at: new Date().toISOString(),
         }, { onConflict: "user_id,platform,platform_user_id" });
+
+        // Also update social_connections with latest profile picture and stats
+        const freshProfilePic2 = cachedAvatar || snippet.thumbnails?.high?.url || "";
+        if (freshProfilePic2) {
+          await supabase.from("social_connections").update({
+            profile_image_url: freshProfilePic2,
+            profile_picture: freshProfilePic2,
+            page_name: snippet.title || "",
+            followers_count: parseInt(stats.subscriberCount || "0"),
+            posts_count: parseInt(stats.videoCount || "0"),
+          }).eq("user_id", userId).eq("platform", "youtube").eq("platform_user_id", channelId);
+        }
 
         results.push({
           type: "channel_stats",

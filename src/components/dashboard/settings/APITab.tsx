@@ -666,7 +666,7 @@ export const APITab = memo(({
                                             </div>
                                           </div>
                                           <div className="flex gap-2 w-full sm:w-auto mt-3 sm:mt-0 shrink-0">
-                                            {onSetPrimary && !conn.is_primary && (
+                                            {conn.is_connected && onSetPrimary && !conn.is_primary && (
                                               <Button
                                                 variant="outline"
                                                 size="sm"

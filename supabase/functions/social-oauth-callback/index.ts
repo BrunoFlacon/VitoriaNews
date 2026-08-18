@@ -107,16 +107,31 @@ async function exchangeGoogle(code: string, redirectUri: string, creds: any, sup
   const userRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${accessToken}` } });
   const userData = await userRes.json();
 
-  const channelRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { headers: { Authorization: `Bearer ${accessToken}` } });
-  const channelData = await channelRes.json();
-  
-  if (channelData.items && channelData.items.length > 0) {
-    return channelData.items.map((ch: any) => ({
+  // Fetch owned channels (mine=true) AND managed channels (managedByMe=true)
+  // Brand accounts / managed channels only appear with managedByMe=true
+  const [ownedRes, managedRes] = await Promise.all([
+    fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { headers: { Authorization: `Bearer ${accessToken}` } }),
+    fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&managedByMe=true", { headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => null),
+  ]);
+
+  const ownedData = await ownedRes.json();
+  const managedData = managedRes ? await managedRes.json().catch(() => ({ items: [] })) : { items: [] };
+
+  // Merge owned + managed channels, deduplicate by channel ID
+  const allChannels = new Map<string, any>();
+  for (const ch of [...(ownedData.items || []), ...(managedData.items || [])]) {
+    if (ch.id && !allChannels.has(ch.id)) {
+      allChannels.set(ch.id, ch);
+    }
+  }
+
+  if (allChannels.size > 0) {
+    return Array.from(allChannels.values()).map((ch: any) => ({
       accessToken, refreshToken, expiresIn,
       platformUserId: ch.id,
       pageName: ch.snippet.title,
       pageId: "",
-      profileImageUrl: ch.snippet.thumbnails?.default?.url || userData.picture || ""
+      profileImageUrl: ch.snippet.thumbnails?.default?.url || ch.snippet.thumbnails?.medium?.url || ch.snippet.thumbnails?.high?.url || userData.picture || ""
     }));
   }
 

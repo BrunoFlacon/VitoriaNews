@@ -8,6 +8,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { SystemFooter } from "@/components/SystemFooter";
+import { useSystem } from "@/hooks/useSystem";
 
 const registerSchema = z.object({
   name: z.string()
@@ -37,6 +38,7 @@ const Register = () => {
   const { register, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { settings } = useSystem();
   useEffect(() => {
     if (user) {
       navigate("/dashboard", { replace: true });
@@ -68,7 +70,7 @@ const Register = () => {
     if (success) {
       toast({
         title: "Conta criada!",
-        description: "Bem-vindo ao Vitória Net.",
+        description: `Bem-vindo ao ${settings?.platform_name || "Vitória News"}.`,
       });
       navigate("/dashboard", { replace: true });
     } else {

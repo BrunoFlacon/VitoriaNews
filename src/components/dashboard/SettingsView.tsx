@@ -333,6 +333,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
       const session = (await supabase.auth.getSession()).data.session;
       if (!session) return;
 
+      const syncErrors: string[] = [];
+
       const invokeFn = async (fnName: string, bodyObj?: any) => {
         const { data, error: invErr } = await supabase.functions.invoke(fnName, {
           body: { userId: session.user.id, ...bodyObj }
@@ -344,52 +346,64 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         if (data?.status === 'skipped') {
           console.log(`[Sync] ${fnName} skipped: ${data.message || 'not configured'}`);
         }
+        return data;
       };
 
       if (platformId === 'telegram') {
         await invokeFn('sync-telegram-chats', { platform: 'telegram' });
       } else if (platformId === 'meta_ads') {
         if (hasCredentials('meta_ads')) {
-          await invokeFn('collect-meta-ads-analytics', { platform: 'meta_ads' }).catch(e => console.warn('[Ads]', e.message));
+          await invokeFn('collect-meta-ads-analytics', { platform: 'meta_ads' }).catch(e => { syncErrors.push(`Meta Ads: ${e.message}`); });
         }
       } else if (platformId === 'google_cloud' || platformId === 'youtube') {
-        if (hasCredentials('google_cloud')) {
+        const hasGoogleOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
+        if (hasCredentials('google_cloud') || hasGoogleOAuth) {
           await Promise.all([
-            invokeFn('collect-youtube-analytics').catch(e => console.warn('[YT]', e.message)),
-            invokeFn('collect-google-analytics').catch(e => console.warn('[GA]', e.message)),
+            invokeFn('collect-youtube-analytics').catch(e => { syncErrors.push(`YouTube: ${e.message}`); }),
+            invokeFn('collect-google-analytics').catch(e => { syncErrors.push(`Google Analytics: ${e.message}`); }),
           ]);
         }
       } else if (platformId) {
-        await invokeFn('collect-social-analytics', { platform: platformId });
+        await invokeFn('collect-social-analytics', { platform: platformId }).catch(e => { syncErrors.push(`${platformId}: ${e.message}`); });
       } else {
         const syncTasks = [];
-        syncTasks.push(invokeFn('collect-social-analytics').catch(e => console.warn('[Social]', e.message)));
+        syncTasks.push(invokeFn('collect-social-analytics').catch(e => { syncErrors.push(`Social: ${e.message}`); }));
         
         if (hasCredentials('meta_ads')) {
-          syncTasks.push(invokeFn('collect-meta-ads-analytics').catch(e => console.warn('[Ads]', e.message)));
+          syncTasks.push(invokeFn('collect-meta-ads-analytics').catch(e => { syncErrors.push(`Meta Ads: ${e.message}`); }));
         }
         
-        if (hasCredentials('google_cloud')) {
-          syncTasks.push(invokeFn('collect-youtube-analytics').catch(e => console.warn('[YT]', e.message)));
-          syncTasks.push(invokeFn('collect-google-analytics').catch(e => console.warn('[GA]', e.message)));
-          syncTasks.push(invokeFn('collect-search-console-data').catch(e => console.warn('[SC]', e.message)));
+        if (hasCredentials('google_cloud') || connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected)) {
+          syncTasks.push(invokeFn('collect-youtube-analytics').catch(e => { syncErrors.push(`YouTube: ${e.message}`); }));
+          syncTasks.push(invokeFn('collect-google-analytics').catch(e => { syncErrors.push(`Google Analytics: ${e.message}`); }));
+          if (hasCredentials('google_cloud')) {
+            syncTasks.push(invokeFn('collect-search-console-data').catch(e => { syncErrors.push(`Search Console: ${e.message}`); }));
+          }
           
           // Only sync Google Contacts if there's a Google OAuth connection or People API key
           const hasGoogleOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
           const hasPeopleApiKey = !!credentials['google_cloud']?.people_api_key;
           if (hasGoogleOAuth || hasPeopleApiKey) {
-            syncTasks.push(invokeFn('sync-google-contacts').catch(e => console.warn('[Contacts]', e.message)));
+            syncTasks.push(invokeFn('sync-google-contacts').catch(e => { syncErrors.push(`Contatos Google: ${e.message}`); }));
           }
         }
         
         await Promise.all(syncTasks);
       }
       
-      toast({ 
-        variant: "success" as any, 
-        title: "Sincronização concluída", 
-        description: `Dados atualizados com sucesso.` 
-      });
+      if (syncErrors.length > 0) {
+        toast({ 
+          variant: "default" as any, 
+          title: "Sincronização parcial", 
+          description: `Alguns dados foram atualizados, mas houve erros em: ${syncErrors.join("; ")}` 
+        });
+      } else {
+        toast({ 
+          variant: "success" as any, 
+          title: "Sincronização concluída", 
+          description: `Dados atualizados com sucesso.` 
+        });
+      }
     } catch (e: any) {
       console.error("Error syncing stats:", e);
       toast({

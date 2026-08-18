@@ -13,6 +13,7 @@ import { SubscriberCapture } from "@/components/portal/SubscriberCapture";
 export default function PrivacyPage() {
   const navigate = useNavigate();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
+  const { settings } = useSystem();
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -47,7 +48,7 @@ export default function PrivacyPage() {
             <div className="space-y-6 text-slate-300 leading-relaxed">
               <section className="space-y-3">
                 <h2 className="text-xl font-bold text-white">1. Coleta de Dados</h2>
-                <p>Coletamos apenas as informações necessárias para o funcionamento da plataforma Vitória Net, incluindo dados de autenticação e conexões com redes sociais via API oficial.</p>
+                <p>Coletamos apenas as informações necessárias para o funcionamento da plataforma {settings?.platform_name || "Vitória News"}, incluindo dados de autenticação e conexões com redes sociais via API oficial.</p>
               </section>
 
               <section className="space-y-3">
