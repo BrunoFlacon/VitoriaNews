@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS public.cover_analytics (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     cover_project_id UUID REFERENCES public.cover_projects(id) ON DELETE SET NULL,
-    post_id UUID REFERENCES public.posts(id) ON DELETE CASCADE,
+    post_id UUID,
     platform VARCHAR(50) NOT NULL, -- 'youtube', 'instagram', 'facebook', 'spotify', etc.
     media_type VARCHAR(50) NOT NULL DEFAULT 'video',
     cover_url TEXT NOT NULL,

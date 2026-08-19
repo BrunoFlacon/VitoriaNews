@@ -4,7 +4,22 @@ export interface PublishPayload {
   content: string;
   mediaUrls?: string[];
   userId?: string;
-  options?: Record<string, any>;
+  options?: {
+    title?: string;
+    visibility?: 'public' | 'private' | 'unlisted';
+    orientation?: 'horizontal' | 'vertical';
+    targetProfileId?: string;
+    postType?: string;
+    postId?: string;
+    recipientPhone?: string;
+    chatId?: string;
+    templateName?: string;
+    templateLanguage?: string;
+    templateVariables?: Record<string, any>;
+    templateHeaderMediaUrl?: string;
+    tags?: string[];
+    [key: string]: any;
+  };
 }
 
 import { publishToTelegram } from './telegram.ts';
