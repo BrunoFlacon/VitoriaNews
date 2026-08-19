@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { 
   Palette, Type, Image as LucideImage, Sparkles, Download, Save, RefreshCw, 
   Layers, Video, Music, Radio, BarChart3, Plus, ShieldCheck, CheckCircle2, Eye, Copy,
-  Upload, LayoutTemplate, Shapes, Sliders
+  Upload, LayoutTemplate, Shapes, Sliders, Wand2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,13 @@ import { CoverAnalyticsView } from "./CoverAnalyticsView";
 import { StudioToolbar } from "./StudioToolbar";
 import { StudioUploadsTab } from "./StudioUploadsTab";
 import { StudioElementsTab } from "./StudioElementsTab";
+import { LidoJSStudioView } from "./LidoJSStudioView";
 
 type SidebarTab = "templates" | "text" | "uploads" | "elements" | "background" | "audio";
 
 export const CoverStudioView: React.FC = () => {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<"editor" | "analytics">("editor");
+  const [activeTab, setActiveTab] = useState<"editor" | "analytics" | "advanced">("editor");
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>("text");
   const [selectedPreset, setSelectedPreset] = useState<CoverPreset>(COVER_PRESETS[0]);
   const [title, setTitle] = useState("Capa para Vídeo / Live / Podcast");
@@ -319,6 +320,15 @@ export const CoverStudioView: React.FC = () => {
             Estúdio Canva
           </Button>
           <Button
+            variant={activeTab === "advanced" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("advanced")}
+            className="gap-2 text-xs font-bold uppercase tracking-wider rounded-xl h-9 px-4"
+          >
+            <Wand2 className="w-4 h-4" />
+            Editor Avançado
+          </Button>
+          <Button
             variant={activeTab === "analytics" ? "default" : "ghost"}
             size="sm"
             onClick={() => setActiveTab("analytics")}
@@ -330,7 +340,9 @@ export const CoverStudioView: React.FC = () => {
         </div>
       </div>
 
-      {activeTab === "analytics" ? (
+      {activeTab === "advanced" ? (
+        <LidoJSStudioView onBack={() => setActiveTab("editor")} />
+      ) : activeTab === "analytics" ? (
         <CoverAnalyticsView />
       ) : (
         <div className="space-y-6">
@@ -502,6 +514,13 @@ export const CoverStudioView: React.FC = () => {
                 selectedLayerId={selectedLayerId}
                 onSelectLayer={setSelectedLayerId}
                 onUpdateLayer={handleUpdateLayer}
+                onDeleteLayer={handleDeleteLayer}
+                onDuplicateLayer={handleDuplicateLayer}
+                onMoveLayerOrder={handleMoveLayerOrder}
+                onToggleLock={(id) => {
+                  const layer = layers.find((l) => l.id === id);
+                  if (layer) handleUpdateLayer(id, { locked: !layer.locked });
+                }}
                 backgroundColor={backgroundColor}
                 backgroundImageUrl={backgroundImageUrl}
                 showSafeZones={showSafeZones}

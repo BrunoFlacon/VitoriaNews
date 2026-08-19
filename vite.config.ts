@@ -62,7 +62,12 @@ export default defineConfig(({ mode }) => {
         "clsx",
         "tailwind-merge",
         "date-fns",
-        "date-fns/locale"
+        "date-fns/locale",
+      ],
+      exclude: [
+        // @imgly/background-removal is heavy and uses dynamic imports for onnxruntime-web
+        // Let it handle its own code-splitting to avoid Vite dev server resolution issues
+        "@imgly/background-removal",
       ],
     },
     plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
