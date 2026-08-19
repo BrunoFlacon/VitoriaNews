@@ -121,15 +121,19 @@ serve(async (req: Request) => {
                   const imgResp = await fetch(profilePic);
                   if (imgResp.ok) {
                     const imgBlob = await imgResp.blob();
-                    const ct = imgResp.headers.get("content-type") || "image/jpeg";
-                    const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
-                    const fileName = `facebook/${conn.platform_user_id || conn.id}.${ext}`;
-                    const { error: uploadError } = await supabase.storage
-                      .from("profile-photos")
-                      .upload(fileName, imgBlob, { contentType: ct, upsert: true });
-                    if (!uploadError) {
-                      const { data: pubUrl } = supabase.storage.from("profile-photos").getPublicUrl(fileName);
-                      profilePic = pubUrl.publicUrl;
+                    if (imgBlob.size > 1000) {
+                      const ct = imgResp.headers.get("content-type") || "image/jpeg";
+                      const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+                      const fileName = `facebook/${conn.platform_user_id || conn.id}.${ext}`;
+                      const { error: uploadError } = await supabase.storage
+                        .from("profile-photos")
+                        .upload(fileName, imgBlob, { contentType: ct, upsert: true });
+                      if (!uploadError) {
+                        const { data: pubUrl } = supabase.storage.from("profile-photos").getPublicUrl(fileName);
+                        profilePic = pubUrl.publicUrl;
+                      }
+                    } else {
+                      console.log(`[FB-PHOTO] Blob too small (${imgBlob.size} bytes), likely a transparent pixel. Skipping upload.`);
                     }
                   }
                 } catch (e) {
@@ -187,15 +191,19 @@ serve(async (req: Request) => {
                     const imgResp = await fetch(profilePic);
                     if (imgResp.ok) {
                       const imgBlob = await imgResp.blob();
-                      const ct = imgResp.headers.get("content-type") || "image/jpeg";
-                      const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
-                      const fileName = `instagram/${conn.platform_user_id || conn.id}.${ext}`;
-                      const { error: uploadError } = await supabase.storage
-                        .from("profile-photos")
-                        .upload(fileName, imgBlob, { contentType: ct, upsert: true });
-                      if (!uploadError) {
-                        const { data: pubUrl } = supabase.storage.from("profile-photos").getPublicUrl(fileName);
-                        profilePic = pubUrl.publicUrl;
+                      if (imgBlob.size > 1000) {
+                        const ct = imgResp.headers.get("content-type") || "image/jpeg";
+                        const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+                        const fileName = `instagram/${conn.platform_user_id || conn.id}.${ext}`;
+                        const { error: uploadError } = await supabase.storage
+                          .from("profile-photos")
+                          .upload(fileName, imgBlob, { contentType: ct, upsert: true });
+                        if (!uploadError) {
+                          const { data: pubUrl } = supabase.storage.from("profile-photos").getPublicUrl(fileName);
+                          profilePic = pubUrl.publicUrl;
+                        }
+                      } else {
+                        console.log(`[IG-PHOTO] Blob too small (${imgBlob.size} bytes), likely a transparent pixel. Skipping upload.`);
                       }
                     }
                   } catch (e) {

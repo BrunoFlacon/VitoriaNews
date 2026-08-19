@@ -45,6 +45,12 @@ async function cacheImageToStorage(
 
     const buffer = await response.arrayBuffer();
 
+    // CRITICAL: Reject transparent pixel GIFs (42 bytes) and other tiny placeholder images
+    if (buffer.byteLength < 1000) {
+      console.warn(`[PROXY-CACHE] Image too small (${buffer.byteLength} bytes), likely a transparent pixel. Skipping cache.`);
+      return null;
+    }
+
     const { error } = await adminClient.storage
       .from('media')
       .upload(filePath, buffer, {
@@ -489,14 +495,10 @@ serve(async (req: Request) => {
 
     if (!response.ok) {
       console.error(`[PROXY] Failed to fetch after all recovery attempts. Status: ${response.status} URL: ${finalTargetUrl}`);
-      // Return a transparent 1x1 pixel SVG instead of JSON error — prevents broken <img> tags
-      const pixel = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-      const img = atob(pixel);
-      const buf = new Uint8Array(img.length);
-      for (let i = 0; i < img.length; i++) buf[i] = img.charCodeAt(i);
-      return new Response(buf, {
-        status: 200,
-        headers: { ...corsHeaders(req), "Content-Type": "image/gif", "Cache-Control": "public, max-age=300" }
+      // Return 404 so the browser/SafeImage can detect the failure and show fallback UI
+      return new Response(JSON.stringify({ error: "Image not found or expired" }), {
+        status: 404,
+        headers: { ...corsHeaders(req), "Content-Type": "application/json", "Cache-Control": "no-cache, no-store, must-revalidate" }
       });
     }
 
@@ -513,6 +515,15 @@ serve(async (req: Request) => {
     responseHeaders.set("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
 
     const body = await response.arrayBuffer();
+
+    // CRITICAL: If the upstream returned a tiny image (transparent pixel), do NOT cache or serve it
+    if (body.byteLength < 1000) {
+      console.warn(`[PROXY] Upstream returned tiny image (${body.byteLength} bytes), likely a transparent pixel. Returning 404.`);
+      return new Response(JSON.stringify({ error: "Image expired (transparent pixel detected)" }), {
+        status: 404,
+        headers: { ...corsHeaders(req), "Content-Type": "application/json", "Cache-Control": "no-cache, no-store, must-revalidate" }
+      });
+    }
 
     // Cache to storage for future requests
     if (supabaseUrl && supabaseKey) {

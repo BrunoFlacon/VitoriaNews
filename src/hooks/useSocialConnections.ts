@@ -145,11 +145,17 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         }
 
         const enrichedPageName  = conn.page_name || acc?.page_name || acc?.username || null;
+
+        // Prefer Supabase Storage URLs (permanent) over CDN URLs (expire)
+        const isStorageUrl = (url: string | null | undefined) => !!url && url.includes('supabase.co/storage/');
+        const allCandidates = [conn.profile_image_url, conn.profile_picture, cachedPic].filter(Boolean) as string[];
+        const bestPic = allCandidates.find(u => isStorageUrl(u)) || allCandidates[0] || null;
+
         return {
           ...conn,
           ...computeExpiry(conn.token_expires_at),
-          profile_image_url: conn.profile_image_url || conn.profile_picture || cachedPic || null,
-          profile_picture:   conn.profile_picture || conn.profile_image_url || cachedPic || null,
+          profile_image_url: bestPic,
+          profile_picture:   bestPic,
           followers_count:   enrichedFollowers,
           posts_count:       enrichedPosts,
           page_name:         enrichedPageName,
