@@ -42,6 +42,8 @@ export async function removeImageBackground(
       format,
       quality,
     },
+    publicPath: 'https://staticimgly.com/@imgly/background-removal-data/1.7.0/dist/',
+    device: 'cpu',
   });
 
   return new Promise<string>((resolve, reject) => {

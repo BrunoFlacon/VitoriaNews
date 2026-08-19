@@ -14,6 +14,10 @@ export default defineConfig(({ mode }) => {
       hmr: {
         overlay: false,
       },
+      headers: {
+        'Cross-Origin-Opener-Policy': 'same-origin',
+        'Cross-Origin-Embedder-Policy': 'credentialless',
+      },
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
@@ -65,8 +69,8 @@ export default defineConfig(({ mode }) => {
         "date-fns/locale",
       ],
       exclude: [
-        // @imgly/background-removal is heavy and uses dynamic imports for onnxruntime-web
-        // Let it handle its own code-splitting to avoid Vite dev server resolution issues
+        // @imgly/background-removal uses onnxruntime-web/webgpu which Vite can't resolve
+        // during pre-bundling. Dynamic import + CSP blob: allows it to work at runtime.
         "@imgly/background-removal",
       ],
     },

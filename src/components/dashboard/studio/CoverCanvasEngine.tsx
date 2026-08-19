@@ -574,6 +574,20 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
     completeCutout();
   }, [completeCutout]);
 
+  // Reset polygon when cutout mode is turned off
+  useEffect(() => {
+    if (!cutoutMode) {
+      setPolygonPoints([]);
+      polygonPointsRef.current = [];
+      setMousePos(null);
+    }
+  }, [cutoutMode]);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    polygonPointsRef.current = polygonPoints;
+  }, [polygonPoints]);
+
   const selected = layers.find((l) => l.id === selectedLayerId);
 
   return (
