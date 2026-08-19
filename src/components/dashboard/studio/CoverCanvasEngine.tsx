@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from "react";
 import { Move, Type, Image as LucideImage, Sparkles, Trash2, Eye, EyeOff, Lock, Unlock, ArrowUp, ArrowDown, Grid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { getMediaUrl } from "@/utils/mediaUtils";
 
 export interface CanvasLayer {
   id: string;
@@ -57,28 +58,38 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [loadedImages, setLoadedImages] = useState<Record<string, HTMLImageElement>>({});
 
-  // Preload image assets into HTMLImageElement cache
+  // Preload image assets into HTMLImageElement cache with clean public URLs
   useEffect(() => {
     layers.forEach((layer) => {
       if ((layer.type === "image" || layer.type === "logo") && layer.content) {
-        if (!loadedImages[layer.content]) {
+        const cleanUrl = getMediaUrl(layer.content);
+        if (!loadedImages[cleanUrl]) {
           const img = new Image();
           img.crossOrigin = "anonymous";
-          img.src = layer.content;
+          img.src = cleanUrl;
           img.onload = () => {
-            setLoadedImages((prev) => ({ ...prev, [layer.content]: img }));
+            setLoadedImages((prev) => ({ ...prev, [cleanUrl]: img, [layer.content]: img }));
+          };
+          img.onerror = () => {
+            // Ignore broken image to prevent loop
           };
         }
       }
     });
 
-    if (backgroundImageUrl && !loadedImages[backgroundImageUrl]) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = backgroundImageUrl;
-      img.onload = () => {
-        setLoadedImages((prev) => ({ ...prev, [backgroundImageUrl]: img }));
-      };
+    if (backgroundImageUrl) {
+      const cleanBgUrl = getMediaUrl(backgroundImageUrl);
+      if (!loadedImages[cleanBgUrl]) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = cleanBgUrl;
+        img.onload = () => {
+          setLoadedImages((prev) => ({ ...prev, [cleanBgUrl]: img, [backgroundImageUrl]: img }));
+        };
+        img.onerror = () => {
+          // Ignore broken bg
+        };
+      }
     }
   }, [layers, backgroundImageUrl, loadedImages]);
 
