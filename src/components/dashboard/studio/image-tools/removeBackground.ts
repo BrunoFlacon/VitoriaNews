@@ -18,6 +18,22 @@ export interface RemoveBackgroundOptions {
 }
 
 /**
+ * Convert a data URI to a Blob (avoids CSP fetch(data:) issues).
+ */
+function dataUriToBlob(dataUri: string): Blob {
+  const [header, base64Data] = dataUri.split(',');
+  const mimeMatch = header.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+  const byteString = atob(base64Data);
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+  return new Blob([ab], { type: mime });
+}
+
+/**
  * Remove the background from an image URL or data URI.
  * Returns a new data URI with transparent background (PNG).
  *
@@ -31,10 +47,16 @@ export async function removeImageBackground(
 ): Promise<string> {
   const { format = 'image/png', quality = 0.8, onProgress } = options;
 
+  // Convert data URIs to Blob to bypass CSP connect-src restrictions on data: scheme
+  let source: string | Blob = imageSource;
+  if (typeof imageSource === 'string' && imageSource.startsWith('data:')) {
+    source = dataUriToBlob(imageSource);
+  }
+
   // Dynamic import to prevent Vite dev server crash from onnxruntime-web/webgpu resolution
   const { removeBackground } = await import('@imgly/background-removal');
 
-  const blob = await removeBackground(imageSource, {
+  const blob = await removeBackground(source, {
     progress: (key: string, current: number, total: number) => {
       onProgress?.(key, current, total);
     },
