@@ -5,7 +5,7 @@ import {
   X, Type, Move, ZoomIn, Info, Save, Heart, MessageCircle, Send, 
   Bookmark, MoreVertical, Share2, Music, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, Palette, Image as LucideImage, Plus, 
-  Scissors, Mic, Video as LucideVideo, Sparkles, Smile, MapPin, Hash, Link as LinkIcon, Play, Pause, RotateCw, Loader2, Eye, EyeOff, Trash2, Menu, Volume2, VolumeX
+  Scissors, Mic, Video as LucideVideo, Sparkles, Smile, MapPin, Hash, Link as LinkIcon, Play, Pause, RotateCw, Loader2, Eye, EyeOff, Trash2, Menu, Volume2, VolumeX, Radio
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1070,6 +1070,12 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
+                    <StickerPlaceholder icon={Radio} label="🔴 AO VIVO AGORA!" platform={platform} onClick={() => {
+                        addSticker("emoji", "🔴 ESTAMOS AO VIVO! TOQUE PARA ASSISTIR", { color: "#ffffff", bgColor: "#ef4444" });
+                    }} />
+                    <StickerPlaceholder icon={ImageIcon} label="📸 NOVO POST!" platform={platform} onClick={() => {
+                        addSticker("emoji", "📸 NOVO POST NO FEED! CONFIRA AGORA", { color: "#ffffff", bgColor: "#ec4899" });
+                    }} />
                     <StickerPlaceholder icon={Hash} label="Hashtag" platform={platform} onClick={() => {
                       const tag = prompt("Digite a hashtag:");
                       if (tag) addSticker("hashtag", tag.startsWith("#") ? tag : `#${tag}`);

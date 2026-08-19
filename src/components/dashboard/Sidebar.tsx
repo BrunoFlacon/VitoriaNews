@@ -24,7 +24,8 @@ import {
   ChevronDown,
   Smartphone,
   TrendingUp,
-  Eye
+  Eye,
+  Palette
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSystem } from "@/hooks/useSystem";

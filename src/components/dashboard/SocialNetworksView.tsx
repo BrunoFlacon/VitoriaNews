@@ -160,8 +160,7 @@ export const SocialNetworksView = memo(() => {
             <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
             Sincronizar Tudo
           </Button>
-        </div>
-      </motion.div>
+        </motion.div>
 
       {/* Empty state if no platforms exist */}
       {!loading && connectedCount === 0 && (

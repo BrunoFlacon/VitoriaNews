@@ -3,6 +3,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { Switch } from "@/components/ui/switch";
 import { 
   Image as ImageIcon, 
   Video, 
@@ -23,6 +24,7 @@ import {
   Wand2,
   ChevronLeft,
   ShieldCheck,
+  Radio,
   ShieldX,
   Music,
   User,
@@ -296,6 +298,8 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [visibility, setVisibility] = useState<"public" | "private" | "subscribers">("public");
+  const [autoPostToStories, setAutoPostToStories] = useState(true);
+  const [storyNotifyType, setStoryNotifyType] = useState<"new_post" | "live_now">("new_post");
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [showAudioDialog, setShowAudioDialog] = useState(false);
   
@@ -319,6 +323,35 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   const { publishNow, publishing } = usePublisher();
   const { connections } = useSocialConnections();
   const { isEditor } = useUserRole();
+  const { user } = useAuth();
+
+  const triggerStoryNotification = async (postContent: string, mediaUrl?: string) => {
+    if (!autoPostToStories || selectedPlatforms.length === 0 || !user?.id) return;
+    try {
+      const bannerTitle = storyNotifyType === "live_now" 
+        ? "🔴 ESTAMOS AO VIVO! TOQUE PARA ASSISTIR" 
+        : "📸 NOVO POST NO FEED! CONFIRA AGORA";
+      
+      const storyEntries = selectedPlatforms.map(platform => ({
+        user_id: user.id,
+        platform,
+        title: bannerTitle,
+        caption: postContent.slice(0, 150),
+        type: "story",
+        status: "published",
+        media_url: mediaUrl || uploadedFiles[0]?.file_url || null,
+        scheduled_at: new Date().toISOString(),
+      }));
+
+      await supabase.from("stories_lives").insert(storyEntries as any);
+      toast({
+        title: "📲 Publicado nos Stories!",
+        description: `Seus seguidores foram notificados nos Stories do ${storyNotifyType === 'live_now' ? 'AO VIVO' : 'NOVO POST'}.`,
+      });
+    } catch (err) {
+      console.warn("Auto story notification error", err);
+    }
+  };
 
   const [debouncedContent, setDebouncedContent] = useState(content);
 
@@ -1918,6 +1951,55 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             </div>
           </TooltipProvider>
         </div>
+
+        {/* Notificação automática nos Stories */}
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-orange-500/10 border border-pink-500/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-pink-500/20 text-pink-400">
+                <Radio className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-foreground">
+                  Aviso Automático nos Stories 📲
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Cria um Story avisando seus seguidores sobre a nova publicação ou live.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={autoPostToStories}
+              onCheckedChange={setAutoPostToStories}
+            />
+          </div>
+
+          {autoPostToStories && (
+            <div className="flex gap-2 pt-1">
+              <Button
+                type="button"
+                variant={storyNotifyType === "new_post" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStoryNotifyType("new_post")}
+                className="flex-1 text-[10px] font-bold uppercase rounded-xl h-9 gap-1.5"
+              >
+                📸 Novo Post no Feed
+              </Button>
+              <Button
+                type="button"
+                variant={storyNotifyType === "live_now" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setStoryNotifyType("live_now")}
+                className={cn(
+                  "flex-1 text-[10px] font-bold uppercase rounded-xl h-9 gap-1.5",
+                  storyNotifyType === "live_now" ? "bg-red-600 hover:bg-red-700 text-white" : "border-red-500/40 text-red-400"
+                )}
+              >
+                🔴 Estamos Ao Vivo!
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
       )}
 
@@ -2000,6 +2082,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                   });
                   if (post) {
                     await submitForApproval(post.id);
+                    await triggerStoryNotification(content.trim(), uploadedFiles[0]?.file_url);
                     setContent("");
                     setSelectedPlatforms([]);
                     setSelectedMedia(null);
@@ -2027,6 +2110,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     videoTitle.trim() || undefined
                   );
                   if (result) {
+                    await triggerStoryNotification(content.trim(), mediaUrls[0]);
                     setContent("");
                     setSelectedPlatforms([]);
                     setSelectedMedia(null);

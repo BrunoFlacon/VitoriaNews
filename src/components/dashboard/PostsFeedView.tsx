@@ -12,7 +12,9 @@ import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
 import { supabase } from "@/integrations/supabase/client";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { FeedPreview } from "@/components/dashboard/FeedPreview";
-import { useSocialConnections } from "@/hooks/useSocialConnections";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { Radio } from "lucide-react";
 import { Heart, MessageCircle, Share2, Globe, Lock, Users as UsersIcon } from "lucide-react";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { getMediaUrl } from "@/utils/mediaUtils";
@@ -311,18 +313,48 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
               )}
             </button>
             {post.status === 'published' && (
-              <button 
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClick(post);
-                }}
-                className="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-full transition-all border-0 cursor-pointer"
-                title="Métricas detalhadas e gráficos"
-              >
-                <BarChart3 className="w-3 h-3" />
-                <span>Métricas</span>
-              </button>
+              <>
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClick(post);
+                  }}
+                  className="flex items-center gap-1 text-[10px] font-bold text-primary hover:text-primary bg-primary/10 hover:bg-primary/20 px-2 py-0.5 rounded-full transition-all border-0 cursor-pointer"
+                  title="Métricas detalhadas e gráficos"
+                >
+                  <BarChart3 className="w-3 h-3" />
+                  <span>Métricas</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      const { data: userRes } = await supabase.auth.getUser();
+                      if (!userRes.user?.id) return;
+                      await supabase.from("stories_lives").insert({
+                        user_id: userRes.user.id,
+                        platform: post.platforms?.[0] || "instagram",
+                        title: "📸 NOVO POST NO FEED! CONFIRA AGORA",
+                        caption: post.content ? post.content.substring(0, 120) : "Nova publicação no feed!",
+                        type: "story",
+                        status: "published",
+                        scheduled_at: new Date().toISOString(),
+                      } as any);
+                      alert("📲 Post repassado para os Stories com sucesso!");
+                    } catch (err: any) {
+                      alert("Erro ao repassar para os Stories: " + (err.message || "Tente novamente"));
+                    }
+                  }}
+                  className="flex items-center gap-1 text-[10px] font-bold text-pink-500 hover:text-pink-400 bg-pink-500/10 hover:bg-pink-500/20 px-2.5 py-0.5 rounded-full transition-all border-0 cursor-pointer"
+                  title="Notificar seguidores nos Stories"
+                >
+                  <Radio className="w-3 h-3 animate-pulse" />
+                  <span>Stories 📲</span>
+                </button>
+              </>
             )}
           </div>
 
