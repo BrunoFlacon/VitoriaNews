@@ -40,8 +40,11 @@ export function useSignedMediaUrl(input: string | null | undefined, expiresIn = 
   const getInitialUrl = () => {
     if (!input) return null;
     if (!input.includes('supabase.co/storage/')) return input;
-    if (input.includes('token=') && isSupabaseUrlExpired(input)) {
-      return null;
+    if (input.includes('/object/sign/')) {
+      return input.replace('/object/sign/', '/object/public/').split('?')[0];
+    }
+    if (input.includes('token=')) {
+      return input.split('?')[0];
     }
     return input;
   };

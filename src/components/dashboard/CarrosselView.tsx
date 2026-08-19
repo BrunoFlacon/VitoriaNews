@@ -141,8 +141,8 @@ function PreviewCarousel({ urls, carouselId, previewIdx, setPreviewIdx, previewT
       onClick={onOpen}
     >
       <img
-        src={urls[curIdx]}
-        alt=""
+        src={getMediaUrl(urls[curIdx])}
+        alt="Slide do carrossel"
         className={cn(
           "absolute inset-0 w-full h-full object-cover transition-opacity duration-300",
           loadedIdx === curIdx ? "opacity-100" : "opacity-0"
@@ -549,7 +549,7 @@ export const CarrosselView = () => {
       .in("id", carousel.media_ids);
 
     setCaption(carousel.content);
-    setSlides((mediaItems || []).map((m: any) => ({ id: m.id, file_url: resolveMediaUrl(m.file_url) })));
+    setSlides((mediaItems || []).map((m: any) => ({ id: m.id, file_url: getMediaUrl(m.file_url) })));
     setCurrentSlideIdx(0);
     setSelectedPlatforms(carousel.platforms);
     setEditingId(carousel.id);

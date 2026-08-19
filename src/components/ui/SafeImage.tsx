@@ -89,10 +89,13 @@ export const SafeImage = memo(({
     const url = signedUrl || resolvedBase;
     if (!url) return null;
 
-    // Pre-emptively block rendering if the initial URL is an expired Supabase signed URL
-    if (!signedUrl && resolvedBase && resolvedBase.includes('supabase.co/storage/') && resolvedBase.includes('token=')) {
-      if (isSupabaseUrlExpired(resolvedBase)) {
-        return null;
+    // Se for URL do Supabase com /object/sign/ ou token=, converte para /object/public/
+    if (url.includes('supabase.co/storage/')) {
+      if (url.includes('/object/sign/')) {
+        return url.replace('/object/sign/', '/object/public/').split('?')[0];
+      }
+      if (url.includes('token=')) {
+        return url.split('?')[0];
       }
     }
 

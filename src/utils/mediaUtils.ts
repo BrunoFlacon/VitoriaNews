@@ -37,6 +37,19 @@ export const encodeStoragePath = (path: string): string => {
 export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
   if (!raw) return "";
 
+  // 1. Tratar imediatamente URLs /object/sign/ ou /object/authenticated/ e converter para /object/public/ sem token expirado
+  if (raw.includes("/object/sign/") || raw.includes("/object/authenticated/")) {
+    return raw
+      .replace("/object/sign/", "/object/public/")
+      .replace("/object/authenticated/", "/object/public/")
+      .split('?')[0];
+  }
+
+  // 2. URLs com token= em buckets públicos -> remover o parâmetro ?token=... expirado
+  if (raw.includes("supabase.co/storage/") && raw.includes("token=")) {
+    return raw.replace("/object/sign/", "/object/public/").split('?')[0];
+  }
+
   // URLs absolutas, blobs, data URIs e proxies
   if (
     raw.startsWith("http://") || 
@@ -59,18 +72,9 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
     return raw;
   }
 
-  // Tratar URLs /object/public/ ou /object/sign/
-  if (raw.includes("/object/public/") || raw.includes("/object/sign/")) {
-    try {
-      const match = raw.match(/\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/);
-      if (match) {
-        const bucket = match[1];
-        const path = encodeStoragePath(match[2]);
-        const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-        return data.publicUrl;
-      }
-    } catch { /* fall through */ }
-    return raw;
+  // Tratar URLs /object/public/
+  if (raw.includes("/object/public/")) {
+    return raw.split('?')[0];
   }
 
   // Remover prefixo de bucket duplicado se já estiver no início do caminho
