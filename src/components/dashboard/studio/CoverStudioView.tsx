@@ -262,7 +262,7 @@ export const CoverStudioView: React.FC = () => {
       if (!userRes.user?.id) throw new Error("Usuário não autenticado");
 
       // Save project metadata to DB
-      const { error: dbError } = await supabase.from("cover_projects").insert({
+      const { error: dbError } = await (supabase as any).from("cover_projects").insert({
         user_id: userRes.user.id,
         title,
         media_type: selectedPreset.category,
