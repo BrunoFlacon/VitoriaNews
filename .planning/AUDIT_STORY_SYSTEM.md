@@ -33,6 +33,7 @@ A sistema de stories e publicações possui **3 problemas bloqueadores** que imp
 | 🟠 GRAVE (Gargalo) | 5 | Publicações falham ou publicam incorretamente |
 | 🟡 MÉDIO | 7 | Funcionalidade parcial ou dados incorretos |
 | 🔵 LEVE | 5+ | Código morto, warnings, melhorias de código |
+| 🆕 YOUTUBE (FASE 6) | 8+ alterações | Orientação, privacidade, Shorts, visibility pipeline |
 
 ---
 
@@ -420,40 +421,374 @@ pg_cron (a cada 6h) → collect-social-analytics
 | 22 | `upload-media` anon key | `upload-media/index.ts` | Trivial | 🔵 P4 |
 | 23 | 5 tabelas sem migration | migrations | Médio | 🔵 P4 |
 
+### FASE 6 — YOUTUBE: ORIENTAÇÃO DE VÍDEO, PRIVACIDADE E VERTICAL SHORTS (Imediato/Semanal)
+
+#### 6.1 Problema Atual
+
+O adapter YouTube (`_shared/platforms/youtube.ts`) tem **3 problemas bloqueadores**:
+
+| Problema | Localização | Impacto |
+|---------|-------------|---------|
+| `privacyStatus` hardcoded como `"private"` | Linha 76 | TODOS os vídeos ficam privados — ninguém vê |
+| Orientação de vídeo ignorada | Não detecta horizontal vs vertical | Shorts (1080×1920) e vídeos normais (1920×1080) são tratados igual |
+| `visibility` do frontend não chega ao adapter | `publish-post` não repassa `visibility` | O usuário escolhe "Público" mas o YouTube publica como privado |
+
+#### 6.2 Fluxo Correto de Privacidade (Mapeamento)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ESTADO DO POST          │  VISIBILIDADE YOUTUBE               │
+├──────────────────────────┼─────────────────────────────────────┤
+│  RASCUNHO (draft)        │  privacyStatus: "private"           │
+│  ├─ Faltando título      │  → Privado (só o autor vê)         │
+│  ├─ Faltando vídeo       │  → Privado                          │
+│  └─ Não apertou          │  → Privado                          │
+│     Publicar/Programar   │                                     │
+├──────────────────────────┼─────────────────────────────────────┤
+│  AGENDADO (scheduled)    │  privacyStatus: "public"            │
+│  ├─ scheduled_at futuro  │  → Público (quando o cron publicar) │
+│  └─ scheduled_at agora   │  → Público (publicação imediata)    │
+├──────────────────────────┼─────────────────────────────────────┤
+│  PUBLICADO (published)   │  privacyStatus: "public"            │
+│                          │  → Público para todos                │
+├──────────────────────────┼─────────────────────────────────────┤
+│  VISIBILIDADE: private   │  privacyStatus: "private"           │
+│  (usuário escolheu)      │  → Só o autor vê                   │
+├──────────────────────────┼─────────────────────────────────────┤
+│  VISIBILIDADE: unlisted  │  privacyStatus: "unlisted"          │
+│  (não listado)           │  → Só quem tem o link vê           │
+├──────────────────────────┼─────────────────────────────────────┤
+│  VISIBILIDADE: public    │  privacyStatus: "public"            │
+│  (público)               │  → Todos veem                       │
+└──────────────────────────┴─────────────────────────────────────┘
+```
+
+**Regra de Decisão (pseudocódigo):**
+```typescript
+function resolveYouTubePrivacy(post, userVisibility) {
+  // 1. Se é rascunho → sempre privado
+  if (post.status === 'draft') return 'private';
+  
+  // 2. Se o usuário escolheu uma visibilidade explícita → usar ela
+  if (userVisibility === 'private')  return 'private';
+  if (userVisibility === 'unlisted') return 'unlisted';
+  if (userVisibility === 'public')   return 'public';
+  
+  // 3. Se é agendado ou publicado → público por padrão
+  if (post.status === 'scheduled' || post.status === 'published') return 'public';
+  
+  // 4. Fallback → privado (seguro)
+  return 'private';
+}
+```
+
+#### 6.3 Orientação de Vídeo: Horizontal vs Vertical vs Shorts
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ORIENTAÇÃO            │  FORMATO YOUTUBE    │  Usado Para     │
+├────────────────────────┼─────────────────────┼─────────────────┤
+│  Horizontal 1920×1080  │  Vídeo normal       │  Vlog, tutorial │
+│  (landscape/16:9)      │  /videos            │  educativo, etc │
+│                        │                     │                 │
+│  Vertical 1080×1920    │  YouTube Shorts      │  Shorts (<60s)  │
+│  (portrait/9:16)       │  /shorts            │  stories, clips │
+│                        │                     │                 │
+│  Live 1920×1080        │  Live Stream         │  Transmissão    │
+│  (landscape/16:9)      │  /live              │  ao vivo        │
+│                        │                     │                 │
+│  Square 1080×1080      │  Vídeo normal       │  Música, arte   │
+│  (1:1)                 │  /videos            │  etc            │
+└────────────────────────┴─────────────────────┴─────────────────┘
+```
+
+**Detecção de Orientação (melhoria do `detectOrientation`):**
+
+```typescript
+// Detectar orientation por metadados do arquivo OU dimensions
+function resolveYouTubeFormat(
+  mediaUrl: string,           // URL do vídeo
+  orientation: 'horizontal' | 'vertical',  // do scheduled_posts.orientation
+  contentType: string,        // 'video' | 'story' | 'live' | 'short'
+  duration?: number           // duração em segundos (se disponível)
+): 'regular' | 'short' {
+  
+  // 1. Se contentType é explicitamente 'short' ou 'story' → SHORT
+  if (contentType === 'short' || contentType === 'story') return 'short';
+  
+  // 2. Se é 'live' → ALWAYS regular (lives não são shorts)
+  if (contentType === 'live') return 'regular';
+  
+  // 3. Se orientation é 'vertical' e duração < 60s → SHORT
+  if (orientation === 'vertical' && duration && duration < 60) return 'short';
+  
+  // 4. Se orientation é 'vertical' sem duração → SHORT (provável)
+  if (orientation === 'vertical') return 'short';
+  
+  // 5. Caso contrário → regular
+  return 'regular';
+}
+```
+
+#### 6.4 Mapeamento de Conteúdo YouTube por Tipo de Post
+
+| Tipo de Post | Formato YouTube | privacyStatus | Notas |
+|-------------|-----------------|---------------|-------|
+| **Post agendado (scheduled)** — vídeo horizontal | 📹 Vídeo normal | `public` | Publicado quando o cron dispara |
+| **Post agendado (scheduled)** — vídeo vertical | 📱 YouTube Short | `public` | Auto-detectado por orientation |
+| **Story** | 📱 YouTube Short | `public` | Stories são shorts |
+| **Live agendada** | 🔴 Live Stream | `public` | Aguarda go-live |
+| **Post privado** — qualquer formato | 📹 ou 📱 | `private` | Só o autor vê |
+| **Rascunho** — faltando título/vídeo | 📹 ou 📱 | `private` | Salvando para depois |
+| **Rascunho** — não apertou publicar | 📹 ou 📱 | `private` | Ainda configurando |
+
+#### 6.5 Alterações Necessárias
+
+**Arquivo 1: `_shared/platforms/youtube.ts`**
+
+```diff
+  export async function publishToYouTube(supabase: any, payload: PublishPayload): Promise<any> {
+-   const { content, mediaUrls, userId, contentType } = payload;
++   const { content, mediaUrls, userId, contentType, options } = payload;
++   const visibility = options?.visibility || 'public';
+  
+    // ...existing code...
+  
+-   const isShort = contentType === 'short' || contentType === 'story' || contentType === 'reels';
++   // Detectar formato baseado em orientação + contentType
++   const orientation = options?.orientation || 'horizontal';
++   const isShort = contentType === 'short' 
++     || contentType === 'story' 
++     || contentType === 'reels'
++     || (orientation === 'vertical' && contentType === 'video');
+  
+    // Mapear visibility do frontend para privacyStatus do YouTube
++   let privacyStatus: 'public' | 'private' | 'unlisted';
++   if (visibility === 'private') {
++     privacyStatus = 'private';
++   } else if (visibility === 'unlisted') {
++     privacyStatus = 'unlisted';
++   } else {
++     privacyStatus = 'public';
++   }
+  
+    const metadata = {
+      snippet: {
+        title: (options?.title || content || "Publicação").slice(0, 100),
+        description: content || "",
+        categoryId: "22",
++       tags: options?.tags || [],
+      },
+      status: {
+-       privacyStatus: "private", // privado durante testes
++       privacyStatus,
+        selfDeclaredMadeForKids: false,
++       ...(isShort ? { isShorts: true } : {}),
+      },
+    };
+  
+    // ...rest of upload code...
+  }
+```
+
+**Arquivo 2: `publish-post/index.ts`**
+
+```diff
+  const payload: PublishPayload = {
+    platform,
+    contentType: mediaType as any,
+    content,
+    mediaUrls,
+    userId,
+    options: {
+      postType,
+      postId,
+      title: title || null,
++     visibility: post.visibility || options?.visibility || 'public',
++     orientation: post.orientation || options?.orientation || 'horizontal',
+      recipientPhone,
+      chatId,
+      targetProfileId,
+      templateName,
+      templateLanguage,
+      templateVariables,
+      templateHeaderMediaUrl
+    }
+  };
+```
+
+**Arquivo 3: `process-scheduled-posts/index.ts`**
+
+```diff
+  body: JSON.stringify({
+    postId: post.id,
+    platforms: [platform],
+    content: post.content,
+    mediaUrls,
+    title: post.metadata?.videoTitle || post.metadata?.title || null,
+    mediaType: post.media_type,
++   contentType: post.media_type,  // ← ADICIONAR: preservar story/carousel/live
++   visibility: post.metadata?.visibility || 'public',
++   orientation: post.orientation || 'horizontal',
+    userId: post.user_id,
+    recipientPhone: post.metadata?.recipientPhone || post.metadata?.recipient_phone || null,
+    chatId: post.metadata?.chatId || post.metadata?.chat_id || null,
+  }),
+```
+
+**Arquivo 4: `CreatePostPanel.tsx`**
+
+```diff
+  const post = await createPost({
+    content: content.trim(),
+    media_ids: uploadedFiles.map(f => f.id),
+    platforms: selectedPlatforms,
+    media_type: selectedMedia || "image",
+    orientation,
+    scheduled_at: scheduledAt,
+-   metadata: { videoTitle: videoTitle.trim() || null },
++   metadata: {
++     videoTitle: videoTitle.trim() || null,
++     visibility,  // ← ADICIONAR: salvar visibility no metadata
++   },
+  });
+```
+
+**Arquivo 5: `dispatcher.ts` (interface)**
+
+```diff
+  export interface PublishPayload {
+    platform: string;
+    contentType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'carousel' | 'story' | 'live';
+    content: string;
+    mediaUrls?: string[];
+    userId?: string;
+-   options?: Record<string, any>;
++   options?: {
++     title?: string;
++     visibility?: 'public' | 'private' | 'unlisted';
++     orientation?: 'horizontal' | 'vertical';
++     targetProfileId?: string;
++     tags?: string[];
++     [key: string]: any;
++   };
+  }
+```
+
+#### 6.6 Matriz de Decisão Completa
+
+```
+         ┌──────────────┐
+         │  Post Criado │
+         └──────┬───────┘
+                │
+         ┌──────▼───────┐
+         │  Tem Vídeo?  │
+         └──────┬───────┘
+           NÃO  │  SIM
+           ┌────▼────┐
+           │  Texto  │  → Publica como post normal (não é vídeo)
+           └─────────┘
+                │ SIM
+         ┌──────▼───────┐
+         │  Orientation │
+         └──────┬───────┘
+           ┌────┴────┐
+      ┌────▼────┐ ┌──▼─────────┐
+      │HORIZONTAL│ │  VERTICAL   │
+      │ 1920×1080│ │  1080×1920 │
+      └────┬────┘ └──┬─────────┘
+           │          │
+    ┌──────▼──────┐  │
+    │ ContentType?│  │
+    └──────┬──────┘  │
+      ┌────┴────┐   │
+      │         │   │
+  ┌───▼──┐  ┌──▼───▼┐
+  │video │  │story/ │
+  │      │  │short  │
+  └───┬──┘  └──┬───┘
+      │        │
+  ┌───▼────────▼───┐
+  │  YOUTUBE API   │
+  │                │
+  │  privacyStatus │
+  │  ┌───────────┐ │
+  │  │ visibility│ │
+  │  │ do post:  │ │
+  │  │ public →  │ │
+  │  │  "public" │ │
+  │  │ private → │ │
+  │  │  "private"│ │
+  │  │ unlisted→ │ │
+  │  │  "unlist" │ │
+  │  │ draft →   │ │
+  │  │  "private"│ │
+  │  └───────────┘ │
+  └────────────────┘
+```
+
+#### 6.7 Resumo de Impacto
+
+| Antes | Depois |
+|-------|--------|
+| Todos os vídeos YouTube ficam **privados** | Vídeos são **públicos** (ou conforme visibilidade escolhida) |
+| Vídeo vertical é tratado como vídeo normal | Vídeo vertical (<60s) é publicado como **YouTube Short** |
+| `visibility` do frontend é **ignorada** | `visibility` é repassada ao YouTube API |
+| Rascunho faltando título/vídeo → crash ou publica parcial | Rascunho → `privacyStatus: "private"` (seguro) |
+| Story agendada → publica como vídeo normal no feed | Story → YouTube Short |
+
+#### 6.8 Todos os Status de Publicação YouTube
+
+| Status do Post | Motivo | privacyStatus YouTube |
+|---------------|--------|----------------------|
+| `draft` — incompleto (sem título) | Não configurado | `"private"` |
+| `draft` — incompleto (sem vídeo) | Não configurado | `"private"` |
+| `draft` — não apertou publicar | Ainda editando | `"private"` |
+| `scheduled` — agendado | Vai publicar no horário | `"public"` |
+| `scheduled` — publicado pelo cron | Já disponível | `"public"` |
+| `published` — manual | Publicado agora | `"public"` |
+| Visibilidade: `private` | Opção do usuário | `"private"` |
+| Visibilidade: `unlisted` | Só com link | `"unlisted"` |
+| Visibilidade: `public` | Padrão | `"public"` |
+
 ---
 
 ## 10. ANEXO: ARQUIVOS AFETADOS
 
 ### Edge Functions
 
-| Caminho | Ação |
-|---------|------|
-| `supabase/functions/process-scheduled-posts/index.ts` | FIX CRÍTICO — adicionar monitor stories_lives + contentType |
-| `supabase/functions/publish-post/index.ts` | REVISAR — garantir que contentType chega ao dispatcher |
-| `supabase/functions/_shared/platforms/youtube.ts` | FIX — privacyStatus → "public" |
-| `supabase/functions/_shared/platforms/tiktok.ts` | FIX — privacy_level (aguardar API auditada) |
-| `supabase/functions/_shared/platforms/snapchat.ts` | FIX — retornar erro claro em vez de falso sucesso |
-| `supabase/functions/_shared/platforms/kwai.ts` | FIX — retornar erro claro em vez de falso sucesso |
-| `supabase/functions/_shared/platforms/rumble.ts` | FIX — retornar erro claro em vez de falso sucesso |
-| `supabase/functions/_shared/platforms/truthsocial.ts` | FIX — retornar erro claro em vez de falso sucesso |
-| `supabase/functions/_shared/platforms/gettr.ts` | FIX — retornar erro claro em vez de falso sucesso |
-| `supabase/functions/_shared/platforms/googlenews.ts` | FIX — retornar erro claro em vez de falso sucesso |
-| `supabase/functions/_shared/platforms/spotify.ts` | FIX — implementar ou retornar erro |
-| `supabase/functions/collect-social-analytics/index.ts` | FIX — dados mockados (FB, X, TG, Spotify) |
-| `supabase/functions/get-analytics/index.ts` | FIX — tabelas ausentes |
-| `supabase/functions/publish-post/server.ts` | DELETE — código morto |
-| `supabase/functions/publish-post/config/env.ts` | FIX — lookup dinâmico |
-| `supabase/functions/publish-post/workers/transcoder.ts` | DELETE ou REESCREVER |
-| `supabase/functions/upload-media/index.ts` | FIX — service role key |
+| Caminho | Ação | Fase |
+|---------|------|------|
+| `supabase/functions/process-scheduled-posts/index.ts` | FIX CRÍTICO — adicionar monitor stories_lives + contentType + visibility + orientation | FASE 1 + 6 |
+| `supabase/functions/publish-post/index.ts` | REVISAR — garantir que contentType, visibility e orientation chegam ao dispatcher | FASE 1 + 6 |
+| `supabase/functions/_shared/platforms/dispatcher.ts` | FIX — tipar interface `options` com visibility, orientation, tags | FASE 6 |
+| `supabase/functions/_shared/platforms/youtube.ts` | FIX COMPLETO — privacyStatus dinâmico + detecção de Shorts + orientation | FASE 6 |
+| `supabase/functions/_shared/platforms/tiktok.ts` | FIX — privacy_level (aguardar API auditada) | FASE 2 |
+| `supabase/functions/_shared/platforms/snapchat.ts` | FIX — retornar erro claro em vez de falso sucesso | FASE 2 |
+| `supabase/functions/_shared/platforms/kwai.ts` | FIX — retornar erro claro em vez de falso sucesso | FASE 2 |
+| `supabase/functions/_shared/platforms/rumble.ts` | FIX — retornar erro claro em vez de falso sucesso | FASE 2 |
+| `supabase/functions/_shared/platforms/truthsocial.ts` | FIX — retornar erro claro em vez de falso sucesso | FASE 2 |
+| `supabase/functions/_shared/platforms/gettr.ts` | FIX — retornar erro claro em vez de falso sucesso | FASE 2 |
+| `supabase/functions/_shared/platforms/googlenews.ts` | FIX — retornar erro claro em vez de falso sucesso | FASE 2 |
+| `supabase/functions/_shared/platforms/spotify.ts` | FIX — implementar ou retornar erro | FASE 2 |
+| `supabase/functions/collect-social-analytics/index.ts` | FIX — dados mockados (FB, X, TG, Spotify) | FASE 3 |
+| `supabase/functions/get-analytics/index.ts` | FIX — tabelas ausentes | FASE 3 |
+| `supabase/functions/publish-post/server.ts` | DELETE — código morto | FASE 5 |
+| `supabase/functions/publish-post/config/env.ts` | FIX — lookup dinâmico | FASE 5 |
+| `supabase/functions/publish-post/workers/transcoder.ts` | DELETE ou REESCREVER | FASE 5 |
+| `supabase/functions/upload-media/index.ts` | FIX — service role key | FASE 5 |
 
 ### Frontend
 
-| Caminho | Ação |
-|---------|------|
-| `src/components/dashboard/StoryEditor.tsx` | FIX — restauração de draft |
-| `src/components/dashboard/StoriesLivesView.tsx` | FIX — toast duplicado |
-| `src/components/dashboard/CreatePostPanel.tsx` | REVISAR — fluxo de story |
-| `src/hooks/useScheduledPosts.ts` | FIX — limite de 50 posts |
+| Caminho | Ação | Fase |
+|---------|------|------|
+| `src/components/dashboard/StoryEditor.tsx` | FIX — restauração de draft | FASE 2 |
+| `src/components/dashboard/StoriesLivesView.tsx` | FIX — toast duplicado | FASE 2 |
+| `src/components/dashboard/CreatePostPanel.tsx` | FIX — passar visibility no metadata + orientation para YouTube | FASE 6 |
+| `src/hooks/useScheduledPosts.ts` | FIX — limite de 50 posts | FASE 4 |
+| `src/components/dashboard/FeedPreview.tsx` | REVISAR — exibir badge YouTube (Short/Normal/Live) | FASE 6 |
+| `src/components/dashboard/PostPreview.tsx` | REVISAR — exibir visibilidade YouTube correta | FASE 6 |
 
 ### Migrations
 
