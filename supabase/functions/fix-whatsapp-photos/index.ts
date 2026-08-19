@@ -1,266 +1,233 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-declare const Deno: any;
-
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FETCH_TIMEOUT = 15000;
-
-function fetchWithTimeout(url: string, options: RequestInit = {}, ms = FETCH_TIMEOUT) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), ms);
-  return fetch(url, { ...options, signal: controller.signal })
-    .finally(() => clearTimeout(id));
-}
-
-const FIX_NAMES = [
-  "Central News", "Andje Wallace",
-  "ADM - Marcha da Família", "ADM - IG. M Vida Eterna",
-  "ADM - Tupã Pela Pátria", "ADM - Partido Liberal Tupã"
-];
-
-async function uploadToStorage(supabase: any, imageUrl: string, fileName: string): Promise<string> {
-  const imgResp = await fetchWithTimeout(imageUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Referer": "https://www.facebook.com/",
-      "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-    }
-  });
-  if (!imgResp.ok) throw new Error(`fetch image failed (${imgResp.status})`);
-  const imgBlob = await imgResp.blob();
-  const ct = imgResp.headers.get("content-type") || "image/png";
-  const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
-  const path = `whatsapp/${fileName}.${ext}`;
-  const { error: uploadError } = await supabase.storage
-    .from("profile-photos")
-    .upload(path, imgBlob, { contentType: ct, upsert: true });
-  if (uploadError) throw new Error(`upload error: ${uploadError.message}`);
-  const { data: pubUrl } = supabase.storage.from("profile-photos").getPublicUrl(path);
-  return pubUrl.publicUrl + `?v=${Date.now()}`;
-}
-
-serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data: allWa } = await supabase
+    // Fetch all WhatsApp connections
+    const { data: connections, error: connErr } = await supabase
       .from("social_connections")
       .select("*")
-      .eq("platform", "whatsapp")
-      .order("page_name");
+      .eq("platform", "whatsapp");
 
-    if (!allWa || allWa.length === 0) {
-      return new Response(JSON.stringify({ success: true, message: "No WhatsApp connections found" }), {
+    if (connErr) {
+      return new Response(JSON.stringify({ error: connErr.message }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const migrationLog: any[] = [];
-
-    // Step 1: Find and merge duplicate connections by page_name
-    // OAuth callback creates new rows with platform_user_id = WABA ID,
-    // while old rows have platform_user_id = Facebook Page ID
-    const byName: Record<string, any[]> = {};
-    for (const conn of allWa) {
-      const key = (conn.page_name || '').trim().toLowerCase();
-      if (!byName[key]) byName[key] = [];
-      byName[key].push(conn);
-    }
-
-    for (const [name, group] of Object.entries(byName)) {
-      if (group.length <= 1) continue;
-      // Sort by updated_at descending, most recent first
-      group.sort((a: any, b: any) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime());
-      const keeper = group[0];
-      const duplicates = group.slice(1);
-      // keeper = most recent (created by re-auth with WABA ID + correct photo)
-      // duplicates = old rows (FB Page ID, empty/wrong photo)
-      // Keep the OLD row active (dashboard knows it), copy photo FROM keeper, deactivate keeper
-      const oldest = duplicates[duplicates.length - 1]; // last = oldest
-      if (keeper.profile_image_url) {
-        console.log(`[MIGRATE] ${name}: copying photo from keeper(${keeper.id}) to oldest(${oldest.id}) then deactivating keeper`);
-        await supabase.from("social_connections").update({
-          profile_image_url: keeper.profile_image_url,
-          page_id: null,
-          phone_number_id: keeper.phone_number_id || oldest.phone_number_id || null,
-          updated_at: new Date().toISOString(),
-        }).eq("id", oldest.id);
-        await supabase.from("social_connections").update({
-          is_connected: false,
-          updated_at: new Date().toISOString(),
-        }).eq("id", keeper.id);
-        migrationLog.push({
-          name: keeper.page_name,
-          kept_id: oldest.id,
-          deactivated_id: keeper.id,
-          photo_truncated: keeper.profile_image_url.substring(0, 60) + "...",
-        });
-      }
-    }
-
-    if (migrationLog.length > 0) {
-      console.log(`[MIGRATE] Merged ${migrationLog.length} duplicate groups`);
-    }
-
-    // Re-fetch after migrations
-    const { data: refreshed } = await supabase
-      .from("social_connections")
-      .select("*")
-      .eq("platform", "whatsapp")
-      .eq("is_connected", true)
-      .order("page_name");
-
-    if (!refreshed) {
-      return new Response(JSON.stringify({ success: true, message: "No connections after migration" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const diagnostics: any[] = [];
     const results: any[] = [];
 
-    for (const conn of refreshed) {
-      const isTarget = FIX_NAMES.some((n: string) => (conn.page_name || '').trim() === n);
-      let profilePic = "";
-      let phoneId = conn.phone_number_id;
-      let bizName = conn.page_name || "WhatsApp Business";
-      const log: any = {
-        name: conn.page_name,
-        isTarget,
-        platform_user_id: conn.platform_user_id,
-        before: {
-          page_id: conn.page_id,
-          phone_number_id: phoneId,
-          profile_image_url: conn.profile_image_url,
-        },
-        debug: {} as any,
-      };
-
-      if (isTarget && conn.page_id) {
-        console.log(`[FIX] ${conn.page_name}: clearing page_id=${conn.page_id}`);
-        await supabase.from("social_connections").update({ page_id: null }).eq("id", conn.id);
-        conn.page_id = null;
-      }
-
-      let wabaId = null;
-      let wabaToken = conn.access_token;
+    for (const conn of connections || []) {
       try {
-        const { data: apiCred } = await supabase
-          .from("api_credentials")
-          .select("credentials")
-          .eq("user_id", conn.user_id)
-          .eq("platform", "whatsapp")
-          .maybeSingle();
-        if (apiCred?.credentials) {
-          wabaId = apiCred.credentials.waba_id;
-          if (apiCred.credentials.access_token) wabaToken = apiCred.credentials.access_token;
-          if (!phoneId) phoneId = apiCred.credentials.phone_number_id;
-        }
-      } catch {}
-
-      // Use WABA ID from api_credentials (correct after OAuth callback fix) or conn.platform_user_id
-      const allWabaIds = [wabaId, conn.platform_user_id].filter((v: any) => v);
-      // phone_numbers edge on WABA — the ONLY reliable source of profile_photo_url in v21.0
-      for (const wid of allWabaIds) {
-        if (profilePic) break;
-        try {
-          const pnUrl = `https://graph.facebook.com/v21.0/${wid}/phone_numbers?fields=id,display_phone_number,profile_photo_url,verified_name&access_token=${wabaToken}`;
-          log.debug["list_nums_url"] = pnUrl.substring(0, 120) + "...";
-          const phoneResp = await fetchWithTimeout(pnUrl);
-          log.debug["list_nums_status"] = phoneResp.status;
-          if (phoneResp.ok) {
-            const phoneData = await phoneResp.json();
-            if (phoneData.error) {
-              log.debug["list_nums_error"] = `${phoneData.error.message} (code ${phoneData.error.code})`;
-              continue;
-            }
-            if (phoneData.data && phoneData.data.length > 0) {
-              log.debug["list_nums_count"] = phoneData.data.length;
-              const connName = (conn.page_name || '').toLowerCase().trim();
-              let matched = phoneData.data[0];
-              if (connName) {
-                for (const p of phoneData.data) {
-                  const pName = (p.verified_name || p.display_phone_number || '').toLowerCase().trim();
-                  if (pName && (connName.includes(pName) || pName.includes(connName))) {
-                    matched = p;
-                    break;
-                  }
-                }
-              }
-              phoneId = matched.id;
-              bizName = matched.verified_name || matched.display_phone_number || bizName;
-              if (matched.profile_photo_url) {
-                profilePic = matched.profile_photo_url;
-                log.debug["photo_found"] = true;
-              }
-              break;
-            }
-          }
-        } catch (e) {
-          console.warn(`[FIX] ${conn.page_name}: phone_numbers error via ${wid}:`, String(e));
-        }
-      }
-
-      let storageUrl = "";
-      if (profilePic && profilePic.startsWith("http")) {
-        try {
-          const baseId = conn.platform_user_id || conn.id;
-          storageUrl = await uploadToStorage(supabase, profilePic, baseId);
-          console.log(`[FIX] ${conn.page_name}: uploaded photo to storage: ${storageUrl}`);
-        } catch (e) {
-          console.warn(`[FIX] upload error for ${conn.page_name}:`, String(e));
-        }
-      }
-
-      const finalPic = storageUrl || profilePic || conn.profile_image_url || "";
-      log.after = {
-        page_id: conn.page_id,
-        phone_number_id: phoneId,
-        profile_image_url: finalPic || "(empty)",
-        phone_id_resolved: !!phoneId,
-        waba_photo_found: !!profilePic,
-        uploaded: !!storageUrl,
-      };
-
-      const updateData: any = { updated_at: new Date().toISOString() };
-      if (isTarget) {
-        if (finalPic) updateData.profile_image_url = finalPic;
-        updateData.phone_number_id = phoneId || null;
-        updateData.page_name = bizName;
-      }
-      if (finalPic && isTarget) {
-        updateData.profile_image_url = finalPic;
-      }
-      if (isTarget) {
-        await supabase.from("social_connections").update(updateData).eq("id", conn.id);
-        if (finalPic) {
-          await supabase.from("social_accounts")
-            .update({ profile_picture: finalPic, username: bizName })
+        let token = conn.access_token;
+        if (!token) {
+          const { data: credsData } = await supabase
+            .from("api_credentials")
+            .select("credentials")
             .eq("user_id", conn.user_id)
             .eq("platform", "whatsapp")
-            .eq("platform_user_id", conn.platform_user_id || "");
+            .maybeSingle();
+          token = (credsData?.credentials as any)?.access_token;
         }
-      }
 
-      diagnostics.push(log);
-      results.push({ name: conn.page_name, isTarget, fixed: isTarget && (!!finalPic || !conn.page_id) });
+        let phoneId = conn.phone_number_id;
+        let bizName = conn.page_name || "WhatsApp Business";
+        let profilePic = "";
+
+        if (token) {
+          // Attempt 1: Resolve phone_number_id if missing
+          if (!phoneId && conn.platform_user_id) {
+            try {
+              const pResp = await fetch(
+                `https://graph.facebook.com/v21.0/${conn.platform_user_id}/phone_numbers?access_token=${token}`
+              );
+              if (pResp.ok) {
+                const pData = await pResp.json();
+                if (pData.data && pData.data.length > 0) {
+                  phoneId = pData.data[0].id;
+                  bizName = pData.data[0].verified_name || pData.data[0].display_phone_number || bizName;
+                  await supabase
+                    .from("social_connections")
+                    .update({ phone_number_id: phoneId, page_name: bizName })
+                    .eq("id", conn.id);
+                }
+              }
+            } catch (e: any) {
+              console.error(`[WA-FIX] phone_number_id lookup failed for ${conn.id}:`, e.message);
+            }
+          }
+
+          // Attempt 2: Query whatsapp_business_profile
+          if (phoneId && !profilePic) {
+            try {
+              const bResp = await fetch(
+                `https://graph.facebook.com/v21.0/${phoneId}/whatsapp_business_profile?fields=profile_picture_url&access_token=${token}`
+              );
+              if (bResp.ok) {
+                const bData = await bResp.json();
+                profilePic = bData.data?.[0]?.profile_picture_url || bData.profile_picture_url || "";
+              }
+            } catch (e: any) {
+              console.error(`[WA-FIX] whatsapp_business_profile lookup failed:`, e.message);
+            }
+          }
+
+          // Attempt 3: Query phone node directly
+          if (phoneId && !profilePic) {
+            try {
+              const pnResp = await fetch(
+                `https://graph.facebook.com/v21.0/${phoneId}?fields=display_phone_number,profile_photo_url,verified_name&access_token=${token}`
+              );
+              if (pnResp.ok) {
+                const pnData = await pnResp.json();
+                profilePic = pnData.profile_photo_url || "";
+                bizName = pnData.verified_name || pnData.display_phone_number || bizName;
+              }
+            } catch (e: any) {
+              console.error(`[WA-FIX] phone node lookup failed:`, e.message);
+            }
+          }
+
+          // Attempt 4: Facebook Page picture fallback
+          if (!profilePic && conn.platform_user_id) {
+            try {
+              const picResp = await fetch(
+                `https://graph.facebook.com/v21.0/${conn.platform_user_id}/picture?type=large&redirect=false&access_token=${token}`
+              );
+              if (picResp.ok) {
+                const picData = await picResp.json();
+                profilePic = picData.data?.url || "";
+              }
+            } catch (e: any) {
+              console.error(`[WA-FIX] FB picture fallback failed:`, e.message);
+            }
+          }
+        }
+
+        // Upload to Storage if valid
+        let finalStorageUrl = "";
+        if (profilePic && profilePic.startsWith("http")) {
+          try {
+            const imgResp = await fetch(profilePic, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+                "Referer": "https://www.facebook.com/",
+              },
+            });
+            if (imgResp.ok) {
+              const imgBlob = await imgResp.blob();
+              if (imgBlob.size > 1000) {
+                const ct = imgResp.headers.get("content-type") || "image/jpeg";
+                const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+                const fileName = `whatsapp/${conn.platform_user_id || conn.id}.${ext}`;
+
+                const { error: uploadErr } = await supabase.storage
+                  .from("profile-photos")
+                  .upload(fileName, imgBlob, { contentType: ct, upsert: true });
+
+                if (!uploadErr) {
+                  const { data: pubUrl } = supabase.storage
+                    .from("profile-photos")
+                    .getPublicUrl(fileName);
+                  finalStorageUrl = pubUrl.publicUrl;
+                } else {
+                  console.error(`[WA-FIX] Storage upload error:`, uploadErr.message);
+                }
+              } else {
+                console.warn(`[WA-FIX] Image too small (${imgBlob.size} bytes), skipping upload.`);
+              }
+            }
+          } catch (e: any) {
+            console.error(`[WA-FIX] Image fetch/upload exception:`, e.message);
+          }
+        }
+
+        // Use fallback default avatar if no custom photo was retrieved
+        if (!finalStorageUrl) {
+          // If we couldn't fetch custom photo, construct public URL or keep current if valid
+          finalStorageUrl = conn.profile_image_url || "";
+        }
+
+        if (finalStorageUrl) {
+          // Update social_connections
+          await supabase
+            .from("social_connections")
+            .update({
+              profile_image_url: finalStorageUrl,
+              profile_picture: finalStorageUrl,
+              is_connected: true,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", conn.id);
+
+          // Update social_accounts
+          if (conn.platform_user_id) {
+            await supabase
+              .from("social_accounts")
+              .upsert({
+                user_id: conn.user_id,
+                platform: "whatsapp",
+                platform_user_id: conn.platform_user_id,
+                username: bizName,
+                page_name: bizName,
+                profile_picture: finalStorageUrl,
+                is_connected: true,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: "user_id,platform,platform_user_id" });
+          }
+
+          // Update api_credentials
+          const { data: existingCreds } = await supabase
+            .from("api_credentials")
+            .select("credentials")
+            .eq("user_id", conn.user_id)
+            .eq("platform", "whatsapp")
+            .maybeSingle();
+
+          const credsObj = (existingCreds?.credentials as any) || {};
+          await supabase
+            .from("api_credentials")
+            .upsert({
+              user_id: conn.user_id,
+              platform: "whatsapp",
+              credentials: {
+                ...credsObj,
+                profile_image_url: finalStorageUrl,
+              },
+              updated_at: new Date().toISOString(),
+            }, { onConflict: "user_id,platform" });
+        }
+
+        results.push({
+          id: conn.id,
+          page_name: bizName,
+          platform_user_id: conn.platform_user_id,
+          phone_number_id: phoneId,
+          profile_image_url: finalStorageUrl,
+          fetchedFromMeta: !!profilePic,
+        });
+      } catch (e: any) {
+        results.push({ id: conn.id, error: e.message });
+      }
     }
 
-    return new Response(JSON.stringify({ success: true, migrationLog, results, diagnostics }), {
+    return new Response(JSON.stringify({ success: true, count: results.length, results }, null, 2), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: String(error) }), {
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

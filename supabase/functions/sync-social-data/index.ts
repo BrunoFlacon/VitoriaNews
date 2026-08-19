@@ -393,22 +393,26 @@ serve(async (req: Request) => {
                   });
                   if (imgResp.ok) {
                     const imgBlob = await imgResp.blob();
-                    const ct = imgResp.headers.get("content-type") || "image/png";
-                    const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
-                    const fileName = `whatsapp/${conn.platform_user_id || conn.id}.${ext}`;
+                    if (imgBlob.size > 1000) {
+                      const ct = imgResp.headers.get("content-type") || "image/png";
+                      const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+                      const fileName = `whatsapp/${conn.platform_user_id || conn.id}.${ext}`;
 
-                    const { error: uploadError } = await supabase.storage
-                      .from("profile-photos")
-                      .upload(fileName, imgBlob, { contentType: ct, upsert: true });
-
-                    if (!uploadError) {
-                      const { data: pubUrl } = supabase.storage
+                      const { error: uploadError } = await supabase.storage
                         .from("profile-photos")
-                        .getPublicUrl(fileName);
-                      profilePic = pubUrl.publicUrl;
-                      console.log(`[WA-PHOTO] ${conn.page_name}: uploaded to storage: ${profilePic}`);
+                        .upload(fileName, imgBlob, { contentType: ct, upsert: true });
+
+                      if (!uploadError) {
+                        const { data: pubUrl } = supabase.storage
+                          .from("profile-photos")
+                          .getPublicUrl(fileName);
+                        profilePic = pubUrl.publicUrl;
+                        console.log(`[WA-PHOTO] ${conn.page_name}: uploaded to storage: ${profilePic}`);
+                      } else {
+                        console.error(`[WA-PHOTO] ${conn.page_name}: upload failed:`, uploadError.message);
+                      }
                     } else {
-                      console.error(`[WA-PHOTO] ${conn.page_name}: upload failed:`, uploadError.message);
+                      console.log(`[WA-PHOTO] ${conn.page_name}: Image size too small (${imgBlob.size} bytes), skipping upload.`);
                     }
                   } else {
                     console.error(`[WA-PHOTO] ${conn.page_name}: fetch image failed (${imgResp.status})`);

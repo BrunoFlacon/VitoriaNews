@@ -550,6 +550,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       }
 
       let isFinalized = false;
+      const startTime = Date.now();
 
       const localOrigin = window.location.origin;
       const isLocalDev = localOrigin.startsWith('http://localhost:') || localOrigin.startsWith('http://127.0.0.1:');
@@ -649,7 +650,7 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
       };
 
       const handleMessage = (event: MessageEvent) => {
-        if (event.source !== popup) return;
+        if (event.source !== popup && event.origin !== window.location.origin) return;
         const d = event.data;
         if (!d || typeof d !== 'object') return;
         if (d.type !== 'oauth-complete' && d.type !== 'oauth-callback') return;
@@ -677,45 +678,47 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       let pendingCloseCheck = false;
       const pollInterval = setInterval(async () => {
-        if (pendingCloseCheck) return;
+        if (pendingCloseCheck || isFinalized) return;
         pendingCloseCheck = true;
         try {
-          // 1) Acelerador: popup fechada (origem acessível, ex.: sem COOP)
-          //    Só é observável antes de navegar para o provider (about:blank).
-          if (!popupIsCrossOrigin) {
-            try {
-              if (!popup || popup.closed) {
-                clearInterval(pollInterval);
-                await finalize();
-                return;
-              }
-            } catch (e) {
-              // COOP (TikTok/Google/Facebook...): o estado da popup é inobservável.
-              // NÃO finalizar por aqui — continuar esperando a fonte de verdade abaixo.
+          // 1) Popup closed check (safe handling for cross-origin COOP)
+          try {
+            if (popup && popup.closed) {
+              clearInterval(pollInterval);
+              await finalize();
+              return;
             }
+          } catch (e) {
+            // COOP error handling fallback
           }
 
-          // 2) Fonte de verdade: a conexão criada no servidor (cobre COOP e popups cross-origin)
+          // 2) Server source of truth: check if a connection was added/updated AFTER startTime
           try {
             const { data: conns } = await (supabase as any)
               .from('social_connections')
-              .select('id')
+              .select('id, updated_at')
               .eq('user_id', user!.id)
               .eq('platform', platform)
               .eq('is_connected', true);
-            if (conns && conns.length > 0) {
+
+            const hasNewOrUpdated = (conns || []).some((c: any) => {
+              if (!c.updated_at) return true;
+              return new Date(c.updated_at).getTime() >= (startTime - 3000);
+            });
+
+            if (hasNewOrUpdated) {
               clearInterval(pollInterval);
               await finalize(true);
               toast({ title: "Conta conectada!", description: `${platform} foi conectado com sucesso.` });
               return;
             }
           } catch (pollErr) {
-            // Continua o polling na próxima rodada
+            // Continue polling
           }
         } finally {
           pendingCloseCheck = false;
         }
-      }, 4000);
+      }, 3000);
 
       // Encerra com mensagem útil (em vez de ficar preso em "Aguardando autorização...")
       setTimeout(() => {

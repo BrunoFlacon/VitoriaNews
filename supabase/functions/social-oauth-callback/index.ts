@@ -108,19 +108,18 @@ async function exchangeGoogle(code: string, redirectUri: string, creds: any, sup
   const userData = await userRes.json();
 
   // Fetch owned channels (mine=true) AND managed channels (managedByMe=true)
-  // Brand accounts / managed channels only appear with managedByMe=true
   const [ownedRes, managedRes] = await Promise.all([
-    fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { headers: { Authorization: `Bearer ${accessToken}` } }),
-    fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&managedByMe=true", { headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => null),
+    fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails,statistics&mine=true", { headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => null),
+    fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails,statistics&managedByMe=true", { headers: { Authorization: `Bearer ${accessToken}` } }).catch(() => null),
   ]);
 
-  const ownedData = await ownedRes.json();
-  const managedData = managedRes ? await managedRes.json().catch(() => ({ items: [] })) : { items: [] };
+  const ownedData = (ownedRes && ownedRes.ok) ? await ownedRes.json().catch(() => ({ items: [] })) : { items: [] };
+  const managedData = (managedRes && managedRes.ok) ? await managedRes.json().catch(() => ({ items: [] })) : { items: [] };
 
   // Merge owned + managed channels, deduplicate by channel ID
   const allChannels = new Map<string, any>();
   for (const ch of [...(ownedData.items || []), ...(managedData.items || [])]) {
-    if (ch.id && !allChannels.has(ch.id)) {
+    if (ch && ch.id && !allChannels.has(ch.id)) {
       allChannels.set(ch.id, ch);
     }
   }
@@ -131,7 +130,10 @@ async function exchangeGoogle(code: string, redirectUri: string, creds: any, sup
       platformUserId: ch.id,
       pageName: ch.snippet.title,
       pageId: "",
-      profileImageUrl: ch.snippet.thumbnails?.default?.url || ch.snippet.thumbnails?.medium?.url || ch.snippet.thumbnails?.high?.url || userData.picture || ""
+      profileImageUrl: ch.snippet.thumbnails?.high?.url || ch.snippet.thumbnails?.medium?.url || ch.snippet.thumbnails?.default?.url || userData.picture || "",
+      username: ch.snippet.customUrl || ch.snippet.title,
+      followers: Number(ch.statistics?.subscriberCount || 0),
+      postsCount: Number(ch.statistics?.videoCount || 0),
     }));
   }
 
@@ -643,13 +645,17 @@ serve(async (req: Request) => {
          page_id: platform === "whatsapp" ? null : (result.pageId || null),
          profile_image_url: result.profileImageUrl || null, is_connected: true, updated_at: new Date().toISOString(),
        };
+       if (typeof (result as any).followers === 'number') upsertData.followers_count = (result as any).followers;
+       if (typeof (result as any).postsCount === 'number') upsertData.posts_count = (result as any).postsCount;
        if (phoneNumberId) upsertData.phone_number_id = phoneNumberId;
        if (result.platformUserId) upsertData.waba_id = result.platformUserId;
        await supabase.from("social_connections").upsert(upsertData, { onConflict: "user_id,platform,platform_user_id" });
 
        await supabase.from("social_accounts").upsert({
          user_id: user.id, platform, platform_user_id: result.platformUserId, username: result.username || result.pageName,
-         page_name: result.pageName, profile_picture: result.profileImageUrl, is_connected: true, updated_at: new Date().toISOString(),
+         page_name: result.pageName, profile_picture: result.profileImageUrl,
+         followers_count: (result as any).followers || 0, posts_count: (result as any).postsCount || 0,
+         is_connected: true, updated_at: new Date().toISOString(),
        }, { onConflict: "user_id,platform,platform_user_id" });
 
        // Sync WhatsApp tokens to api_credentials for downstream functions
