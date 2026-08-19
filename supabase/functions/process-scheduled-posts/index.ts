@@ -100,6 +100,9 @@ async function invokePublishForPlatform(
         mediaUrls,
         title: post.metadata?.videoTitle || post.metadata?.title || null,
         mediaType: post.media_type,
+        contentType: post.media_type, // preservar story/carousel/live para o dispatcher
+        visibility: post.metadata?.visibility || 'public',
+        orientation: post.orientation || 'horizontal',
         userId: post.user_id,
         recipientPhone: post.metadata?.recipientPhone || post.metadata?.recipient_phone || null,
         chatId: post.metadata?.chatId || post.metadata?.chat_id || null,
@@ -240,3 +243,79 @@ serve(async (req: Request) => {
     });
   }
 });
+
+// ─── Stories & Lives processing ─────────────────────────────────────────────
+// stories_lives has its own scheduled_at but no dedicated cron.
+// We piggyback on the same invocation to publish overdue stories/lives.
+async function processScheduledStories(supabaseUrl: string, serviceKey: string) {
+  const supabase = createClient(supabaseUrl, serviceKey);
+
+  const { data: stories, error } = await supabase
+    .from("stories_lives")
+    .select("id, user_id, platform, title, content, media_url, thumbnail_url, status, scheduled_at, metadata, type")
+    .lte("scheduled_at", new Date().toISOString())
+    .in("status", ["scheduled"])
+    .order("scheduled_at", { ascending: true })
+    .limit(BATCH_SIZE);
+
+  if (error) throw error;
+  if (!stories || stories.length === 0) return;
+
+  let published = 0;
+  let failed = 0;
+
+  for (const story of stories) {
+    const now = new Date().toISOString();
+
+    // Claim the story (atomic status transition)
+    const { data: claimed } = await supabase
+      .from("stories_lives")
+      .update({ status: "publishing", updated_at: now })
+      .eq("id", story.id)
+      .eq("status", "scheduled")
+      .select("id")
+      .maybeSingle();
+
+    if (!claimed) continue;
+
+    try {
+      const mediaUrls = story.media_url ? [story.media_url] : (story.thumbnail_url ? [story.thumbnail_url] : []);
+
+      const result = await invokePublishForPlatform(supabaseUrl, serviceKey, {
+        id: story.id,
+        user_id: story.user_id,
+        content: story.content || story.title || "",
+        media_ids: [],
+        media_type: story.type || "story",
+        metadata: story.metadata || {},
+        orientation: "vertical", // stories are vertical by default
+      }, story.platform, mediaUrls);
+
+      const success = result?.success === true ||
+        (Array.isArray(result?.results) && result.results.some((r: any) => r.success));
+
+      if (success) {
+        await supabase
+          .from("stories_lives")
+          .update({ status: "published", published_at: now, completed_at: now, updated_at: now })
+          .eq("id", story.id);
+        published++;
+      } else {
+        const errMsg = result?.error || (result?.results || []).map((r: any) => r.error).filter(Boolean).join(", ") || "Publish failed";
+        await supabase
+          .from("stories_lives")
+          .update({ status: "failed", error_message: String(errMsg).slice(0, 500), updated_at: now })
+          .eq("id", story.id);
+        failed++;
+      }
+    } catch (e: any) {
+      await supabase
+        .from("stories_lives")
+        .update({ status: "failed", error_message: String(e?.message || e).slice(0, 500), updated_at: new Date().toISOString() })
+        .eq("id", story.id);
+      failed++;
+    }
+  }
+
+  return { storiesProcessed: stories.length, storiesPublished: published, storiesFailed: failed };
+}

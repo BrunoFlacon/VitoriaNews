@@ -118,13 +118,13 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
   const fetchPosts = async () => {
     if (!user) return [];
 
-    // Fetch posts (limited to 50 for faster initial dashboard load)
+    // Fetch posts (limited for performance — increase if needed)
     const { data: postsData, error: postsError } = await supabase
       .from('scheduled_posts')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(200);
 
     if (postsError) throw postsError;
     

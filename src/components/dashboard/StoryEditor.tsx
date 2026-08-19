@@ -245,31 +245,55 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
     setStories(prev => prev.map((s, i) => i === activeIndex ? { ...s, ...updates } : s));
   };
 
-  // Auto-save logic
+  // Auto-save logic — saves on unmount (including route changes) and periodically
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      localStorage.setItem(`story_draft_${user?.id}`, JSON.stringify(stories));
+    if (!user?.id) return;
+
+    const saveDraft = () => {
+      localStorage.setItem(`story_draft_${user.id}`, JSON.stringify(stories));
     };
+
+    const handleBeforeUnload = () => saveDraft();
     window.addEventListener("beforeunload", handleBeforeUnload);
     
-    // Periodical auto-save
-    const timer = setTimeout(() => {
-      localStorage.setItem(`story_draft_${user?.id}`, JSON.stringify(stories));
-    }, 2000);
+    // Periodic auto-save every 5 seconds
+    const timer = setInterval(saveDraft, 5000);
 
+    // Also save when component unmounts (navigation, tab close)
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
-      clearTimeout(timer);
+      clearInterval(timer);
+      saveDraft(); // persist on unmount
     };
   }, [stories, user?.id]);
 
-  // Load draft if exists
+  // Load draft if exists (on mount, only when no media was provided)
+  const hasInitializedDraft = useRef(false);
   useEffect(() => {
+    if (hasInitializedDraft.current) return;
+    if (!user?.id) return;
+    // Only offer draft restore when no media was provided (empty story)
+    if (initialMediaUrls.length > 0 && initialMediaUrls.some(u => u !== "")) return;
+
     const draft = localStorage.getItem(`story_draft_${user?.id}`);
-    if (draft && stories.some(s => s.url === "")) {
-       // Only prompt/load if we have a blank state or user wants to recover
+    if (draft) {
+      try {
+        const parsed = JSON.parse(draft) as StoryItem[];
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(s => s.url && s.url !== "")) {
+          setStories(parsed);
+          toast({
+            title: "Rascunho restaurado",
+            description: `Seu story anterior com ${parsed.length} mídia(s) foi recuperado.`,
+          });
+        }
+        // Always clear after attempting restore to avoid stale drafts
+        localStorage.removeItem(`story_draft_${user?.id}`);
+      } catch {
+        localStorage.removeItem(`story_draft_${user?.id}`);
+      }
     }
-  }, [user?.id]);
+    hasInitializedDraft.current = true;
+  }, [user?.id, initialMediaUrls]);
 
   // Video/Audio Controls Synchronization
   useEffect(() => {
@@ -431,7 +455,18 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
     setActiveIndex(stories.length);
   };
 
+  const handleDiscard = () => {
+    if (user?.id) {
+      localStorage.removeItem(`story_draft_${user?.id}`);
+    }
+    onClose();
+  };
+
   const handleSave = () => {
+    // Clear draft on successful save
+    if (user?.id) {
+      localStorage.removeItem(`story_draft_${user?.id}`);
+    }
     onSave({ stories });
   };
 
@@ -488,7 +523,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
             className={cn("text-[10px] font-bold uppercase px-3", showRulers ? "text-primary" : "text-white/40")}>
             Safe Zones: {showRulers ? "ON" : "OFF"}
           </Button>
-          <Button variant="ghost" size="sm" className="text-white/60 hover:text-white" onClick={onClose}>Descartar</Button>
+          <Button variant="ghost" size="sm" className="text-white/60 hover:text-white" onClick={handleDiscard}>Descartar</Button>
           <Button size="sm" onClick={handleSave} className="bg-primary hover:bg-primary/90 text-white font-bold rounded-xl px-6 h-10">
             <Save className="w-4 h-4 mr-2" /> Finalizar & Salvar
           </Button>
@@ -534,7 +569,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-white/60" onClick={onClose}>
+              <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px] text-white/60" onClick={handleDiscard}>
                 <X className="w-3.5 h-3.5" />
               </Button>
               <Button size="sm" onClick={handleSave} className="h-7 px-3 text-[10px] bg-primary rounded-full font-bold">

@@ -420,7 +420,6 @@ export const StoriesLivesView = () => {
             await supabase.from("stories_lives").insert(storyInserts as any);
           }
         }
-        toast({ title: "Live agendada!" });
       } else {
         // Create standard story entries
         const inserts = formPlatforms.map(platform => ({

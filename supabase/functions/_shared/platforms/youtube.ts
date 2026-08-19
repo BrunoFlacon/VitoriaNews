@@ -34,9 +34,54 @@ async function youtubeFetch(
   return response;
 }
 
+/**
+ * Resolve o privacyStatus do YouTube baseado no estado do post e visibilidade escolhida.
+ *
+ * Regras:
+ *   - Rascunho (draft)              → "private"
+ *   - Visibilidade explícita do user → respeitada (public | private | unlisted)
+ *   - Agendado / Publicado           → "public"
+ *   - Fallback                        → "private" (seguro)
+ */
+function resolvePrivacyStatus(
+  postStatus: string | undefined,
+  visibility: string | undefined
+): 'public' | 'private' | 'unlisted' {
+  // 1. Se é rascunho → sempre privado
+  if (postStatus === 'draft') return 'private';
+
+  // 2. Se o usuário escolheu visibilidade explícita → usar ela
+  if (visibility === 'private') return 'private';
+  if (visibility === 'unlisted') return 'unlisted';
+  if (visibility === 'public') return 'public';
+
+  // 3. Se é agendado ou publicado → público por padrão
+  if (postStatus === 'scheduled' || postStatus === 'published') return 'public';
+
+  // 4. Fallback → privado (seguro)
+  return 'private';
+}
+
+/**
+ * Determina se o vídeo deve ser publicado como YouTube Short.
+ *
+ * Regras:
+ *   - contentType = short / story / reels → Short
+ *   - orientation = vertical → Short (provável formato 9:16)
+ *   - Caso contrário → vídeo normal
+ */
+function resolveYouTubeFormat(
+  contentType: string | undefined,
+  orientation: string | undefined
+): 'regular' | 'short' {
+  if (contentType === 'short' || contentType === 'story' || contentType === 'reels') return 'short';
+  if (contentType === 'live') return 'regular'; // lives nunca são shorts
+  if (orientation === 'vertical') return 'short';
+  return 'regular';
+}
+
 export async function publishToYouTube(supabase: any, payload: PublishPayload): Promise<any> {
-  const { content, mediaUrls, userId, contentType } = payload;
-  const targetProfileId = payload.options?.targetProfileId || null;
+  const { content, mediaUrls, userId, contentType, options } = payload;
 
   if (!mediaUrls || mediaUrls.length === 0) {
     throw new Error("YouTube requer um vídeo para upload.");
@@ -47,6 +92,7 @@ export async function publishToYouTube(supabase: any, payload: PublishPayload): 
     throw new Error("YouTube: apenas vídeos são suportados no momento.");
   }
 
+  const targetProfileId = options?.targetProfileId || null;
   const creds = await getPlatformCredentials(supabase, userId || "", "youtube", targetProfileId);
 
   if (!creds.isConnected || !creds.accessToken) {
@@ -64,19 +110,30 @@ export async function publishToYouTube(supabase: any, payload: PublishPayload): 
   const videoBlob = await videoRes.blob();
   const bytes = await videoBlob.arrayBuffer();
 
-  const isShort = contentType === 'short' || contentType === 'story' || contentType === 'reels';
+  // 🔹 Resolver formato (Short vs normal) e privacidade
+  const visibility = options?.visibility || 'public';
+  const orientation = options?.orientation || 'horizontal';
+  const postStatus = options?.postStatus; // draft | scheduled | published
+
+  const format = resolveYouTubeFormat(contentType, orientation);
+  const isShort = format === 'short';
+  const privacyStatus = resolvePrivacyStatus(postStatus, visibility);
 
   const metadata = {
     snippet: {
-      title: (payload.options?.title || content || "Publicação").slice(0, 100),
+      title: (options?.title || content || "Publicação").slice(0, 100),
       description: content || "",
       categoryId: "22", // Pessoas e Blogs
+      tags: options?.tags || [],
     },
     status: {
-      privacyStatus: "private", // privado durante testes; mude para public em produção
+      privacyStatus,
       selfDeclaredMadeForKids: false,
+      ...(isShort ? { isShorts: true } : {}),
     },
   };
+
+  console.log(`[YouTube] format=${format} privacy=${privacyStatus} orientation=${orientation}`);
 
   // 🔹 STEP 2: iniciar upload resumable (metadados → URL de upload)
   const initRes = await youtubeFetch(
@@ -136,5 +193,6 @@ export async function publishToYouTube(supabase: any, payload: PublishPayload): 
     profileId,
     url: `https://www.youtube.com/watch?v=${videoId}`,
     contentType: isShort ? 'short' : contentType,
+    privacyStatus,
   };
 }

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
 import { motion } from "framer-motion";
-import { RefreshCw, Share2, CheckCircle2, AlertCircle, PlusCircle } from "lucide-react";
+import { RefreshCw, Share2, CheckCircle2, AlertCircle, PlusCircle, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
@@ -122,7 +122,16 @@ export const SocialNetworksView = memo(() => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.search = "?tab=studio"}
+            className="gap-2 rounded-xl text-xs font-bold bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
+          >
+            <Palette className="w-4 h-4" />
+            Criar Capas
+          </Button>
+
           {/* Connection summary badge */}
           <Badge
             variant="outline"

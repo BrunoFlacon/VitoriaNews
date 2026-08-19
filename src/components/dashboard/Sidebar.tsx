@@ -60,7 +60,8 @@ const ICON_MAP: Record<string, any> = {
   robot: Bot,
   monitoring: Activity,
   trends: TrendingUp,
-  preview: Eye
+  preview: Eye,
+  studio: Palette
 };
 
 export const Sidebar = memo(({ 
@@ -99,6 +100,7 @@ export const Sidebar = memo(({
       { id: "messaging", icon: MessageCircle, label: "Mensagens" },
       { id: "news", icon: Newspaper, label: "Notícias" },
       { id: "documents", icon: FolderOpen, label: "Arquivos & Galeria" },
+      { id: "studio", icon: Palette, label: "Criar Capas" },
       { id: "networks", icon: Share2, label: "Redes Sociais" },
       { id: "robot", icon: Bot, label: "Artesão de Bots" },
       { id: "monitoring", icon: Activity, label: "Monitoramento" },

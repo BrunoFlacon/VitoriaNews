@@ -38,5 +38,11 @@ export async function publishToSpotify(supabase: any, payload: PublishPayload): 
     };
   }
 
-  return { success: true, platform: 'spotify', info: 'Spotify text note recorded.' };
+  // Spotify não suporta publicação de texto puro — apenas playlists de áudio/vídeo
+  return {
+    success: false,
+    platform: 'spotify',
+    error: 'Spotify não suporta publicação de texto. Envie conteúdo de áudio ou vídeo para criar uma playlist.',
+    unsupported: true,
+  };
 }

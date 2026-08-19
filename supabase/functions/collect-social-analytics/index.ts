@@ -90,9 +90,41 @@ async function processPlatform(conn: any, supabase: any) {
         metrics = {
           followers_count: typeof data.followers_count === "number" ? data.followers_count : (data.fan_count || 0),
           media_count: finalPostsCount,
-          views_count: 500 + Math.floor(Math.random() * 1000),
+          views_count: 0, // Requires page_insights permission; see Facebook Graph API /{page}/insights
+          likes: typeof data.fan_count === "number" ? data.fan_count : 0,
           profile_picture: profilePic
         };
+
+        // Collect post-level metrics from recent posts
+        if (data.posts?.data) {
+          for (const post of data.posts.data) {
+            try {
+              const insightResp = await fetchWithTimeout(
+                `https://graph.facebook.com/v21.0/${post.id}/insights?metric=post_impressions,post_reactions_by_type_total&access_token=${conn.access_token}`
+              );
+              if (insightResp.ok) {
+                const insightData = await insightResp.json();
+                const impressions = insightData.data?.find((i: any) => i.name === 'post_impressions')?.values?.[0]?.value || 0;
+                const reactionsData = insightData.data?.find((i: any) => i.name === 'post_reactions_by_type_total')?.values?.[0] || {};
+                const totalReactions = Object.values(reactionsData).reduce((sum: number, val: any) => sum + (typeof val === 'number' ? val : 0), 0);
+
+                recentPostsMetrics.push({
+                  external_id: post.id,
+                  platform: "facebook",
+                  impressions,
+                  likes: totalReactions,
+                  comments: 0,
+                  reach: impressions,
+                  engagement: totalReactions,
+                  content: post.message || null,
+                  collected_at: new Date().toISOString()
+                });
+              }
+            } catch (e) {
+              // Silently skip post-level metrics — not critical
+            }
+          }
+        }
       }
       break;
     }
@@ -612,11 +644,41 @@ async function processPlatform(conn: any, supabase: any) {
             metrics = {
               followers_count: m.followers_count || 0,
               media_count: m.tweet_count || 0,
-              views_count: Math.floor(m.followers_count * 1.5) || 0,
+              views_count: 0, // X API v2 does not expose aggregate tweet views at user level
+              likes: m.like_count || 0,
               profile_picture: data.data.profile_image_url?.replace('_normal', '') || conn.profile_image_url || null,
-              likes: 0
             };
           }
+        }
+
+        // Collect post-level metrics from recent tweets (last 10)
+        try {
+          const tweetsRes = await fetchWithTimeout(
+            `https://api.x.com/2/users/${conn.platform_user_id}/tweets?max_results=10&tweet.fields=public_metrics,created_at,text,attachments`,
+            { headers: { Authorization: `Bearer ${conn.access_token}` } }
+          );
+          if (tweetsRes.ok) {
+            const tweetsData = await tweetsRes.json();
+            if (tweetsData.data) {
+              for (const tweet of tweetsData.data) {
+                const pm = tweet.public_metrics || {};
+                recentPostsMetrics.push({
+                  external_id: tweet.id,
+                  platform: "twitter",
+                  impressions: pm.impression_count || 0,
+                  likes: pm.like_count || 0,
+                  comments: pm.reply_count || 0,
+                  reach: pm.impression_count || 0,
+                  engagement: (pm.like_count || 0) + (pm.retweet_count || 0) + (pm.reply_count || 0) + (pm.quote_count || 0),
+                  shares: (pm.retweet_count || 0) + (pm.quote_count || 0),
+                  content: tweet.text || null,
+                  collected_at: new Date().toISOString()
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("Could not fetch Twitter post metrics:", e);
         }
       }
       break;
@@ -683,12 +745,13 @@ async function processPlatform(conn: any, supabase: any) {
           metrics = {
             followers_count: data.followers?.total || 0,
             media_count: albumCount + playlistCount,
-            views_count: 5000 + Math.floor(Math.random() * 2000),
+            views_count: 0, // Spotify API does not expose stream/listen counts at profile level
             profile_picture: data.images?.[0]?.url || null
           };
         }
       } else {
-        metrics = { followers_count: 1200, media_count: 8, views_count: 4500 };
+        // No token — return zeros, not fabricated data
+        metrics = { followers_count: 0, media_count: 0, views_count: 0 };
       }
       break;
     }
@@ -714,7 +777,7 @@ async function processPlatform(conn: any, supabase: any) {
         metrics = {
           followers_count: channelCount || 0,
           media_count: msgCount || 0,
-          views_count: (msgCount || 0) * 10,
+          views_count: 0, // Telegram Bot API does not expose profile/channel view counts
           profile_picture: conn.profile_image_url || null
         };
       } catch (e) {
@@ -726,12 +789,11 @@ async function processPlatform(conn: any, supabase: any) {
     case "rumble":
     case "gettr":
     case "truthsocial": {
+      // No public API available — return zeros (no fabricated data)
       metrics = {
-        followers_count: 1500 + Math.floor(Math.random() * 5000),
-        media_count: 10 + Math.floor(Math.random() * 40),
-        views_count: 2500 + Math.floor(Math.random() * 10000),
-        likes: 400 + Math.floor(Math.random() * 1000),
-        shares: 50 + Math.floor(Math.random() * 200)
+        followers_count: 0,
+        media_count: 0,
+        views_count: 0,
       };
       break;
     }
@@ -753,8 +815,8 @@ async function processPlatform(conn: any, supabase: any) {
 
     const finalFollowers = typeof metrics.followers_count === "number" ? metrics.followers_count : 0;
     const finalPosts = typeof metrics.media_count === "number" ? metrics.media_count : 0;
-    const finalLikes = typeof metrics.likes === "number" ? metrics.likes : (finalFollowers * 0.1);
-    const finalShares = typeof metrics.shares === "number" ? metrics.shares : (finalFollowers * 0.05);
+    const finalLikes = typeof metrics.likes === "number" ? metrics.likes : 0;
+    const finalShares = typeof metrics.shares === "number" ? metrics.shares : 0;
     const finalComments = typeof metrics.comments === "number" ? metrics.comments : 0;
 
     // CRITICAL: For WhatsApp, NEVER use conn.page_id as the platform_user_id.

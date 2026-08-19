@@ -585,7 +585,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           media_type: selectedMedia || "image",
           orientation,
           scheduled_at: scheduledAt,
-          metadata: { videoTitle: videoTitle.trim() || null },
+          metadata: { videoTitle: videoTitle.trim() || null, visibility },
         });
 
         if (success) {
@@ -606,7 +606,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
           media_type: selectedMedia || "image",
           orientation,
           scheduled_at: scheduledAt,
-          metadata: { videoTitle: videoTitle.trim() || null },
+          metadata: { videoTitle: videoTitle.trim() || null, visibility },
         });
 
         if (post) {
@@ -1941,6 +1941,25 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
             </Button>
           </div>
           <div className="grid grid-cols-2 md:flex md:flex-wrap gap-2 md:gap-3 w-full md:w-auto">
+            {(content.trim() || editingPost || uploadedFiles.length > 0 || selectedPlatforms.length > 0) && (
+              <Button
+                variant="outline"
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-xl text-[10px] md:text-sm h-12 md:h-auto font-black uppercase"
+                onClick={() => {
+                  setContent("");
+                  setSelectedPlatforms([]);
+                  setSelectedMedia(null);
+                  setScheduledDate("");
+                  setUploadedFiles([]);
+                  setVideoTitle("");
+                  onPostSaved?.();
+                  toast({ title: editingPost ? "Edição cancelada" : "Rascunho descartado" });
+                }}
+              >
+                {editingPost ? "Cancelar Edição" : "Descartar"}
+              </Button>
+            )}
+
             <Button 
               variant="outline" 
               className="border-border rounded-xl text-[10px] md:text-sm h-12 md:h-auto font-black uppercase"
@@ -1964,7 +1983,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     media_type: selectedMedia || "image",
                     orientation,
                     scheduled_at: scheduledDate ? new Date(scheduledDate) : undefined,
-                    metadata: { videoTitle: videoTitle.trim() || null },
+                    metadata: { videoTitle: videoTitle.trim() || null, visibility },
                   });
                   if (success) {
                     await submitForApproval(editingPost.id);
@@ -1977,7 +1996,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                     platforms: selectedPlatforms,
                     media_type: selectedMedia || "image",
                     orientation,
-                    metadata: { videoTitle: videoTitle.trim() || null },
+                    metadata: { videoTitle: videoTitle.trim() || null, visibility },
                   });
                   if (post) {
                     await submitForApproval(post.id);

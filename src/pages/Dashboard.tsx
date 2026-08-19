@@ -45,6 +45,7 @@ const SocialNetworksView = lazy(() => import("@/components/dashboard/SocialNetwo
 const TrendsView = lazy(() => import("@/components/dashboard/TrendsView"));
 const PlatformPreview = lazy(() => import("@/components/dashboard/PlatformPreview"));
 const FloatingWhatsApp = lazy(() => import("@/components/dashboard/FloatingWhatsApp").then(m => ({ default: m.FloatingWhatsApp })));
+const CoverStudioView = lazy(() => import("@/components/dashboard/studio/CoverStudioView").then(m => ({ default: m.CoverStudioView })));
 
 const ViewLoader = () => (
   <div className="flex items-center justify-center py-10 min-h-[200px]">
@@ -513,6 +514,13 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
         return (
           <Suspense fallback={<ViewLoader />}>
             <ErrorBoundary><SocialNetworksView /></ErrorBoundary>
+          </Suspense>
+        );
+      case "studio":
+      case "covers":
+        return (
+          <Suspense fallback={<ViewLoader />}>
+            <ErrorBoundary><CoverStudioView /></ErrorBoundary>
           </Suspense>
         );
       case "sys_portal":
