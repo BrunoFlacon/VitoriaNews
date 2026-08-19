@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { Move, Type, Image as LucideImage, Sparkles, Trash2, Eye, EyeOff, Lock, Unlock, ArrowUp, ArrowDown } from "lucide-react";
+import { Move, Type, Image as LucideImage, Sparkles, Trash2, Eye, EyeOff, Lock, Unlock, ArrowUp, ArrowDown, Grid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,7 @@ export interface CanvasLayer {
   color?: string;
   backgroundColor?: string;
   badgeStyle?: "live" | "podcast" | "exclusive" | "news";
+  shapeType?: "rectangle" | "circle" | "star" | "arrow" | "divider";
   shadowColor?: string;
   shadowBlur?: number;
 }
@@ -36,6 +37,7 @@ interface CoverCanvasEngineProps {
   onUpdateLayer: (id: string, updates: Partial<CanvasLayer>) => void;
   backgroundColor?: string;
   backgroundImageUrl?: string | null;
+  showSafeZones?: boolean;
 }
 
 export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
@@ -48,10 +50,37 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
   onUpdateLayer,
   backgroundColor = "#0F172A",
   backgroundImageUrl = null,
+  showSafeZones = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [loadedImages, setLoadedImages] = useState<Record<string, HTMLImageElement>>({});
+
+  // Preload image assets into HTMLImageElement cache
+  useEffect(() => {
+    layers.forEach((layer) => {
+      if ((layer.type === "image" || layer.type === "logo") && layer.content) {
+        if (!loadedImages[layer.content]) {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = layer.content;
+          img.onload = () => {
+            setLoadedImages((prev) => ({ ...prev, [layer.content]: img }));
+          };
+        }
+      }
+    });
+
+    if (backgroundImageUrl && !loadedImages[backgroundImageUrl]) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = backgroundImageUrl;
+      img.onload = () => {
+        setLoadedImages((prev) => ({ ...prev, [backgroundImageUrl]: img }));
+      };
+    }
+  }, [layers, backgroundImageUrl, loadedImages]);
 
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -67,13 +96,8 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
     ctx.fillRect(0, 0, width, height);
 
     // Render Background Image if present
-    if (backgroundImageUrl) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = backgroundImageUrl;
-      if (img.complete) {
-        ctx.drawImage(img, 0, 0, width, height);
-      }
+    if (backgroundImageUrl && loadedImages[backgroundImageUrl]) {
+      ctx.drawImage(loadedImages[backgroundImageUrl], 0, 0, width, height);
     }
 
     // Render Layers in order
@@ -103,21 +127,82 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
         ctx.fillText(layer.content, layer.x, layer.y);
       } else if (layer.type === "badge") {
         // Render Badge Background
-        const badgeColor = layer.badgeStyle === "live" ? "#EF4444" : layer.badgeStyle === "podcast" ? "#3B82F6" : "#10B981";
+        const badgeColor =
+          layer.badgeStyle === "live"
+            ? "#EF4444"
+            : layer.badgeStyle === "podcast"
+            ? "#3B82F6"
+            : layer.badgeStyle === "exclusive"
+            ? "#A855F7"
+            : "#F59E0B";
+
         ctx.fillStyle = badgeColor;
-        ctx.roundRect(layer.x, layer.y, layer.width, layer.height, 12);
+        ctx.beginPath();
+        ctx.roundRect(layer.x, layer.y, layer.width, layer.height, 14);
         ctx.fill();
 
         // Badge Text
         ctx.fillStyle = "#FFFFFF";
-        ctx.font = "bold 28px Inter, sans-serif";
+        ctx.font = "bold 26px Inter, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(layer.content.toUpperCase(), layer.x + layer.width / 2, layer.y + layer.height / 2);
+      } else if (layer.type === "shape") {
+        ctx.fillStyle = layer.color || "#3B82F6";
+        ctx.beginPath();
+
+        if (layer.shapeType === "circle") {
+          const radius = Math.min(layer.width, layer.height) / 2;
+          ctx.arc(layer.x + layer.width / 2, layer.y + layer.height / 2, radius, 0, 2 * Math.PI);
+          ctx.fill();
+        } else if (layer.shapeType === "star") {
+          const cx = layer.x + layer.width / 2;
+          const cy = layer.y + layer.height / 2;
+          const outerR = layer.width / 2;
+          const innerR = outerR / 2;
+          for (let i = 0; i < 5; i++) {
+            ctx.lineTo(
+              cx + Math.cos(((18 + i * 72) * Math.PI) / 180) * outerR,
+              cy - Math.sin(((18 + i * 72) * Math.PI) / 180) * outerR
+            );
+            ctx.lineTo(
+              cx + Math.cos(((54 + i * 72) * Math.PI) / 180) * innerR,
+              cy - Math.sin(((54 + i * 72) * Math.PI) / 180) * innerR
+            );
+          }
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          // Default Rectangle
+          ctx.roundRect(layer.x, layer.y, layer.width, layer.height, 12);
+          ctx.fill();
+        }
+      } else if ((layer.type === "image" || layer.type === "logo") && loadedImages[layer.content]) {
+        ctx.drawImage(loadedImages[layer.content], layer.x, layer.y, layer.width, layer.height);
       }
 
       ctx.restore();
     });
+
+    // Draw Safe Zone Grid if enabled
+    if (showSafeZones) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(239, 68, 68, 0.6)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+
+      // Top and Bottom Safe Margins (for Shorts / Reels UI overlays)
+      const topMargin = height * 0.15;
+      const bottomMargin = height * 0.85;
+      const sideMargin = width * 0.08;
+
+      ctx.strokeRect(sideMargin, topMargin, width - sideMargin * 2, bottomMargin - topMargin);
+
+      ctx.fillStyle = "rgba(239, 68, 68, 0.8)";
+      ctx.font = "bold 18px Inter, sans-serif";
+      ctx.fillText("MARGEM SEGURA (REELS / SHORTS)", sideMargin + 10, topMargin + 25);
+      ctx.restore();
+    }
 
     // Draw Selection Overlay
     const selected = layers.find((l) => l.id === selectedLayerId);
@@ -129,7 +214,7 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
       ctx.strokeRect(selected.x - 4, selected.y - 4, selected.width + 8, selected.height + 8);
       ctx.restore();
     }
-  }, [width, height, layers, selectedLayerId, backgroundColor, backgroundImageUrl]);
+  }, [width, height, layers, selectedLayerId, backgroundColor, backgroundImageUrl, showSafeZones, loadedImages]);
 
   useEffect(() => {
     renderCanvas();
