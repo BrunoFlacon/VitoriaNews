@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from "react";
+import React, { useRef, useEffect, useState, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
   Trash2, Copy, Lock, Unlock, ArrowUp, ArrowDown,
   ChevronsUp, ChevronsDown, ZoomIn, ZoomOut, Maximize,
@@ -79,13 +79,17 @@ function getHandlePositions(x: number, y: number, w: number, h: number) {
   };
 }
 
-export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
+export interface CoverCanvasEngineRef {
+  exportAsDataURL: () => string;
+}
+
+export const CoverCanvasEngine = forwardRef<CoverCanvasEngineRef, CoverCanvasEngineProps>(({
   width, height, aspectRatio, layers, selectedLayerId,
   onSelectLayer, onUpdateLayer, onDeleteLayer, onDuplicateLayer,
   onMoveLayerOrder, onToggleLock,
   backgroundColor = "#0F172A", backgroundImageUrl = null, showSafeZones = false,
   cutoutMode = false, onCutoutComplete,
-}) => {
+}, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -162,13 +166,8 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
     };
   }, [width, height]);
 
-  // Render canvas
-  const renderCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
+  // Function to draw only the layers and background (used for rendering and exporting)
+  const drawCanvasContent = useCallback((ctx: CanvasRenderingContext2D) => {
     ctx.clearRect(0, 0, width, height);
 
     // Background
@@ -241,6 +240,16 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
       }
       ctx.restore();
     });
+  }, [width, height, backgroundColor, backgroundImageUrl, loadedImages, layers]);
+
+  // Render canvas
+  const renderCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    drawCanvasContent(ctx);
 
     // Safe zones
     if (showSafeZones) {
@@ -345,9 +354,22 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
         ctx.restore();
       }
     }
-  }, [width, height, layers, selectedLayerId, backgroundColor, backgroundImageUrl, showSafeZones, loadedImages, isResizing, cutoutMode, polygonPoints, mousePos]);
+  }, [width, height, selectedLayerId, showSafeZones, isResizing, cutoutMode, polygonPoints, mousePos, drawCanvasContent, layers]);
 
   useEffect(() => { renderCanvas(); }, [renderCanvas]);
+
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    exportAsDataURL: () => {
+      const offscreen = document.createElement("canvas");
+      offscreen.width = width;
+      offscreen.height = height;
+      const ctx = offscreen.getContext("2d");
+      if (!ctx) return "";
+      drawCanvasContent(ctx);
+      return offscreen.toDataURL("image/png");
+    }
+  }));
 
   // ---- MOUSE HANDLERS ----
 
@@ -707,7 +729,7 @@ export const CoverCanvasEngine: React.FC<CoverCanvasEngineProps> = ({
       )}
     </div>
   );
-};
+});
 
 // Context menu item
 function CtxMenuItem({

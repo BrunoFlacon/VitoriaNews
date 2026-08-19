@@ -1,7 +1,7 @@
 // LidoJS Studio View - Full-featured cover editor
 // Uses our CoverCanvasEngine with canva-clone inspired UI/UX
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import {
   ArrowLeft,
   Eye,
@@ -17,11 +17,12 @@ import {
   ChevronsDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { EditorProvider, useEditor } from './EditorContext';
-import { CoverCanvasEngine, type CanvasLayer } from './CoverCanvasEngine';
+import { CoverCanvasEngine, type CanvasLayer, type CoverCanvasEngineRef } from './CoverCanvasEngine';
 import { Sidebar } from './lidojs-sidebar/Sidebar';
 
 interface LidoJSStudioViewProps {
@@ -53,6 +54,7 @@ const EditorInner = ({ onBack }: LidoJSStudioViewProps) => {
 
   const [isExporting, setIsExporting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const engineRef = useRef<CoverCanvasEngineRef>(null);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -89,6 +91,17 @@ const EditorInner = ({ onBack }: LidoJSStudioViewProps) => {
       });
 
       if (dbError) console.warn('DB record error:', dbError.message);
+
+      // Gerar e fazer download da imagem
+      if (engineRef.current) {
+        const dataUrl = engineRef.current.exportAsDataURL();
+        if (dataUrl) {
+          const a = document.createElement("a");
+          a.href = dataUrl;
+          a.download = `capa-social-canvas-${Date.now()}.png`;
+          a.click();
+        }
+      }
 
       toast({
         title: 'Capa Exportada com Sucesso!',
@@ -181,6 +194,32 @@ const EditorInner = ({ onBack }: LidoJSStudioViewProps) => {
               <span className="text-xs font-bold text-gray-500 mr-2">
                 {selectedLayer.name}
               </span>
+
+              {selectedLayer.type === 'text' && (
+                <div className="flex items-center gap-2 border-l pl-2 ml-2 border-gray-200">
+                  <Input 
+                    value={selectedLayer.content} 
+                    onChange={(e) => updateLayer(selectedLayer.id, { content: e.target.value })}
+                    className="h-7 w-48 text-xs"
+                    placeholder="Texto"
+                  />
+                  <Input 
+                    type="number"
+                    value={selectedLayer.fontSize || 60} 
+                    onChange={(e) => updateLayer(selectedLayer.id, { fontSize: Number(e.target.value) })}
+                    className="h-7 w-16 text-xs p-1"
+                    title="Tamanho da Fonte"
+                  />
+                  <input 
+                    type="color"
+                    value={selectedLayer.color || "#FFFFFF"} 
+                    onChange={(e) => updateLayer(selectedLayer.id, { color: e.target.value })}
+                    className="h-7 w-7 p-0 border-0 rounded cursor-pointer"
+                    title="Cor do Texto"
+                  />
+                </div>
+              )}
+
               <div className="flex items-center gap-1 ml-auto">
                 <Button
                   variant="ghost"
@@ -244,6 +283,7 @@ const EditorInner = ({ onBack }: LidoJSStudioViewProps) => {
           {/* Canvas */}
           <div className="flex-1 overflow-auto flex items-center justify-center p-4">
             <CoverCanvasEngine
+              ref={engineRef}
               width={canvasWidth}
               height={canvasHeight}
               aspectRatio={`${canvasWidth}:${canvasHeight}`}
