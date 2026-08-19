@@ -25,7 +25,7 @@ export const StudioUploadsTab: React.FC<StudioUploadsTabProps> = ({ onAddImageLa
 
       const { data, error } = await supabase
         .from("media")
-        .select("id, file_url, file_name, file_type")
+        .select("id, file_url, name, file_type")
         .eq("user_id", userRes.user.id)
         .order("created_at", { ascending: false })
         .limit(20);
@@ -37,7 +37,7 @@ export const StudioUploadsTab: React.FC<StudioUploadsTabProps> = ({ onAddImageLa
             .map((m: any) => ({
               id: m.id,
               url: m.file_url,
-              name: m.file_name || "Imagem do Usuário",
+              name: m.name || "Imagem do Usuário",
             }))
         );
       }
