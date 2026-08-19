@@ -147,7 +147,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
   const selectedAccount = connections.find(c => {
     const cPlatform = c.platform?.split('|')[0];
     const targetId = platform?.split('|')[1];
-    if (targetId) return c.id === targetId || c.platform_id === targetId;
+    if (targetId) return c.id === targetId || (c as any).platform_id === targetId || c.platform_user_id === targetId;
     return cPlatform === platformId && c.is_connected;
   });
   
@@ -1073,7 +1073,7 @@ export const StoryEditor = ({ initialMediaUrls, platform, onSave, onClose }: Sto
                     <StickerPlaceholder icon={Radio} label="🔴 AO VIVO AGORA!" platform={platform} onClick={() => {
                         addSticker("emoji", "🔴 ESTAMOS AO VIVO! TOQUE PARA ASSISTIR", { color: "#ffffff", bgColor: "#ef4444" });
                     }} />
-                    <StickerPlaceholder icon={ImageIcon} label="📸 NOVO POST!" platform={platform} onClick={() => {
+                    <StickerPlaceholder icon={LucideImage} label="📸 NOVO POST!" platform={platform} onClick={() => {
                         addSticker("emoji", "📸 NOVO POST NO FEED! CONFIRA AGORA", { color: "#ffffff", bgColor: "#ec4899" });
                     }} />
                     <StickerPlaceholder icon={Hash} label="Hashtag" platform={platform} onClick={() => {

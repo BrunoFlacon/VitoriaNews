@@ -12,6 +12,7 @@ import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
 import { supabase } from "@/integrations/supabase/client";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { FeedPreview } from "@/components/dashboard/FeedPreview";
+import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { Radio } from "lucide-react";

@@ -3,6 +3,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { useAuth } from "@/hooks/useAuth";
 import { Switch } from "@/components/ui/switch";
 import { 
   Image as ImageIcon, 
@@ -930,7 +931,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
                       if (!hasConnections) {
                         togglePlatform(platform.id as SocialPlatformId);
                       } else if (platformConnections.length === 1) {
-                        togglePlatform(`${platform.id}|${platformConnections[0].id}`);
+                        togglePlatform(`${platform.id}|${platformConnections[0].id}` as any);
                       } else {
                         // On desktop, if it has many connections, maybe toggle the first or just let hover work
                         setHoveredPlatform(hoveredPlatform === platform.id ? null : platform.id);
