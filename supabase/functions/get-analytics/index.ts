@@ -137,7 +137,7 @@ serve(async (req: Request) => {
     const youtubeConfigured = hasOAuth ? true : false;
 
     // Demographics data from demographics_data table
-    const demographicsData = credDemRes?.data || null;
+    const demoDataFix = credDemRes?.data || null;
 
     const [postsRes, socialRes, accMetRes, postMetRes, msgRes, adsRes, gaRes, ytRes, mChanRes, googleAdsRes, demoRes, retentionRes, formatRes, viralRes] = await Promise.allSettled([
       supabase.from("scheduled_posts").select("id, status, platforms, created_at, content").eq("user_id", userId).gte("created_at", startISO).order("created_at", { ascending: false }).limit(500),
@@ -167,7 +167,7 @@ serve(async (req: Request) => {
     const ytData = getD(ytRes);
     const msgChannels = getD(mChanRes);
     const googleAds = getD(googleAdsRes);
-    const analyticsDemographicsData = (demoRes?.data as any) || null;
+    const analyticsDemographicsData = demoRes.status === "fulfilled" ? demoRes.value.data : null;
     const retentionData = getD(retentionRes);
     const formatReachData = getD(formatRes);
     const viralPotentialData = getD(viralRes);

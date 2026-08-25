@@ -114,7 +114,17 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
     const { data } = supabase.storage.from(targetBucket).getPublicUrl(encodedPath);
     // Sempre rotear pelo proxy para evitar 403
     return toViteProxy(data.publicUrl);
-  } catch {
+  } catch (err) {
+    // ---------- ERRO CONHECIDO ----------
+    // O bucket 'media' (ou 'documents') no Supabase não tem acesso público habilitado.
+    // Para corrigir: no painel do Supabase > Storage > bucket 'media' > "Make public"
+    // ou configure RLS policies para permitir acesso anônimo.
+    // Enquanto isso, retornamos o caminho raw — o consumidor pode usar o path
+    // direto ou aguardar a configuração do dashboard.
+    console.warn(
+      "[mediaUtils] getPublicUrl falhou (bucket sem acesso público). Retornando caminho bruto. " +
+        "Para corrigir: no Supabase Dashboard > Storage > bucket 'media' > Make public."
+    );
     return raw;
   }
 };

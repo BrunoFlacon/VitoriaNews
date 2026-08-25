@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo, startTransition } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { getInitialOrientation } from "@/utils/orientation";
 
 import { motion, AnimatePresence } from "framer-motion";
 import { SafeImage } from "@/components/ui/SafeImage";
@@ -270,11 +271,11 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
     return [];
   });
 
-  const [selectedMedia, setSelectedMedia] = useState<MediaType | null>(
+const [selectedMedia, setSelectedMedia] = useState<MediaType | null>(
     (editingPost?.media_type as MediaType) || null
   );
   const [orientation, setOrientation] = useState<"horizontal" | "vertical">(
-    (editingPost?.orientation as "horizontal" | "vertical") || "horizontal"
+    (editingPost?.orientation as "horizontal" | "vertical") || getInitialOrientation(selectedPlatforms, editingPost?.postType)
   );
   const [scheduledDate, setScheduledDate] = useState<string>(
     editingPost?.scheduled_at
@@ -326,7 +327,7 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
   const { isEditor } = useUserRole();
   const { user } = useAuth();
 
-  const triggerStoryNotification = async (postContent: string, mediaUrl?: string) => {
+const triggerStoryNotification = async (postContent: string, mediaUrl?: string) => {
     if (!autoPostToStories || selectedPlatforms.length === 0 || !user?.id) return;
     try {
       const bannerTitle = storyNotifyType === "live_now" 
@@ -342,15 +343,40 @@ export const CreatePostPanel = ({ initialDate, editingPost, onPostSaved, onBackT
         status: "published",
         media_url: mediaUrl || uploadedFiles[0]?.file_url || null,
         scheduled_at: new Date().toISOString(),
+        // Campos adicionais para compatibilidade com o schema do stories_lives
+        created_at: new Date().toISOString(),
+        // O campo 'type' pode ser 'video' ou 'story' - definimos como 'story'
+        // O campo 'status' pode ser 'published' ou 'draft' - definimos como 'published'
       }));
-
-      await supabase.from("stories_lives").insert(storyEntries as any);
+      
+      const { error } = await supabase.from("stories_lives").insert(storyEntries as any);
+      if (error) {
+        console.warn("Erro ao inserir story no stories_lives:", error);
+        // Tentativa alternativa: inserir apenas os campos mínimos necessários
+        const minimalStory = {
+          user_id: user.id,
+          platform: selectedPlatforms[0] || '',
+          title: bannerTitle,
+          type: 'story',
+          status: 'published',
+        };
+        const { error: minErr } = await supabase.from("stories_lives").insert(minimalStory as any);
+        if (minErr) {
+          console.warn("Erro mínimo também falhou:", minErr);
+          throw new Error("Não foi possível inserir story no stories_lives. Verifique as políticas RLS do Supabase.");
+        }
+      }
       toast({
         title: "📲 Publicado nos Stories!",
         description: `Seus seguidores foram notificados nos Stories do ${storyNotifyType === 'live_now' ? 'AO VIVO' : 'NOVO POST'}.`,
       });
     } catch (err) {
       console.warn("Auto story notification error", err);
+      toast({
+        title: "Erro ao notificar stories",
+        description: "Não foi possível publicar o story. Tente publicar manualmente.",
+        variant: "destructive",
+      });
     }
   };
 

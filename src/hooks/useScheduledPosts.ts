@@ -73,40 +73,7 @@ export interface CreatePostInput {
   metadata?: Record<string, any>;
 }
 
-/**
- * Resolve o file_url de uma mídia em URL de exibição:
- * - URLs absolutas de terceiros (ex: dummy.pdf externo) → usa direto;
- * - URLs do nosso storage (signed/public) → extrai o path e monta publicUrl;
- * - Paths relativos → publicUrl padrão.
- */
-function resolveMediaUrl(fileUrl: string | null | undefined): string | null {
-  if (!fileUrl) return null;
-
-  // URL absoluta de terceiros (não é do nosso storage): usar direto
-  if (/^https?:\/\//i.test(fileUrl) && !fileUrl.includes('supabase.co/storage/')) {
-    return fileUrl;
-  }
-
-  // URL do nosso storage → extrai o path (evita concatenar URL inteira)
-  if (fileUrl.includes('supabase.co/storage/')) {
-    const signMarker = '/object/sign/media/';
-    const publicMarker = '/object/public/media/';
-    let path = fileUrl;
-    if (path.includes(signMarker)) {
-      path = decodeURIComponent(path.split(signMarker)[1]?.split('?')[0] ?? '');
-    } else if (path.includes(publicMarker)) {
-      path = decodeURIComponent(path.split(publicMarker)[1]?.split('?')[0] ?? '');
-    }
-    if (path.startsWith('/')) path = path.substring(1);
-    if (!path) return null;
-    const { data: pub } = supabase.storage.from('media').getPublicUrl(path);
-    return pub.publicUrl;
-  }
-
-  // Path relativo simples (UUID.ext) → publicUrl padrão
-  const { data: pub } = supabase.storage.from('media').getPublicUrl(fileUrl);
-  return pub.publicUrl;
-}
+export { resolveMediaUrl } from "@/utils/resolveMediaUrl";
 
 export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}) {
   const { user } = useAuth();

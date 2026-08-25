@@ -86,11 +86,17 @@ export const SafeImage = memo(({
   const resolvedSrc = useMemo(() => {
     if (!rawSrc) return null;
 
-    const url = signedUrl || resolvedBase;
+    let url = signedUrl || resolvedBase;
     if (!url) return null;
 
+    // Fix internal docker hostnames
+    if (url.includes('supabase-kong:8000') || url.includes('kong:8000')) {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:8000';
+      url = url.replace(/https?:\/\/(supabase-kong|kong):8000/g, supabaseUrl);
+    }
+
     // Se for URL do Supabase com /object/sign/ ou token=, converte para /object/public/
-    if (url.includes('supabase.co/storage/')) {
+    if (url.includes('supabase.co/storage/') || url.includes('/storage/v1/object/')) {
       if (url.includes('/object/sign/')) {
         return url.replace('/object/sign/', '/object/public/').split('?')[0];
       }

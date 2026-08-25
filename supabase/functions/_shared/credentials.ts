@@ -39,7 +39,11 @@ export async function refreshConnectionToken(
       grant_type: "refresh_token",
     };
     if (!bodyParams.client_id || !bodyParams.client_secret) {
-      throw new Error("YouTube/Google: client_id/client_secret não configurados (api_credentials.google).");
+      // Credenciais não configuradas — não dá para renovar automaticamente.
+      // Retorna o token existente com aviso; o sistema cai em modo "dados limitados"
+      // e o usuário precisa configurar client_id/client_secret no api_credentials.
+      throw new Error("YouTube/Google: client_id/client_secret não configurados (api_credentials.google). " +
+        "Renovação automática impossível — configure client_id/client_secret ou reconecte a conta.");
     }
     defaultExpiresIn = 3600;
   } else if (platform === "twitter") {

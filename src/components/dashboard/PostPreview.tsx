@@ -7,7 +7,7 @@ import {
   SkipBack, SkipForward, Music, Mail, Globe, ArrowLeft,
   Youtube, Twitter, Facebook, Instagram, Linkedin, MessageSquare,
   Smile, Camera, Image as ImageIcon, Plus, CheckCircle2, Mic,
-  Video, ArrowDownToLine, Smartphone, Monitor
+  Video, ArrowDownToLine, Smartphone, Monitor, Volume2, VolumeX
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
@@ -44,6 +44,7 @@ interface PostPreviewProps {
 const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, controls, videoRef, playing, setPlaying }: any) {
   const resolvedUrl = getMediaUrl(fileUrl);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const [isMuted, setIsMuted] = useState(true);
 
   const handleVideoRef = useCallback((el: HTMLVideoElement | null) => {
     localVideoRef.current = el;
@@ -56,14 +57,17 @@ const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, co
     }
   }, [videoRef]);
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    // Prevent toggle if clicking on controls
+    if ((e.target as HTMLElement).closest('.video-controls-overlay')) return;
+    
     const video = localVideoRef.current;
     if (video) {
-      // Read current paused state directly to avoid stale closure (L3 fix)
       const isPaused = video.paused;
       if (isPaused) {
         video.play().catch(err => console.log("Video playback error:", err));
         setPlaying?.(true);
+        setIsMuted(false);
       } else {
         video.pause();
         setPlaying?.(false);
@@ -76,6 +80,9 @@ const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, co
     if (!video) return;
     if (playing) {
       video.play().catch(() => {});
+      // Se estava mudo e o usuário deu play pela primeira vez, talvez ele queira desmutar?
+      // No comportamento nativo, o play às vezes desmuta. Vamos manter o estado de isMuted manual
+      // para não ser intrusivo.
     } else {
       video.pause();
     }
@@ -84,13 +91,19 @@ const ResolvedVideo = React.memo(function ResolvedVideo({ fileUrl, className, co
   if (!resolvedUrl) return <div className="w-full h-full bg-zinc-900 animate-pulse" />;
 
   if (controls) {
-    return <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} controls muted playsInline />;
+    return <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} controls muted={isMuted} playsInline />;
   }
 
   return (
     <div className="relative w-full h-full cursor-pointer" onClick={handleClick}>
-      <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} loop playsInline muted />
+      <video ref={handleVideoRef} src={resolvedUrl} className={cn("w-full h-full object-cover", className)} loop playsInline muted={isMuted} />
       {!playing && <div className="absolute inset-0 flex items-center justify-center bg-black/20"><Play className="w-12 h-12 text-white fill-white" /></div>}
+      <button 
+        className="video-controls-overlay absolute bottom-4 right-4 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center backdrop-blur-sm transition-all z-20"
+        onClick={(e) => { e.stopPropagation(); setIsMuted(!isMuted); }}
+      >
+        {isMuted ? <VolumeX className="w-4 h-4 text-white" /> : <Volume2 className="w-4 h-4 text-white" />}
+      </button>
     </div>
   );
 });
@@ -166,8 +179,12 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
 
   if (media.length === 1) {
     const m = media[0];
-    if (m.file_type?.startsWith("image/")) return renderImage(m.file_url, 0);
-    if (m.file_type?.startsWith("video/")) {
+    const isImg = m.file_type?.startsWith("image") || m.file_type === "image";
+    const isVid = m.file_type?.startsWith("video") || m.file_type === "video";
+    const isAud = m.file_type?.startsWith("audio") || m.file_type === "audio";
+
+    if (isImg) return renderImage(m.file_url, 0);
+    if (isVid) {
       return (
         <ResolvedVideo
           fileUrl={m.file_url}
@@ -178,24 +195,30 @@ const MultimodalMedia = ({ media, playing, setPlaying, videoRef, audioRef, class
         />
       );
     }
-    if (m.file_type?.startsWith("audio/")) return renderAudio(m.file_url);
+    if (isAud) return renderAudio(m.file_url);
     return null;
   }
 
   return (
-    <MediaWrapper>
+    <MediaWrapper className={_outerClassName}>
       <Carousel className="absolute inset-0" setApi={setCarouselApi} opts={{ watchDrag: true }}>
         <CarouselContent className="h-full ml-0">
-          {media.map((m: any, idx: number) => (
-            <CarouselItem key={m?.id ?? `media-${idx}`} className="h-full pl-0 relative">
-              {m.file_type?.startsWith("image/") ? renderImage(m.file_url, idx, true) :
-               m.file_type?.startsWith("video/") ? renderVideo(m.file_url, idx, true) :
-               m.file_type?.startsWith("audio/") ? renderAudio(m.file_url) :
-               <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
-                 <ImageIcon className="w-12 h-12 text-zinc-600" />
-               </div>}
-            </CarouselItem>
-          ))}
+          {media.map((m: any, idx: number) => {
+            const isImg = m.file_type?.startsWith("image") || m.file_type === "image";
+            const isVid = m.file_type?.startsWith("video") || m.file_type === "video";
+            const isAud = m.file_type?.startsWith("audio") || m.file_type === "audio";
+            
+            return (
+              <CarouselItem key={m?.id ?? `media-${idx}`} className="h-full pl-0 relative">
+                {isImg ? renderImage(m.file_url, idx, true) :
+                 isVid ? renderVideo(m.file_url, idx, true) :
+                 isAud ? renderAudio(m.file_url) :
+                 <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
+                   <ImageIcon className="w-12 h-12 text-zinc-600" />
+                 </div>}
+              </CarouselItem>
+            );
+          })}
         </CarouselContent>
 
         {media.length > 1 && (
@@ -272,7 +295,7 @@ export const XLikeCard = memo(function XLikeCardRenderer({ content, media, autho
       <div className="flex gap-3">
         <div className="flex flex-col items-center gap-1 shrink-0">
           {authorAvatar ? (
-            <img src={authorAvatar} className="x-avatar-img w-10 h-10 rounded-full" alt="" />
+            <SafeImage src={authorAvatar} className="x-avatar-img w-10 h-10 rounded-full" alt="" />
           ) : (
             <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center font-black text-white">{authorName?.[0] || "V"}</div>
           )}
@@ -350,7 +373,7 @@ export const TruthSocialCard = memo(function TruthSocialCardRenderer({ content, 
       <div className="flex gap-3">
         <div className="shrink-0">
           {authorAvatar ? (
-            <img src={authorAvatar} className="w-12 h-12 rounded-full border-2 border-[#552B7C]/10" alt="" />
+            <SafeImage src={authorAvatar} className="w-12 h-12 rounded-full border-2 border-[#552B7C]/10" alt="" />
           ) : (
             <div className="w-12 h-12 rounded-full bg-[#552B7C] flex items-center justify-center font-bold text-white">{authorName?.[0] || "T"}</div>
           )}
@@ -418,7 +441,7 @@ export const GettrCard = memo(function GettrCardRenderer({ content, media, autho
       <div className="flex gap-3">
         <div className="shrink-0">
           {authorAvatar ? (
-            <img src={authorAvatar} className="w-12 h-12 rounded-full" alt="" />
+            <SafeImage src={authorAvatar} className="w-12 h-12 rounded-full" alt="" />
           ) : (
             <div className="w-12 h-12 rounded-full bg-[#FC223B] flex items-center justify-center font-bold text-white">{authorName?.[0] || "G"}</div>
           )}
@@ -485,7 +508,7 @@ export const FacebookCard = memo(function FacebookCardRenderer({ content, media,
   return (
     <div className="preview-card fb-card bg-[#18191a] text-white border-none rounded-xl overflow-hidden">
       <div className="fb-header flex gap-3 p-4">
-        {authorAvatar ? <img src={authorAvatar} className="fb-avatar-img w-10 h-10 rounded-full" alt="" /> : <div className="fb-avatar-img bg-zinc-700 w-10 h-10 rounded-full flex items-center justify-center font-black text-lg">{authorName?.[0] || "V"}</div>}
+        {authorAvatar ? <SafeImage src={authorAvatar} className="fb-avatar-img w-10 h-10 rounded-full" alt="" /> : <div className="fb-avatar-img bg-zinc-700 w-10 h-10 rounded-full flex items-center justify-center font-black text-lg">{authorName?.[0] || "V"}</div>}
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5">
             <span className="text-[15px] font-black tracking-tight">{authorName || "Vitória News"}</span>
@@ -535,7 +558,7 @@ export const FacebookCard = memo(function FacebookCardRenderer({ content, media,
       </div>
       <div className="px-4 py-3 bg-zinc-900/40">
         <div className="flex gap-2 items-center">
-          {authorAvatar ? <img src={authorAvatar} className="w-8 h-8 rounded-full border border-white border-opacity-10" alt="" /> : <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] font-black">{authorName?.[0]}</div>}
+          {authorAvatar ? <SafeImage src={authorAvatar} className="w-8 h-8 rounded-full border border-white border-opacity-10" alt="" /> : <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] font-black">{authorName?.[0]}</div>}
           <div className="flex-1 bg-zinc-800 rounded-full px-4 py-2 text-xs text-zinc-500 flex justify-between items-center border border-white border-opacity-5">
             Escreva um comentário público...
             <div className="flex gap-3 items-center opacity-70">
@@ -550,14 +573,91 @@ export const FacebookCard = memo(function FacebookCardRenderer({ content, media,
   );
 });
 
-export const InstagramCard = memo(function InstagramCardRenderer({ content, media, authorName, authorAvatar, realMetrics, visibility }: any) {
+export const InstagramCard = memo(function InstagramCardRenderer({ content, media, authorName, authorAvatar, realMetrics, visibility, mediaType }: any) {
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
   const [likes, setLikes] = useState(realMetrics?.likes ?? 0);
-  const hasVideo = media.some((m: any) => m.file_type?.startsWith("video/"));
+  const isVertical = mediaType === 'reel' || mediaType === 'story' || mediaType === 'short';
   const [playing, setPlaying] = useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const audioRef = React.useRef<HTMLAudioElement>(null);
+
+  if (isVertical) {
+    return (
+      <div className="w-full h-full bg-black relative flex items-center justify-center overflow-hidden">
+        <div 
+          className="media-wrapper absolute inset-0 cursor-pointer"
+          onDoubleClick={() => { if(!liked) { setLiked(true); setLikes(l => l + 1); } }}
+        >
+          <MultimodalMedia 
+            media={media} 
+            playing={playing} 
+            setPlaying={setPlaying} 
+            videoRef={videoRef} 
+            audioRef={audioRef} 
+          />
+          {liked && (
+             <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1.2, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+               <Heart className="w-24 h-24 text-white fill-white drop-shadow-[0_0_20px_rgba(255,0,0,0.5)] opacity-90" />
+             </motion.div>
+          )}
+        </div>
+        
+        {/* Overlay Gradients */}
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none z-10" />
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/50 to-transparent pointer-events-none z-10" />
+        
+        {/* Header (Top) */}
+        <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
+          <span className="font-bold text-lg drop-shadow-md text-white">Reels</span>
+          <Camera className="w-6 h-6 text-white drop-shadow-md" />
+        </div>
+
+        {/* Right Actions Bar */}
+        <div className="absolute right-2 bottom-6 flex flex-col items-center gap-6 z-20">
+          <div className="flex flex-col items-center gap-1 group cursor-pointer" onClick={() => { setLiked(!liked); setLikes(l => liked ? l - 1 : l + 1); }}>
+            <Heart className={cn("w-8 h-8 transition-transform group-active:scale-75 drop-shadow-lg", liked ? "text-red-500 fill-current" : "text-white")} />
+            <span className="text-[12px] font-bold drop-shadow-md text-white">{formatNum(likes)}</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 cursor-pointer group">
+            <MessageCircle className="w-8 h-8 text-white drop-shadow-lg transition-transform group-active:scale-75" />
+            <span className="text-[12px] font-bold drop-shadow-md text-white">{formatNum(Math.floor((realMetrics?.followers ?? 0) * 0.02))}</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 cursor-pointer group">
+            <Send className="w-8 h-8 text-white drop-shadow-lg transition-transform group-active:scale-75" />
+            <span className="text-[12px] font-bold drop-shadow-md text-white">{formatNum(Math.floor((realMetrics?.followers ?? 0) * 0.05))}</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 cursor-pointer group">
+            <MoreHorizontal className="w-8 h-8 text-white drop-shadow-lg transition-transform group-active:scale-75" />
+          </div>
+          <div className="w-9 h-9 mt-2 rounded-md border-2 border-white overflow-hidden shadow-lg">
+            {authorAvatar ? <SafeImage src={authorAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-zinc-800" />}
+          </div>
+        </div>
+
+        {/* Bottom Info Info */}
+        <div className="absolute bottom-6 left-4 right-16 flex flex-col gap-3 z-20">
+          <div className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full border border-white/20 overflow-hidden shadow-lg">
+              {authorAvatar ? <SafeImage src={authorAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white">{authorName?.[0] || "V"}</div>}
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-sm drop-shadow-md text-white">{authorName?.toLowerCase().replace(/\s/g, '')}</span>
+              <div className="w-1 h-1 bg-white rounded-full opacity-50" />
+              <button className="text-sm font-bold border border-white/50 text-white px-3 py-1 rounded-full hover:bg-white/10 transition-colors backdrop-blur-sm">Seguir</button>
+            </div>
+          </div>
+          <div className="text-[14px] line-clamp-2 drop-shadow-md text-white">
+            {content || "A revolução do conteúdo digital."}
+          </div>
+          <div className="flex items-center gap-2 text-[12px] text-white bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full w-max mt-1">
+            <Music className="w-3 h-3" />
+            <span className="truncate max-w-[150px]">Áudio original • {authorName?.toLowerCase().replace(/\s/g, '')}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="preview-card insta-card bg-black text-white border-none rounded-xl overflow-hidden shadow-2xl">
@@ -565,7 +665,7 @@ export const InstagramCard = memo(function InstagramCardRenderer({ content, medi
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 p-[2px] shadow-2xl ring-2 ring-black">
             <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden border border-black">
-               {authorAvatar ? <img src={authorAvatar} className="w-full h-full object-cover" alt="" /> : <span className="text-[10px] font-black uppercase">{authorName?.[0] || "V"}</span>}
+               {authorAvatar ? <SafeImage src={authorAvatar} className="w-full h-full object-cover" alt="" /> : <span className="text-[10px] font-black uppercase">{authorName?.[0] || "V"}</span>}
             </div>
           </div>
           <div>
@@ -585,7 +685,7 @@ export const InstagramCard = memo(function InstagramCardRenderer({ content, medi
         <MoreHorizontal className="w-5 h-5 text-zinc-500 hover:text-white transition-colors cursor-pointer" />
       </div>
       <div 
-        className={cn("media-wrapper bg-zinc-950 flex items-center justify-center relative group cursor-pointer overflow-hidden", hasVideo ? "aspect-[9/16] max-h-[550px]" : "aspect-square")}
+        className={cn("media-wrapper bg-zinc-950 flex items-center justify-center relative group cursor-pointer overflow-hidden aspect-square")}
         onDoubleClick={() => { if(!liked) { setLiked(true); setLikes(l => l + 1); } }}
       >
         <MultimodalMedia 
@@ -616,7 +716,7 @@ export const InstagramCard = memo(function InstagramCardRenderer({ content, medi
       </div>
       <div className="px-4 text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-4">HÁ 2 MINUTOS</div>
       <div className="px-4 py-3 border-t border-white border-opacity-5 flex items-center gap-3">
-        {authorAvatar ? <img src={authorAvatar} className="w-6 h-6 rounded-full opacity-60" /> : <div className="w-6 h-6 rounded-full bg-zinc-800" />}
+        {authorAvatar ? <SafeImage src={authorAvatar} className="w-6 h-6 rounded-full opacity-60" /> : <div className="w-6 h-6 rounded-full bg-zinc-800" />}
         <span className="text-[13px] text-zinc-500 flex-1">Adicione um comentário...</span>
         <button className="text-sky-500 text-[13px] font-black opacity-40 hover:opacity-100 transition-opacity">Publicar</button>
       </div>
@@ -636,7 +736,7 @@ export const LinkedInCard = memo(function LinkedInCardRenderer({ content, media,
   return (
     <div className="preview-card ln-card bg-[#1d2226] text-white border-none rounded-xl shadow-2xl overflow-hidden">
       <div className="ln-header flex gap-3 p-4">
-        {authorAvatar ? <img src={authorAvatar} className="ln-avatar-img w-12 h-12 rounded ring-1 ring-white/10" alt="" /> : <div className="ln-avatar-img bg-zinc-700 w-12 h-12 rounded flex items-center justify-center font-black text-xl">{authorName?.[0] || "V"}</div>}
+        {authorAvatar ? <SafeImage src={authorAvatar} className="ln-avatar-img w-12 h-12 rounded ring-1 ring-white/10" alt="" /> : <div className="ln-avatar-img bg-zinc-700 w-12 h-12 rounded flex items-center justify-center font-black text-xl">{authorName?.[0] || "V"}</div>}
         <div className="ln-user-info">
           <div className="flex items-center gap-1.5">
             <h4 className="font-black text-[15px] text-white">{authorName || "Vitória News"}</h4>
@@ -705,7 +805,7 @@ export const ThreadsCard = memo(function ThreadsCardRenderer({ content, media, a
       <div className="grid grid-cols-[auto_1fr] gap-4">
         <div className="flex flex-col items-center gap-3">
           <div className="relative">
-            {authorAvatar ? <img src={authorAvatar} className="w-11 h-11 rounded-full border border-white border-opacity-10" alt="" /> : <div className="bg-zinc-800 w-11 h-11 rounded-full flex items-center justify-center font-black text-white">{authorName?.[0] || "V"}</div>}
+            {authorAvatar ? <SafeImage src={authorAvatar} className="w-11 h-11 rounded-full border border-white border-opacity-10" alt="" /> : <div className="bg-zinc-800 w-11 h-11 rounded-full flex items-center justify-center font-black text-white">{authorName?.[0] || "V"}</div>}
             <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-black rounded-full flex items-center justify-center border-2 border-black">
                <div className="w-full h-full rounded-full bg-white flex items-center justify-center"><Plus className="w-3 h-3 text-black stroke-[3]" /></div>
             </div>
@@ -824,8 +924,8 @@ export const TikTokCard = memo(function TikTokCardRenderer({ content, media, aut
   const audioRef = React.useRef<HTMLAudioElement>(null);
 
   return (
-    <div className="preview-card tiktok-card relative aspect-[9/16] bg-black rounded-3xl overflow-hidden shadow-2xl group max-w-[320px] mx-auto border border-white border-opacity-10">
-      <div className="w-full h-full relative cursor-pointer">
+    <div className="preview-card tiktok-card w-full h-full relative bg-black overflow-hidden flex items-center justify-center">
+      <div className="w-full h-full relative cursor-pointer" onClick={() => setPlaying(!playing)}>
         <MultimodalMedia 
           media={media} 
           playing={playing} 
@@ -834,7 +934,8 @@ export const TikTokCard = memo(function TikTokCardRenderer({ content, media, aut
           audioRef={audioRef} 
         />
       </div>
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 pointer-events-none" />
+      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/90 via-transparent to-transparent pointer-events-none z-10" />
+      <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
       <div className="tt-overlay absolute bottom-0 left-0 w-full p-5 flex items-end justify-between z-20">
         <div className="tt-info flex-1 pr-12 mb-6">
           <div className="tt-user flex items-center gap-2 mb-3">
@@ -850,7 +951,7 @@ export const TikTokCard = memo(function TikTokCardRenderer({ content, media, aut
         </div>
         <div className="tt-actions-bar flex flex-col gap-5 items-center mb-6">
           <div className="relative mb-2">
-            {authorAvatar ? <img src={authorAvatar} className="w-12 h-12 rounded-full border-2 border-white shadow-2xl" alt="" /> : <div className="w-12 h-12 rounded-full bg-zinc-800 border-2 border-white flex items-center justify-center font-black">V</div>}
+            {authorAvatar ? <SafeImage src={authorAvatar} className="w-12 h-12 rounded-full border-2 border-white shadow-2xl" alt="" /> : <div className="w-12 h-12 rounded-full bg-zinc-800 border-2 border-white flex items-center justify-center font-black">V</div>}
             <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center border-2 border-black"><Plus className="w-3 h-3 text-white stroke-[4]" /></div>
           </div>
           <div className="tt-action-btn group" onClick={() => { setLiked(!liked); setLikes(l => liked ? l - 1 : l + 1); }}>
@@ -860,7 +961,7 @@ export const TikTokCard = memo(function TikTokCardRenderer({ content, media, aut
           <div className="tt-action-btn"><div className="tt-circle-btn shadow-2xl"><MessageCircle className="w-7 h-7 text-white fill-white" /></div><span className="text-xs font-black mt-1 shadow-lg">{formatNum(Math.floor((realMetrics?.followers ?? 0) * 0.02))}</span></div>
           <div className="tt-action-btn"><div className="tt-circle-btn shadow-2xl"><Share2 className="w-7 h-7 text-white fill-white" /></div><span className="text-xs font-black mt-1 shadow-lg">{formatNum(Math.floor((realMetrics?.followers ?? 0) * 0.05))}</span></div>
           <div className="w-11 h-11 rounded-full bg-zinc-800 border-4 border-zinc-700 animate-spin-slow p-1 shadow-2xl overflow-hidden mt-4">
-             {authorAvatar ? <img src={authorAvatar} className="w-full h-full rounded-full grayscale" /> : <div className="w-full h-full bg-black rounded-full" />}
+             {authorAvatar ? <SafeImage src={authorAvatar} className="w-full h-full rounded-full grayscale" /> : <div className="w-full h-full bg-black rounded-full" />}
           </div>
         </div>
       </div>
@@ -868,16 +969,102 @@ export const TikTokCard = memo(function TikTokCardRenderer({ content, media, aut
   );
 });
 
-export const YouTubeCard = memo(function YouTubeCardRenderer({ content, media, authorName, authorAvatar, videoTitle, realMetrics, visibility }: any) {
+export const YouTubeCard = memo(function YouTubeCardRenderer({ content, media, authorName, authorAvatar, videoTitle, realMetrics, visibility, mediaType }: any) {
   const [liked, setLiked] = useState(false);
   const [likes, setLikes] = useState(realMetrics?.likes ?? 0);
   const [playing, setPlaying] = useState(false);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const audioRef = React.useRef<HTMLAudioElement>(null);
   
+  const isShort = mediaType === 'short' || mediaType === 'reel';
+
+  if (isShort) {
+    return (
+      <div className="w-full h-full bg-[#0f0f0f] relative flex items-center justify-center overflow-hidden">
+        <div 
+          className="media-wrapper absolute inset-0 cursor-pointer"
+          onClick={() => setPlaying(!playing)}
+        >
+          <MultimodalMedia 
+            media={media} 
+            playing={playing} 
+            setPlaying={setPlaying} 
+            videoRef={videoRef} 
+            audioRef={audioRef} 
+          />
+        </div>
+        
+        {/* Overlay Gradients */}
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none z-10" />
+        <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10" />
+        
+        {/* Header (Top) */}
+        <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
+          <div className="flex gap-4">
+            <span className="font-bold text-lg text-white drop-shadow-md">Shorts</span>
+          </div>
+          <div className="flex gap-4">
+            <Camera className="w-6 h-6 text-white drop-shadow-md" />
+            <MoreHorizontal className="w-6 h-6 text-white drop-shadow-md" />
+          </div>
+        </div>
+
+        {/* Right Actions Bar */}
+        <div className="absolute right-2 bottom-6 flex flex-col items-center gap-6 z-20">
+          <div className="flex flex-col items-center gap-1 group cursor-pointer" onClick={(e) => { e.stopPropagation(); setLiked(!liked); setLikes(l => liked ? l - 1 : l + 1); }}>
+            <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-md">
+              <ThumbsUp className={cn("w-6 h-6 transition-transform group-active:scale-75", liked ? "text-white fill-current" : "text-white")} />
+            </div>
+            <span className="text-[12px] font-bold text-white drop-shadow-md">{formatNum(likes)}</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 cursor-pointer group">
+            <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-md">
+              <ThumbsUp className="w-6 h-6 text-white rotate-180 transition-transform group-active:scale-75" />
+            </div>
+            <span className="text-[12px] font-bold text-white drop-shadow-md">Não gostei</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 cursor-pointer group">
+            <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-md">
+              <MessageSquare className="w-6 h-6 text-white fill-white transition-transform group-active:scale-75" />
+            </div>
+            <span className="text-[12px] font-bold text-white drop-shadow-md">{formatNum(Math.floor((realMetrics?.followers ?? 0) * 0.02))}</span>
+          </div>
+          <div className="flex flex-col items-center gap-1 cursor-pointer group">
+            <div className="w-12 h-12 bg-black/40 rounded-full flex items-center justify-center backdrop-blur-md">
+              <Share2 className="w-6 h-6 text-white transition-transform group-active:scale-75" />
+            </div>
+            <span className="text-[12px] font-bold text-white drop-shadow-md">Compartilhar</span>
+          </div>
+          <div className="w-10 h-10 mt-2 rounded-md overflow-hidden border-2 border-white shadow-lg">
+            {authorAvatar ? <SafeImage src={authorAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-zinc-800" />}
+          </div>
+        </div>
+
+        {/* Bottom Info Info */}
+        <div className="absolute bottom-6 left-4 right-16 flex flex-col gap-3 z-20">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full overflow-hidden shadow-lg border border-white/10">
+              {authorAvatar ? <SafeImage src={authorAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-white">{authorName?.[0] || "V"}</div>}
+            </div>
+            <span className="font-bold text-[15px] text-white drop-shadow-md">@{authorName?.toLowerCase().replace(/\s/g, '')}</span>
+            <button className="text-[13px] font-bold bg-white text-black px-4 py-1.5 rounded-full hover:bg-zinc-200 transition-colors">Inscrever-se</button>
+          </div>
+          <div className="text-[14px] line-clamp-2 text-white drop-shadow-md">
+            {videoTitle || content?.split('\n')[0] || "A revolução do conteúdo digital."}
+          </div>
+        </div>
+        
+        {/* Progress Bar (Fake) */}
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/20 z-20">
+           <div className="h-full bg-[#ff0000] w-1/3" />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="preview-card yt-card bg-black text-white rounded-xl overflow-hidden shadow-2xl">
-      <div className="aspect-video bg-zinc-900 relative group cursor-pointer">
+      <div className={cn("bg-zinc-900 relative group cursor-pointer aspect-video")}>
         <MultimodalMedia 
           media={media} 
           playing={playing} 
@@ -894,7 +1081,7 @@ export const YouTubeCard = memo(function YouTubeCardRenderer({ content, media, a
       </div>
       <div className="p-4">
         <div className="flex gap-3">
-          {authorAvatar ? <img src={authorAvatar} className="w-10 h-10 rounded-full shrink-0" alt="" /> : <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-white shrink-0 font-black">{authorName?.[0] || "V"}</div>}
+          {authorAvatar ? <SafeImage src={authorAvatar} className="w-10 h-10 rounded-full shrink-0" alt="" /> : <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-white shrink-0 font-black">{authorName?.[0] || "V"}</div>}
           <div className="min-w-0 flex-1">
             <h3 className="font-black text-[15px] line-clamp-2 mb-1.5 leading-tight">{videoTitle || content?.split('\n')[0] || "Explorando o Futuro Digital"}</h3>
             <div className="flex flex-col gap-0.5">
@@ -1042,7 +1229,7 @@ export const ResendCard = memo(function ResendCardRenderer({ content, authorName
         <h2 className="text-3xl font-black text-white mb-8 leading-[1.1] tracking-tight drop-shadow-2xl">{content?.split('\n')[0]?.slice(0, 60) || "Inteligência Artificial & O Futuro da Sua Marca"}</h2>
         <div className="flex items-start gap-4 mb-10 bg-white/5 p-4 rounded-2xl border border-white border-opacity-5 shadow-inner">
           <div className="w-12 h-12 rounded-full bg-gradient-to-br from-zinc-700 to-black flex items-center justify-center text-white font-black overflow-hidden shadow-2xl ring-2 ring-white/10">
-            {authorAvatar ? <img src={authorAvatar} className="w-full h-full object-cover" alt="" /> : (authorName?.[0] || "V")}
+            {authorAvatar ? <SafeImage src={authorAvatar} className="w-full h-full object-cover" alt="" /> : (authorName?.[0] || "V")}
           </div>
           <div className="flex flex-col">
              <div className="flex items-center gap-1.5">
@@ -1098,7 +1285,7 @@ export const RumbleCard = memo(function RumbleCardRenderer({ content, media, aut
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-rumble-green to-emerald-400 p-[2px] shadow-2xl ring-2 ring-zinc-900 overflow-hidden">
               {authorAvatar ? (
-                <img src={authorAvatar} className="w-full h-full rounded-full object-cover" alt="" />
+                <SafeImage src={authorAvatar} className="w-full h-full rounded-full object-cover" alt="" />
               ) : (
                 <div className="w-full h-full rounded-full bg-zinc-900 flex items-center justify-center text-xs font-black text-white uppercase">{authorName?.[0] || "V"}</div>
               )}
@@ -1156,7 +1343,7 @@ export const PinterestCard = memo(function PinterestCardRenderer({ content, medi
         <h3 className="pin-title text-base font-black text-white line-clamp-1 mb-4 group-hover:text-zinc-300 transition-colors cursor-pointer tracking-tight drop-shadow-md">{content?.split('\n')[0] || "Novas Ideias para Seu Hub"}</h3>
         <div className="pin-user flex items-center gap-3.5 group/user cursor-pointer">
           <div className="relative">
-            {authorAvatar ? <img src={authorAvatar} className="pin-avatar-img w-10 h-10 rounded-full border-2 border-white border-opacity-10 group-hover/user:scale-110 transition-all shadow-xl" alt="" /> : <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-white border border-white border-opacity-5">V</div>}
+            {authorAvatar ? <SafeImage src={authorAvatar} className="pin-avatar-img w-10 h-10 rounded-full border-2 border-white border-opacity-10 group-hover/user:scale-110 transition-all shadow-xl" alt="" /> : <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-black text-white border border-white border-opacity-5">V</div>}
             {visibility && <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-red-600 rounded-full border-2 border-black" />}
           </div>
           <div className="flex flex-col min-w-0">
@@ -1207,7 +1394,7 @@ export const WebsiteCard = memo(function WebsiteCardRenderer({ content, media, a
         <p className="text-zinc-600 text-sm leading-relaxed mb-6 line-clamp-3">{content?.split('\n').slice(1).join('\n') || "A revolução digital continua transformando o modo como consumimos informações no dia a dia..."}</p>
         <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
           <div className="flex items-center gap-2">
-            {authorAvatar ? <img src={authorAvatar} className="w-6 h-6 rounded-full" alt="" /> : <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold">V</div>}
+            {authorAvatar ? <SafeImage src={authorAvatar} className="w-6 h-6 rounded-full" alt="" /> : <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold">V</div>}
             <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">{authorName || "Vitória News"}</span>
           </div>
           <span className="text-[10px] text-zinc-400 font-bold">{new Date().toLocaleDateString('pt-BR')}</span>

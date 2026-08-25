@@ -2281,6 +2281,9 @@ export type Database = {
           platform_post_id: string | null
           post_id: string
           published_at: string | null
+          url: string | null
+          status: string | null
+          metadata: Record<string, any> | null
           user_id: string
         }
         Insert: {
@@ -2290,6 +2293,9 @@ export type Database = {
           platform_post_id?: string | null
           post_id: string
           published_at?: string | null
+          url?: string | null
+          status?: string | null
+          metadata?: Record<string, any> | null
           user_id: string
         }
         Update: {
@@ -2299,6 +2305,9 @@ export type Database = {
           platform_post_id?: string | null
           post_id?: string
           published_at?: string | null
+          url?: string | null
+          status?: string | null
+          metadata?: Record<string, any> | null
           user_id?: string
         }
         Relationships: [

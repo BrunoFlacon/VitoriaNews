@@ -1,9 +1,9 @@
 import { memo, useState, useEffect, startTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Image as ImageIcon, Video, FileText, Eye, Trash2, Edit2, 
+import {
+  Image as ImageIcon, Video, FileText, Eye, Trash2, Edit2,
   Clock, CheckCircle2, AlertCircle, XCircle, Send, Filter,
-  RefreshCw, Play, ChevronDown, ChevronUp, Calendar, BarChart3
+  RefreshCw, Play, ChevronDown, ChevronUp, Calendar, BarChart3, Radio
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,9 +13,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { FeedPreview } from "@/components/dashboard/FeedPreview";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
-import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
-import { Radio } from "lucide-react";
 import { Heart, MessageCircle, Share2, Globe, Lock, Users as UsersIcon } from "lucide-react";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { getMediaUrl } from "@/utils/mediaUtils";
@@ -24,7 +21,7 @@ const statusConfig = {
   draft: { label: "Rascunho", icon: FileText, color: "bg-muted text-muted-foreground border-border" },
   scheduled: { label: "Agendado", icon: Clock, color: "bg-blue-500/10 text-blue-500 border-blue-500/20" },
   published: { label: "Publicado", icon: CheckCircle2, color: "bg-green-500/10 text-green-500 border-green-500/20" },
-  failed: { label: "Falhou", icon: XCircle, color: "bg-destructive/10 text-destructive border-destructive/20" },
+  failed: { label: "Falhou", icon: XCircle, color: "bg-destructive/10 text-destructive border-destructive/10" },
   pending_approval: { label: "Em Revisão", icon: AlertCircle, color: "bg-orange-500/10 text-orange-500 border-orange-500/20" },
   rejected: { label: "Rejeitado", icon: XCircle, color: "bg-red-500/10 text-red-500 border-red-500/20" },
 };
@@ -87,7 +84,7 @@ const MediaPreview = memo(({ mediaIds, mediaType }: MediaPreviewProps) => {
       ) : (
         <div className="grid grid-cols-3 gap-1.5">
           {mediaUrls.slice(0, expanded ? undefined : 3).map((m) =>
-            m.type.startsWith("image/") ? (
+            m.type.startsWith("image/") || m.type === "image" ? (
               <div key={m.id} className="w-full aspect-square rounded-lg overflow-hidden bg-muted">
                 <SafeImage
                   src={m.url}
@@ -95,13 +92,18 @@ const MediaPreview = memo(({ mediaIds, mediaType }: MediaPreviewProps) => {
                   className="w-full h-full object-cover"
                 />
               </div>
-            ) : m.type.startsWith("video/") || m.type.startsWith("audio/") ? (
-              <video
-                key={m.id}
-                src={getMediaUrl(m.url)}
-                className="w-full aspect-square object-cover rounded-lg bg-black"
-                controls
-              />
+            ) : m.type.startsWith("video/") || m.type === "video" || m.type.startsWith("audio/") || m.type === "audio" ? (
+              <div key={m.id} className="relative w-full aspect-square rounded-lg overflow-hidden bg-black group">
+                <video
+                  src={getMediaUrl(m.url)}
+                  className="w-full h-full object-cover opacity-80"
+                  muted
+                  playsInline
+                />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Play className="w-8 h-8 text-white fill-white opacity-80 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
             ) : null
           )}
           {mediaUrls.length > 3 && (
@@ -131,12 +133,11 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
   const StatusIcon = status.icon;
   const MediaIcon = mediaTypeIcon[post.media_type as keyof typeof mediaTypeIcon] || FileText;
 
-  // 📌 Perfis que PUBLICARAM de verdade (metadata.targetProfileId em published_posts)
+  // Perfis que PUBLICARAM de verdade (metadata.targetProfileId em published_posts)
   const publishedMap: Record<string, string | null> = {};
   if (post.published_details?.length) {
     post.published_details.forEach((pd) => {
       const pid = pd.metadata?.targetProfileId || pd.metadata?.connectionId || null;
-      // Preferir o registro mais recente (published_details já vem ordenado desc)
       if (!publishedMap[pd.platform]) publishedMap[pd.platform] = pid;
     });
   }
@@ -147,7 +148,7 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
       const platform = socialPlatforms.find(sp => sp.id === platformId);
       let account: any;
 
-      // 1º) Perfil real publicado (evita cair no "primeiro conectado" das configurações)
+      // 1º) Perfil real publicado
       const realProfileId = post.status === 'published' ? publishedMap[platformId] : null;
       if (realProfileId) {
         account = connections.find(c => c.id === realProfileId)
@@ -170,7 +171,7 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
   const primaryPlatform = platforms[0];
   const metrics = (post as any).metrics || { likes: 0, comments: 0, shares: 0, views: 0 };
 
-  // Link real da publicação (published_posts.url) — prioriza a 1ª plataforma do post
+  // Link real da publicação (published_posts.url)
   const publishedLink =
     post.published_details?.find((pd) => pd.url)?.url ||
     post.published_details?.[0]?.url ||
@@ -183,7 +184,7 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
       exit={{ opacity: 0, scale: 0.95 }}
       className="bg-card border border-border rounded-2xl overflow-hidden hover:border-primary/30 transition-all group cursor-pointer shadow-sm hover:shadow-md"
       onClick={() => startTransition(() => onClick(post))}
-      style={{ contain: "paint layout" }}
+      style={{ contain: "paint layout", willChange: "transform, opacity" }}
     >
       <div className="p-4">
         {/* Profile Header */}
@@ -211,7 +212,7 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
               </span>
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium">
                 <span>
-                  {post.published_at 
+                  {post.published_at
                     ? new Date(post.published_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
                     : post.scheduled_at
                     ? `Agendado: ${new Date(post.scheduled_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`
@@ -280,42 +281,27 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
         {/* Real Metrics Footer */}
         <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/50">
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5 text-muted-foreground transition-colors">
+            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
               <Heart className="w-4 h-4" />
-              {post.status === 'published' && (
-                <span className="text-xs font-bold">{metrics.likes.toLocaleString('pt-BR')}</span>
-              )}
+              <span className="text-xs font-bold">{metrics.likes.toLocaleString("pt-BR")}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground transition-colors">
+            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
               <MessageCircle className="w-4 h-4" />
-              {post.status === 'published' && (
-                <span className="text-xs font-bold">{metrics.comments.toLocaleString('pt-BR')}</span>
-              )}
+              <span className="text-xs font-bold">{metrics.comments.toLocaleString("pt-BR")}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground transition-colors">
+            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
               <Share2 className="w-4 h-4" />
-              {post.status === 'published' && (
-                <span className="text-xs font-bold">{metrics.shares.toLocaleString('pt-BR')}</span>
-              )}
+              <span className="text-xs font-bold">{metrics.shares.toLocaleString("pt-BR")}</span>
             </div>
-            <button 
-              type="button"
-              onClick={(e) => {
-                if (post.status === 'published') {
-                  e.stopPropagation();
-                  onClick(post);
-                }
-              }}
-              className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors cursor-pointer bg-transparent border-0 p-0"
-            >
+            <div className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors">
               <Eye className="w-4 h-4" />
-              {post.status === 'published' && (
-                <span className="text-xs font-bold">{metrics.views.toLocaleString('pt-BR')}</span>
-              )}
-            </button>
+              <span className="text-xs font-bold">{metrics.views.toLocaleString("pt-BR")}</span>
+            </div>
+
+            {/* Métricas detalhadas + Repassar para Stories */}
             {post.status === 'published' && (
               <>
-                <button 
+                <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
@@ -338,13 +324,13 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
                       await supabase.from("stories_lives").insert({
                         user_id: userRes.user.id,
                         platform: post.platforms?.[0] || "instagram",
-                        title: "📸 NOVO POST NO FEED! CONFIRA AGORA",
-                        caption: post.content ? post.content.substring(0, 120) : "Nova publicação no feed!",
+                        title: "NOVO POST NO FEED! CONFIRA AGORA",
+                        caption: post.content ? post.content.substring(0, 120) : "Nova publicacao no feed!",
                         type: "story",
                         status: "published",
                         scheduled_at: new Date().toISOString(),
                       } as any);
-                      alert("📲 Post repassado para os Stories com sucesso!");
+                      alert("Post repassado para os Stories com sucesso!");
                     } catch (err: any) {
                       alert("Erro ao repassar para os Stories: " + (err.message || "Tente novamente"));
                     }
@@ -353,7 +339,7 @@ const PostCard = memo(({ post, onEdit, onDelete, onClick }: PostCardProps) => {
                   title="Notificar seguidores nos Stories"
                 >
                   <Radio className="w-3 h-3 animate-pulse" />
-                  <span>Stories 📲</span>
+                  <span>Stories</span>
                 </button>
               </>
             )}
@@ -472,10 +458,10 @@ export const PostsFeedView = memo(({ onEditPost }: PostsFeedViewProps) => {
 
       {/* Detail Modal */}
       {previewPost && (
-        <FeedPreview 
-          post={previewPost} 
-          isOpen={!!previewPost} 
-          onClose={() => setPreviewPost(null)} 
+        <FeedPreview
+          post={previewPost}
+          isOpen={!!previewPost}
+          onClose={() => setPreviewPost(null)}
           onEdit={onEditPost}
           onDelete={deletePost}
         />
