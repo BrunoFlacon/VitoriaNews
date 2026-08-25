@@ -87,3 +87,8 @@ _temp_root_files/
 _restore_backup/
 _conflict_backup/
 backup_migrations/
+
+# Migration and Export Data (Contains Secrets)
+*.mjs
+*.sql
+export_*.json
