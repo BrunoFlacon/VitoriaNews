@@ -1,7 +1,6 @@
 import { useEditor } from '../../EditorContext';
 import type { CanvasLayer } from '../../CoverCanvasEngine';
 import { PanelHeader } from '../PanelHeader';
-import { addAHeading, addASubheading, addABodyText } from '../textPresets';
 
 interface TextContentProps {
   onClose: () => void;
@@ -34,7 +33,7 @@ export const TextContent = ({ onClose }: TextContentProps) => {
       fontFamily,
       fontWeight,
       color,
-      shadowColor: 'rgba(0, 0, 0, 0.5)',
+      shadowColor: '#000000',
       shadowBlur: 10,
     };
     addLayer(layer);
@@ -48,19 +47,19 @@ export const TextContent = ({ onClose }: TextContentProps) => {
       {/* Quick-add buttons */}
       <div className="flex flex-col gap-2 p-4">
         <div
-          className="text-[28px] leading-none p-4 font-bold bg-gray-100 rounded cursor-pointer select-none hover:bg-gray-200 transition-colors"
+          className="text-[28px] leading-none p-4 font-bold bg-white/5 text-white cursor-pointer select-none hover:bg-white/10 transition-colors"
           onClick={() => handleAddText('TITULO', 64, 'Inter, sans-serif', 'bold', '#FFFFFF')}
         >
           Adicionar titulo
         </div>
         <div
-          className="text-lg leading-none p-4 font-bold bg-gray-100 rounded cursor-pointer select-none hover:bg-gray-200 transition-colors"
+          className="text-lg leading-none p-4 font-bold bg-white/5 text-white cursor-pointer select-none hover:bg-white/10 transition-colors"
           onClick={() => handleAddText('Subtitulo', 40, 'Inter, sans-serif', 'bold', '#FACC15')}
         >
           Adicionar subtitulo
         </div>
         <div
-          className="text-xs leading-none p-4 font-bold bg-gray-100 rounded cursor-pointer select-none hover:bg-gray-200 transition-colors"
+          className="text-xs leading-none p-4 font-bold bg-white/5 text-white cursor-pointer select-none hover:bg-white/10 transition-colors"
           onClick={() => handleAddText('Texto descritivo', 26, 'Inter, sans-serif', 'normal', '#CBD5E1')}
         >
           Adicionar texto pequeno
@@ -81,11 +80,11 @@ export const TextContent = ({ onClose }: TextContentProps) => {
         ].map((style) => (
           <div
             key={style.label}
-            className="cursor-pointer bg-gray-100 rounded p-2 flex items-center justify-center min-h-[70px] hover:bg-gray-200 transition-colors"
+            className="cursor-pointer bg-white/5 p-2 flex items-center justify-center min-h-[70px] hover:bg-white/10 transition-colors"
             onClick={() => handleAddText(style.label, style.fontSize, style.fontFamily, 'bold', style.color)}
           >
             <span
-              className="text-center text-gray-700 truncate w-full"
+              className="text-center text-gray-200 truncate w-full"
               style={{
                 fontFamily: style.fontFamily,
                 fontSize: '16px',

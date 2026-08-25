@@ -20,6 +20,7 @@ import { WebhookStatusBadge } from "./WebhookStatusBadge";
 import { WhatsAppMetricsDashboard } from "@/components/dashboard/analytics/WhatsAppMetricsDashboard";
 import { WhatsAppPhotoUpload } from "./WhatsAppPhotoUpload";
 import { WhatsAppBotControl } from "./WhatsAppBotControl";
+import { AiEnginesTab } from "./AiEnginesTab";
 
 interface APITabProps {
   UNIQUE_PLATFORM_CONFIGS: any[];
@@ -751,8 +752,7 @@ export const APITab = memo(({
                                       </Badge>
                                     )}
                                   </div>
-                                  <form className="grid gap-3" onSubmit={e => e.preventDefault()} autoComplete="on">
-                                    <input type="text" name="username" autoComplete="username" className="hidden" aria-hidden="true" />
+                                  <div className="grid gap-3">
                                     {fields.map((field) => {
                                       const fieldId = `${config.id}-${field.key}`;
                                       const isVisible = visibleFields[fieldId] ?? false;
@@ -760,7 +760,8 @@ export const APITab = memo(({
                                       const val = formValues[config.id]?.[field.key] ?? credentials[config.id]?.[field.key] ?? "";
 
                                       return (
-                                        <div key={field.key} className="space-y-1.5">
+                                        <form key={field.key} className="space-y-1.5" onSubmit={e => e.preventDefault()} autoComplete="on">
+                                          <input type="text" name="username" autoComplete="username" className="hidden" aria-hidden="true" />
                                           <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">
                                             {field.label.includes("TOKEN") && config.id === 'telegram' ? "BOT TOKEN (@BOTFATHER)" : field.label}
                                           </label>
@@ -785,10 +786,17 @@ export const APITab = memo(({
                                               {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                             </button>
                                           </div>
-                                        </div>
+                                        </form>
                                       );
                                     })}
-                                  </form>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Motores de IA de Imagem (Studio) — sub-seção do ai_config */}
+                              {config.id === 'ai_config' && (
+                                <div className="pt-4 border-t border-border/10">
+                                  <AiEnginesTab />
                                 </div>
                               )}
 

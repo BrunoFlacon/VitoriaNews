@@ -192,7 +192,9 @@ serve(async (req: Request) => {
       templateLanguage,
       templateVariables,
       templateHeaderMediaUrl,
-      userId: bodyUserId
+      userId: bodyUserId,
+      coverUrl,         // URL da thumbnail/capa customizada (Instagram Reels, YouTube, TikTok, FB Stories)
+      thumbnailUrl,     // Alias alternativo para coverUrl
     } = await req.json();
 
     const userId = user?.id || bodyUserId || "system";
@@ -228,7 +230,8 @@ serve(async (req: Request) => {
             templateName,
             templateLanguage,
             templateVariables,
-            templateHeaderMediaUrl
+            templateHeaderMediaUrl,
+            coverUrl: coverUrl || thumbnailUrl || null,  // thumbnail/capa para vídeos e stories
           }
         };
 

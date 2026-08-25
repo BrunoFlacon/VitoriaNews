@@ -186,6 +186,47 @@ export async function publishToYouTube(supabase: any, payload: PublishPayload): 
     throw new Error("YouTube API Error: resposta sem videoId — upload não confirmado.");
   }
 
+  // 🖼️ STEP 4 (opcional): Thumbnail customizada
+  // Endpoint: POST /upload/youtube/v3/thumbnails/set?videoId={id}
+  // Requer o mesmo token OAuth com permissão youtube.upload
+  const thumbUrl = options?.coverUrl || options?.thumbnailUrl;
+  if (thumbUrl) {
+    try {
+      // Baixa a imagem da thumbnail
+      const thumbRes = await fetch(thumbUrl);
+      if (thumbRes.ok) {
+        const thumbBytes = await thumbRes.arrayBuffer();
+        const thumbContentType = thumbRes.headers.get('content-type') || 'image/jpeg';
+
+        const thumbUploadRes = await youtubeFetch(
+          `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${videoId}&uploadType=media`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': thumbContentType,
+              'Content-Length': String(thumbBytes.byteLength),
+            },
+            body: thumbBytes,
+          },
+          supabase,
+          userId || '',
+          profileId,
+          creds.accessToken
+        );
+
+        if (thumbUploadRes.ok) {
+          console.log(`[YouTube] Thumbnail customizada aplicada ao vídeo ${videoId}`);
+        } else {
+          const thumbErr = await thumbUploadRes.json().catch(() => ({}));
+          // Thumbnail falhou mas o vídeo já foi publicado — registra e continua
+          console.warn(`[YouTube] Thumbnail upload falhou (vídeo publicado): ${thumbErr?.error?.message || thumbUploadRes.status}`);
+        }
+      }
+    } catch (thumbError) {
+      console.warn('[YouTube] Erro ao enviar thumbnail (não crítico):', thumbError);
+    }
+  }
+
   return {
     success: true,
     platform: 'youtube',
@@ -194,5 +235,6 @@ export async function publishToYouTube(supabase: any, payload: PublishPayload): 
     url: `https://www.youtube.com/watch?v=${videoId}`,
     contentType: isShort ? 'short' : contentType,
     privacyStatus,
+    thumbnailSet: !!thumbUrl,
   };
 }

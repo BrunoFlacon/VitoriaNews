@@ -24,26 +24,56 @@ export async function publishToFacebook(supabase: any, payload: PublishPayload):
     });
     const result = await response.json();
     if (result.error) {
-      throw new Error(`Facebook API Error: ${result.error.message}`);
+      throw new Error(`Facebook API Error (${path}): ${result.error.message} [code ${result.error.code}]`);
     }
     return result;
   }
 
-  // 📖 STORY
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // 📖 FACEBOOK PAGE STORIES
+  // Foto  → POST /{page-id}/photo_stories  { url: <imageUrl> }
+  // Vídeo → POST /{page-id}/video_stories  { file_url: <videoUrl>, thumb_url?: <thumbUrl> }
+  // Requer permissão: publish_stories (aprovada no App Review)
+  // Docs: https://developers.facebook.com/docs/pages/publishing/stories
+  // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   if (contentType === 'story') {
     if (!mediaUrls || mediaUrls.length === 0) {
-      throw new Error("Story exige mídia (foto ou vídeo).");
+      throw new Error("Facebook Stories exige mídia (foto ou vídeo).");
     }
     const kind = detectMediaType(mediaUrls[0]);
-    const body: Record<string, unknown> = {
-      media_type: kind === 'video' ? 'video' : 'photo',
-    };
-    if (kind === 'video') body.video_url = mediaUrls[0];
-    else body.url = mediaUrls[0];
-    if (content) body.message = content;
 
-    const result = await graph("story", body);
-    return { success: true, platform: 'facebook', postId: result.id, contentType: 'story', profileId, url: permalink(result.id) };
+    if (kind === 'video') {
+      // Vídeo Story: POST /{page-id}/video_stories
+      const storyBody: Record<string, unknown> = {
+        file_url: mediaUrls[0],
+      };
+      // Thumbnail do story de vídeo (se disponível)
+      const thumbUrl = options?.coverUrl || options?.thumbnailUrl;
+      if (thumbUrl) storyBody.thumb_url = thumbUrl;
+
+      const result = await graph("video_stories", storyBody);
+      return {
+        success: true,
+        platform: 'facebook',
+        postId: result.video_id || result.id,
+        contentType: 'story',
+        mediaKind: 'video',
+        profileId,
+        url: null, // Stories não têm URL pública permanente
+      };
+    } else {
+      // Foto Story: POST /{page-id}/photo_stories
+      const result = await graph("photo_stories", { url: mediaUrls[0] });
+      return {
+        success: true,
+        platform: 'facebook',
+        postId: result.post_id || result.id,
+        contentType: 'story',
+        mediaKind: 'photo',
+        profileId,
+        url: null, // Stories não têm URL pública permanente
+      };
+    }
   }
 
   // 🎠 CARROSSEL (até 10 mídias em um único post)
@@ -81,10 +111,15 @@ export async function publishToFacebook(supabase: any, payload: PublishPayload):
     const results = [];
 
     if (kind === 'video') {
-      const result = await graph("videos", {
+      const videoBody: Record<string, unknown> = {
         file_url: mediaUrls[0],
         description: content || '',
-      });
+      };
+      // Thumbnail customizada para vídeos do feed
+      const thumbUrl = options?.coverUrl || options?.thumbnailUrl;
+      if (thumbUrl) videoBody.thumb = thumbUrl;
+
+      const result = await graph("videos", videoBody);
       return { success: true, platform: 'facebook', postId: result.id, contentType: 'video', profileId, url: permalink(result.id) };
     }
 

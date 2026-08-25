@@ -29,7 +29,8 @@ export function usePublisher() {
     platforms: string[],
     content: string,
     mediaUrls: string[] = [],
-    title?: string
+    title?: string,
+    coverUrl?: string // URL da thumbnail/capa para vídeos e stories
   ): Promise<PublishResponse | null> => {
     if (!postId || !platforms.length || !content) {
       toast({
@@ -62,6 +63,7 @@ export function usePublisher() {
             content,
             mediaUrls,
             title,
+            coverUrl: coverUrl || undefined,
           }),
         }
       );
@@ -119,7 +121,8 @@ export function usePublisher() {
     content: string,
     platforms: string[],
     mediaUrls: string[] = [],
-    title?: string
+    title?: string,
+    coverUrl?: string // URL da thumbnail/capa para vídeos e stories
   ): Promise<string | null> => {
     // First create the post, then publish immediately
     try {
@@ -146,7 +149,7 @@ export function usePublisher() {
       if (error) throw error;
 
       // Then publish
-      await publishPost(post.id, platforms, content, mediaUrls, title);
+      await publishPost(post.id, platforms, content, mediaUrls, title, coverUrl);
 
       return post.id;
     } catch (error) {

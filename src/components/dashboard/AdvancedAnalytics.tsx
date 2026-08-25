@@ -725,7 +725,19 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
           {activeSubTab === "overview" && (
             <div className="space-y-8">
               <StatsGrid 
-                engagement={data.engagement} 
+                engagement={(() => {
+                  if (data.engagement.views > 0 || data.engagement.engagementRate > 0 || data.engagement.reach > 0) return data.engagement;
+                  if (analyticsChartData && analyticsChartData.length > 0) {
+                    let v = 0, l = 0, c = 0, s = 0, r = 0;
+                    analyticsChartData.forEach((d: any) => {
+                      v += (d.views || 0); l += (d.likes || 0); c += (d.comments || 0); s += (d.shares || 0); r += (d.reach || 0);
+                    });
+                    if (v > 0 || r > 0 || l > 0) {
+                      return { views: v, likes: l, comments: c, shares: s, reach: r, engagementRate: v > 0 ? ((l+c+s)/v)*100 : 0, growth: 0 };
+                    }
+                  }
+                  return data.engagement;
+                })()} 
                 overview={{...data.overview, publishRate: Number(data.overview.publishRate || 0)}} 
                 messageStats={socialMessageStats} 
                 chartData={analyticsChartData}
@@ -763,11 +775,6 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
                 platformActiveProfile={platformActiveProfile}
                 setPlatformActiveProfile={setPlatformActiveProfile}
                 onNavigate={onNavigate}
-              />
-
-              <PlatformFollowersGrid 
-                groupedFollowers={groupedFollowers} 
-                dataSource={data.dataSource} 
               />
 
               <AnalyticsDetailedReports 

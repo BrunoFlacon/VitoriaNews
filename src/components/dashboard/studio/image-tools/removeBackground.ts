@@ -53,8 +53,20 @@ export async function removeImageBackground(
     source = dataUriToBlob(imageSource);
   }
 
+  // Hack: onnxruntime-web crashes if SharedArrayBuffer is present but crossOriginIsolated is false.
+  // We temporarily disable it so it falls back to single-threaded WebAssembly.
+  const originalSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined' ? SharedArrayBuffer : undefined;
+  if (typeof window !== 'undefined' && !window.crossOriginIsolated) {
+    (window as any).SharedArrayBuffer = undefined;
+  }
+
   // Dynamic import to prevent Vite dev server crash from onnxruntime-web/webgpu resolution
   const { removeBackground } = await import('@imgly/background-removal');
+
+  // Restore SharedArrayBuffer
+  if (typeof window !== 'undefined' && originalSharedArrayBuffer) {
+    (window as any).SharedArrayBuffer = originalSharedArrayBuffer;
+  }
 
   const blob = await removeBackground(source, {
     progress: (key: string, current: number, total: number) => {

@@ -67,8 +67,8 @@ export const AudioWaveformOverlay: React.FC<AudioWaveformOverlayProps> = ({
   }, [color, barCount, height, style]);
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl bg-black/40 border border-white/10 p-4 flex items-center gap-3">
-      <div className="p-2 rounded-lg bg-primary/20 text-primary shrink-0">
+    <div className="relative w-full overflow-hidden bg-black/40 border border-white/10 p-4 flex items-center gap-3">
+      <div className="p-2 bg-primary/20 text-primary shrink-0">
         <Radio className="w-5 h-5 animate-pulse" />
       </div>
       <div className="flex-1 min-w-0">

@@ -145,23 +145,28 @@ export function VideoViewer({ videos, initialIndex, onClose }: VideoViewerProps)
   useEffect(() => {
     if (!isImage || !playing) return;
     const duration = 5000; // 5 segundos para imagens
-    const interval = 50;
-    let elapsed = 0;
+    let startTime: number | null = null;
+    let rafId: number;
     
-    const timer = setInterval(() => {
-      elapsed += interval;
-      setProgress((elapsed / duration) * 100);
+    const tick = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+      const progress = Math.min((elapsed / duration) * 100, 100);
+      setProgress(progress);
+      
       if (elapsed >= duration) {
-        clearInterval(timer);
         if (index < videos.length - 1) {
            setIndex(index + 1);
         } else {
            setPlaying(false);
         }
+        return;
       }
-    }, interval);
+      rafId = requestAnimationFrame(tick);
+    };
     
-    return () => clearInterval(timer);
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [isImage, playing, index, videos.length]);
 
   useEffect(() => {

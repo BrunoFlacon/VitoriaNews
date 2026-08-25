@@ -39,8 +39,8 @@ export const MessageDeliveryLogs = memo(({ messageStats, dataSource }: MessageDe
   const displayMessages = hasRealData ? messageStats.recentMessages : [];
   const totalSent = messageStats?.totalSent || 0;
   const totalFailed = messageStats?.totalFailed || 0;
-  const totalDelivered = totalSent;
-  const totalRead = messageStats?.totalReceived || 0;
+  const totalDelivered = messageStats?.totalDelivered || totalSent;
+  const totalRead = messageStats?.totalRead || 0;
   const successRate = totalSent > 0 ? Math.round((totalDelivered / totalSent) * 100) : 0;
 
   return (

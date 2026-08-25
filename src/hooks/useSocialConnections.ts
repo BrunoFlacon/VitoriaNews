@@ -654,7 +654,8 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         const d = event.data;
         if (!d || typeof d !== 'object') return;
         if (d.type !== 'oauth-complete' && d.type !== 'oauth-callback') return;
-        setTimeout(() => handleOAuthEvent(d, event), 0);
+        // Use queueMicrotask instead of setTimeout(0) to avoid message handler violation
+        queueMicrotask(() => handleOAuthEvent(d, event));
       };
 
       window.addEventListener("message", handleMessage, { passive: true });

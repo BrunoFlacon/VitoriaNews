@@ -718,30 +718,27 @@ export const MessagingView = () => {
     if (!user) return;
     
     // Debounce refetches to avoid multiple rapid calls from batch updates
-    let debounceTimer1: ReturnType<typeof setTimeout>;
-    let debounceTimer2: ReturnType<typeof setTimeout>;
+    let debounceTimer: ReturnType<typeof setTimeout>;
     
-    const debouncedFetchChannels = () => {
-      clearTimeout(debounceTimer1);
-      debounceTimer1 = setTimeout(fetchChannels, 300);
-    };
-    const debouncedFetchMessages = () => {
-      clearTimeout(debounceTimer2);
-      debounceTimer2 = setTimeout(fetchMessages, 300);
+    const debouncedFetchAll = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchChannels();
+        fetchMessages();
+      }, 300);
     };
 
     const ch1 = supabase
       .channel("messaging-channels-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, debouncedFetchChannels)
+      .on("postgres_changes", { event: "*", schema: "public", table: "messaging_channels", filter: `user_id=eq.${user.id}` }, debouncedFetchAll)
       .subscribe();
     const ch2 = supabase
       .channel("messages-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, debouncedFetchMessages)
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `user_id=eq.${user.id}` }, debouncedFetchAll)
       .subscribe();
 
     return () => { 
-      clearTimeout(debounceTimer1);
-      clearTimeout(debounceTimer2);
+      clearTimeout(debounceTimer);
       supabase.removeChannel(ch1).catch(() => {}); 
       supabase.removeChannel(ch2).catch(() => {});
     };

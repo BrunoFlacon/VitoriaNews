@@ -408,9 +408,10 @@ export const WhatsAppChatWindow = ({
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setReplyMessage(e.target.value);
+    const el = e.target;
+    // Single-pass height adjustment: save scrollHeight before resetting to avoid forced reflow
     requestAnimationFrame(() => {
-      e.target.style.height = 'auto';
-      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+      el.style.height = `${Math.min(Math.max(el.scrollHeight, 24), 120)}px`;
     });
   };
 

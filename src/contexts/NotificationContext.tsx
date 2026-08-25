@@ -68,12 +68,13 @@ export const NotificationProvider = ({ children }: NotificationProviderProps) =>
 
   // Initial fetch - deferred to not block paint
   useEffect(() => {
+    let cancelled = false;
     const id = typeof requestIdleCallback === 'function'
-      ? requestIdleCallback(() => fetchNotifications(), { timeout: 2000 })
-      : setTimeout(fetchNotifications, 800);
+      ? requestIdleCallback(() => { if (!cancelled) fetchNotifications(); }, { timeout: 2000 })
+      : requestAnimationFrame(() => { if (!cancelled) fetchNotifications(); });
     return () => {
-      if (typeof id === 'number') clearTimeout(id);
-      else if (id) cancelIdleCallback(id);
+      cancelled = true;
+      if (typeof id === 'number') cancelAnimationFrame(id);
     };
   }, [fetchNotifications]);
 

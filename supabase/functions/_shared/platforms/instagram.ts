@@ -166,7 +166,7 @@ export async function publishToInstagram(supabase: any, payload: PublishPayload)
     return { success: true, platform: 'instagram', postId, contentType: 'carousel', items: children.length, profileId, url: instagramPermalink(postId) };
   }
 
-  // 🎬 PADRÃO: cada mídia publicada separadamente
+  // 🎥 PADRÃO: cada mídia publicada separadamente
   //  - imagem → IMAGE
   //  - vídeo vertical/curto → REELS
   //  - vídeo horizontal → VIDEO (feed)
@@ -176,6 +176,12 @@ export async function publishToInstagram(supabase: any, payload: PublishPayload)
     const extra: Record<string, unknown> = {};
     if (kind === 'video') {
       extra.media_type = detectOrientation(mediaUrl) === 'horizontal' ? 'VIDEO' : 'REELS';
+      // 🗃️ Thumbnail/capa customizada para Reels e Vídeos
+      // Enviada como cover_url no container (Graph API v21+)
+      const coverUrl = payload.options?.coverUrl || payload.options?.thumbnailUrl;
+      if (coverUrl) {
+        extra.cover_url = coverUrl;
+      }
     }
     const creationId = await createContainer(igUserId, meta.accessToken, mediaUrl, extra);
 

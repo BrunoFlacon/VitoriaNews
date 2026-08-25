@@ -73,7 +73,7 @@ export const CoverAnalyticsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/60 p-6 rounded-3xl border border-border/60">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card/60 p-6 border border-border/60">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <BarChart3 className="w-5 h-5 text-primary" />
@@ -94,8 +94,8 @@ export const CoverAnalyticsView: React.FC = () => {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-card/50 p-5 rounded-2xl border border-border/60 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-blue-500/10 text-blue-500">
+        <div className="bg-card/50 p-5 border border-border/60 flex items-center gap-4">
+          <div className="p-3 bg-blue-500/10 text-blue-500">
             <Eye className="w-6 h-6" />
           </div>
           <div>
@@ -104,8 +104,8 @@ export const CoverAnalyticsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-card/50 p-5 rounded-2xl border border-border/60 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-green-500/10 text-green-500">
+        <div className="bg-card/50 p-5 border border-border/60 flex items-center gap-4">
+          <div className="p-3 bg-green-500/10 text-green-500">
             <MousePointerClick className="w-6 h-6" />
           </div>
           <div>
@@ -114,8 +114,8 @@ export const CoverAnalyticsView: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-card/50 p-5 rounded-2xl border border-border/60 flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-yellow-500/10 text-yellow-500">
+        <div className="bg-card/50 p-5 border border-border/60 flex items-center gap-4">
+          <div className="p-3 bg-yellow-500/10 text-yellow-500">
             <TrendingUp className="w-6 h-6" />
           </div>
           <div>
@@ -134,7 +134,7 @@ export const CoverAnalyticsView: React.FC = () => {
             variant={selectedFilter === f ? "default" : "ghost"}
             size="sm"
             onClick={() => setSelectedFilter(f)}
-            className="text-xs font-bold uppercase tracking-wider rounded-xl h-8 px-4"
+            className="text-xs font-bold uppercase tracking-wider h-8 px-4"
           >
             {f === "all" ? "Todas as Capas" : f}
           </Button>
@@ -142,7 +142,7 @@ export const CoverAnalyticsView: React.FC = () => {
       </div>
 
       {/* Covers Performance Table */}
-      <div className="bg-card/40 rounded-3xl border border-border/60 overflow-hidden">
+      <div className="bg-card/40 border border-border/60 overflow-hidden">
         <div className="p-4 border-b border-border/60 flex items-center justify-between">
           <p className="text-xs font-black uppercase tracking-wider text-muted-foreground">
             Ranking de Capas por Conversão (CTR)
@@ -153,7 +153,7 @@ export const CoverAnalyticsView: React.FC = () => {
             <div key={item.id} className="p-4 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-4 min-w-0">
                 <span className="text-xs font-black text-muted-foreground w-6 font-mono">#{idx + 1}</span>
-                <div className="w-16 h-12 rounded-lg overflow-hidden border border-border shrink-0 bg-muted">
+                <div className="w-16 h-12 overflow-hidden border border-border shrink-0 bg-muted">
                   <SafeImage src={item.coverUrl} alt={item.title} className="w-full h-full object-cover" />
                 </div>
                 <div className="min-w-0">
@@ -176,7 +176,7 @@ export const CoverAnalyticsView: React.FC = () => {
                   <p className="text-[10px] font-black uppercase text-muted-foreground">Cliques</p>
                   <p className="text-sm font-bold text-foreground font-mono">{item.clicks.toLocaleString('pt-BR')}</p>
                 </div>
-                <div className="text-right bg-primary/10 px-3 py-1.5 rounded-xl border border-primary/20">
+                <div className="text-right bg-primary/10 px-3 py-1.5 border border-primary/20">
                   <p className="text-[9px] font-black uppercase text-primary">CTR</p>
                   <p className="text-base font-black text-primary font-mono">{item.ctr.toFixed(2)}%</p>
                 </div>

@@ -113,7 +113,7 @@ export const EngagementChart = React.memo(({ chartData, totalFollowers = 0 }: En
           const cfg = METRIC_CONFIG[key];
           const active = isAll || selectedMetric === key;
           const isStatic = key === 'followers';
-          const val = isStatic ? totalFollowers : Number(latest?.[key] || 0);
+          const val = isStatic ? totalFollowers : chartData.reduce((acc, d) => acc + Number((d as any)[key] || 0), 0);
           return (
             <button
               key={key}

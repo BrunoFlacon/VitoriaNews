@@ -122,48 +122,54 @@ export function usePlatformMetrics(platform: string, period: string = '30d', ena
     queryKey: ['platform_top_content', platform, period],
     queryFn: async (): Promise<PostMetric[]> => {
       const query = supabase
-        .from('scheduled_posts')
-        .select('id, content, platforms, media_type, published_at, status')
+        .from('post_metrics')
+        .select('*')
         .eq('user_id', user!.id)
-        .eq('status', 'published')
-        .not('content', 'is', null)
-        .order('published_at', { ascending: false })
-        .limit(20);
+        .gte('collected_at', sinceStr)
+        .order('collected_at', { ascending: false })
+        .limit(50);
 
       const { data, error } = await query;
       if (error || !data) return [];
 
       const merged: Record<string, PostMetric & { allPlatforms: string[] }> = {};
       for (const p of data) {
-        const platforms = parsePlatforms(p.platforms);
-        if (platform !== 'all' && !platforms.includes(platform)) continue;
-        const key = p.content?.trim().toLowerCase().slice(0, 80) || p.id;
+        if (platform !== 'all' && p.platform !== platform) continue;
+        const key = p.external_id || p.id;
+        
         if (!merged[key]) {
           merged[key] = {
             id: p.id,
             content: p.content || '',
-            platform: platforms[0] || '',
-            allPlatforms: [],
-            platforms: [] as string[],
+            platform: p.platform || '',
+            allPlatforms: [p.platform],
+            platforms: [p.platform],
             media_type: p.media_type || null,
-            likes: 0,
-            comments: 0,
-            shares: 0,
-            views: 0,
-            engagement: 0,
-            published_at: p.published_at,
+            likes: Number(p.likes || 0),
+            comments: Number(p.comments || 0),
+            shares: Number(p.shares || 0),
+            views: Number(p.views || 0),
+            engagement: Number(p.likes || 0) + Number(p.comments || 0) + Number(p.shares || 0),
+            published_at: p.published_at || p.collected_at,
           };
-        }
-        for (const plat of platforms) {
-          if (!merged[key].allPlatforms.includes(plat)) {
-            merged[key].allPlatforms.push(plat);
-            merged[key].platforms.push(plat);
+          // Extra props for PostDetailModal compatibility
+          (merged[key] as any).media_url = p.media_url;
+          (merged[key] as any).impressions = p.impressions;
+          (merged[key] as any).reach = p.reach;
+        } else {
+          // If we have multiple metrics for the same post, we can aggregate or just take the newest (since it's ordered by collected_at DESC)
+          // We already have the newest due to order. Just add to platforms array if needed (though external_id is usually unique per platform)
+          if (!merged[key].allPlatforms.includes(p.platform)) {
+            merged[key].allPlatforms.push(p.platform);
+            merged[key].platforms?.push(p.platform);
           }
         }
       }
       const finalTopContent = Object.values(merged)
-        .filter(p => p.content.trim().length > 0)
+        .filter(p => p.content && p.content.trim().length > 0)
+        .sort((a, b) => b.engagement - a.engagement)
         .slice(0, 10);
+        
       return finalTopContent;
     },
     enabled: !!user && enabled,

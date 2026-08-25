@@ -130,8 +130,14 @@ export async function publishToTikTok(supabase: any, payload: PublishPayload): P
     disable_comment: false,
     disable_duet: false,
     disable_stitch: false,
-    video_cover_timestamp_ms: 1000,
+    // 🖼️ Capa do vídeo: usa o timestamp configurável ou 1000ms (1s) por padrão
+    video_cover_timestamp_ms: payload.options?.coverTimestampMs ?? 1000,
   };
+  // Cover image URL (disponível em alguns tiers do TikTok API)
+  const tiktokCoverUrl = payload.options?.coverUrl || payload.options?.thumbnailUrl;
+  if (tiktokCoverUrl && !isPhoto) {
+    (postInfo as any).cover_image_url = tiktokCoverUrl;
+  }
   const sourceInfo: Record<string, unknown> = {
     source: "FILE_UPLOAD",
   };

@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { getPlatformDetails, socialPlatforms } from "@/components/icons/platform-metadata";
+import { PostDetailModal } from "./platform-detail/PostDetailModal";
+import type { PostMetric } from "./platform-detail/usePlatformDetail";
 
 interface AnalyticsDetailedReportsProps {
   filteredTopContent: any[];
@@ -31,6 +33,7 @@ export const AnalyticsDetailedReports = ({
   setTopContentFilter,
   portalArticles = []
 }: AnalyticsDetailedReportsProps) => {
+  const [selectedPost, setSelectedPost] = React.useState<PostMetric | null>(null);
 
   const displaySocialContent = useMemo(() => {
     return filteredTopContent.filter((item: any) => 
@@ -67,19 +70,25 @@ export const AnalyticsDetailedReports = ({
         <div className="space-y-3 flex-1 overflow-y-auto max-h-[420px] pr-1 custom-scrollbar">
           {displaySocialContent.length > 0 ? (
             displaySocialContent.map((item: any) => (
-              <div 
+              <button 
                 key={item.id} 
-                className="p-3.5 rounded-xl bg-[#0a0b14]/50 border border-border/30 hover:border-border transition-colors"
+                onClick={() => setSelectedPost(item)}
+                className="w-full text-left p-3.5 rounded-xl bg-[#0a0b14]/50 border border-border/30 hover:border-primary/50 transition-colors"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-1.5">
-                    {item.platforms && item.platforms.map((p: string) => {
+                    {item.platforms ? item.platforms.map((p: string) => {
                       const pf = getPlatformDetails(p);
-                      return <pf.icon key={p} className={cn("w-3.5 h-3.5", pf.textColor)} />;
-                    })}
+                      return pf ? <pf.icon key={p} className={cn("w-3.5 h-3.5", pf.textColor)} /> : null;
+                    }) : (
+                      item.platform ? (() => {
+                        const pf = getPlatformDetails(item.platform);
+                        return pf ? <pf.icon className={cn("w-3.5 h-3.5", pf.textColor)} /> : null;
+                      })() : null
+                    )}
                   </div>
                   <span className="text-[10px] text-muted-foreground">
-                    {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString("pt-BR") : "--"}
+                    {item.publishedAt || item.published_at ? new Date(item.publishedAt || item.published_at).toLocaleDateString("pt-BR") : "--"}
                   </span>
                 </div>
                 
@@ -94,10 +103,10 @@ export const AnalyticsDetailedReports = ({
                   </div>
                   <div className="flex items-center gap-1 text-purple-400">
                     <Heart className="w-3.5 h-3.5" />
-                    <span className="font-bold">{(item.engagement || 0).toLocaleString("pt-BR")}</span>
+                    <span className="font-bold">{(item.engagement || item.likes || 0).toLocaleString("pt-BR")}</span>
                   </div>
                 </div>
-              </div>
+              </button>
             ))
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground text-center py-10 px-4 bg-muted/10 rounded-xl border border-dashed border-border/60">
@@ -170,6 +179,11 @@ export const AnalyticsDetailedReports = ({
           )}
         </div>
       </Card>
+      <PostDetailModal
+        post={selectedPost}
+        open={!!selectedPost}
+        onClose={() => setSelectedPost(null)}
+      />
     </div>
   );
 };

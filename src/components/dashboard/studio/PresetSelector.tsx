@@ -99,7 +99,7 @@ export const PresetSelector: React.FC<PresetSelectorProps> = ({
               key={preset.id}
               onClick={() => onSelectPreset(preset)}
               className={cn(
-                "flex flex-col text-left p-3.5 rounded-2xl border transition-all relative overflow-hidden group",
+                "flex flex-col text-left p-3.5 border transition-all relative overflow-hidden group",
                 isSelected
                   ? "bg-primary/10 border-primary shadow-lg shadow-primary/10 ring-1 ring-primary"
                   : "bg-card/50 border-border/60 hover:bg-card hover:border-border"
@@ -107,12 +107,12 @@ export const PresetSelector: React.FC<PresetSelectorProps> = ({
             >
               <div className="flex items-center justify-between mb-2">
                 <div className={cn(
-                  "p-2 rounded-xl transition-transform group-hover:scale-110",
+                  "p-2 transition-transform group-hover:scale-110",
                   isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                 )}>
                   <Icon className="w-4 h-4" />
                 </div>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-muted/80 text-muted-foreground">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 bg-muted/80 text-muted-foreground">
                   {preset.aspectRatio}
                 </span>
               </div>
@@ -126,7 +126,7 @@ export const PresetSelector: React.FC<PresetSelectorProps> = ({
                 {preset.platforms.map((p) => (
                   <span
                     key={p}
-                    className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-primary/5 text-primary border border-primary/10"
+                    className="text-[9px] font-semibold px-1.5 py-0.2 bg-primary/5 text-primary border border-primary/10"
                   >
                     {p}
                   </span>

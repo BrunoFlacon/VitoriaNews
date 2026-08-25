@@ -521,14 +521,15 @@ async function processPlatform(conn: any, supabase: any) {
     case "instagram": {
       if (!conn.access_token) break;
       const igUserId = conn.platform_user_id;
-      const fields = "followers_count,media_count,name,username,profile_picture_url,media.limit(10){id,media_type,like_count,comments_count,insights.metric(impressions,reach,engagement),caption,media_url}";
+      // Removemos a query embutida de insights que falha ao misturar tipos de mídia (reels vs posts normais)
+      const fields = "followers_count,media_count,name,username,profile_picture_url,media.limit(25){id,media_type,like_count,comments_count,caption,media_url,timestamp}";
       const resp = await fetchWithTimeout(`https://graph.facebook.com/v21.0/${igUserId}?fields=${fields}&access_token=${conn.access_token}`);
       if (resp.ok) {
         const data = await resp.json();
         // Get real Instagram profile views from insights
         let igViews = 0;
         try {
-          const igViewsResp = await fetchWithTimeout(`https://graph.facebook.com/v21.0/${igUserId}/insights?metric=profile_views&period=total_over_range&access_token=${conn.access_token}`);
+          const igViewsResp = await fetchWithTimeout(`https://graph.facebook.com/v21.0/${igUserId}/insights?metric=profile_views&period=day&access_token=${conn.access_token}`);
           if (igViewsResp.ok) {
             const igViewsData = await igViewsResp.json();
             if (igViewsData.data?.[0]?.values?.[0]?.value) {
@@ -544,17 +545,48 @@ async function processPlatform(conn: any, supabase: any) {
           views_count: igViews,
           profile_picture: data.profile_picture_url || null
         };
+        
         if (data.media?.data) {
           for (const media of data.media.data) {
-            const insights = media.insights?.data || [];
-            const impressions = insights.find((i: any) => i.name === 'impressions')?.values?.[0]?.value || 0;
-            const reach = insights.find((i: any) => i.name === 'reach')?.values?.[0]?.value || 0;
-            const engagement = insights.find((i: any) => i.name === 'engagement')?.values?.[0]?.value || 0;
+            let impressions = 0;
+            let reach = 0;
+            let engagement = 0;
+            let plays = 0;
+
+            try {
+              // Mapeia as métricas dependendo do tipo da mídia (VIDEO/REELS vs IMAGE/CAROUSEL_ALBUM)
+              const metricsToFetch = media.media_type === "VIDEO" 
+                ? "impressions,reach,plays,engagement" 
+                : "impressions,reach,engagement";
+                
+              const insightResp = await fetchWithTimeout(
+                `https://graph.facebook.com/v21.0/${media.id}/insights?metric=${metricsToFetch}&access_token=${conn.access_token}`
+              );
+              
+              if (insightResp.ok) {
+                const insightData = await insightResp.json();
+                const insights = insightData.data || [];
+                impressions = insights.find((i: any) => i.name === 'impressions')?.values?.[0]?.value || 0;
+                reach = insights.find((i: any) => i.name === 'reach')?.values?.[0]?.value || 0;
+                engagement = insights.find((i: any) => i.name === 'engagement')?.values?.[0]?.value || 0;
+                if (media.media_type === "VIDEO") {
+                  plays = insights.find((i: any) => i.name === 'plays')?.values?.[0]?.value || 0;
+                }
+              }
+            } catch (e) {
+              console.warn(`[IG] Failed to fetch insights for media ${media.id}:`, e);
+            }
+
             recentPostsMetrics.push({
-              external_id: media.id, platform: "instagram",
-              impressions: impressions || 0,
-              likes: media.like_count || 0, comments: media.comments_count || 0,
-              reach, engagement, content: media.caption || null,
+              external_id: media.id, 
+              platform: "instagram",
+              impressions,
+              likes: media.like_count || 0, 
+              comments: media.comments_count || 0,
+              reach, 
+              engagement, 
+              plays,
+              content: media.caption || null,
               media_url: media.media_url || null,
               collected_at: new Date().toISOString()
             });
@@ -597,19 +629,50 @@ async function processPlatform(conn: any, supabase: any) {
             let mediaCount = 0;
             try {
               const mediaResp = await fetchWithTimeout(
-                `https://graph.threads.net/v1.0/${data.id}/threads?fields=id&limit=1&access_token=${conn.access_token}`
+                `https://graph.threads.net/v1.0/${data.id}/threads?fields=id,text,like_count,reply_count,quote_count,repost_count&limit=50&access_token=${conn.access_token}`
               );
               const mediaData = await mediaResp.json();
               if (mediaData.data) {
                 mediaCount = mediaData.data.length;
+                
+                for (const thread of mediaData.data) {
+                  recentPostsMetrics.push({
+                    external_id: thread.id,
+                    platform: "threads",
+                    impressions: 0,
+                    likes: thread.like_count || 0,
+                    comments: thread.reply_count || 0,
+                    reach: 0,
+                    engagement: (thread.like_count || 0) + (thread.reply_count || 0) + (thread.quote_count || 0) + (thread.repost_count || 0),
+                    shares: thread.repost_count || 0,
+                    content: thread.text || null,
+                    collected_at: new Date().toISOString()
+                  });
+                }
                 if (mediaData.paging?.next && mediaData.paging?.cursors?.after) {
                   let cursorAfter = mediaData.paging.cursors.after;
                   while (true) {
                     const nextRes = await fetchWithTimeout(
-                      `https://graph.threads.net/v1.0/${data.id}/threads?fields=id&limit=100&after=${cursorAfter}&access_token=${conn.access_token}`
+                      `https://graph.threads.net/v1.0/${data.id}/threads?fields=id,text,like_count,reply_count,quote_count,repost_count&limit=100&after=${cursorAfter}&access_token=${conn.access_token}`
                     );
                     const nextData = await nextRes.json();
                     if (!nextData.data || nextData.data.length === 0) break;
+                    
+                    for (const thread of nextData.data) {
+                      recentPostsMetrics.push({
+                        external_id: thread.id,
+                        platform: "threads",
+                        impressions: 0,
+                        likes: thread.like_count || 0,
+                        comments: thread.reply_count || 0,
+                        reach: 0,
+                        engagement: (thread.like_count || 0) + (thread.reply_count || 0) + (thread.quote_count || 0) + (thread.repost_count || 0),
+                        shares: thread.repost_count || 0,
+                        content: thread.text || null,
+                        collected_at: new Date().toISOString()
+                      });
+                    }
+
                     mediaCount += nextData.data.length;
                     if (nextData.paging?.next && nextData.paging?.cursors?.after) {
                       cursorAfter = nextData.paging.cursors.after;
@@ -697,6 +760,44 @@ async function processPlatform(conn: any, supabase: any) {
             profile_picture: data.picture || null
           };
         }
+        
+        // Coletar posts e métricas (UGC Posts)
+        const authorUrn = conn.platform_user_id || `urn:li:person:${data?.sub}`;
+        try {
+          const postsResp = await fetchWithTimeout(
+            `https://api.linkedin.com/v2/ugcPosts?q=authors&authors=List(${encodeURIComponent(authorUrn)})&count=20`,
+            { headers: { Authorization: `Bearer ${conn.access_token}`, "X-Restli-Protocol-Version": "2.0.0" } }
+          );
+          if (postsResp.ok) {
+            const postsData = await postsResp.json();
+            if (postsData.elements) {
+              for (const post of postsData.elements) {
+                // Para pegar views/likes precisamos da endpoint de socialActions (ou network shares)
+                // Usando valores fallback (0) para métricas pois requer permissões específicas (rw_organization_admin ou similar)
+                // A não ser que seja Organization, não temos acesso fácil aos likes do user sem query adicional.
+                let contentText = null;
+                try {
+                   contentText = post.specificContent?.["com.linkedin.ugc.ShareContent"]?.shareCommentary?.text;
+                } catch(e) {}
+                
+                recentPostsMetrics.push({
+                  external_id: post.id,
+                  platform: "linkedin",
+                  impressions: 0,
+                  likes: 0, // Fallback (API de Social Actions é restrita)
+                  comments: 0,
+                  reach: 0,
+                  engagement: 0,
+                  shares: 0,
+                  content: contentText || null,
+                  collected_at: new Date().toISOString()
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[LinkedIn] Error fetching ugcPosts metrics:", e);
+        }
       }
       break;
     }
@@ -717,6 +818,82 @@ async function processPlatform(conn: any, supabase: any) {
               profile_picture: user.avatar_url_100 || user.avatar_url || user.avatar_large_url || null
             };
           }
+        }
+        
+        // Coletar métricas dos vídeos recentes
+        try {
+          const videoResp = await fetchWithTimeout("https://open.tiktokapis.com/v2/video/list/?fields=id,title,video_description,like_count,comment_count,share_count,view_count", {
+            method: "POST",
+            headers: { 
+              "Authorization": `Bearer ${conn.access_token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ "max_count": 20 })
+          });
+          
+          if (videoResp.ok) {
+            const videoData = await videoResp.json();
+            if (videoData.data?.videos) {
+              for (const video of videoData.data.videos) {
+                recentPostsMetrics.push({
+                  external_id: video.id,
+                  platform: "tiktok",
+                  impressions: video.view_count || 0,
+                  likes: video.like_count || 0,
+                  comments: video.comment_count || 0,
+                  reach: video.view_count || 0,
+                  engagement: (video.like_count || 0) + (video.comment_count || 0) + (video.share_count || 0),
+                  plays: video.view_count || 0,
+                  shares: video.share_count || 0,
+                  content: video.video_description || video.title || null,
+                  collected_at: new Date().toISOString()
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[TikTok] Error fetching videos:", e);
+        }
+      }
+      break;
+    }
+    case "pinterest": {
+      if (conn.access_token) {
+        metrics = {
+          followers_count: conn.followers_count || 0,
+          media_count: conn.posts_count || 0,
+          views_count: 0,
+          profile_picture: conn.profile_image_url || null
+        };
+
+        try {
+          const pinsResp = await fetchWithTimeout("https://api.pinterest.com/v5/pins?page_size=25", {
+            headers: { Authorization: `Bearer ${conn.access_token}` }
+          });
+          if (pinsResp.ok) {
+            const pinsData = await pinsResp.json();
+            if (pinsData.items) {
+              for (const pin of pinsData.items) {
+                // A API Analytics por Pin requer start_date e end_date. 
+                // Por padrão, sem isso, cai no catch. Usaremos dados do próprio pin e 0 pros que precisam de chamadas adicionais pesadas.
+                recentPostsMetrics.push({
+                  external_id: pin.id,
+                  platform: "pinterest",
+                  impressions: 0,
+                  likes: 0, // Pinterest usa saves/repins
+                  comments: 0,
+                  reach: 0,
+                  engagement: 0,
+                  shares: 0,
+                  content: pin.description || pin.title || null,
+                  media_url: pin.media?.images?.['1200x']?.url || null,
+                  collected_at: new Date().toISOString()
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[Pinterest] Error fetching pins metrics:", e);
         }
       }
       break;

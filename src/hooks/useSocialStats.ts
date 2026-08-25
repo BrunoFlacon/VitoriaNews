@@ -63,8 +63,10 @@ export interface MessageDeliveryStats {
   totalDraft: number;
   totalScheduled: number;
   totalReceived: number;
+  totalDelivered: number;
+  totalRead: number;
   successRate: number;
-  platformStats: Record<string, { sent: number; failed: number; draft: number; scheduled: number; received: number }>;
+  platformStats: Record<string, { sent: number; failed: number; draft: number; scheduled: number; received: number; delivered: number; read: number; }>;
   recentMessages: any[];
   perPlatformSender: Record<string, { bot: number; human: number }>;
   perConnectionSender: Record<string, { bot: number; human: number }>;
@@ -129,7 +131,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           .select('id, platform, status, content, recipient_name, recipient_phone, created_at, metadata')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
-          .limit(50)),
+          .limit(1000)),
         run(supabase
           .from('scheduled_posts')
           .select('platforms, status')
@@ -171,7 +173,9 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
       let msgTotalDraft = 0;
       let msgTotalScheduled = 0;
       let msgTotalReceived = 0;
-      const msgPlatformStats: Record<string, { sent: number; failed: number; draft: number; scheduled: number; received: number }> = {};
+      let msgTotalDelivered = 0;
+      let msgTotalRead = 0;
+      const msgPlatformStats: Record<string, { sent: number; failed: number; draft: number; scheduled: number; received: number; delivered: number; read: number; }> = {};
       
       (messagesRes.data || []).forEach((m: any) => {
         const p = (m.platform || 'unknown').toLowerCase().trim();
@@ -192,10 +196,19 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         if (isBot) perConnectionSender[cid].bot++;
         else perConnectionSender[cid].human++;
 
-        if (!msgPlatformStats[p]) msgPlatformStats[p] = { sent: 0, failed: 0, draft: 0, scheduled: 0, received: 0 };
+        if (!msgPlatformStats[p]) msgPlatformStats[p] = { sent: 0, failed: 0, draft: 0, scheduled: 0, received: 0, delivered: 0, read: 0 };
         if (m.status === 'sent') {
           msgPlatformStats[p].sent++;
           msgTotalSent++;
+        } else if (m.status === 'delivered') {
+          msgPlatformStats[p].delivered++;
+          msgTotalDelivered++;
+          msgTotalSent++; // counts as sent
+        } else if (m.status === 'read') {
+          msgPlatformStats[p].read++;
+          msgTotalRead++;
+          msgTotalDelivered++;
+          msgTotalSent++; // counts as sent
         } else if (m.status === 'failed') {
           msgPlatformStats[p].failed++;
           msgTotalFailed++;
@@ -407,6 +420,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           totalDraft: msgTotalDraft,
           totalScheduled: msgTotalScheduled,
           totalReceived: msgTotalReceived,
+          totalDelivered: msgTotalDelivered,
+          totalRead: msgTotalRead,
           successRate: msgSuccessRate,
           platformStats: msgPlatformStats,
           recentMessages: (messagesRes.data || []).slice(0, 500).map((m: any) => ({
@@ -424,6 +439,8 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           totalDraft: msgTotalDraft,
           totalScheduled: msgTotalScheduled,
           totalReceived: msgTotalReceived,
+          totalDelivered: msgTotalDelivered,
+          totalRead: msgTotalRead,
           successRate: msgSuccessRate,
           platformStats: msgPlatformStats,
           perPlatformSender,
@@ -480,8 +497,7 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         }, 2000);
       };
 
-      const channel = supabase
-        .channel(channelName)
+      const channel = (supabase.channel(channelName) as any)
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
@@ -493,9 +509,9 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           schema: 'public',
           table: 'messaging_channels',
           filter: `user_id=eq.${user!.id}`,
-        }, debouncedInvalidate);
+        }, debouncedInvalidate) as RealtimeChannel;
 
-      channel.subscribe((status) => {
+      channel.subscribe((status: string) => {
         if (status === 'CHANNEL_ERROR') {
           entry!.errorCount++;
         } else if (status === 'SUBSCRIBED') {

@@ -121,7 +121,7 @@ function FlowCanvasInner() {
         const posObj: Record<string, { x: number; y: number }> = {};
         positions.forEach((p, k) => { posObj[k] = p; });
         updateNodePositions(posObj);
-        // Fit view after positions are set
+        // Fit view after positions are set — single setTimeout
         setTimeout(() => fitView({ duration: 200 }), 50);
       }
     } else {

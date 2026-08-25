@@ -101,27 +101,37 @@ function LineSvg({ data, maxY, ticks }: { data: ConversationsSeriesPoint[]; maxY
     const svg = svgRef.current;
     const wrap = wrapRef.current;
     if (!svg || !wrap) return;
+    // Cache wrap rect and only refresh on resize — avoids getBoundingClientRect per mousemove
+    let wrapRect = wrap.getBoundingClientRect();
+    const ro = new ResizeObserver(() => { wrapRect = wrap.getBoundingClientRect(); });
+    ro.observe(wrap);
+    let rafId: number;
+    let pending = false;
     const onMove = (e: MouseEvent) => {
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return;
-      const pt = svg.createSVGPoint();
-      pt.x = e.clientX;
-      pt.y = e.clientY;
-      const local = pt.matrixTransform(ctm.inverse());
-      const xVb = local.x;
-      if (xVb < PADDING.left - 8 || xVb > VB_W - PADDING.right + 8) {
-        setHover(null);
-        return;
-      }
-      const relative = xVb - PADDING.left;
-      const idx = Math.max(0, Math.min(data.length - 1, Math.round(stepX === 0 ? 0 : relative / stepX)));
-      const dataPointVbX = PADDING.left + idx * stepX;
-      const dataPointPt = svg.createSVGPoint();
-      dataPointPt.x = dataPointVbX;
-      dataPointPt.y = 0;
-      const screen = dataPointPt.matrixTransform(ctm);
-      const wrapRect = wrap.getBoundingClientRect();
-      setHover({ idx, tooltipLeftPx: screen.x - wrapRect.left });
+      if (pending) return;
+      pending = true;
+      rafId = requestAnimationFrame(() => {
+        pending = false;
+        const ctm = svg.getScreenCTM();
+        if (!ctm) return;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const local = pt.matrixTransform(ctm.inverse());
+        const xVb = local.x;
+        if (xVb < PADDING.left - 8 || xVb > VB_W - PADDING.right + 8) {
+          setHover(null);
+          return;
+        }
+        const relative = xVb - PADDING.left;
+        const idx = Math.max(0, Math.min(data.length - 1, Math.round(stepX === 0 ? 0 : relative / stepX)));
+        const dataPointVbX = PADDING.left + idx * stepX;
+        const dataPointPt = svg.createSVGPoint();
+        dataPointPt.x = dataPointVbX;
+        dataPointPt.y = 0;
+        const screen = dataPointPt.matrixTransform(ctm);
+        setHover({ idx, tooltipLeftPx: screen.x - wrapRect.left });
+      });
     };
     const onLeave = () => setHover(null);
     svg.addEventListener("mousemove", onMove);
@@ -129,6 +139,8 @@ function LineSvg({ data, maxY, ticks }: { data: ConversationsSeriesPoint[]; maxY
     return () => {
       svg.removeEventListener("mousemove", onMove);
       svg.removeEventListener("mouseleave", onLeave);
+      cancelAnimationFrame(rafId);
+      ro.disconnect();
     };
   }, [data, stepX]);
 

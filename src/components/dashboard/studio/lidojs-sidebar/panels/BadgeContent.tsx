@@ -48,12 +48,12 @@ export const BadgeContent = ({ onClose }: BadgeContentProps) => {
       <PanelHeader title="Badges" onClose={onClose} />
 
       <div className="p-4">
-        <div className="py-2 font-bold text-sm text-gray-700">Badges Profissionais</div>
+        <div className="py-2 font-bold text-sm text-white/80">Badges Profissionais</div>
         <div className="grid grid-cols-2 gap-3">
           {BADGE_DEFINITIONS.map((badge) => (
             <div
               key={badge.id}
-              className="cursor-pointer rounded-lg p-4 flex flex-col items-center justify-center gap-2 hover:scale-105 transition-transform shadow-sm"
+              className="cursor-pointer p-4 flex flex-col items-center justify-center gap-2 hover:scale-105 transition-transform shadow-sm"
               style={{ backgroundColor: badge.bgColor }}
               onClick={() => addBadge(badge)}
             >

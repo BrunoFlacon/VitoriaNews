@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { getMediaUrl } from "@/utils/mediaUtils";
 
 interface StudioUploadsTabProps {
   onAddImageLayer: (url: string, name: string) => void;
@@ -36,7 +37,7 @@ export const StudioUploadsTab: React.FC<StudioUploadsTabProps> = ({ onAddImageLa
             .filter((m: any) => m.file_type?.startsWith("image/"))
             .map((m: any) => ({
               id: m.id,
-              url: m.file_url,
+              url: getMediaUrl(m.file_url) || "",
               name: m.name || "Imagem do Usuário",
             }))
         );
@@ -63,6 +64,14 @@ export const StudioUploadsTab: React.FC<StudioUploadsTabProps> = ({ onAddImageLa
 
       const { data: pubUrl } = supabase.storage.from("media").getPublicUrl(path);
       const publicUrl = pubUrl.publicUrl;
+
+      // Persist to media table so it survives page refresh
+      await supabase.from("media").insert({
+        user_id: userRes.user.id,
+        file_url: path,
+        name: file.name,
+        file_type: file.type,
+      });
 
       // Add to state & immediately insert into canvas
       setUploads((prev) => [{ id: path, url: publicUrl, name: file.name }, ...prev]);
@@ -96,7 +105,7 @@ export const StudioUploadsTab: React.FC<StudioUploadsTabProps> = ({ onAddImageLa
 
       {/* Upload Action Button */}
       <label className="cursor-pointer">
-        <div className="border-2 border-dashed border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 transition-all">
+        <div className="border-2 border-dashed border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 p-4 flex flex-col items-center justify-center gap-2 transition-all">
           {isUploading ? (
             <Loader2 className="w-6 h-6 animate-spin text-primary" />
           ) : (
@@ -123,7 +132,7 @@ export const StudioUploadsTab: React.FC<StudioUploadsTabProps> = ({ onAddImageLa
         </p>
 
         {uploads.length === 0 ? (
-          <div className="text-center py-6 border border-border/40 rounded-2xl text-xs text-muted-foreground">
+          <div className="text-center py-6 border border-border/40 text-xs text-muted-foreground">
             Nenhuma imagem enviada ainda.
           </div>
         ) : (
@@ -132,7 +141,7 @@ export const StudioUploadsTab: React.FC<StudioUploadsTabProps> = ({ onAddImageLa
               <button
                 key={img.id}
                 onClick={() => onAddImageLayer(img.url, img.name)}
-                className="group relative aspect-square rounded-xl overflow-hidden border border-border/60 hover:border-primary transition-all text-left"
+                className="group relative aspect-square overflow-hidden border border-border/60 hover:border-primary transition-all text-left"
               >
                 <SafeImage src={img.url} alt={img.name} className="w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
