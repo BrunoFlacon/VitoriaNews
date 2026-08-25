@@ -63,18 +63,30 @@ export const ProfileTab = memo(({
     if (!src) return "";
     
     const currentProjectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+    const selfHostedSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
     
-    if (src.startsWith('http') || src.startsWith('blob:') || src.startsWith('data:')) {
-       if (src.startsWith('http') && src.includes('.supabase.co/storage/v1/object/public/media/') && !src.includes(`${currentProjectId}.supabase.co`)) {
-          const parts = src.split('/public/media/');
-          if (parts.length > 1) {
-             return supabase.storage.from('media').getPublicUrl(parts[1]).data.publicUrl;
-          }
-       }
-       return src;
+    if (src.startsWith('blob:') || src.startsWith('data:')) {
+      return src;
     }
     
-    return supabase.storage.from('media').getPublicUrl(src).data.publicUrl;
+    if (src.startsWith('http')) {
+      // Se é URL do domínio self-hosted, converte para rota do proxy Vite
+      // para evitar 403 do Cloudflare (que bloqueia referer de localhost)
+      if (selfHostedSupabaseUrl && src.startsWith(selfHostedSupabaseUrl + '/storage/')) {
+        return src.replace(selfHostedSupabaseUrl, '/supabase');
+      }
+      // Se é URL do Supabase cloud com project-id diferente, reconstrói
+      if (src.includes('.supabase.co/storage/v1/object/public/media/') && !src.includes(`${currentProjectId}.supabase.co`)) {
+        const parts = src.split('/public/media/');
+        if (parts.length > 1) {
+          return getProxyUrl(supabase.storage.from('media').getPublicUrl(parts[1]).data.publicUrl);
+        }
+      }
+      // Demais URLs externas passam pelo getProxyUrl
+      return getProxyUrl(src);
+    }
+    
+    return getProxyUrl(supabase.storage.from('media').getPublicUrl(src).data.publicUrl);
   }, [profileData.avatar_url]);
 
   return (

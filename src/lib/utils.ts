@@ -80,6 +80,7 @@ export function getProxyUrl(url: string | null | undefined): string {
 
   // URLs já proxied ou locais não precisam de novo proxy
   if (url.startsWith('/api/')) return url;
+  if (url.startsWith('/supabase/')) return url;  // Já está roteado pelo proxy Vite
   if (url.includes('/api/proxy-image?url=')) return url;
   if (url.includes('media-relay?url=') || url.includes('proxy-media?url=')) return url;
 
@@ -94,8 +95,18 @@ export function getProxyUrl(url: string | null | undefined): string {
   if (isLocalMode && url.includes('supabase.co/storage/')) {
     return toLocalProxy(url);
   }
-  // Em modo remoto, URLs do storage do Supabase são servidas diretamente
+  // Em modo remoto, URLs do storage do Supabase cloud são servidas diretamente
   if (url.includes('supabase.co/storage/')) return url;
+
+  // Verifica se a URL é do domínio self-hosted configurado (ex: supabase.webradiovitoria.com.br)
+  // Essas URLs precisam passar pelo proxy Vite (/supabase/...) para evitar bloqueio 403 do Cloudflare
+  // quando a requisição vem de localhost com referer externo
+  const selfHostedSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+  if (selfHostedSupabaseUrl && url.startsWith(selfHostedSupabaseUrl + '/storage/')) {
+    // Converte https://supabase.webradiovitoria.com.br/storage/... → /supabase/storage/...
+    const path = url.replace(selfHostedSupabaseUrl, '/supabase');
+    return path;
+  }
 
   const problematicDomains = [
     "fbcdn.net", 
