@@ -16,6 +16,7 @@ import { SafeImage } from "@/components/ui/SafeImage";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
 import { VideoViewer } from "./VideoViewer";
 import { useToast } from "@/hooks/use-toast";
+import { getMediaUrl } from "@/utils/mediaUtils";
 
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.3gp', '.ogv']);
 
@@ -118,7 +119,7 @@ const SlideVideo = memo(({ url, isActive, posterUrl }: { url: string; isActive: 
     >
       <video
         ref={videoRef}
-        src={url}
+        src={getMediaUrl(url) || url}
         className="w-full h-full object-contain"
         muted
         loop
@@ -168,7 +169,7 @@ const PlayableVideo = memo(({ url, posterUrl, className }: { url: string; poster
     >
       <video
         ref={videoRef}
-        src={url}
+        src={getMediaUrl(url) || url}
         className="w-full h-full object-contain"
         muted
         loop
