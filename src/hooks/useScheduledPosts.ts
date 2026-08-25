@@ -93,7 +93,10 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
       .order('created_at', { ascending: false })
       .limit(200);
 
-    if (postsError) throw postsError;
+    if (postsError) {
+      console.error("[useScheduledPosts] Error fetching posts:", postsError);
+      throw postsError;
+    }
     
     // Fetch metrics for these posts
     const postIds = (postsData || []).map(p => p.id);

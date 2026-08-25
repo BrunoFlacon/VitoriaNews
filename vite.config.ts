@@ -35,13 +35,18 @@ export default defineConfig(({ mode }) => {
             proxy.on('proxyReq', (proxyReq, req) => {
               proxyReq.setHeader('origin', env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co');
               proxyReq.removeHeader('referer');
-              // Remove accept-encoding so the server sends raw (non-compressed) data
-              // This prevents ERR_INCOMPLETE_CHUNKED_ENCODING on large media files
-              proxyReq.removeHeader('accept-encoding');
+              
+              // Only remove accept-encoding for storage requests so the server sends raw data
+              // This prevents ERR_INCOMPLETE_CHUNKED_ENCODING on large media files,
+              // but doing it for all routes breaks PostgREST (ERR_CONTENT_LENGTH_MISMATCH).
+              if (req.url && req.url.includes('/storage/v1/object/')) {
+                proxyReq.removeHeader('accept-encoding');
+              }
             });
-            proxy.on('proxyRes', (proxyRes) => {
-              // Remove content-encoding header to avoid browser decompression issues
-              delete proxyRes.headers['content-encoding'];
+            proxy.on('proxyRes', (proxyRes, req) => {
+              if (req.url && req.url.includes('/storage/v1/object/')) {
+                delete proxyRes.headers['content-encoding'];
+              }
             });
           },
         },
