@@ -117,9 +117,6 @@ serve(async (req: Request) => {
       return v;
     };
 
-    // Check for demographics_data table
-    const credDemRes = await supabase.from("demographics_data").select("*").eq("user_id", userId).limit(1).maybeSingle();
-
     // Check which services are configured with credentials
     const [credMetaRes, credGcloudRes, credOAuthRes] = await Promise.allSettled([
       supabase.from("api_credentials").select("credentials").eq("user_id", userId).eq("platform", "meta_ads").maybeSingle(),
@@ -136,10 +133,7 @@ serve(async (req: Request) => {
     const searchConsoleConfigured = gcloudCreds?.search_console_id && hasOAuth ? true : false;
     const youtubeConfigured = hasOAuth ? true : false;
 
-    // Demographics data from demographics_data table
-    const demoDataFix = credDemRes?.data || null;
-
-    const [postsRes, socialRes, accMetRes, postMetRes, msgRes, adsRes, gaRes, ytRes, mChanRes, googleAdsRes, demoRes, retentionRes, formatRes, viralRes] = await Promise.allSettled([
+    const [postsRes, socialRes, accMetRes, postMetRes, msgRes, adsRes, gaRes, ytRes, mChanRes, googleAdsRes, retentionRes, formatRes, viralRes] = await Promise.allSettled([
       supabase.from("scheduled_posts").select("id, status, platforms, created_at, content").eq("user_id", userId).gte("created_at", startISO).order("created_at", { ascending: false }).limit(500),
       supabase.from("social_accounts").select("id, platform, page_name, display_name, username, followers, followers_count, subscribers_count, posts_count, profile_picture, last_synced_at, updated_at, platform_user_id, page_id").eq("user_id", userId),
       supabase.from("account_metrics").select("social_account_id, followers, collected_at").eq("user_id", userId).gte("collected_at", startISO).order("collected_at", { ascending: true }).limit(1000),
@@ -150,7 +144,6 @@ serve(async (req: Request) => {
       supabase.from("youtube_analytics").select("views,likes,comments,date,subscribers_gained,watch_time_minutes,estimated_minutes_watched,title,metadata").eq("user_id", userId).gte("date", startDate10).limit(500),
       supabase.from("messaging_channels").select("id, platform, channel_name, page_name, username, channel_id, members_count, profile_picture, updated_at").eq("user_id", userId),
       supabase.from("google_ads_campaigns").select("impressions,clicks,cost_micros,conversions,date").eq("user_id", userId).gte("date", startDate10).limit(200),
-      supabase.from("demographics_data").select("age_groups, gender, devices, top_cities, top_countries").eq("user_id", userId).limit(1).maybeSingle(),
       supabase.from("video_retention").select("duration, views").eq("user_id", userId).gte("date", startDate10).limit(500),
       supabase.from("format_reach_data").select("*").eq("user_id", userId).gte("collected_at", startISO).limit(500),
       supabase.from("viral_potential").select("*").eq("user_id", userId).gte("collected_at", startISO).limit(500),
@@ -167,7 +160,6 @@ serve(async (req: Request) => {
     const ytData = getD(ytRes);
     const msgChannels = getD(mChanRes);
     const googleAds = getD(googleAdsRes);
-    const analyticsDemographicsData = demoRes.status === "fulfilled" ? demoRes.value.data : null;
     const retentionData = getD(retentionRes);
     const formatReachData = getD(formatRes);
     const viralPotentialData = getD(viralRes);

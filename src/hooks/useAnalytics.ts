@@ -141,7 +141,7 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
         logNetworkError('Analytics Edge Function', aErr, true);
         const key = ['analytics', user?.id, period, platform, postType];
         const cached = queryClient.getQueryData<AnalyticsData>(key);
-        return cached || getDemoAnalyticsData(period);
+        return cached || (await fetchFallbackLocalAnalytics(user.id, period));
       }
       const result = aData as AnalyticsData;
       const key = ['analytics', user?.id, period, platform, postType];
@@ -160,9 +160,93 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       if (cached) {
         return cached;
       }
-      return getDemoAnalyticsData(period);
+      return await fetchFallbackLocalAnalytics(user.id, period);
     }
   };
+
+  async function fetchFallbackLocalAnalytics(userId: string, p: string): Promise<AnalyticsData> {
+    try {
+      const { data: posts } = await supabase
+        .from('scheduled_posts')
+        .select('*')
+        .eq('user_id', userId)
+        .limit(200);
+
+      const postList = posts || [];
+      const totalPosts = postList.length;
+      const publishedPosts = postList.filter(p => p.status === 'published').length;
+      const scheduledPosts = postList.filter(p => p.status === 'scheduled').length;
+      const failedPosts = postList.filter(p => p.status === 'failed').length;
+      const draftPosts = postList.filter(p => p.status === 'draft').length;
+      const publishRate = totalPosts > 0 ? Number(((publishedPosts / totalPosts) * 100).toFixed(1)) : 0;
+
+      const postIds = postList.map(p => p.id);
+      let totalViews = 0;
+      let totalLikes = 0;
+      let totalComments = 0;
+      let totalShares = 0;
+      let totalReach = 0;
+
+      if (postIds.length > 0) {
+        const { data: metrics } = await supabase
+          .from('post_metrics')
+          .select('*')
+          .in('post_id', postIds);
+
+        if (metrics) {
+          metrics.forEach(m => {
+            totalViews += Number(m.views || 0);
+            totalLikes += Number(m.likes || 0);
+            totalComments += Number(m.comments || 0);
+            totalShares += Number(m.shares || 0);
+            totalReach += Number(m.reach || m.impressions || 0);
+          });
+        }
+      }
+
+      const totalEngagement = totalLikes + totalComments + totalShares;
+      const engagementRate = totalViews > 0 ? Number(((totalEngagement / totalViews) * 100).toFixed(2)) : 0;
+
+      return {
+        overview: {
+          totalPosts,
+          publishedPosts,
+          scheduledPosts,
+          failedPosts,
+          draftPosts,
+          publishRate,
+          totalFollowers: 0,
+          followersGrowth: 0,
+        },
+        engagement: {
+          views: totalViews,
+          likes: totalLikes,
+          comments: totalComments,
+          shares: totalShares,
+          reach: totalReach,
+          engagementRate,
+          growth: 0,
+        },
+        chartData: [],
+        platformBreakdown: {},
+        topContent: postList.slice(0, 5).map(p => ({
+          id: p.id,
+          content: p.content || '',
+          platforms: p.platforms || [],
+          engagement: 0,
+          views: 0,
+          publishedAt: p.published_at || p.created_at,
+        })),
+        bestTimes: [],
+        followerData: [],
+        period: p,
+        generatedAt: new Date().toISOString(),
+        dataSource: 'real'
+      };
+    } catch {
+      return getDemoAnalyticsData(p);
+    }
+  }
 
   function getDemoAnalyticsData(p: string): AnalyticsData {
     return {

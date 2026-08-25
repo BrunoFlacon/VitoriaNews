@@ -174,77 +174,111 @@ export const StoriesLivesView = () => {
 
   const fetchItems = async () => {
     if (!user) return;
-    const { data, error } = await supabase
-      .from("stories_lives")
-      .select("*")
-      .eq("user_id", user.id)
-      .neq("status", "archived")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (!error && data) setItems(data as unknown as StoryLive[]);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("stories_lives")
+        .select("*")
+        .eq("user_id", user.id)
+        .neq("status", "archived")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) {
+        console.error("[StoriesLivesView] Error fetching stories:", error);
+        toast({ title: "Erro ao carregar stories", description: error.message, variant: "destructive" });
+      } else if (data) {
+        setItems(data as unknown as StoryLive[]);
+      }
+    } catch (err) {
+      console.error("[StoriesLivesView] Stories fetch exception:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchSessions = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("live_sessions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setSessions((data as unknown as LiveSession[]) || []);
-    setSessionsLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("live_sessions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) {
+        console.error("[StoriesLivesView] Error fetching live sessions:", error);
+      }
+      setSessions((data as unknown as LiveSession[]) || []);
+    } catch (err) {
+      console.error("[StoriesLivesView] Sessions fetch exception:", err);
+    } finally {
+      setSessionsLoading(false);
+    }
   };
 
   const fetchClips = async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("live_clips")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(20);
-    setClips((data as LiveClip[]) || []);
-    setClipsLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from("live_clips")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) {
+        console.error("[StoriesLivesView] Error fetching clips:", error);
+      }
+      setClips((data as LiveClip[]) || []);
+    } catch (err) {
+      console.error("[StoriesLivesView] Clips fetch exception:", err);
+    } finally {
+      setClipsLoading(false);
+    }
   };
 
   const fetchMemories = async () => {
     if (!user) return;
-    const now = new Date();
-    
-    // Dates for 6 and 12 months ago (with a 3-day window for better UX)
-    const sixMonthsAgoStart = new Date(now);
-    sixMonthsAgoStart.setMonth(now.getMonth() - 6);
-    sixMonthsAgoStart.setDate(sixMonthsAgoStart.getDate() - 2);
-    
-    const sixMonthsAgoEnd = new Date(now);
-    sixMonthsAgoEnd.setMonth(now.getMonth() - 6);
-    sixMonthsAgoEnd.setDate(sixMonthsAgoEnd.getDate() + 2);
+    try {
+      const now = new Date();
+      
+      // Dates for 6 and 12 months ago (with a 3-day window for better UX)
+      const sixMonthsAgoStart = new Date(now);
+      sixMonthsAgoStart.setMonth(now.getMonth() - 6);
+      sixMonthsAgoStart.setDate(sixMonthsAgoStart.getDate() - 2);
+      
+      const sixMonthsAgoEnd = new Date(now);
+      sixMonthsAgoEnd.setMonth(now.getMonth() - 6);
+      sixMonthsAgoEnd.setDate(sixMonthsAgoEnd.getDate() + 2);
 
-    const twelveMonthsAgoStart = new Date(now);
-    twelveMonthsAgoStart.setMonth(now.getMonth() - 12);
-    twelveMonthsAgoStart.setDate(twelveMonthsAgoStart.getDate() - 2);
+      const twelveMonthsAgoStart = new Date(now);
+      twelveMonthsAgoStart.setMonth(now.getMonth() - 12);
+      twelveMonthsAgoStart.setDate(twelveMonthsAgoStart.getDate() - 2);
 
-    const twelveMonthsAgoEnd = new Date(now);
-    twelveMonthsAgoEnd.setMonth(now.getMonth() - 12);
-    twelveMonthsAgoEnd.setDate(twelveMonthsAgoEnd.getDate() + 2);
+      const twelveMonthsAgoEnd = new Date(now);
+      twelveMonthsAgoEnd.setMonth(now.getMonth() - 12);
+      twelveMonthsAgoEnd.setDate(twelveMonthsAgoEnd.getDate() + 2);
 
-    const { data: memData } = await supabase
-      .from("stories_lives")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "published")
-      .or(`and(completed_at.gte.${sixMonthsAgoStart.toISOString()},completed_at.lte.${sixMonthsAgoEnd.toISOString()}),and(completed_at.gte.${twelveMonthsAgoStart.toISOString()},completed_at.lte.${twelveMonthsAgoEnd.toISOString()})`);
+      const { data: memData, error } = await supabase
+        .from("stories_lives")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "published")
+        .or(`and(completed_at.gte.${sixMonthsAgoStart.toISOString()},completed_at.lte.${sixMonthsAgoEnd.toISOString()}),and(completed_at.gte.${twelveMonthsAgoStart.toISOString()},completed_at.lte.${twelveMonthsAgoEnd.toISOString()})`);
 
-    if (memData) {
-      const filtered = memData.filter(m => {
-        const d = new Date(m.completed_at || m.created_at);
-        const isSix = d >= sixMonthsAgoStart && d <= sixMonthsAgoEnd;
-        const isTwelve = d >= twelveMonthsAgoStart && d <= twelveMonthsAgoEnd;
-        return isSix || isTwelve;
-      });
-      setMemories(filtered);
+      if (error) {
+        console.error("[StoriesLivesView] Error fetching memories:", error);
+      }
+
+      if (memData) {
+        const filtered = memData.filter(m => {
+          const d = new Date(m.completed_at || m.created_at);
+          const isSix = d >= sixMonthsAgoStart && d <= sixMonthsAgoEnd;
+          const isTwelve = d >= twelveMonthsAgoStart && d <= twelveMonthsAgoEnd;
+          return isSix || isTwelve;
+        });
+        setMemories(filtered);
+      }
+    } catch (err) {
+      console.error("[StoriesLivesView] Memories fetch exception:", err);
     }
   };
 

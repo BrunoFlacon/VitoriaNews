@@ -104,19 +104,30 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
     const platformMetricsMap: Record<string, Record<string, PlatformMetricDetail>> = {};
     
     if (postIds.length > 0) {
-      // Fetch post_metrics
-      const { data: metricsData, error: metricsError } = await supabase
-        .from('post_metrics')
-        .select('*')
-        .in('post_id', postIds)
-        .order('collected_at', { ascending: false });
+      // Fetch post_metrics + post_metrics_details in parallel (non-fatal if they fail)
+      let metricsData: any[] | null = null;
+      let metricsError: any = null;
+      let detailsData: any[] | null = null;
 
-      // Fetch post_metrics_details
-      const { data: detailsData } = await supabase
-        .from('post_metrics_details')
-        .select('*')
-        .in('post_id', postIds)
-        .order('collected_at', { ascending: false });
+      try {
+        const [metricsResult, detailsResult] = await Promise.all([
+          supabase
+            .from('post_metrics')
+            .select('*')
+            .in('post_id', postIds)
+            .order('collected_at', { ascending: false }),
+          supabase
+            .from('post_metrics_details')
+            .select('*')
+            .in('post_id', postIds)
+            .order('collected_at', { ascending: false }),
+        ]);
+        metricsData = metricsResult.data;
+        metricsError = metricsResult.error;
+        detailsData = detailsResult.data;
+      } catch (err) {
+        console.warn("[useScheduledPosts] Metrics queries failed (non-fatal):", err);
+      }
 
       // Map details breakdown by post_id and platform
       const detailsMap: Record<string, Record<string, any>> = {};
@@ -178,32 +189,40 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
     const mediaUrlMap: Record<string, string | null> = {};
 
     if (allMediaIds.length > 0) {
-      const { data: mediaRecords } = await supabase
-        .from('media')
-        .select('id, file_url')
-        .in('id', allMediaIds);
+      try {
+        const { data: mediaRecords } = await supabase
+          .from('media')
+          .select('id, file_url')
+          .in('id', allMediaIds);
 
-      if (mediaRecords) {
-        mediaRecords.forEach((m) => {
-          mediaUrlMap[m.id] = resolveMediaUrl(m.file_url);
-        });
+        if (mediaRecords) {
+          mediaRecords.forEach((m) => {
+            mediaUrlMap[m.id] = resolveMediaUrl(m.file_url);
+          });
+        }
+      } catch (err) {
+        console.warn("[useScheduledPosts] Media query failed (non-fatal):", err);
       }
     }
 
     // Resolve published_posts → links reais + perfil que publicou (metadata.targetProfileId)
     const publishedMap: Record<string, any[]> = {};
     if (postIds.length > 0) {
-      const { data: publishedData } = await supabase
-        .from('published_posts')
-        .select('*')
-        .in('post_id', postIds)
-        .order('published_at', { ascending: false });
+      try {
+        const { data: publishedData } = await supabase
+          .from('published_posts')
+          .select('*')
+          .in('post_id', postIds)
+          .order('published_at', { ascending: false });
 
-      if (publishedData) {
-        publishedData.forEach((pp) => {
-          if (!publishedMap[pp.post_id]) publishedMap[pp.post_id] = [];
-          publishedMap[pp.post_id].push(pp);
-        });
+        if (publishedData) {
+          publishedData.forEach((pp) => {
+            if (!publishedMap[pp.post_id]) publishedMap[pp.post_id] = [];
+            publishedMap[pp.post_id].push(pp);
+          });
+        }
+      } catch (err) {
+        console.warn("[useScheduledPosts] Published posts query failed (non-fatal):", err);
       }
     }
 
@@ -223,13 +242,21 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
     });
   };
 
-  const { data: posts = [], isLoading: loading, refetch } = useQuery({
+  const { data: posts = [], isLoading: loading, refetch: rqRefetch, isError, error } = useQuery({
     queryKey,
     queryFn: fetchPosts,
     enabled: !!user && enabled,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
+    retry: 1,
+    retryDelay: 3000,
   });
+
+  // Wrapper: invalidate cache THEN refetch to ensure UI updates
+  const refetch = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey });
+    return rqRefetch();
+  }, [queryClient, queryKey, rqRefetch]);
 
   const createPost = async (input: CreatePostInput): Promise<ScheduledPost | null> => {
     if (!user) {
@@ -491,6 +518,8 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
   return {
     posts,
     loading,
+    isError,
+    error,
     createPost,
     updatePost,
     deletePost,
@@ -499,6 +528,6 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
     submitForApproval,
     approvePost,
     rejectPost,
-    refetch: fetchPosts,
+    refetch,
   };
 }
