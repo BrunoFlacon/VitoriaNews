@@ -37,12 +37,25 @@ export const encodeStoragePath = (path: string): string => {
 export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
   if (!raw) return "";
 
+  // Helper: converte URL absoluta do self-hosted Supabase para o proxy local do Vite
+  const toViteProxy = (url: string): string => {
+    const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || '';
+    if (selfHostedUrl && url.startsWith(selfHostedUrl + '/storage/')) {
+      // Remove query params de tokens expirados
+      return url.replace(selfHostedUrl, '/supabase').split('?')[0];
+    }
+    // Supabase cloud - vai direto
+    if (url.includes('.supabase.co/storage/')) return url;
+    return url;
+  };
+
   // 1. Tratar imediatamente URLs /object/sign/ ou /object/authenticated/ e converter para /object/public/ sem token expirado
   if (raw.includes("/object/sign/") || raw.includes("/object/authenticated/")) {
-    return raw
+    const cleaned = raw
       .replace("/object/sign/", "/object/public/")
       .replace("/object/authenticated/", "/object/public/")
       .split('?')[0];
+    return toViteProxy(cleaned);
   }
 
   // 2. URLs com token= em buckets públicos -> remover o parâmetro ?token=... expirado
@@ -50,14 +63,15 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
     return raw.replace("/object/sign/", "/object/public/").split('?')[0];
   }
 
-  // URLs absolutas, blobs, data URIs e proxies
+  // 3. URLs absolutas - rotear pelo proxy se for do domínio self-hosted
   if (
     raw.startsWith("http://") || 
-    raw.startsWith("https://") || 
-    raw.startsWith("blob:") || 
-    raw.startsWith("data:") || 
-    raw.startsWith("/api/")
+    raw.startsWith("https://")
   ) {
+    // Proxy do Vite para domínio self-hosted (evita 403 do Cloudflare)
+    const proxied = toViteProxy(raw);
+    if (proxied !== raw) return proxied;
+    // URLs externas (blob, data, cdn externo) - passam direto
     try {
       const url = new URL(raw);
       url.pathname = url.pathname.split('/').map(s => encodeURIComponent(decodeURIComponent(s))).join('/');
@@ -67,6 +81,11 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
     }
   }
 
+  // blobs e data URIs passam direto
+  if (raw.startsWith("blob:") || raw.startsWith("data:") || raw.startsWith("/api/")) {
+    return raw;
+  }
+
   // Caminhos de proxy local já formatados
   if (raw.startsWith("/supabase/") || raw.startsWith("/storage/")) {
     return raw;
@@ -74,7 +93,7 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
 
   // Tratar URLs /object/public/
   if (raw.includes("/object/public/")) {
-    return raw.split('?')[0];
+    return toViteProxy(raw.split('?')[0]);
   }
 
   // Remover prefixo de bucket duplicado se já estiver no início do caminho
@@ -93,7 +112,8 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
 
   try {
     const { data } = supabase.storage.from(targetBucket).getPublicUrl(encodedPath);
-    return data.publicUrl;
+    // Sempre rotear pelo proxy para evitar 403
+    return toViteProxy(data.publicUrl);
   } catch {
     return raw;
   }
