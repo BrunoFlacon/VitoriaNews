@@ -180,12 +180,18 @@ export const MediaGalleryView = () => {
         ]);
       }
 
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let orQuery = `file_url.eq.${fileUrl}${name ? `,name.eq.${name}` : ''}`;
+      if (isUuid) {
+        orQuery = `id.eq.${id},${orQuery}`;
+      }
+
       if (user) {
         await Promise.allSettled([
-          supabase.from('media').delete().eq('user_id', user.id).or(`id.eq.${id},file_url.eq.${fileUrl}${name ? `,name.eq.${name}` : ''}`),
-          supabase.from('documents').delete().eq('user_id', user.id).or(`id.eq.${id},file_url.eq.${fileUrl}${name ? `,name.eq.${name}` : ''}`)
+          supabase.from('media').delete().eq('user_id', user.id).or(orQuery),
+          supabase.from('documents').delete().eq('user_id', user.id).or(orQuery)
         ]);
-      } else {
+      } else if (isUuid) {
         await supabase.from('media').delete().eq('id', id);
       }
 

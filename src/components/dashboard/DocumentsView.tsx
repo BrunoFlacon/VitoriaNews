@@ -115,12 +115,12 @@ const SmartGridImage = ({ file, badge, Icon }: { file: UnifiedFileItem; badge: a
       const bucket = file.sourceTable === "documents" ? "documents" : "media";
 
       if (cleanPath && !cleanPath.startsWith("http")) {
-        const { data, error } = await supabase.storage
+        const { data } = supabase.storage
           .from(bucket)
-          .createSignedUrl(decodeURIComponent(cleanPath), 3600);
+          .getPublicUrl(decodeURIComponent(cleanPath));
 
-        if (!error && data?.signedUrl) {
-          setCurrentUrl(data.signedUrl);
+        if (data?.publicUrl) {
+          setCurrentUrl(data.publicUrl);
           setIsRetrying(false);
           return;
         }
@@ -512,7 +512,10 @@ export const DocumentsView = () => {
       const fileUrlQ = fileItem.file_url.replace(/"/g, '\\"');
       const nameQ = fileItem.name.replace(/"/g, '\\"');
       const origIdQ = fileItem.originalId.replace(/"/g, '\\"');
-      const orFilter = `id.eq."${origIdQ}",file_url.eq."${fileUrlQ}",name.eq."${nameQ}"`;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(origIdQ);
+      const orFilter = isUuid 
+        ? `id.eq."${origIdQ}",file_url.eq."${fileUrlQ}",name.eq."${nameQ}"` 
+        : `file_url.eq."${fileUrlQ}",name.eq."${nameQ}"`;
       await Promise.allSettled([
         supabase.from("documents").delete().eq("user_id", user.id).or(orFilter),
         supabase.from("media").delete().eq("user_id", user.id).or(orFilter)

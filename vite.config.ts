@@ -34,6 +34,7 @@ export default defineConfig(({ mode }) => {
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq, req) => {
               proxyReq.setHeader('origin', env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co');
+              proxyReq.removeHeader('referer');
             });
           },
         },
