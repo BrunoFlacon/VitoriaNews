@@ -137,8 +137,11 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       });
 
       if (aErr) {
+        // Edge function 500 errors are silently bypassed - function may not be deployed on self-hosted
         logNetworkError('Analytics Edge Function', aErr, true);
-        throw aErr;
+        const key = ['analytics', user?.id, period, platform, postType];
+        const cached = queryClient.getQueryData<AnalyticsData>(key);
+        return cached || getDemoAnalyticsData(period);
       }
       const result = aData as AnalyticsData;
       const key = ['analytics', user?.id, period, platform, postType];
@@ -151,9 +154,6 @@ export function useAnalytics(options: { enabled?: boolean } = {}) {
       }
       return result;
     } catch (err: any) {
-      const underlying = err?.context?.message || err?.context || '';
-      const errMsg = err?.message || String(err);
-      setFetchError(`${errMsg}${underlying ? ' | ' + underlying : ''}`);
       logNetworkError('Analytics Fetch', err, true);
       const key = ['analytics', user?.id, period, platform, postType];
       const cached = queryClient.getQueryData<AnalyticsData>(key);

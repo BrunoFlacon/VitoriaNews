@@ -35,6 +35,13 @@ export default defineConfig(({ mode }) => {
             proxy.on('proxyReq', (proxyReq, req) => {
               proxyReq.setHeader('origin', env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co');
               proxyReq.removeHeader('referer');
+              // Remove accept-encoding so the server sends raw (non-compressed) data
+              // This prevents ERR_INCOMPLETE_CHUNKED_ENCODING on large media files
+              proxyReq.removeHeader('accept-encoding');
+            });
+            proxy.on('proxyRes', (proxyRes) => {
+              // Remove content-encoding header to avoid browser decompression issues
+              delete proxyRes.headers['content-encoding'];
             });
           },
         },
