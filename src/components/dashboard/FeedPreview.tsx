@@ -80,43 +80,20 @@ const VerifiedBadge = memo(({ className = "w-4 h-4 text-[#1d9bf0]" }: { classNam
 
 const SlideVideo = memo(({ url, isActive, posterUrl }: { url: string; isActive: boolean; posterUrl?: string | null }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
     if (isActive) {
-      el.currentTime = 0;
       el.muted = true;
-      el.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
+      el.play().catch(() => {});
     } else {
       el.pause();
-      setIsPlaying(false);
     }
   }, [isActive]);
 
-  const handleTogglePlay = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const el = videoRef.current;
-    if (!el) return;
-    if (el.paused) {
-      el.muted = false;
-      el.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    } else {
-      el.pause();
-      setIsPlaying(false);
-    }
-  }, []);
-
   return (
-    <div
-      onClick={handleTogglePlay}
-      className="relative w-full h-full cursor-pointer block bg-zinc-950"
-    >
+    <div className="relative w-full h-full bg-zinc-950">
       <video
         ref={videoRef}
         src={getMediaUrl(url) || url}
@@ -124,49 +101,27 @@ const SlideVideo = memo(({ url, isActive, posterUrl }: { url: string; isActive: 
         muted
         loop
         playsInline
+        controls
         preload="metadata"
         poster={posterUrl || undefined}
+        onPlay={(e) => {
+          e.currentTarget.muted = false;
+        }}
       />
-      {!isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
-          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
-            <Play className="w-5 h-5 text-white ml-0.5" />
-          </div>
-        </div>
-      )}
     </div>
   );
 });
 
 const PlayableVideo = memo(({ url, posterUrl, className }: { url: string; posterUrl?: string | null; className?: string }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
     const el = videoRef.current;
     if (el) el.muted = true;
   }, []);
 
-  const handleTogglePlay = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const el = videoRef.current;
-    if (!el) return;
-    if (el.paused) {
-      el.muted = false;
-      el.play()
-        .then(() => setIsPlaying(true))
-        .catch(() => setIsPlaying(false));
-    } else {
-      el.pause();
-      setIsPlaying(false);
-    }
-  }, []);
-
   return (
-    <div
-      onClick={handleTogglePlay}
-      className={cn("relative cursor-pointer w-full h-full overflow-hidden bg-zinc-950", className)}
-    >
+    <div className={cn("relative w-full h-full overflow-hidden bg-zinc-950", className)}>
       <video
         ref={videoRef}
         src={getMediaUrl(url) || url}
@@ -174,16 +129,13 @@ const PlayableVideo = memo(({ url, posterUrl, className }: { url: string; poster
         muted
         loop
         playsInline
+        controls
         preload="metadata"
         poster={posterUrl || undefined}
+        onPlay={(e) => {
+          e.currentTarget.muted = false;
+        }}
       />
-      {!isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
-          <div className="w-10 h-10 rounded-full bg-black/60 flex items-center justify-center">
-            <Play className="w-5 h-5 text-white ml-0.5" />
-          </div>
-        </div>
-      )}
     </div>
   );
 });
@@ -683,11 +635,7 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
     null;
 
   const getAspectClass = () => {
-    const isVertical = platformId === 'tiktok' || platformId === 'whatsapp' || platformId === 'telegram' || post.media_type === 'reel' || post.media_type === 'story';
-    if (isVertical) return "aspect-[9/16] h-full";
-    if (platformId === 'youtube') return "aspect-[16/9] w-full max-h-[400px]";
-    if (platformId === 'instagram') return "aspect-[4/5] h-full";
-    return "aspect-[16/9] w-full max-h-[400px]";
+    return "w-full h-full";
   };
 
   const activeComments = commentsByPlatform[platformId] || [];
@@ -714,8 +662,8 @@ export const FeedPreview = memo(({ post, isOpen, onClose, onEdit, onDelete }: Fe
               posterUrl={localPosterUrl}
             />
 
-            {/* TikTok / Shorts Native Overlay (Fase 2) */}
-            {platformId === 'tiktok' && (
+            {/* Social Overlay */}
+            {['tiktok', 'instagram', 'youtube', 'facebook'].includes(platformId) && (
               <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 bg-gradient-to-b from-black/10 via-transparent to-black/75 z-20">
                 <div></div>
                 <div className="flex items-end justify-between w-full pointer-events-auto">
