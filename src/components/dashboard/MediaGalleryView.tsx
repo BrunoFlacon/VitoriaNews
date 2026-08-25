@@ -180,11 +180,14 @@ export const MediaGalleryView = () => {
         ]);
       }
 
+      const fileUrlQ = (fileUrl || "").replace(/"/g, '\\"');
+      const nameQ = (name || "").replace(/"/g, '\\"');
+      const origIdQ = id.replace(/"/g, '\\"');
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-      let orQuery = `file_url.eq.${fileUrl}${name ? `,name.eq.${name}` : ''}`;
-      if (isUuid) {
-        orQuery = `id.eq.${id},${orQuery}`;
-      }
+      
+      let orQuery = `file_url.eq."${fileUrlQ}"`;
+      if (name) orQuery += `,name.eq."${nameQ}"`;
+      if (isUuid) orQuery = `id.eq."${origIdQ}",${orQuery}`;
 
       if (user) {
         await Promise.allSettled([
