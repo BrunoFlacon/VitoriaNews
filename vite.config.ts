@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => {
           ws: true,
           timeout: 180000,
           proxyTimeout: 180000,
-          rewrite: (path) => path.replace(/^\/supabase/, ''),
+          rewrite: (path) => path.replace(/^\/supabase/, '').replace(/\/storage\/v1\//, '/storage/'),
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq, req) => {
               proxyReq.setHeader('origin', env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co');
