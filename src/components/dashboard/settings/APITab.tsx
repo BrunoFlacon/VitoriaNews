@@ -139,14 +139,6 @@ export const APITab = memo(({
 
 
                 const hasCreds = hasCredentials(config.id);
-                // Telegram connects via Bot Token — data saved directly to social_accounts.
-                const platformConnections = config.id === 'telegram'
-                  ? socialStats.filter(s => s.platform === config.id).map(s => ({
-                    id: s.id,
-                    platform: s.platform,
-                    username: s.username,
-                    platform_user_id: s.id,
-                    profile_image_url: s.profile_picture,
                 const platformConnections = (config.id === 'google' || config.id === 'youtube')
                   ? connections.filter(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected)
                   : (config.id === 'telegram')
