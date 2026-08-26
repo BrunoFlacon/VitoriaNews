@@ -62,6 +62,12 @@ export default defineConfig(({ mode }) => {
       include: [
         "react",
         "react-dom",
+        "react-dom/client",
+        "react/jsx-dev-runtime",
+        "react/jsx-runtime",
+        "react-router-dom",
+        "@tanstack/react-query",
+        "@supabase/supabase-js",
         "lucide-react",
         // ALL @radix-ui packages — prevents late discovery re-optimization
         // which invalidates every dep mid-session (504 Outdated Optimize Dep)
