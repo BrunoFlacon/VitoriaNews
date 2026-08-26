@@ -89,6 +89,12 @@ export function PresenceHeartbeat() {
           rpcAvailable = false;
           return;
         }
+        // 522 / 504 Cloudflare connection timeout
+        if (error.status === 522 || error.message?.includes("522") || error.message?.includes("timed out") || error.message?.includes("Connection timed out")) {
+          quotaExceededRef.current = true;
+          lastQuotaWarningRef.current = t;
+          return;
+        }
         // Other unexpected error — throttle to once per minute max
         if (!cancelled) {
           const sinceLastWarn = t - lastQuotaWarningRef.current;

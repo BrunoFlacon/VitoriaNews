@@ -142,13 +142,17 @@ export const APITab = memo(({
                 const rawPlatformConnections = (config.id === 'google' || config.id === 'youtube')
                   ? connections.filter(c => (c.platform === 'google' || c.platform === 'youtube') && (c.is_connected || !!c.access_token))
                   : (config.id === 'telegram')
-                    ? socialStats.filter(s => s.platform === 'telegram').map(s => ({
-                        id: `telegram-${s.username}`,
-                        platform: 'telegram',
-                        page_name: s.username || 'Bot/Canal Telegram',
-                        followers_count: s.followers_count,
-                        is_connected: true
-                      })) as any[]
+                    ? (connections.filter(c => c.platform === 'telegram' && c.is_connected).length > 0
+                        ? connections.filter(c => c.platform === 'telegram' && c.is_connected)
+                        : socialStats.filter(s => s.platform === 'telegram').map(s => ({
+                            id: `telegram-${s.username || 'bot'}`,
+                            platform: 'telegram',
+                            page_name: s.username || 'WebRadioVitoria_Newsbot',
+                            username: s.username,
+                            followers_count: s.followers_count || 0,
+                            posts_count: s.posts_count || 0,
+                            is_connected: true
+                          })) as any[])
                     : connections.filter(c =>
                         c.platform === config.id &&
                         (c.is_connected || !!(c as any).access_token || config.id === 'whatsapp')
@@ -608,9 +612,7 @@ export const APITab = memo(({
                                 </div>
                                 <div className="grid grid-cols-1 gap-3">
                                   {/* Lista Individual de Conexões */}
-                                  {platformConnections
-                                    .filter(conn => config.id !== 'telegram' || (conn.username && conn.username.toLowerCase().endsWith('bot')))
-                                    .map(conn => {
+                                  {platformConnections.map(conn => {
                                       const stats = socialStats.find(s =>
                                         s.platform === config.id && (
                                           (conn.page_id && s.platform_user_id === conn.page_id) ||
