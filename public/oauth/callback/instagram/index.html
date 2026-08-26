@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://ghtkdkauseesambzqfrd.supabase.co; font-src 'self'; frame-src 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' *; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; style-src 'self' 'unsafe-inline' *; img-src 'self' data: blob: *; connect-src *;">
     <title>Conectando Instagram - Vitória Net</title>
     <script>
         // 🔹 Página de callback (ponte)
@@ -55,7 +55,7 @@
 
             // Fallback: popup aberta sem opener — troca aqui com a sessão real
             if (code && state && platform && !hasOpener) {
-                var supabaseUrl = 'https://ghtkdkauseesambzqfrd.supabase.co';
+                var isLocal = window.location.origin.indexOf('localhost') !== -1 || window.location.origin.indexOf('127.0.0.1') !== -1; var supabaseUrl = isLocal ? (window.location.origin + '/supabase') : 'https://supabase.webradiovitoria.com.br';
                 var sessionToken = getSessionToken();
                 if (sessionToken) {
                     var redirectUri = window.location.origin + window.location.pathname;
