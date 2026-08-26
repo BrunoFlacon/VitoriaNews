@@ -89,22 +89,33 @@ export const DashboardHomeView = memo(({
     return localStats.filter(s => normalizePlatform(s.platform) === normalizePlatform(platform));
   }, [localStats, platform]);
 
-  const platformTotalPosts = useMemo(() =>
-    filteredStats.reduce((s, a) => s + (a.posts_count || 0), 0),
-    [filteredStats]
-  );
-  const platformViews = useMemo(() =>
-    filteredStats.reduce((s, a) => s + (a.views_count || 0), 0),
-    [filteredStats]
-  );
-  const platformEngagement = useMemo(() =>
-    filteredStats.reduce((s, a) => s + (a.likes_count || 0) + (a.comments_count || 0) + (a.shares_count || 0), 0),
-    [filteredStats]
-  );
-  const platformFollowers = useMemo(() =>
-    filteredStats.reduce((s, a) => s + (a.followers_count || 0), 0),
-    [filteredStats]
-  );
+  const platformTotalPosts = useMemo(() => {
+    const sum = filteredStats.reduce((s, a) => s + (a.posts_count || a.posts || 0), 0);
+    if (sum > 0) return sum;
+    if (platform === 'all') return localTotalPosts || Number(analyticsData?.engagement?.posts || 0);
+    return 0;
+  }, [filteredStats, localTotalPosts, analyticsData, platform]);
+
+  const platformViews = useMemo(() => {
+    const sum = filteredStats.reduce((s, a) => s + (a.views_count || a.views || 0), 0);
+    if (sum > 0) return sum;
+    if (analyticsData?.engagement?.views) return Number(analyticsData.engagement.views);
+    return 0;
+  }, [filteredStats, analyticsData]);
+
+  const platformEngagement = useMemo(() => {
+    const sum = filteredStats.reduce((s, a) => s + (a.likes_count || a.likes || 0) + (a.comments_count || a.comments || 0) + (a.shares_count || a.shares || 0), 0);
+    if (sum > 0) return sum;
+    if (platform === 'all') return localEngagement || Number(analyticsData?.engagement?.total || 0);
+    return 0;
+  }, [filteredStats, localEngagement, analyticsData, platform]);
+
+  const platformFollowers = useMemo(() => {
+    const sum = filteredStats.reduce((s, a) => s + (a.followers_count || a.followers || 0), 0);
+    if (sum > 0) return sum;
+    if (platform === 'all') return localFollowers || Number(analyticsData?.followers?.total || 0);
+    return 0;
+  }, [filteredStats, localFollowers, analyticsData, platform]);
 
   // All trends computed from localStats — appear instantly, no API dependency
   const engagementRate = useMemo(() => {

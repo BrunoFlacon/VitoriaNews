@@ -263,8 +263,14 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
         const publishedPostCount = publishedActions[platformKey] || 0;
         const effectivePosts = apiPostsCount > 0 ? apiPostsCount : publishedPostCount;
 
-        const rawFollowers = Number(acc.followers_count || acc.followers || 0);
+        const rawFollowers = Number(acc.followers_count || acc.followers || acc.metadata?.followers_count || acc.metadata?.followers || 0);
         const channelMembersFromMeta = Number(acc.metadata?.members_count || 0);
+        const finalFollowers = rawFollowers > 0 ? rawFollowers : channelMembersFromMeta;
+        const finalViews = Number(acc.views_count ?? acc.views ?? acc.metadata?.views ?? 0);
+        const finalLikes = Number(acc.likes_count ?? acc.likes ?? acc.metadata?.likes ?? 0);
+        const finalShares = Number(acc.shares_count ?? acc.shares ?? acc.metadata?.shares ?? 0);
+        const finalComments = Number(acc.comments_count ?? acc.comments ?? acc.metadata?.comments ?? 0);
+        const finalEngagementRate = Number(acc.engagement_rate ?? 0);
 
         dedupedAccounts.push({
           id: acc.id,
@@ -272,13 +278,19 @@ export function useSocialStats(options: { enabled?: boolean } = {}) {
           platform_user_id: acc.platform_user_id,
           username: acc.username,
           profile_picture: acc.profile_picture,
-          followers_count: rawFollowers > 0 ? rawFollowers : channelMembersFromMeta,
+          followers_count: finalFollowers,
+          followers: finalFollowers,
           posts_count: effectivePosts,
-          views_count: Number(acc.views ?? 0),
-          likes_count: Number(acc.likes ?? 0),
-          shares_count: Number(acc.shares ?? 0),
-          comments_count: Number(acc.comments ?? 0),
-          engagement_rate: Number(acc.engagement_rate ?? 0),
+          posts: effectivePosts,
+          views_count: finalViews,
+          views: finalViews,
+          likes_count: finalLikes,
+          likes: finalLikes,
+          shares_count: finalShares,
+          shares: finalShares,
+          comments_count: finalComments,
+          comments: finalComments,
+          engagement_rate: finalEngagementRate,
           updated_at: acc.updated_at,
           chat_id: acc.chat_id,
           metadata: {
