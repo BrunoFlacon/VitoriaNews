@@ -154,7 +154,7 @@ export const SafeImage = memo(({
     signedUrlRef.current = null;
 
     // If the base URL is expired on mount/change, immediately start re-signing without rendering it
-    if (resolvedBase && resolvedBase.includes('supabase.co/storage/') && resolvedBase.includes('token=')) {
+    if (resolvedBase && (resolvedBase.includes('/storage/') || resolvedBase.includes('supabase.co/storage/')) && resolvedBase.includes('token=')) {
       if (isSupabaseUrlExpired(resolvedBase)) {
         trySignedUrl();
       }
@@ -162,7 +162,7 @@ export const SafeImage = memo(({
   }, [rawSrc, resolvedBase, trySignedUrl]);
 
   const handleError = useCallback(() => {
-    if (resolvedBase?.includes('supabase.co/storage/') && (!signedUrlRef.current || signedUrlRef.current === "signing_in_progress")) {
+    if (resolvedBase && (resolvedBase.includes('/storage/') || resolvedBase.includes('supabase.co/storage/')) && (!signedUrlRef.current || signedUrlRef.current === "signing_in_progress")) {
       signedUrlRef.current = null;
       trySignedUrl();
     } else {
