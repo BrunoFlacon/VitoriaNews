@@ -62,6 +62,8 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
     const botInfo = meData.result;
     const botId = botInfo.id.toString();
 
+    const publicBaseUrl = Deno.env.get("PUBLIC_SUPABASE_URL") || Deno.env.get("SITE_URL") || "https://supabase.webradiovitoria.com.br";
+
     let botProfilePicture = "";
     try {
       const photosRes = await fetch(`https://api.telegram.org/bot${token}/getUserProfilePhotos?user_id=${botId}&limit=1`);
@@ -75,17 +77,21 @@ async function syncSingleBot(adminClient: any, userId: string, botToken: string,
           
           // Se ainda for uma URL do telegram, aplica o proxy para evitar bloqueios do navegador
           if (botProfilePicture.includes('api.telegram.org')) {
-            botProfilePicture = `${supabaseUrl}/functions/v1/media-relay?url=${encodeURIComponent(botProfilePicture)}`;
+            botProfilePicture = `${publicBaseUrl}/functions/v1/media-relay?url=${encodeURIComponent(botProfilePicture)}`;
           }
         }
       }
     } catch (e) { console.warn("[SYNC] Could not fetch bot profile pic:", e.message); }
 
-    // Register Webhook
-    const functionUrl = `${supabaseUrl}/functions/v1/telegram-webhook?token=${token}`;
+    // Register Webhook with external public domain
+    const functionUrl = `${publicBaseUrl}/functions/v1/telegram-webhook?token=${token}`;
     try {
-      await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(functionUrl)}`);
-    } catch {}
+      const hookRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(functionUrl)}`);
+      const hookData = await hookRes.json();
+      console.log("[SYNC] Telegram setWebhook result:", hookData);
+    } catch (err: any) {
+      console.warn("[SYNC] setWebhook error:", err?.message);
+    }
 
     // Cleanup: remover duplicatas Telegram com platform_user_id diferente (sintético ou de outro bot)
     try {

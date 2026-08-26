@@ -78,9 +78,17 @@ export function getWhatsAppMediaUrl(mediaId: string, userId: string): string | n
 export function getProxyUrl(url: string | null | undefined): string {
   if (!url) return "";
 
+  const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+
+  // Fix Docker-internal hostnames (supabase-kong:8000, kong:8000) FIRST BEFORE ANY RETURN!
+  if (url.includes('supabase-kong:8000') || url.includes('kong:8000')) {
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const targetBase = isLocal ? (window.location.origin + '/supabase') : selfHostedUrl;
+    url = url.replace(/https?:\/\/(supabase-kong|kong):8000/g, targetBase);
+  }
+
   // URLs já proxied ou locais não precisam de novo proxy
-  if (url.startsWith('/api/')) return url;
-  if (url.startsWith('/supabase/')) return url;  // Já está roteado pelo proxy Vite
+  if (url.startsWith('/api/') || url.startsWith('/supabase/')) return url;
   if (url.includes('/api/proxy-image?url=')) return url;
   if (url.includes('media-relay?url=') || url.includes('proxy-media?url=')) return url;
 

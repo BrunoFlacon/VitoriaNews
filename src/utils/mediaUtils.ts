@@ -37,6 +37,14 @@ export const encodeStoragePath = (path: string): string => {
 export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
   if (!raw) return "";
 
+  // Fix Docker-internal hostnames (supabase-kong:8000, kong:8000) to external URL
+  const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+  if (url.includes('supabase-kong:8000') || url.includes('kong:8000')) {
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const targetBase = isLocal ? (window.location.origin + '/supabase') : selfHostedUrl;
+    url = url.replace(/https?:\/\/(supabase-kong|kong):8000/g, targetBase);
+  }
+
   // Helper: converte URL absoluta do self-hosted Supabase para o proxy local do Vite
   const toViteProxy = (url: string): string => {
     const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -50,8 +58,8 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
   };
 
   // 1. Tratar imediatamente URLs /object/sign/ ou /object/authenticated/ e converter para /object/public/ sem token expirado
-  if (raw.includes("/object/sign/") || raw.includes("/object/authenticated/")) {
-    const cleaned = raw
+  if (url.includes("/object/sign/") || url.includes("/object/authenticated/")) {
+    const cleaned = url
       .replace("/object/sign/", "/object/public/")
       .replace("/object/authenticated/", "/object/public/")
       .split('?')[0];
@@ -59,45 +67,45 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
   }
 
   // 2. URLs com token= em buckets públicos -> remover o parâmetro ?token=... expirado
-  if (raw.includes("supabase.co/storage/") && raw.includes("token=")) {
-    return raw.replace("/object/sign/", "/object/public/").split('?')[0];
+  if (url.includes("supabase.co/storage/") && url.includes("token=")) {
+    return url.replace("/object/sign/", "/object/public/").split('?')[0];
   }
 
   // 3. URLs absolutas - rotear pelo proxy se for do domínio self-hosted
   if (
-    raw.startsWith("http://") || 
-    raw.startsWith("https://")
+    url.startsWith("http://") || 
+    url.startsWith("https://")
   ) {
     // Proxy do Vite para domínio self-hosted (evita 403 do Cloudflare)
-    const proxied = toViteProxy(raw);
-    if (proxied !== raw) return proxied;
+    const proxied = toViteProxy(url);
+    if (proxied !== url) return proxied;
     // URLs externas (blob, data, cdn externo) - passam direto
     try {
-      const url = new URL(raw);
-      url.pathname = url.pathname.split('/').map(s => encodeURIComponent(decodeURIComponent(s))).join('/');
-      return url.toString();
+      const parsedUrl = new URL(url);
+      parsedUrl.pathname = parsedUrl.pathname.split('/').map(s => encodeURIComponent(decodeURIComponent(s))).join('/');
+      return parsedUrl.toString();
     } catch {
-      return raw;
+      return url;
     }
   }
 
   // blobs e data URIs passam direto
-  if (raw.startsWith("blob:") || raw.startsWith("data:") || raw.startsWith("/api/")) {
-    return raw;
+  if (url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("/api/")) {
+    return url;
   }
 
   // Caminhos de proxy local já formatados
-  if (raw.startsWith("/supabase/") || raw.startsWith("/storage/")) {
-    return raw;
+  if (url.startsWith("/supabase/") || url.startsWith("/storage/")) {
+    return url;
   }
 
   // Tratar URLs /object/public/
-  if (raw.includes("/object/public/")) {
-    return toViteProxy(raw.split('?')[0]);
+  if (url.includes("/object/public/")) {
+    return toViteProxy(url.split('?')[0]);
   }
 
   // Remover prefixo de bucket duplicado se já estiver no início do caminho
-  let cleanPath = raw.trim();
+  let cleanPath = url.trim();
   let targetBucket = defaultBucket;
 
   if (cleanPath.startsWith("media/")) {
@@ -125,7 +133,7 @@ export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
       "[mediaUtils] getPublicUrl falhou (bucket sem acesso público). Retornando caminho bruto. " +
         "Para corrigir: no Supabase Dashboard > Storage > bucket 'media' > Make public."
     );
-    return raw;
+    return url;
   }
 };
 
