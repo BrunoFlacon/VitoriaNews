@@ -45,14 +45,19 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
     if (data.platform_name) {
       document.title = data.platform_name;
     }
-    if (data.favicon_url) {
-      let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-      if (!link) {
-        link = document.createElement("link");
+    const iconUrl = data.favicon_url || data.logo_url;
+    if (iconUrl) {
+      const links = document.querySelectorAll("link[rel*='icon']");
+      if (links.length > 0) {
+        links.forEach((link: any) => {
+          link.href = iconUrl;
+        });
+      } else {
+        const link = document.createElement("link");
         link.rel = "icon";
+        link.href = iconUrl;
         document.head.appendChild(link);
       }
-      link.href = data.favicon_url;
     }
   }, []);
 
