@@ -344,7 +344,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           throw new Error(`${fnName}: ${invErr.message}`);
         }
         if (data?.status === 'skipped') {
-          console.log(`[Sync] ${fnName} skipped: ${data.message || 'not configured'}`);
+          console.debug(`[Sync] ${fnName} skipped: ${data.message || 'not configured'}`);
         }
         return data;
       };
@@ -360,7 +360,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         if (hasCredentials('google_cloud') || hasGoogleOAuth) {
           await Promise.all([
             invokeFn('collect-youtube-analytics').catch(e => { syncErrors.push(`YouTube: ${e.message}`); }),
-            invokeFn('collect-google-analytics').catch(e => { syncErrors.push(`Google Analytics: ${e.message}`); }),
+            ...(hasGoogleOAuth ? [invokeFn('collect-google-analytics').catch(e => { console.debug(`Google Analytics: ${e.message}`); })] : []),
           ]);
         }
       } else if (platformId) {
@@ -373,18 +373,19 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           syncTasks.push(invokeFn('collect-meta-ads-analytics').catch(e => { syncErrors.push(`Meta Ads: ${e.message}`); }));
         }
         
-        if (hasCredentials('google_cloud') || connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected)) {
+        const hasGoogleOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
+        if (hasCredentials('google_cloud') || hasGoogleOAuth) {
           syncTasks.push(invokeFn('collect-youtube-analytics').catch(e => { syncErrors.push(`YouTube: ${e.message}`); }));
-          syncTasks.push(invokeFn('collect-google-analytics').catch(e => { syncErrors.push(`Google Analytics: ${e.message}`); }));
+          if (hasGoogleOAuth) {
+            syncTasks.push(invokeFn('collect-google-analytics').catch(e => { console.debug(`Google Analytics: ${e.message}`); }));
+          }
           if (hasCredentials('google_cloud') && credentials['google_cloud']?.search_console_id) {
-            syncTasks.push(invokeFn('collect-search-console-data').catch(e => { console.info(`Search Console: ${e.message}`); }));
+            syncTasks.push(invokeFn('collect-search-console-data').catch(e => { console.debug(`Search Console: ${e.message}`); }));
           }
           
-          // Only sync Google Contacts if there's a Google OAuth connection or People API key
-          const hasGoogleOAuth = connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected);
           const hasPeopleApiKey = !!credentials['google_cloud']?.people_api_key;
           if (hasGoogleOAuth || hasPeopleApiKey) {
-            syncTasks.push(invokeFn('sync-google-contacts').catch(e => { syncErrors.push(`Contatos Google: ${e.message}`); }));
+            syncTasks.push(invokeFn('sync-google-contacts').catch(e => { console.debug(`Contatos Google: ${e.message}`); }));
           }
         }
         
@@ -429,14 +430,17 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     refreshStats();
   }, [user]);
 
-  // Auto-sync on first load when there are connections
+  // Auto-sync on first load when there are connections (deferred to prevent main thread reflow violations)
   useEffect(() => {
     if (!hasSyncedRef.current && connections.length > 0) {
       hasSyncedRef.current = true;
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (!session) return;
-        syncSocialStats(undefined, true).catch(() => {});
-      });
+      const timer = setTimeout(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) return;
+          syncSocialStats(undefined, true).catch(() => {});
+        });
+      }, 400);
+      return () => clearTimeout(timer);
     }
   }, [connections]);
 
