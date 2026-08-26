@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { Users, Calendar } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getProxyUrl } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { getPlatformDetails, getPlatformName } from "./platformConfigs";
 import type { PlatformAccount } from "./usePlatformDetail";
@@ -35,7 +35,7 @@ export const PlatformProfileHeader = memo(({
   return (
     <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/20 border border-border/50">
       <Avatar className="w-12 h-12 border-2 border-border">
-        <AvatarImage src={account.profile_picture || ""} alt={account.username || ""} />
+        <AvatarImage src={getProxyUrl(account.profile_picture)} alt={account.username || ""} />
         <AvatarFallback className={cn("text-white text-lg", platform?.color || "bg-primary")}>
           {(account.username || "")[0]?.toUpperCase()}
         </AvatarFallback>
