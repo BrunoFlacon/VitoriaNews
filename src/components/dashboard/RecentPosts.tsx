@@ -30,6 +30,8 @@ import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { PlatformIconBadge } from "@/components/icons/PlatformIconBadge";
 import { useScheduledPosts, ScheduledPost } from "@/hooks/useScheduledPosts";
 import { FeedPreview } from "./FeedPreview";
+import { SafeImage } from "@/components/ui/SafeImage";
+import { getMediaUrl } from "@/utils/mediaUtils";
 import { useState, useEffect, useMemo, startTransition } from "react";
 import {
   DropdownMenu,
@@ -188,7 +190,7 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                       {isVideoUrl(post.media_urls[0]) ? (
                         <div className="w-full h-full relative">
                           <video
-                            src={post.media_urls[0]}
+                            src={getMediaUrl(post.media_urls[0]) || post.media_urls[0]}
                             className="w-full h-full object-cover"
                             preload="none"
                             muted
@@ -198,7 +200,7 @@ export const RecentPosts = ({ onEditPost }: { onEditPost?: (post: ScheduledPost)
                           </div>
                         </div>
                       ) : (
-                        <img
+                        <SafeImage
                           src={post.media_urls[0]}
                           alt=""
                           className="w-full h-full object-cover"

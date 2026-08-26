@@ -80,7 +80,8 @@ const VIDEO_EXTENSIONS = new Set([
   ".ogv",
 ]);
 
-function isVideoUrl(url: string): boolean {
+function isVideoUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
   try {
     const path = new URL(url).pathname;
     const ext = path.substring(path.lastIndexOf(".")).toLowerCase();

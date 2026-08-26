@@ -11,13 +11,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 
-function normalizePlatform(platform: string): string {
-  const value = platform.toLowerCase().trim();
-  if (value === "x" || value === "twitter" || value === "x (twitter)") {
-    return "twitter";
-  }
-  return value;
-}
+// normalizePlatform is defined inside serve() to handle all platform aliases
 
 interface PostMetric {
   id: string;

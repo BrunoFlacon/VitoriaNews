@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getMediaUrl } from '@/utils/mediaUtils';
 
 export interface PlatformMetricDetail {
   platform: string;
@@ -72,8 +73,6 @@ export interface CreatePostInput {
   published_at?: string;
   metadata?: Record<string, any>;
 }
-
-export { resolveMediaUrl } from "@/utils/resolveMediaUrl";
 
 export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}) {
   const { user } = useAuth();
@@ -197,7 +196,7 @@ export function useScheduledPosts({ enabled = true }: { enabled?: boolean } = {}
 
         if (mediaRecords) {
           mediaRecords.forEach((m) => {
-            mediaUrlMap[m.id] = resolveMediaUrl(m.file_url);
+            mediaUrlMap[m.id] = getMediaUrl(m.file_url);
           });
         }
       } catch (err) {
