@@ -64,10 +64,27 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Downloading media from URL: ${fileUrl.substring(0, 50)}...`);
+    // Resolve Vite proxy URLs to real Supabase URLs (container can't reach localhost)
+    let resolvedUrl = fileUrl;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    // /supabase/storage/... -> SUPABASE_URL/storage/...
+    if (resolvedUrl.startsWith("/supabase/")) {
+      resolvedUrl = supabaseUrl + resolvedUrl.replace("/supabase", "");
+    }
+    // http://localhost:8081/supabase/storage/... -> SUPABASE_URL/storage/...
+    if (resolvedUrl.includes("localhost") && resolvedUrl.includes("/supabase/")) {
+      const path = resolvedUrl.split("/supabase")[1];
+      resolvedUrl = supabaseUrl + "/supabase" + path;
+    }
+    // Also handle relative /storage/ paths
+    if (resolvedUrl.startsWith("/storage/")) {
+      resolvedUrl = supabaseUrl + resolvedUrl;
+    }
 
-    // Download the file from the signed URL
-    const mediaResponse = await fetch(fileUrl);
+    console.log(`Downloading media from URL: ${resolvedUrl.substring(0, 80)}...`);
+
+    // Download the file from the resolved URL
+    const mediaResponse = await fetch(resolvedUrl);
     if (!mediaResponse.ok) {
       throw new Error(`Failed to download media file: ${mediaResponse.statusText}`);
     }
