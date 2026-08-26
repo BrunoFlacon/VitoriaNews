@@ -233,7 +233,7 @@ export const SafeImage = memo(({
         onLoad={handleLoad}
         decoding="async"
         referrerPolicy="no-referrer"
-        fetchpriority={fetchpriority}
+        fetchPriority={fetchpriority}
         loading={imgLoading}
         {...props}
       />
