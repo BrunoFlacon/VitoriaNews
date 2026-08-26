@@ -34,10 +34,9 @@ export const encodeStoragePath = (path: string): string => {
     .join('/');
 };
 
-export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
-  if (!raw) return "";
+export const getMediaUrl = (url: string, defaultBucket: string = "media") => {
+  if (!url) return "";
 
-  let url = raw;
   const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
   if (url.includes('supabase-kong:8000') || url.includes('kong:8000')) {
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
