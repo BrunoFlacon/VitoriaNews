@@ -22,7 +22,7 @@ export const SocialNetworksView = memo(() => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { connections, loading, initiateOAuth, disconnect, setPrimary, refetch } = useSocialConnections();
-  const { stats, refresh: refreshStats } = useSocialStats();
+  const { stats, audienceBreakdown, refresh: refreshStats } = useSocialStats();
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<Record<string, string>>({});
@@ -188,6 +188,19 @@ export const SocialNetworksView = memo(() => {
 
           const platformSocialStats = stats.filter(s => s.platform === platformId || (platformId === 'youtube' && s.platform === 'google'));
 
+          const uniqueChannelsMap = new Map<string, number>();
+          if (platformId === 'telegram' || platformId === 'whatsapp') {
+            (audienceBreakdown?.flatMap((b: any) => b.channels || []) || [])
+              .filter((ch: any) => ch.platform === platformId)
+              .forEach((ch: any) => {
+                const key = ch.channel_id || ch.id || ch.channel_name;
+                if (key && !uniqueChannelsMap.has(key)) {
+                  uniqueChannelsMap.set(key, Number(ch.members_count || 0));
+                }
+              });
+          }
+          const platformMembers = Array.from(uniqueChannelsMap.values()).reduce((sum, m) => sum + m, 0);
+
           const platformAccounts: any[] = rawConns.map((conn) => {
             const accountStats = platformSocialStats.find(s => {
               const s_pid = String(s.platform_user_id || "").toLowerCase();
@@ -205,12 +218,16 @@ export const SocialNetworksView = memo(() => {
             const rawPhoto = accountStats?.profile_picture || conn.profile_image_url || conn.profile_picture || "";
             const displayPhoto = getProxyUrl(rawPhoto);
 
+            const displayFollowers = (platformId === 'telegram' || platformId === 'whatsapp')
+              ? (platformMembers || Number(accountStats?.followers_count ?? conn.followers_count ?? 0))
+              : Number(accountStats?.followers_count ?? conn.followers_count ?? 0);
+
             return {
               id: conn.id,
               page_name: conn.page_name || accountStats?.username || conn.username || (platformId === 'threads' ? 'webradiovitoriaa' : 'Conta Conectada'),
               platform_user_id: conn.platform_user_id,
               profile_image_url: displayPhoto,
-              followers_count: Number(accountStats?.followers_count ?? conn.followers_count ?? 0),
+              followers_count: displayFollowers,
               posts_count: Number(accountStats?.posts_count ?? conn.posts_count ?? 0),
               page_id: conn.page_id,
               username: accountStats?.username || conn.username,
@@ -224,12 +241,16 @@ export const SocialNetworksView = memo(() => {
           if (platformAccounts.length === 0 && platformSocialStats.length > 0) {
             platformSocialStats.forEach(st => {
               const rawPhoto = st.profile_picture || "";
+              const displayFollowers = (platformId === 'telegram' || platformId === 'whatsapp')
+                ? (platformMembers || Number(st.followers_count || (st as any).followers || 0))
+                : Number(st.followers_count || (st as any).followers || 0);
+
               platformAccounts.push({
                 id: st.id || `stat-${platformId}-${st.username || '1'}`,
                 page_name: st.username || (platformId === 'threads' ? 'webradiovitoriaa' : 'Conta Conectada'),
                 platform_user_id: st.platform_user_id,
                 profile_image_url: getProxyUrl(rawPhoto),
-                followers_count: Number(st.followers_count || (st as any).followers || 0),
+                followers_count: displayFollowers,
                 posts_count: Number(st.posts_count || 0),
                 username: st.username,
                 is_primary: true
