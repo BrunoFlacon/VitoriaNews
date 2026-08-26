@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   Smile,
   PenLine,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -1358,6 +1359,18 @@ export const FeedPreview = memo(
                       <Image className="w-3.5 h-3.5 mr-1" />
                       Alterar Capa
                     </button>
+
+                    {post.status === 'published' && publishedLink && (
+                      <a
+                        href={publishedLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold border-0 cursor-pointer transition-colors col-span-2 shadow-sm"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 mr-1" />
+                        Ver Publicação na Rede Social
+                      </a>
+                    )}
                   </div>
                 </div>
               </div>
