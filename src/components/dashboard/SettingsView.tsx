@@ -713,8 +713,14 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   };
 
   const handleConnectApi = useCallback(async (platform: string) => {
+    // Auto-save form values if the user entered credentials in inputs
+    const currentForm = formValues[platform];
+    if (currentForm && Object.values(currentForm).some(v => v && v.trim())) {
+      await saveCredentials(platform, currentForm);
+    }
+
     if (platform === "threads") {
-      const hasAppId = credentials["threads"]?.app_id || credentials["threads"]?.client_id;
+      const hasAppId = currentForm?.app_id || credentials["threads"]?.app_id || credentials["threads"]?.client_id;
       if (!hasAppId) {
         toast({
           title: "Configuração Necessária",
@@ -731,7 +737,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
     } finally {
       setConnectingPlatform(null);
     }
-  }, [credentials, toast, initiateOAuth]);
+  }, [credentials, formValues, saveCredentials, toast, initiateOAuth]);
 
   const updateFormField = useCallback((platform: string, key: string, value: string) => {
     setFormValues(prev => ({

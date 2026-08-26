@@ -492,6 +492,39 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             client_id: clientKey,
             client_secret: clientSecret,
           };
+        } else if (platform === 'youtube' || platform === 'google') {
+          let gCreds: Record<string, string | undefined> = {};
+          try {
+            const { data } = await supabase
+              .from('api_credentials')
+              .select('platform, credentials')
+              .eq('user_id', user!.id)
+              .in('platform', ['youtube', 'google', 'google_cloud']);
+            if (data) {
+              data.forEach(row => {
+                gCreds = { ...gCreds, ...((row.credentials as Record<string, string>) || {}) };
+              });
+            }
+          } catch (e) {
+          }
+
+          const clientId = gCreds?.client_id?.trim() || gCreds?.youtube_id?.trim();
+          const clientSecret = gCreds?.client_secret?.trim();
+
+          if (!clientId) {
+            toast({
+              title: "Google Client ID não configurado",
+              description: "Vá em Configurações → APIs → YouTube/Google e salve o 'Google Client ID' antes de conectar.",
+              variant: "destructive",
+            });
+            popup.close();
+            return;
+          }
+
+          extraBody = {
+            client_id: clientId,
+            client_secret: clientSecret,
+          };
         }
 
         const { data, error: aErr } = await safeInvoke('social-oauth-init', {
