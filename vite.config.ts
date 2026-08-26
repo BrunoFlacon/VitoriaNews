@@ -33,7 +33,8 @@ export default defineConfig(({ mode }) => {
           rewrite: (path) => path.replace(/^\/supabase/, ''),
           configure: (proxy) => {
             proxy.on('proxyReq', (proxyReq, req) => {
-              proxyReq.setHeader('origin', env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co');
+              const targetUrl = env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+              proxyReq.setHeader('origin', targetUrl);
               proxyReq.removeHeader('referer');
               
               // Only remove accept-encoding for storage requests so the server sends raw data
@@ -42,6 +43,11 @@ export default defineConfig(({ mode }) => {
               if (req.url && req.url.includes('/storage/v1/object/')) {
                 proxyReq.removeHeader('accept-encoding');
               }
+            });
+            proxy.on('proxyReqWs', (proxyReq) => {
+              const targetUrl = env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+              proxyReq.setHeader('origin', targetUrl);
+              proxyReq.removeHeader('referer');
             });
             proxy.on('proxyRes', (proxyRes, req) => {
               if (req.url && req.url.includes('/storage/v1/object/')) {
