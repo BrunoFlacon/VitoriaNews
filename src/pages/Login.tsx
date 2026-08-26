@@ -28,15 +28,15 @@ const Login = () => {
   const [recoveryMethod, setRecoveryMethod] = useState<"email" | "sms" | "whatsapp" | "mfa" | null>(null);
   const [phone, setPhone] = useState("");
   const [tempProfile, setTempProfile] = useState<any>(null);
-  const { login, user, sendOtp, verifyOtp } = useAuth();
+  const { login, user, loading, sendOtp, verifyOtp } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { settings } = useSystem();
   useEffect(() => {
-    if (user) {
+    if (user && !loading) {
       navigate("/dashboard", { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

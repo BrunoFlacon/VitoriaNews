@@ -159,10 +159,9 @@
     contain: layout style paint;
   }
 
-  /* LCP element optimization — promote to own layer */
+  /* LCP element optimization */
   .lcp-target {
     contain: layout style;
-    will-change: transform;
   }
 
   /* Framer-motion layout animated elements */

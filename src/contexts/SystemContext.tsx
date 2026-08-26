@@ -203,7 +203,15 @@ export const SystemProvider = ({ children }: { children: React.ReactNode }) => {
 export const useSystem = () => {
   const context = useContext(SystemContext);
   if (!context) {
-    throw new Error("useSystem must be used within a SystemProvider");
+    return {
+      settings: null,
+      navSettings: [],
+      sectionPermissions: {},
+      loading: false,
+      refreshSettings: async () => {},
+      updateSettingsOptimistic: () => {},
+      canAccessSection: () => true,
+    };
   }
   return context;
 };

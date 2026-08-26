@@ -46,7 +46,9 @@ const fetchWithTimeout: typeof fetch = (url, options) => {
     .finally(() => clearTimeout(timeout));
 };
 
-const supabaseClient = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+const globalForSupabase = globalThis as unknown as { __supabaseClient?: ReturnType<typeof createClient<Database>> };
+
+const supabaseClient = globalForSupabase.__supabaseClient ?? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: localStorage,
     persistSession: true,
@@ -54,6 +56,10 @@ const supabaseClient = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE
   },
   global: { fetch: fetchWithTimeout },
 });
+
+if (import.meta.env.DEV) {
+  globalForSupabase.__supabaseClient = supabaseClient;
+}
 
 export const supabase = USE_LOCAL ? localDb : supabaseClient;
 

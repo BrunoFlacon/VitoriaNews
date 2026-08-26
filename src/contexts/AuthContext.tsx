@@ -52,12 +52,13 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    // Gracefully handle brief HMR context unmount transitions without throwing fatal error
+    // During HMR transitions when context is temporarily unmounting, return loading: true
+    // so ProtectedRoute holds the loading state instead of triggering redirect loops.
     return {
       user: null,
       profile: null,
       session: null,
-      loading: false,
+      loading: true,
       isOnline: false,
       login: async () => ({ success: false }),
       register: async () => ({ success: false }),
