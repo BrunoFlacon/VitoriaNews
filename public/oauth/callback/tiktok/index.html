@@ -1,15 +1,11 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' *; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; style-src 'self' 'unsafe-inline' *; img-src 'self' data: blob: *; connect-src *;">
-    <title>Conectando TikTok - Vitória Net</title>
+    <title>Conectando TikTok - Vitória News</title>
     <script>
-        // 🔹 Página de callback (ponte)
-        // - SEMPRE repassa a URL com code/state para o painel via postMessage.
-        //   O painel (local ou produção) é quem troca o code → evita dupla troca.
-        // - Só troca o code aqui se NÃO houver opener (fallback), usando o
-        //   access_token da sessão real do domínio (nunca a anonKey).
         function getSessionToken() {
             try {
                 for (var i = 0; i < localStorage.length; i++) {
@@ -30,13 +26,13 @@
             var code = urlParams.get('code');
             var state = urlParams.get('state');
             var errParam = urlParams.get('error');
-            var pathParts = window.location.pathname.split('/').filter(Boolean);
-            var platform = pathParts.length >= 3 ? pathParts[2] : '';
+            var platform = 'tiktok';
 
             if (errParam) {
                 document.getElementById('status').innerText = 'Autorização cancelada ou recusada.';
                 document.getElementById('loader').style.display = 'none';
-                setTimeout(function() { window.close(); }, 2000);
+                document.getElementById('icon-box').innerText = '⚠️';
+                setTimeout(function() { window.close(); }, 3000);
                 return;
             }
 
@@ -44,18 +40,17 @@
             try { hasOpener = !!window.opener; } catch (e) { hasOpener = false; }
 
             if (hasOpener) {
-                // O painel (mesmo origin ou localhost) recebe a URL e troca o code
                 try {
-                    window.opener.postMessage({ type: 'oauth-callback', url: window.location.href }, '*');
+                    window.opener.postMessage({ type: 'oauth-callback', url: window.location.href, platform: platform }, '*');
                 } catch (e) {}
-                document.getElementById('status').innerText = 'Autorização concluída! Esta janela fechará em instantes.';
+                document.getElementById('status').innerText = 'Autorização recebida com sucesso! Concluindo...';
             }
 
             var closeTimer = setTimeout(function() { window.close(); }, 15000);
 
-            // Fallback: popup aberta sem opener — troca aqui com a sessão real
             if (code && state && platform && !hasOpener) {
-                var isLocal = window.location.origin.indexOf('localhost') !== -1 || window.location.origin.indexOf('127.0.0.1') !== -1; var supabaseUrl = isLocal ? (window.location.origin + '/supabase') : 'https://supabase.webradiovitoria.com.br';
+                var isLocal = window.location.origin.indexOf('localhost') !== -1 || window.location.origin.indexOf('127.0.0.1') !== -1;
+                var supabaseUrl = isLocal ? (window.location.origin + '/supabase') : 'https://supabase.webradiovitoria.com.br';
                 var sessionToken = getSessionToken();
                 if (sessionToken) {
                     var redirectUri = window.location.origin + window.location.pathname;
@@ -65,16 +60,19 @@
                         body: JSON.stringify({ code: code, state: state, platform: platform, redirect_uri: redirectUri })
                     }).then(function(r) { return r.json(); }).then(function(data) {
                         if (data.success) {
-                            document.getElementById('status').innerText = 'Conta conectada com sucesso!';
+                            document.getElementById('status').innerText = 'Conta de TikTok conectada com sucesso!';
                             document.getElementById('loader').style.display = 'none';
+                            document.getElementById('icon-box').innerText = '✅';
                             clearTimeout(closeTimer);
                             setTimeout(function() { window.close(); }, 2000);
                         } else {
-                            document.getElementById('status').innerText = 'Falha ao finalizar: ' + (data.error || 'erro desconhecido');
+                            document.getElementById('status').innerText = 'Falha ao conectar: ' + (data.error || 'erro desconhecido');
                             document.getElementById('loader').style.display = 'none';
+                            document.getElementById('icon-box').innerText = '❌';
                         }
                     }).catch(function() {
                         document.getElementById('loader').style.display = 'none';
+                        document.getElementById('icon-box').innerText = '⚠️';
                     });
                 } else {
                     document.getElementById('status').innerText = 'Sessão não encontrada. Feche e tente novamente pelo painel.';
@@ -85,50 +83,52 @@
     </script>
     <style>
         body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
             height: 100vh; 
             margin: 0; 
-            background: #0f172a; 
-            color: white; 
+            background: #090d16; 
+            color: #f8fafc; 
             text-align: center; 
         }
-        .container {
-            max-width: 400px;
-            padding: 40px;
-            background: rgba(30, 41, 59, 0.5);
+        .card {
+            max-width: 380px;
+            width: 90%;
+            padding: 36px 28px;
+            background: rgba(15, 23, 42, 0.75);
             border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            backdrop-filter: blur(16px);
         }
-        .success-icon { 
-            font-size: 64px; 
-            color: #22c55e; 
-            margin-bottom: 24px;
-            animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        .icon-box { 
+            font-size: 52px; 
+            margin-bottom: 16px;
+            line-height: 1;
         }
-        h1 { font-size: 20px; margin: 0 0 12px; font-weight: 700; }
-        p { color: #94a3b8; font-size: 14px; line-height: 1.6; }
+        h1 { font-size: 22px; margin: 0 0 4px; font-weight: 900; letter-spacing: -0.02em; color: #ffffff; }
+        .tagline { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.15em; color: #38bdf8; margin-bottom: 20px; }
+        p { color: #94a3b8; font-size: 13.5px; line-height: 1.5; margin: 0; }
         .loader {
-            border: 3px solid rgba(255,255,255,0.1);
-            border-top: 3px solid #3b82f6;
+            border: 3px solid rgba(255,255,255,0.08);
+            border-top: 3px solid #38bdf8;
             border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
+            width: 28px;
+            height: 28px;
+            animation: spin 0.8s linear infinite;
             margin: 20px auto 0;
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes scaleIn { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="success-icon">✅</div>
-        <h1>Vitória Net</h1>
-        <p id="status">Sincronizando autorização com o seu painel...</p>
+    <div class="card">
+        <div id="icon-box" class="icon-box">⚡</div>
+        <h1>Vitória News</h1>
+        <div class="tagline">Rede Vitória de Comunicação</div>
+        <p id="status">Sincronizando autorização de TikTok com o seu painel...</p>
         <div id="loader" class="loader"></div>
     </div>
 </body>

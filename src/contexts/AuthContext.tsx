@@ -52,7 +52,22 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    // Gracefully handle brief HMR context unmount transitions without throwing fatal error
+    return {
+      user: null,
+      profile: null,
+      session: null,
+      loading: false,
+      isOnline: false,
+      login: async () => ({ success: false }),
+      register: async () => ({ success: false }),
+      logout: async () => {},
+      updateProfile: async () => false,
+      toggleOnline: async () => {},
+      sendOtp: async () => ({ success: false }),
+      verifyOtp: async () => ({ success: false }),
+      onlineUsersMap: {},
+    } as AuthContextType;
   }
   return context;
 };

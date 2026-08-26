@@ -3,9 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { localDb } from './local-client';
 
-const SUPABASE_URL = import.meta.env.DEV
-  ? `${window.location.origin}/supabase`
-  : import.meta.env.VITE_SUPABASE_URL;
+import { SUPABASE_URL as CONFIG_SUPABASE_URL, FUNCTIONS_BASE_URL } from '@/config/serverConfig';
+
+const SUPABASE_URL = CONFIG_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 const USE_LOCAL = import.meta.env.VITE_USE_LOCAL_DB === 'true' || import.meta.env.USE_LOCAL_DB === 'true';
@@ -60,7 +60,7 @@ export const supabase = USE_LOCAL ? localDb : supabaseClient;
 // Base URL for Edge Function invocations. In local mode points at our Express
 // "functions" runtime; otherwise at the Supabase project.
 export const getFunctionsBase = () =>
-  USE_LOCAL ? "/api/functions" : `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+  USE_LOCAL ? "/api/functions" : FUNCTIONS_BASE_URL;
 
 export const SUPABASE_ANON_KEY = SUPABASE_PUBLISHABLE_KEY;
 export const SUPABASE_PROJECT_URL = SUPABASE_URL;

@@ -3,6 +3,7 @@ import { BarChart3, TrendingUp, Eye, MousePointerClick, Award, Youtube, Instagra
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { resolveMediaUrl } from "@/config/serverConfig";
 
 interface CoverPerformanceItem {
   id: string;
@@ -20,7 +21,7 @@ const MOCK_COVER_PERFORMANCE: CoverPerformanceItem[] = [
     id: "1",
     title: "Entrevista Exclusiva: Eleições 2026",
     platform: "youtube",
-    coverUrl: "https://ghtkdkauseesambzqfrd.supabase.co/storage/v1/object/public/profile-photos/facebook/106917862467761.jpg",
+    coverUrl: resolveMediaUrl("/storage/v1/object/public/profile-photos/facebook/106917862467761.jpg"),
     impressions: 45200,
     clicks: 5880,
     ctr: 13.01,
@@ -30,7 +31,7 @@ const MOCK_COVER_PERFORMANCE: CoverPerformanceItem[] = [
     id: "2",
     title: "Live ao Vivo: Cobertura Especial Tupã",
     platform: "youtube",
-    coverUrl: "https://ghtkdkauseesambzqfrd.supabase.co/storage/v1/object/public/profile-photos/facebook/106015418265600.jpg",
+    coverUrl: resolveMediaUrl("/storage/v1/object/public/profile-photos/facebook/106015418265600.jpg"),
     impressions: 28900,
     clicks: 4200,
     ctr: 14.53,
@@ -40,7 +41,7 @@ const MOCK_COVER_PERFORMANCE: CoverPerformanceItem[] = [
     id: "3",
     title: "Podcast Web Rádio #42 - Bastidores da Notícia",
     platform: "spotify",
-    coverUrl: "https://ghtkdkauseesambzqfrd.supabase.co/storage/v1/object/public/profile-photos/facebook/323348644425052.png",
+    coverUrl: resolveMediaUrl("/storage/v1/object/public/profile-photos/facebook/323348644425052.png"),
     impressions: 18400,
     clicks: 3100,
     ctr: 16.85,
@@ -50,7 +51,7 @@ const MOCK_COVER_PERFORMANCE: CoverPerformanceItem[] = [
     id: "4",
     title: "Reels Giro de Notícias da Semana",
     platform: "instagram",
-    coverUrl: "https://ghtkdkauseesambzqfrd.supabase.co/storage/v1/object/public/profile-photos/instagram/17841449150065487.jpg",
+    coverUrl: resolveMediaUrl("/storage/v1/object/public/profile-photos/instagram/17841449150065487.jpg"),
     impressions: 62000,
     clicks: 7440,
     ctr: 12.00,
