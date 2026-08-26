@@ -139,8 +139,8 @@ export const APITab = memo(({
 
 
                 const hasCreds = hasCredentials(config.id);
-                const platformConnections = (config.id === 'google' || config.id === 'youtube')
-                  ? connections.filter(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected)
+                const rawPlatformConnections = (config.id === 'google' || config.id === 'youtube')
+                  ? connections.filter(c => (c.platform === 'google' || c.platform === 'youtube') && (c.is_connected || !!c.access_token))
                   : (config.id === 'telegram')
                     ? socialStats.filter(s => s.platform === 'telegram').map(s => ({
                         id: `telegram-${s.username}`,
@@ -151,17 +151,33 @@ export const APITab = memo(({
                       })) as any[]
                     : connections.filter(c =>
                         c.platform === config.id &&
-                        c.is_connected &&
-                        ((c as any).access_token !== null || config.id === 'whatsapp')
+                        (c.is_connected || !!(c as any).access_token || config.id === 'whatsapp')
                       );
 
-
-                const hasConnections = platformConnections.length > 0;
-                const isVerifiedFinal = (config.id === 'telegram' && hasCreds) || (config.id === 'whatsapp' && hasCreds) || socialStats.some(s => s.platform === config.id);
+                const isVerifiedFinal = (config.id === 'telegram' && hasCreds) || (config.id === 'whatsapp' && hasCreds) || socialStats.some(s => s.platform === config.id || (config.id === 'youtube' && s.platform === 'google'));
 
                 // For tools/manual APIs, having credentials means it is effectively connected
                 const isTool = config.type === 'tool' || !config.oauthSupported;
-                const isEffectivelyConnected = hasConnections || isVerifiedFinal || (isTool && hasCreds);
+                const isEffectivelyConnected = rawPlatformConnections.length > 0 || isVerifiedFinal || (isTool && hasCreds);
+
+                // If no explicit connections row exists but socialStats or credentials confirms connection, create fallback display profile card
+                const fallbackStats = socialStats.find(s => s.platform === config.id || (config.id === 'youtube' && s.platform === 'google'));
+                const platformConnections = rawPlatformConnections.length > 0
+                  ? rawPlatformConnections
+                  : (isEffectivelyConnected && !isTool)
+                    ? [{
+                        id: `fallback-${config.id}`,
+                        platform: config.id,
+                        page_name: fallbackStats?.username || fallbackStats?.platform_user_id || (config.id === 'youtube' ? 'Canal do YouTube' : `${config.name} Conectado`),
+                        profile_picture: fallbackStats?.profile_picture || "",
+                        followers_count: fallbackStats?.followers_count || 0,
+                        posts_count: fallbackStats?.posts_count || 0,
+                        is_connected: true,
+                        is_fallback: true
+                      }]
+                    : [];
+
+                const hasConnections = platformConnections.length > 0;
 
                 const isConnecting = connectingPlatform === config.id;
                 const isExpanded = expandedPlatform === config.id;

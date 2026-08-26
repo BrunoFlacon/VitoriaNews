@@ -247,8 +247,8 @@ CTA: [call-to-action sugerido]`;
       fetchHeaders["Authorization"] = `Bearer ${apiKey}`;
       
       if (provider === "openrouter") {
-        fetchHeaders["HTTP-Referer"] = "https://social-canvas-hub.lovable.dev";
-        fetchHeaders["X-Title"] = "Vitória Net";
+        fetchHeaders["HTTP-Referer"] = "https://webradiovitoria.com.br";
+        fetchHeaders["X-Title"] = "Vitória News";
       }
       
       fetchBody = {

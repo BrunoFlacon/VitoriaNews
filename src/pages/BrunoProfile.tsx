@@ -137,7 +137,7 @@ const INITIAL_CONTENT: ContentState = {
     logoType: 'text', 
     logoText: 'V',
     logoUrl: '',
-    brandName: 'Vitória Net'
+    brandName: 'Vitória News'
   },
   style: {
     fontFamily: '"Outfit", sans-serif',

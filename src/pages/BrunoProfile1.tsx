@@ -80,14 +80,14 @@ const PREMIUM_STYLE = {
 };
 
 const INITIAL_CONTENT = {
-  subtitle: "Desenvolvedor Full-stack, Arquiteto de Software & Fundador Visionário da Vitória Net.",
+  subtitle: "Desenvolvedor Full-stack, Arquiteto de Software & Fundador Visionário da Vitória News.",
   style: PREMIUM_STYLE,
   sections: [
     { 
       id: 'bio', 
       type: 'text', 
       title: 'A VISÃO', 
-      content: 'Liderando a evolução técnica da Vitória Net com foco em escalabilidade e design de elite. Minha missão é transformar ideias complexas em produtos digitais de alto impacto que definem novos padrões de mercado.' 
+      content: 'Liderando a evolução técnica da Vitória News com foco em escalabilidade e design de elite. Minha missão é transformar ideias complexas em produtos digitais de alto impacto que definem novos padrões de mercado.' 
     },
     {
       id: 'skills',
@@ -105,7 +105,7 @@ const INITIAL_CONTENT = {
       type: 'experience',
       title: 'TRAJETÓRIA',
       items: [
-        { date: '2023 - Presente', title: 'Fundador & CTO', company: 'Vitória Net', desc: 'Direção estratégica e arquitetura do núcleo da plataforma Vitória Net.' },
+        { date: '2023 - Presente', title: 'Fundador & CTO', company: 'Vitória News', desc: 'Direção estratégica e arquitetura do núcleo da plataforma Vitória News.' },
         { date: '2021 - 2023', title: 'Sênior Architecture', company: 'Flacon Tech', desc: 'Desenvolvimento de ecossistemas digitais para gestão inteligente.' },
       ]
     }
@@ -250,7 +250,7 @@ export default function BrunoProfile() {
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <Link to="/" className="group flex items-center gap-2">
             <ArrowLeft className="w-4 h-4 text-primary group-hover:-translate-x-1 transition-transform" />
-            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 group-hover:text-white transition-colors">Portal Vitória Net</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400 group-hover:text-white transition-colors">Portal Vitória News</span>
           </Link>
           <div className="flex items-center gap-6">
             {isOwner && !isEditing && (

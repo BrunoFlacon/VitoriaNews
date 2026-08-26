@@ -161,7 +161,7 @@ export async function getSmartResponse(config: BotEngineConfig) {
     try {
       console.log(`[BOT-ENGINE] [${platform}] Calling ${provider} IA with model ${model || 'default'}...`);
       
-      const defaultSystemPrompt = "Você é o robô assistente oficial do Social Canvas Hub / Vitória Net. Você é educado, ágil e focado em ajudar o usuário com informações sobre marketing, redes sociais e tendências. Se o usuário perguntar quem você é, identifique-se como o Robô Artesão da Vitória Net.";
+      const defaultSystemPrompt = "Você é o robô assistente oficial do Vitória News. Você é educado, ágil e focado em ajudar o usuário com informações sobre jornalismo, redes sociais e tendências. Se o usuário perguntar quem você é, identifique-se como o Assistente de Redação da Vitória News.";
       let systemPrompt = settings.ai_prompt || defaultSystemPrompt;
       
       if (isGroup) {
