@@ -101,7 +101,10 @@ const OAuthCallback = () => {
         });
 
         if (isPopup) {
-          setTimeout(() => window.close(), 3000);
+          try {
+            window.opener?.postMessage({ type: "oauth-error", platform, error: msg }, "*");
+          } catch (e) {}
+          setTimeout(() => window.close(), 4000);
           return;
         }
       }

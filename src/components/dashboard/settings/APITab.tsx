@@ -147,15 +147,21 @@ export const APITab = memo(({
                     username: s.username,
                     platform_user_id: s.id,
                     profile_image_url: s.profile_picture,
-                    page_name: s.username || 'Bot/Canal Telegram',
-                    followers_count: s.followers_count,
-                    is_connected: true
-                  })) as any[]
-                  : connections.filter(c =>
-                    c.platform === config.id &&
-                    c.is_connected &&
-                    ((c as any).access_token !== null || config.id === 'whatsapp')
-                  );
+                const platformConnections = (config.id === 'google' || config.id === 'youtube')
+                  ? connections.filter(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected)
+                  : (config.id === 'telegram')
+                    ? socialStats.filter(s => s.platform === 'telegram').map(s => ({
+                        id: `telegram-${s.username}`,
+                        platform: 'telegram',
+                        page_name: s.username || 'Bot/Canal Telegram',
+                        followers_count: s.followers_count,
+                        is_connected: true
+                      })) as any[]
+                    : connections.filter(c =>
+                        c.platform === config.id &&
+                        c.is_connected &&
+                        ((c as any).access_token !== null || config.id === 'whatsapp')
+                      );
 
 
                 const hasConnections = platformConnections.length > 0;
@@ -189,8 +195,15 @@ export const APITab = memo(({
 
                             {/* Conectado (green): effective connection confirmed */}
                             {isEffectivelyConnected && (
-                              <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-600 w-fit">
-                                Conectado
+                              <Badge variant="default" className="text-[10px] bg-green-600 hover:bg-green-600 text-white w-fit font-bold shadow-sm">
+                                <Check className="w-3 h-3 mr-1" /> Conectado
+                              </Badge>
+                            )}
+
+                            {/* Desconectado (muted gray): when not connected and no credentials */}
+                            {!isEffectivelyConnected && !hasCreds && (
+                              <Badge variant="outline" className="text-[10px] font-medium text-slate-400 border-white/10 bg-white/5 w-fit">
+                                Desconectado
                               </Badge>
                             )}
 
@@ -199,17 +212,17 @@ export const APITab = memo(({
                               <WebhookStatusBadge platform={config.id === "meta_ads" || config.id === "threads" ? "meta" : config.id} userId={user?.id} compact platformLabel={config.id === "threads" ? "Threads" : undefined} />
                             )}
 
-                            {/* Credenciais Salvas (grey): has creds but not yet verified */}
+                            {/* Credenciais Salvas / Pendente de Conexão (yellow): has creds but not yet connected */}
                             {!isEffectivelyConnected && hasCreds && (() => {
-                              let label = "Credenciais Salvas";
+                              let label = "Pendente de Conexão";
                               if (config.id === 'google_cloud') {
                                 const googleCreds = credentials['google_cloud'] || {};
                                 const serviceKeys = ['maps_api_key', 'news_api_key', 'analytics_id', 'gtag_id', 'search_console_id', 'people_api_key', 'ads_id'];
                                 const activeServices = serviceKeys.filter(k => googleCreds[k]?.trim()).length;
-                                label = `Credencias Ativas (${activeServices} serviço${activeServices !== 1 ? 's' : ''})`;
+                                label = `Credenciais Ativas (${activeServices} serviço${activeServices !== 1 ? 's' : ''})`;
                               }
                               return (
-                                <Badge variant="outline" className="text-[10px] font-medium text-muted-foreground border-border/50 bg-muted/30 w-fit">
+                                <Badge variant="outline" className="text-[10px] font-medium text-amber-400 border-amber-500/30 bg-amber-500/10 w-fit">
                                   {label}
                                 </Badge>
                               );
