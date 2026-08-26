@@ -376,8 +376,8 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
         if (hasCredentials('google_cloud') || connections.some(c => (c.platform === 'google' || c.platform === 'youtube') && c.is_connected)) {
           syncTasks.push(invokeFn('collect-youtube-analytics').catch(e => { syncErrors.push(`YouTube: ${e.message}`); }));
           syncTasks.push(invokeFn('collect-google-analytics').catch(e => { syncErrors.push(`Google Analytics: ${e.message}`); }));
-          if (hasCredentials('google_cloud')) {
-            syncTasks.push(invokeFn('collect-search-console-data').catch(e => { syncErrors.push(`Search Console: ${e.message}`); }));
+          if (hasCredentials('google_cloud') && credentials['google_cloud']?.search_console_id) {
+            syncTasks.push(invokeFn('collect-search-console-data').catch(e => { console.info(`Search Console: ${e.message}`); }));
           }
           
           // Only sync Google Contacts if there's a Google OAuth connection or People API key

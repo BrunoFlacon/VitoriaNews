@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, RefreshCw, ChevronUp, ChevronDown, X, Globe, 
   Unplug, Link2, Loader2, Plug, Save, FileText, MessageSquare,
-  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2, Star, Webhook, Tag, AlertCircle
+  Key, Eye, EyeOff, Target, Phone, Check, Plus, Trash2, Star, Webhook, Tag, AlertCircle, Send
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -629,12 +629,19 @@ export const APITab = memo(({
                                     // Use page_name from connection as primary display name (most accurate for WA)
                                     const displayName = conn.page_name || stats?.username || conn.username || "Conta Conectada";
 
-                                    // For Telegram/WhatsApp: sum ONLY channels matching THIS platform strictly
-                                    const totalPlatformMembers = (config.id === 'telegram' || config.id === 'whatsapp')
-                                      ? (audienceBreakdown?.flatMap(b => b.channels) || [])
-                                        .filter(ch => ch.platform === config.id)
-                                        .reduce((sum, ch) => sum + (ch.members_count || 0), 0)
-                                      : 0;
+                                    // For Telegram/WhatsApp: sum ONLY unique channels matching THIS platform strictly
+                                    const uniquePlatformChannels = new Map<string, number>();
+                                    if (config.id === 'telegram' || config.id === 'whatsapp') {
+                                      (audienceBreakdown?.flatMap((b: any) => b.channels || []) || [])
+                                        .filter((ch: any) => ch.platform === config.id)
+                                        .forEach((ch: any) => {
+                                          const key = ch.channel_id || ch.id || ch.channel_name;
+                                          if (key && !uniquePlatformChannels.has(key)) {
+                                            uniquePlatformChannels.set(key, Number(ch.members_count || 0));
+                                          }
+                                        });
+                                    }
+                                    const totalPlatformMembers = Array.from(uniquePlatformChannels.values()).reduce((sum, m) => sum + m, 0);
 
                                     // WhatsApp metrics are independent from Facebook — use only WA-native data
                                     const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
@@ -670,8 +677,14 @@ export const APITab = memo(({
                                                   alt={displayName} 
                                                   className="object-cover" 
                                                 />
-                                                <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 text-xl font-bold">
-                                                  {displayName.charAt(0).toUpperCase()}
+                                                <AvatarFallback className="rounded-2xl bg-gradient-to-br from-primary/10 to-accent/10 text-xl font-bold p-0 overflow-hidden">
+                                                  {config.id === 'telegram' ? (
+                                                    <div className="w-full h-full bg-[#0088cc] flex items-center justify-center rounded-2xl">
+                                                      <Send className="w-7 h-7 text-white" />
+                                                    </div>
+                                                  ) : (
+                                                    displayName.charAt(0).toUpperCase()
+                                                  )}
                                                 </AvatarFallback>
                                               </Avatar>
                                               {config.id === 'whatsapp' && (
