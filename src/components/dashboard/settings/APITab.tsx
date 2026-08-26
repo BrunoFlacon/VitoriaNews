@@ -219,6 +219,12 @@ export const APITab = memo(({
                   }];
                 }
 
+                platformConnections.sort((a, b) => {
+                  if (a.is_primary && !b.is_primary) return -1;
+                  if (!a.is_primary && b.is_primary) return 1;
+                  return 0;
+                });
+
                 const hasConnections = platformConnections.length > 0;
 
                 const isConnecting = connectingPlatform === config.id;

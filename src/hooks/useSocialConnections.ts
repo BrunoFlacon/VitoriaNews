@@ -839,6 +839,17 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
 
       if (error) throw error;
 
+      // Optimistically update local connections state so UI swaps top profile instantly
+      setConnections(prev => prev.map(c => {
+        if (c.platform === conn.platform) {
+          return {
+            ...c,
+            is_primary: (c.id === connectionId || c.platform_user_id === conn.platform_user_id)
+          };
+        }
+        return c;
+      }));
+
       toast({ title: "Perfil Padrão Definido!", description: `${conn.page_name || conn.username || conn.platform} definido como padrão.` });
       await refetch();
     } catch (error: any) {

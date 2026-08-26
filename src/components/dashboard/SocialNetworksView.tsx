@@ -44,19 +44,29 @@ export const SocialNetworksView = memo(() => {
   }, [connections]);
 
   const isConnected = useCallback(
-    (platformId: string) =>
-      connections.some((c) => c.platform === platformId && c.is_connected),
-    [connections]
+    (platformId: string) => {
+      if (platformId === 'youtube' || platformId === 'google') {
+        return (
+          connections.some((c) => (c.platform === 'youtube' || c.platform === 'google') && c.is_connected) ||
+          stats.some((s) => s.platform === 'youtube' || s.platform === 'google')
+        );
+      }
+      return (
+        connections.some((c) => c.platform === platformId && c.is_connected) ||
+        stats.some((s) => s.platform === platformId)
+      );
+    },
+    [connections, stats]
   );
 
-          const getPageName = useCallback(
-            (platformId: string) => {
-              const conn = connections.find((c) => c.platform === platformId && c.is_connected);
-              const relatedStats = stats.find(s => s.platform === platformId);
-              return relatedStats?.username || conn?.page_name || conn?.username || (platformId === 'threads' ? "Threads Profile" : null);
-            },
-            [connections, stats]
-          );
+  const getPageName = useCallback(
+    (platformId: string) => {
+      const conn = connections.find((c) => (c.platform === platformId || (platformId === 'youtube' && c.platform === 'google')) && c.is_connected);
+      const relatedStats = stats.find(s => s.platform === platformId || (platformId === 'youtube' && s.platform === 'google'));
+      return relatedStats?.username || conn?.page_name || conn?.username || (platformId === 'threads' ? "webradiovitoriaa" : null);
+    },
+    [connections, stats]
+  );
 
   const handleConnect = async (platformId: string) => {
     setConnectingPlatform(platformId);
@@ -68,7 +78,7 @@ export const SocialNetworksView = memo(() => {
   };
 
   const handleDisconnect = async (platformId: string) => {
-    const conn = connections.find((c) => c.platform === platformId && c.is_connected);
+    const conn = connections.find((c) => (c.platform === platformId || (platformId === 'youtube' && c.platform === 'google')) && c.is_connected);
     if (!conn) return;
     await disconnect(`${platformId}|${conn.id}`);
   };
@@ -97,12 +107,6 @@ export const SocialNetworksView = memo(() => {
     }
   };
 
-  // Stats summary per platform
-  const getStats = useCallback(
-    (platformId: string) => stats.find((s) => s.platform === platformId),
-    [stats]
-  );
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -122,16 +126,7 @@ export const SocialNetworksView = memo(() => {
           </p>
         </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.location.search = "?tab=studio"}
-            className="gap-2 rounded-xl text-xs font-bold bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
-          >
-            <Palette className="w-4 h-4" />
-            Criar Capas
-          </Button>
-
+        <div className="flex items-center gap-3">
           {/* Connection summary badge */}
           <Badge
             variant="outline"
@@ -154,13 +149,14 @@ export const SocialNetworksView = memo(() => {
             variant="outline"
             size="sm"
             onClick={handleSyncAll}
-            disabled={isSyncing || connectedCount === 0}
+            disabled={isSyncing}
             className="gap-2"
           >
             <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
             Sincronizar Tudo
           </Button>
-        </motion.div>
+        </div>
+      </motion.div>
 
       {/* Empty state if no platforms exist */}
       {!loading && connectedCount === 0 && (
@@ -185,40 +181,61 @@ export const SocialNetworksView = memo(() => {
           const platform = socialPlatforms.find((p) => p.id === platformId);
           if (!platform) return null;
 
-           const platformAccounts = (accountsByPlatform[platformId] || []).map((conn) => {
-             const accountStats = stats.find(s => {
-               if (s.platform !== platformId) return false;
-               const s_pid = String(s.platform_user_id || "").toLowerCase();
-               const c_pid = String(conn.platform_user_id || "").toLowerCase();
-               const c_page = String(conn.page_id || "").toLowerCase();
-               const s_username = String(s.username || "").toLowerCase();
-               const c_username = String(conn.username || conn.page_name || "").toLowerCase();
-               
-               return (s_pid && c_pid && s_pid === c_pid) ||
-                      (s_pid && c_page && s_pid === c_page) ||
-                      (s_username && c_username && s_username === c_username) ||
-                      (s.id === conn.id);
-             });
- 
-             // Use media proxy for profile images to handle expiration
-             const rawPhoto = accountStats?.profile_picture || conn.profile_image_url || conn.profile_picture || "";
-             const displayPhoto = getProxyUrl(rawPhoto);
- 
-             return {
-                id: conn.id,
-                page_name: accountStats?.username || conn.page_name || conn.username,
-                platform_user_id: conn.platform_user_id,
-                profile_image_url: displayPhoto,
-                followers_count: Number(accountStats?.followers_count ?? conn.followers_count ?? 0),
-                posts_count: Number(accountStats?.posts_count ?? conn.posts_count ?? 0),
-                page_id: conn.page_id,
-                username: accountStats?.username || conn.username,
-                token_expires_at: conn.token_expires_at,
-                isExpiringSoon: conn.isExpiringSoon,
-                daysUntilExpiry: conn.daysUntilExpiry,
-                is_primary: conn.is_primary,
-              };
-           });
+          const rawConns = (accountsByPlatform[platformId] || []);
+          if (platformId === 'youtube' && rawConns.length === 0) {
+            rawConns.push(...(accountsByPlatform['google'] || []));
+          }
+
+          const platformSocialStats = stats.filter(s => s.platform === platformId || (platformId === 'youtube' && s.platform === 'google'));
+
+          const platformAccounts: any[] = rawConns.map((conn) => {
+            const accountStats = platformSocialStats.find(s => {
+              const s_pid = String(s.platform_user_id || "").toLowerCase();
+              const c_pid = String(conn.platform_user_id || "").toLowerCase();
+              const c_page = String(conn.page_id || "").toLowerCase();
+              const s_username = String(s.username || "").toLowerCase();
+              const c_username = String(conn.username || conn.page_name || "").toLowerCase();
+              
+              return (s_pid && c_pid && s_pid === c_pid) ||
+                     (s_pid && c_page && s_pid === c_page) ||
+                     (s_username && c_username && s_username === c_username) ||
+                     (s.id === conn.id);
+            }) || platformSocialStats[0];
+
+            const rawPhoto = accountStats?.profile_picture || conn.profile_image_url || conn.profile_picture || "";
+            const displayPhoto = getProxyUrl(rawPhoto);
+
+            return {
+              id: conn.id,
+              page_name: conn.page_name || accountStats?.username || conn.username || (platformId === 'threads' ? 'webradiovitoriaa' : 'Conta Conectada'),
+              platform_user_id: conn.platform_user_id,
+              profile_image_url: displayPhoto,
+              followers_count: Number(accountStats?.followers_count ?? conn.followers_count ?? 0),
+              posts_count: Number(accountStats?.posts_count ?? conn.posts_count ?? 0),
+              page_id: conn.page_id,
+              username: accountStats?.username || conn.username,
+              token_expires_at: conn.token_expires_at,
+              isExpiringSoon: conn.isExpiringSoon,
+              daysUntilExpiry: conn.daysUntilExpiry,
+              is_primary: conn.is_primary,
+            };
+          });
+
+          if (platformAccounts.length === 0 && platformSocialStats.length > 0) {
+            platformSocialStats.forEach(st => {
+              const rawPhoto = st.profile_picture || "";
+              platformAccounts.push({
+                id: st.id || `stat-${platformId}-${st.username || '1'}`,
+                page_name: st.username || (platformId === 'threads' ? 'webradiovitoriaa' : 'Conta Conectada'),
+                platform_user_id: st.platform_user_id,
+                profile_image_url: getProxyUrl(rawPhoto),
+                followers_count: Number(st.followers_count || (st as any).followers || 0),
+                posts_count: Number(st.posts_count || 0),
+                username: st.username,
+                is_primary: true
+              });
+            });
+          }
 
           return (
             <SocialNetworkCard
