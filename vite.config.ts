@@ -1,11 +1,20 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import https from "https";
+import http from "http";
 import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const supabaseTarget = env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+  const proxyAgent = new (supabaseTarget.startsWith('http:') ? http : https).Agent({
+    keepAlive: true,
+    family: 4,
+    timeout: 30000,
+  });
+
   return {
     server: {
       host: true,
@@ -24,10 +33,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/supabase': {
-          target: env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co',
+          target: supabaseTarget,
           changeOrigin: true,
           secure: false,
           ws: true,
+          agent: proxyAgent,
           timeout: 180000,
           proxyTimeout: 180000,
           rewrite: (path) => path.replace(/^\/supabase/, ''),

@@ -74,15 +74,17 @@ export const SparklineCard = ({
         </defs>
         <path d={areaD} fill={`url(#spark-${id})`} />
         <path d={pathD} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        {hoverIndex !== null && (
+        {hoverIndex !== null && points[hoverIndex] && (
           <>
             <circle cx={points[hoverIndex].x} cy={points[hoverIndex].y} r="3" fill={color} stroke="#0f172a" strokeWidth="1.5" />
             <line x1={points[hoverIndex].x} y1={0} x2={points[hoverIndex].x} y2={height} stroke={color} strokeWidth="0.5" strokeDasharray="2,2" opacity={0.4} />
           </>
         )}
-        <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="2" fill={color} />
+        {points.length > 0 && points[points.length - 1] && (
+          <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="2" fill={color} />
+        )}
       </svg>
-      {hoverIndex !== null && (
+      {hoverIndex !== null && points[hoverIndex] && (
         <div
           className="absolute z-50 pointer-events-none"
           style={{
@@ -92,7 +94,7 @@ export const SparklineCard = ({
         >
           <div className="bg-[#0f172a] border border-border/60 rounded-md px-2 py-1 shadow-xl backdrop-blur-sm">
             <p className="text-xs font-bold text-white whitespace-nowrap">
-              {data[hoverIndex].toLocaleString('pt-BR')}
+              {data[hoverIndex]?.toLocaleString('pt-BR')}
             </p>
             {labels?.[hoverIndex] && (
               <p className="text-[9px] text-muted-foreground whitespace-nowrap">
