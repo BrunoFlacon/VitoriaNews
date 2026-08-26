@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, useMemo, useCallback, startTransition } from "react";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { useToast } from "@/hooks/use-toast";
 import { useWebPushNotifications } from "@/hooks/useWebPushNotifications";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
@@ -22,30 +23,30 @@ import { MobileNav } from "@/components/dashboard/MobileNav";
 import { DashboardHomeView } from "@/components/dashboard/DashboardHomeView";
 import { DashboardSkeleton } from "@/components/dashboard/DashboardSkeleton";
 
-// Lazy load non-critical components
-const NotificationsPanel = lazy(() => import("@/components/dashboard/NotificationsPanel").then(m => ({ default: m.NotificationsPanel })));
-const SystemFooter = lazy(() => import("@/components/SystemFooter").then(m => ({ default: m.SystemFooter })));
+// Lazy load non-critical components with automatic retry
+const NotificationsPanel = lazyWithRetry(() => import("@/components/dashboard/NotificationsPanel").then(m => ({ default: m.NotificationsPanel })));
+const SystemFooter = lazyWithRetry(() => import("@/components/SystemFooter").then(m => ({ default: m.SystemFooter })));
 
 // Views lazy-loaded
-const CreatePostPanel = lazy(() => import("@/components/dashboard/CreatePostPanel"));
-const CalendarView = lazy(() => import("@/components/dashboard/CalendarView").then(m => ({ default: m.CalendarView })));
-const AdvancedAnalytics = lazy(() => import("@/components/dashboard/AdvancedAnalytics").then(m => ({ default: m.AdvancedAnalytics })));
-const StoriesLivesView = lazy(() => import("@/components/dashboard/StoriesLivesView").then(m => ({ default: m.StoriesLivesView })));
-const DocumentsView = lazy(() => import("@/components/dashboard/DocumentsView").then(m => ({ default: m.DocumentsView })));
-const MessagingView = lazy(() => import("@/components/dashboard/MessagingView").then(m => ({ default: m.MessagingView })));
-const SettingsView = lazy(() => import("@/components/dashboard/SettingsView").then(m => ({ default: m.SettingsView })));
-const MediaGalleryView = lazy(() => import("@/components/dashboard/MediaGalleryView").then(m => ({ default: m.MediaGalleryView })));
-const NotificationsFullView = lazy(() => import("@/components/dashboard/NotificationsFullView").then(m => ({ default: m.NotificationsFullView })));
-const NewsPortal = lazy(() => import("@/components/dashboard/NewsPortal"));
-const PortalSettingsWrapper = lazy(() => import("@/components/dashboard/settings/PortalSettingsWrapper").then(m => ({ default: m.PortalSettingsWrapper })));
-const ManualView = lazy(() => import("@/components/dashboard/ManualView").then(m => ({ default: m.ManualView })));
-const RobotBuilder = lazy(() => import("./RobotBuilder"));
-const CronMonitorView = lazy(() => import("@/components/dashboard/CronMonitorView").then(m => ({ default: m.CronMonitorView })));
-const SocialNetworksView = lazy(() => import("@/components/dashboard/SocialNetworksView").then(m => ({ default: m.SocialNetworksView })));
-const TrendsView = lazy(() => import("@/components/dashboard/TrendsView"));
-const PlatformPreview = lazy(() => import("@/components/dashboard/PlatformPreview"));
-const FloatingWhatsApp = lazy(() => import("@/components/dashboard/FloatingWhatsApp").then(m => ({ default: m.FloatingWhatsApp })));
-const CoverStudioView = lazy(() => import("@/components/dashboard/studio/CoverStudioView").then(m => ({ default: m.CoverStudioView })));
+const CreatePostPanel = lazyWithRetry(() => import("@/components/dashboard/CreatePostPanel"));
+const CalendarView = lazyWithRetry(() => import("@/components/dashboard/CalendarView").then(m => ({ default: m.CalendarView })));
+const AdvancedAnalytics = lazyWithRetry(() => import("@/components/dashboard/AdvancedAnalytics").then(m => ({ default: m.AdvancedAnalytics })));
+const StoriesLivesView = lazyWithRetry(() => import("@/components/dashboard/StoriesLivesView").then(m => ({ default: m.StoriesLivesView })));
+const DocumentsView = lazyWithRetry(() => import("@/components/dashboard/DocumentsView").then(m => ({ default: m.DocumentsView })));
+const MessagingView = lazyWithRetry(() => import("@/components/dashboard/MessagingView").then(m => ({ default: m.MessagingView })));
+const SettingsView = lazyWithRetry(() => import("@/components/dashboard/SettingsView").then(m => ({ default: m.SettingsView })));
+const MediaGalleryView = lazyWithRetry(() => import("@/components/dashboard/MediaGalleryView").then(m => ({ default: m.MediaGalleryView })));
+const NotificationsFullView = lazyWithRetry(() => import("@/components/dashboard/NotificationsFullView").then(m => ({ default: m.NotificationsFullView })));
+const NewsPortal = lazyWithRetry(() => import("@/components/dashboard/NewsPortal"));
+const PortalSettingsWrapper = lazyWithRetry(() => import("@/components/dashboard/settings/PortalSettingsWrapper").then(m => ({ default: m.PortalSettingsWrapper })));
+const ManualView = lazyWithRetry(() => import("@/components/dashboard/ManualView").then(m => ({ default: m.ManualView })));
+const RobotBuilder = lazyWithRetry(() => import("./RobotBuilder"));
+const CronMonitorView = lazyWithRetry(() => import("@/components/dashboard/CronMonitorView").then(m => ({ default: m.CronMonitorView })));
+const SocialNetworksView = lazyWithRetry(() => import("@/components/dashboard/SocialNetworksView").then(m => ({ default: m.SocialNetworksView })));
+const TrendsView = lazyWithRetry(() => import("@/components/dashboard/TrendsView"));
+const PlatformPreview = lazyWithRetry(() => import("@/components/dashboard/PlatformPreview"));
+const FloatingWhatsApp = lazyWithRetry(() => import("@/components/dashboard/FloatingWhatsApp").then(m => ({ default: m.FloatingWhatsApp })));
+const CoverStudioView = lazyWithRetry(() => import("@/components/dashboard/studio/CoverStudioView").then(m => ({ default: m.CoverStudioView })));
 
 const ViewLoader = () => (
   <div className="flex items-center justify-center py-10 min-h-[200px]">
@@ -57,7 +58,7 @@ const ViewLoader = () => (
 );
 
 // WhatsApp Hub View
-const WhatsAppHubView = lazy(() => import("@/components/dashboard/whatsapp/WhatsAppHubView").then(m => ({ default: m.WhatsAppHubView })));
+const WhatsAppHubView = lazyWithRetry(() => import("@/components/dashboard/whatsapp/WhatsAppHubView").then(m => ({ default: m.WhatsAppHubView })));
 
 const Dashboard = () => {
   const { logout, user } = useAuth();

@@ -36,6 +36,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Uncaught error:", error, errorInfo);
+    if (error && isChunkError(error)) {
+      const lastReload = sessionStorage.getItem('chunk_reload_timestamp');
+      const now = Date.now();
+      if (!lastReload || now - Number(lastReload) > 10000) {
+        sessionStorage.setItem('chunk_reload_timestamp', String(now));
+        window.location.reload();
+      }
+    }
   }
 
   private handleReset = () => {
