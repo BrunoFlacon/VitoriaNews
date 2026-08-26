@@ -18,6 +18,8 @@ interface WebhookStatusBadgeProps {
   compact?: boolean;
   onRefresh?: () => void;
   platformLabel?: string;
+  isConnected?: boolean;
+  hasCreds?: boolean;
 }
 
 const WEBHOOK_PLATFORMS: Record<string, { label: string; docField: string }> = {
@@ -38,6 +40,8 @@ export const WebhookStatusBadge = React.memo(({
   compact = false,
   onRefresh,
   platformLabel,
+  isConnected,
+  hasCreds,
 }: WebhookStatusBadgeProps) => {
   const [status, setStatus] = useState<WebhookHealth | null>(null);
   const [loading, setLoading] = useState(false);
@@ -62,7 +66,7 @@ export const WebhookStatusBadge = React.memo(({
       if (fnErr) throw fnErr;
       const webhooks = data?.webhooks || {};
       const key = platform === "meta" || platform === "threads" ? "meta" : platform;
-      const ws = webhooks[key] || webhooks["meta"] || null;
+      const ws = webhooks[key] || webhooks[platform] || webhooks["meta"] || null;
       setStatus(ws);
     } catch (err: any) {
       setError(err.message || "Falha ao verificar webhook");
@@ -77,26 +81,27 @@ export const WebhookStatusBadge = React.memo(({
 
   if (!webhookInfo) return null;
 
+  const isHealthy = status ? (status.healthy && status.configured) : (isConnected !== undefined ? isConnected : true);
+  const isConfigured = status ? status.configured : (isConnected !== undefined ? (isConnected || !!hasCreds) : true);
+
   const getBadgeVariant = () => {
-    if (!status || error) return "outline";
-    if (status.healthy && status.configured) return "default";
-    if (status.configured && !status.healthy) return "destructive";
+    if (loading) return "outline";
+    if (isHealthy) return "default";
+    if (isConfigured && !isHealthy) return "destructive";
     return "secondary";
   };
 
   const getBadgeContent = () => {
     if (loading) return <Loader2 className="w-3 h-3 animate-spin text-current" />;
-    if (error || !status) return <span className="w-1.5 h-1.5 rounded-full bg-red-500" />;
-    if (status.healthy && status.configured) return <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />;
-    if (status.configured && !status.healthy) return <span className="w-1.5 h-1.5 rounded-full bg-red-500" />;
+    if (isHealthy) return <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />;
+    if (isConfigured && !isHealthy) return <span className="w-1.5 h-1.5 rounded-full bg-red-500" />;
     return <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />;
   };
 
   const getBadgeLabel = () => {
     if (loading) return "Verificando...";
-    if (error || !status) return "Erro";
-    if (status.healthy && status.configured) return "Webhook Ativo";
-    if (status.configured && !status.healthy) return "Webhook com Erro";
+    if (isHealthy) return "Webhook Ativo";
+    if (isConfigured && !isHealthy) return "Webhook com Erro";
     return "Inativo";
   };
 

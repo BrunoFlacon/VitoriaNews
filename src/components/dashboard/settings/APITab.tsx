@@ -269,7 +269,14 @@ export const APITab = memo(({
 
                             {/* Webhook status badge inline */}
                             {["facebook","instagram","threads","whatsapp","telegram","twitter","tiktok","linkedin","meta_ads"].includes(config.id) && (
-                              <WebhookStatusBadge platform={config.id === "meta_ads" || config.id === "threads" ? "meta" : config.id} userId={user?.id} compact platformLabel={config.id === "threads" ? "Threads" : undefined} />
+                              <WebhookStatusBadge
+                                platform={config.id === "meta_ads" || config.id === "threads" ? "meta" : config.id}
+                                userId={user?.id}
+                                compact
+                                platformLabel={config.id === "threads" ? "Threads" : undefined}
+                                isConnected={isEffectivelyConnected}
+                                hasCreds={hasCreds}
+                              />
                             )}
 
                             {/* Credenciais Salvas / Pendente de Conexão (yellow): has creds but not yet connected */}
