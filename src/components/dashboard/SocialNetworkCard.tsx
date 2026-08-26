@@ -2,7 +2,7 @@ import React, { forwardRef, useState, useEffect, useRef, memo } from "react";
 
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Plus, Settings, Loader2, Star, User, X, Unplug } from "lucide-react";
+import { Check, Plus, Settings, Loader2, Star, User, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { socialPlatforms } from "@/components/icons/platform-metadata";
 import { SafeImage } from "@/components/ui/SafeImage";
@@ -70,7 +70,6 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
     const Icon = platform.icon;
 
     const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? accounts[0];
-    const hasAccountData = !!selectedAccount && (!!selectedAccount.profile_image_url || !!selectedAccount.page_name || !!selectedAccount.username);
 
     const handleGearClick = (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -111,9 +110,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
           "glass-card rounded-2xl p-5 border transition-all duration-300 cursor-pointer group relative",
           isConnected
             ? `${platformColors[platform.id]?.border || "border-green-500/30"} ${platformColors[platform.id]?.bg || "bg-green-500/5"}`
-            : hasAccountData
-              ? `${platformColors[platform.id]?.border || "border-muted"} ${platformColors[platform.id]?.bg || "bg-muted/5"} opacity-70`
-              : "border-border hover:border-primary/30"
+            : "border-border hover:border-primary/30"
         )}
         onClick={() => (isConnected ? onDisconnect() : onConnect())}
       >
@@ -123,9 +120,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
             <div
               className={cn(
                 "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 relative",
-                isConnected && !selectedAccount?.profile_image_url ? platform.color
-                  : hasAccountData ? platform.color
-                  : "bg-muted/40"
+                isConnected && !selectedAccount?.profile_image_url ? platform.color : "bg-muted/40"
               )}
               style={{
                 // Strong diagonal shadow like the Snapchat reference
@@ -134,15 +129,12 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                   : "4px 5px 10px rgba(0,0,0,0.35)",
               }}
             >
-              {(isConnected || hasAccountData) && selectedAccount?.profile_image_url ? (
+              {isConnected && selectedAccount?.profile_image_url ? (
                 <>
                   <SafeImage
                     src={selectedAccount.profile_image_url}
                     alt={selectedAccount.page_name || platform.name}
-                    className={cn(
-                      "w-full h-full rounded-2xl object-cover",
-                      !isConnected && "grayscale-[50%] opacity-80"
-                    )}
+                    className="w-full h-full rounded-2xl object-cover"
                     referrerPolicy="no-referrer"
                     isExternal
                     placeholderIcon={
@@ -162,8 +154,8 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                 </>
               ) : (
                 <Icon
-                  className={cn("w-8 h-8", isConnected || hasAccountData ? "text-white" : "text-muted-foreground")}
-                  data-active={isConnected || hasAccountData}
+                  className={cn("w-8 h-8", isConnected ? "text-white" : "text-muted-foreground")}
+                  data-active={isConnected}
                   style={{
                     filter: "drop-shadow(3px 4px 3px rgba(0,0,0,0.50))",
                   }}
@@ -178,9 +170,7 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                   ? "Conectando..."
                   : isConnected
                     ? (selectedAccount?.page_name || (selectedAccount?.username ? `@${selectedAccount.username}` : pageName || "Conectado"))
-                    : hasAccountData
-                      ? (selectedAccount?.page_name || (selectedAccount?.username ? `@${selectedAccount.username}` : pageName || "Desconectado"))
-                      : "Clique para conectar"}
+                    : "Clique para conectar"}
               </p>
               {isConnected && selectedAccount && (
                 <div className="flex items-center gap-3 mt-1.5">
@@ -228,16 +218,12 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
                 ? "bg-muted text-muted-foreground"
                 : isConnected
                   ? `${platformColors[platform.id]?.bg || "bg-green-500/10"} ${platformColors[platform.id]?.text || "text-green-500"}`
-                  : hasAccountData
-                    ? "bg-orange-500/10 text-orange-400/70"
-                    : "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground"
             )}>
               {isConnecting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : isConnected ? (
                 <Check className="w-4 h-4" />
-              ) : hasAccountData ? (
-                <Unplug className="w-4 h-4" />
               ) : (
                 <Plus className="w-4 h-4" />
               )}

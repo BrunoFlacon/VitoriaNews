@@ -46,17 +46,22 @@ export const SocialNetworksView = memo(() => {
   const isConnected = useCallback(
     (platformId: string) => {
       if (platformId === 'youtube' || platformId === 'google') {
-        return connections.some((c) => (c.platform === 'youtube' || c.platform === 'google') && c.is_connected);
+        return (
+          connections.some((c) => (c.platform === 'youtube' || c.platform === 'google') && c.is_connected) ||
+          stats.some((s) => s.platform === 'youtube' || s.platform === 'google')
+        );
       }
-      return connections.some((c) => c.platform === platformId && c.is_connected);
+      return (
+        connections.some((c) => c.platform === platformId && c.is_connected) ||
+        stats.some((s) => s.platform === platformId)
+      );
     },
-    [connections]
+    [connections, stats]
   );
 
   const getPageName = useCallback(
     (platformId: string) => {
-      const conn = connections.find((c) => (c.platform === platformId || (platformId === 'youtube' && c.platform === 'google')) && c.is_connected)
-        || connections.find((c) => (c.platform === platformId || (platformId === 'youtube' && c.platform === 'google')));
+      const conn = connections.find((c) => (c.platform === platformId || (platformId === 'youtube' && c.platform === 'google')) && c.is_connected);
       const relatedStats = stats.find(s => s.platform === platformId || (platformId === 'youtube' && s.platform === 'google'));
       return relatedStats?.username || conn?.page_name || conn?.username || (platformId === 'threads' ? "webradiovitoriaa" : null);
     },
@@ -154,7 +159,7 @@ export const SocialNetworksView = memo(() => {
       </motion.div>
 
       {/* Empty state if no platforms exist */}
-      {!loading && connections.length === 0 && connectedCount === 0 && (
+      {!loading && connectedCount === 0 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
