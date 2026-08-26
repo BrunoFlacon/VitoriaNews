@@ -160,22 +160,64 @@ export const APITab = memo(({
                 const isTool = config.type === 'tool' || !config.oauthSupported;
                 const isEffectivelyConnected = rawPlatformConnections.length > 0 || isVerifiedFinal || (isTool && hasCreds);
 
-                // If no explicit connections row exists but socialStats or credentials confirms connection, create fallback display profile card
-                const fallbackStats = socialStats.find(s => s.platform === config.id || (config.id === 'youtube' && s.platform === 'google'));
-                const platformConnections = rawPlatformConnections.length > 0
-                  ? rawPlatformConnections
-                  : (isEffectivelyConnected && !isTool)
-                    ? [{
-                        id: `fallback-${config.id}`,
-                        platform: config.id,
-                        page_name: fallbackStats?.username || fallbackStats?.platform_user_id || (config.id === 'youtube' ? 'Canal do YouTube' : `${config.name} Conectado`),
-                        profile_picture: fallbackStats?.profile_picture || "",
-                        followers_count: fallbackStats?.followers_count || 0,
-                        posts_count: fallbackStats?.posts_count || 0,
-                        is_connected: true,
-                        is_fallback: true
-                      }]
-                    : [];
+                const platformSocialStats = socialStats.filter(s =>
+                  s.platform === config.id || (config.id === 'youtube' && s.platform === 'google')
+                );
+
+                // Merge rawPlatformConnections with platformSocialStats so ALL channels/profiles connected show up
+                const platformConnectionsMap = new Map<string, any>();
+
+                rawPlatformConnections.forEach(c => {
+                  const key = c.platform_user_id || c.page_id || c.id;
+                  platformConnectionsMap.set(key, { ...c });
+                });
+
+                platformSocialStats.forEach(stat => {
+                  const key = stat.platform_user_id || stat.username || stat.id;
+                  if (!platformConnectionsMap.has(key)) {
+                    platformConnectionsMap.set(key, {
+                      id: stat.id || `stat-${config.id}-${key}`,
+                      platform: config.id,
+                      platform_user_id: stat.platform_user_id || stat.username,
+                      page_name: stat.username || (config.id === 'youtube' ? 'Canal do YouTube' : `${config.name} Conectado`),
+                      profile_picture: stat.profile_picture || "",
+                      followers_count: stat.followers_count || (stat as any).followers || 0,
+                      posts_count: stat.posts_count || (stat?.metadata as any)?.video_count || (stat?.metadata as any)?.videoCount || 0,
+                      is_connected: true,
+                      is_fallback: true
+                    });
+                  } else {
+                    const existing = platformConnectionsMap.get(key);
+                    if (!existing.followers_count && (stat.followers_count || (stat as any).followers)) {
+                      existing.followers_count = stat.followers_count || (stat as any).followers;
+                    }
+                    if (!existing.posts_count && (stat.posts_count || (stat?.metadata as any)?.video_count)) {
+                      existing.posts_count = stat.posts_count || (stat?.metadata as any)?.video_count;
+                    }
+                    if (!existing.profile_picture && stat.profile_picture) {
+                      existing.profile_picture = stat.profile_picture;
+                    }
+                    if (!existing.page_name && stat.username) {
+                      existing.page_name = stat.username;
+                    }
+                  }
+                });
+
+                let platformConnections = Array.from(platformConnectionsMap.values());
+
+                if (platformConnections.length === 0 && isEffectivelyConnected && !isTool) {
+                  const fallbackStats = platformSocialStats[0];
+                  platformConnections = [{
+                    id: `fallback-${config.id}`,
+                    platform: config.id,
+                    page_name: fallbackStats?.username || fallbackStats?.platform_user_id || (config.id === 'youtube' ? 'Canal do YouTube' : `${config.name} Conectado`),
+                    profile_picture: fallbackStats?.profile_picture || "",
+                    followers_count: fallbackStats?.followers_count || (fallbackStats as any)?.followers || 0,
+                    posts_count: fallbackStats?.posts_count || (fallbackStats?.metadata as any)?.video_count || 0,
+                    is_connected: true,
+                    is_fallback: true
+                  }];
+                }
 
                 const hasConnections = platformConnections.length > 0;
 
@@ -588,16 +630,25 @@ export const APITab = memo(({
 
                                     // WhatsApp metrics are independent from Facebook — use only WA-native data
                                     const displayFollowers = (config.id === 'telegram' || config.id === 'whatsapp')
-                                      ? (totalPlatformMembers || Number(stats?.followers_count ?? 0))
-                                      : Number(stats?.followers_count ?? conn.followers_count ?? 0);
+                                      ? (totalPlatformMembers || Number(stats?.followers_count || (stats as any)?.followers || conn.followers_count || (conn as any)?.followers || 0))
+                                      : Number(stats?.followers_count || (stats as any)?.followers || conn.followers_count || (conn as any)?.followers || 0);
 
                                     // Statistics for WhatsApp (Bot messages sent / posts via bot)
                                     const waMetadata = (stats?.metadata as any) || {};
                                     const displayPosts = config.id === 'whatsapp'
                                       ? Number(waMetadata.official_posts_count ?? waMetadata.bot_posts_count ?? stats?.posts_count ?? conn.posts_count ?? 0)
                                       : (config.id === 'youtube')
-                                        ? Number(stats?.posts_count ?? stats?.metadata?.video_count ?? 0)
-                                        : Number(stats?.posts_count ?? conn.posts_count ?? 0);
+                                        ? Number(
+                                            stats?.posts_count ||
+                                            (stats?.metadata as any)?.video_count ||
+                                            (stats?.metadata as any)?.videos_count ||
+                                            (stats?.metadata as any)?.videoCount ||
+                                            conn.posts_count ||
+                                            (conn?.metadata as any)?.video_count ||
+                                            (conn?.metadata as any)?.videoCount ||
+                                            0
+                                          )
+                                        : Number(stats?.posts_count || conn.posts_count || 0);
 
                                     return (
                                       <div key={conn.id} className="space-y-4">

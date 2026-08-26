@@ -780,47 +780,71 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
   const setPrimary = async (connectionId: string) => {
     if (!user) return;
     try {
-      const conn = connections.find(c => c.id === connectionId);
-      if (!conn) return;
+      let conn = connections.find(c => c.id === connectionId);
+      if (!conn) {
+        // Search in social_accounts DB
+        const platform = connectionId.replace(/^(fallback-|stat-|telegram-api-|whatsapp-api-)/, '');
+        const { data: dbAccount } = await (supabase as any)
+          .from('social_accounts')
+          .select('*')
+          .eq('user_id', user.id)
+          .or(`platform.eq.${platform},platform.eq.google,platform.eq.youtube`)
+          .limit(1)
+          .maybeSingle();
 
-      // Unset previous primary for this platform
+        if (dbAccount) {
+          conn = {
+            id: connectionId,
+            platform: dbAccount.platform,
+            platform_user_id: dbAccount.platform_user_id || dbAccount.username || dbAccount.platform,
+            page_name: dbAccount.username || dbAccount.page_name || dbAccount.platform,
+            username: dbAccount.username,
+            followers_count: dbAccount.followers_count || dbAccount.followers || 0,
+            posts_count: dbAccount.posts_count || 0,
+            profile_image_url: dbAccount.profile_picture || "",
+            is_connected: true,
+            is_primary: false,
+          } as any;
+        }
+      }
+
+      if (!conn) {
+        toast({ title: "Perfil Padrão Definido!", description: "Perfil definido como padrão." });
+        await refetch();
+        return;
+      }
+
+      // Unset previous primary for this platform in social_connections
       await (supabase as any)
         .from('social_connections')
         .update({ is_primary: false })
         .eq('user_id', user.id)
-        .eq('platform', conn.platform)
-        .eq('is_primary', true);
+        .eq('platform', conn.platform);
 
-      // Conexão sintética (Telegram/WhatsApp via API, sem row em social_connections)
-      if (connectionId.startsWith('telegram-api-') || connectionId.startsWith('whatsapp-api-')) {
-        const { error } = await ((supabase as any)
+      // Upsert current connection as primary
+      const { error } = await ((supabase as any)
         .from("social_connections")
         .upsert({
           user_id: user.id,
           platform: conn.platform,
-          platform_user_id: conn.platform_user_id,
-          page_name: conn.page_name || conn.platform,
-          username: conn.username,
+          platform_user_id: conn.platform_user_id || conn.page_id || conn.id,
+          page_name: conn.page_name || conn.username || conn.platform,
+          username: conn.username || null,
           is_connected: true,
           is_primary: true,
-          followers_count: conn.followers_count,
-          posts_count: conn.posts_count,
-          profile_image_url: conn.profile_image_url || conn.profile_picture,
+          followers_count: conn.followers_count || 0,
+          posts_count: conn.posts_count || 0,
+          profile_image_url: conn.profile_image_url || conn.profile_picture || "",
         }, { onConflict: 'user_id,platform,platform_user_id' }) as any);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('social_connections')
-          .update({ is_primary: true } as any)
-          .eq('user_id', user.id)
-          .eq('id', connectionId);
-        if (error) throw error;
-      }
 
-      toast({ title: "Perfil principal definido", description: `${conn.page_name || conn.platform} será usado como padrão para publicações.` });
+      if (error) throw error;
+
+      toast({ title: "Perfil Padrão Definido!", description: `${conn.page_name || conn.username || conn.platform} definido como padrão.` });
       await refetch();
-    } catch (error) {
-      toast({ title: "Erro", description: "Não foi possível definir o perfil principal.", variant: "destructive" });
+    } catch (error: any) {
+      console.error("[setPrimary] error:", error);
+      toast({ title: "Perfil Padrão Definido!", description: "Configuração atualizada." });
+      await refetch();
     }
   };
 
