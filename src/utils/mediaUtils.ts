@@ -37,7 +37,7 @@ export const encodeStoragePath = (path: string): string => {
 export const getMediaUrl = (raw: string, defaultBucket: string = "media") => {
   if (!raw) return "";
 
-  // Fix Docker-internal hostnames (supabase-kong:8000, kong:8000) to external URL
+  let url = raw;
   const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
   if (url.includes('supabase-kong:8000') || url.includes('kong:8000')) {
     const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
