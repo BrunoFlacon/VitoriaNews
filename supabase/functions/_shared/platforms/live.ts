@@ -1,3 +1,5 @@
+import { crypto } from "https://deno.land/std@0.177.0/crypto/mod.ts";
+
 export interface LiveStreamPayload {
   platform: 'youtube' | 'facebook';
   title: string;
@@ -5,11 +7,15 @@ export interface LiveStreamPayload {
 }
 
 export async function createLiveStream(payload: LiveStreamPayload): Promise<any> {
-  // console.log('Creating live stream on:', payload.platform, payload);
+  // Generate cryptographically secure stream key
+  const keyBytes = new Uint8Array(32);
+  crypto.getRandomValues(keyBytes);
+  const streamKey = Array.from(keyBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+
   return {
     success: true,
     platform: payload.platform,
-    stream_key: `live_${Math.random().toString(36).substring(7)}`,
+    stream_key: streamKey,
     playback_url: `https://${payload.platform}.com/live/some_id`,
     timestamp: new Date().toISOString()
   };

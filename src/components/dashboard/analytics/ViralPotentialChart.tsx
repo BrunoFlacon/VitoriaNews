@@ -7,15 +7,12 @@ interface ViralPotentialChartProps {
   data?: { name: string; value: number }[];
 }
 
-const DEFAULT_DATA = [
-  { name: "Não Seguidores", value: 934056 },
-  { name: "Seguidores", value: 143102 },
-];
+const EMPTY_DATA: { name: string; value: number }[] = [];
 
 const COLORS = ["#3b82f6", "#94a3b8"];
 
 export const ViralPotentialChart = ({ data }: ViralPotentialChartProps) => {
-  const chartData = data && data.length > 0 ? data : DEFAULT_DATA;
+  const chartData = data && data.length > 0 ? data : EMPTY_DATA;
   const hasRealData = data !== undefined && data.length > 0;
   const total = chartData.reduce((s, d) => s + d.value, 0);
   const naoSeguidoresPct = total > 0 ? ((chartData[0]?.value ?? 0) / total * 100).toFixed(1) : "0";
@@ -32,6 +29,14 @@ export const ViralPotentialChart = ({ data }: ViralPotentialChartProps) => {
         </div>
       </div>
       <div className="h-64 w-full relative" style={{ isolation: 'isolate' }}>
+        {!hasRealData ? (
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+            <Zap className="w-8 h-8 mb-2 opacity-30" />
+            <p className="text-sm font-medium">Sem dados disponíveis</p>
+            <p className="text-[10px] mt-1">Conecte o Meta para ver potencial viral</p>
+          </div>
+        ) : (
+        <>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -46,7 +51,7 @@ export const ViralPotentialChart = ({ data }: ViralPotentialChartProps) => {
               stroke="none"
             >
               {chartData.map((_, idx) => (
-                <Cell key={`cell-${idx}`} fill={COLORS[idx]} fillOpacity={hasRealData ? 1 : 0.3} />
+                <Cell key={`cell-${idx}`} fill={COLORS[idx]} />
               ))}
             </Pie>
             <RechartsTooltip
@@ -74,6 +79,8 @@ export const ViralPotentialChart = ({ data }: ViralPotentialChartProps) => {
           <span className="text-2xl font-bold text-white">{naoSeguidoresPct}%</span>
           <span className="text-[10px] font-medium text-muted-foreground">Não-Seguidores</span>
         </div>
+        </>
+        )}
       </div>
       <div className="mt-4 space-y-2">
         {chartData.map((entry, idx) => {

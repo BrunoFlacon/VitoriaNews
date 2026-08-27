@@ -7,11 +7,7 @@ interface RetentionFunnelChartProps {
   data?: { name: string; value: number }[];
 }
 
-const DEFAULT_DATA = [
-  { name: "3s", value: 14.7 },
-  { name: "15s", value: 7.8 },
-  { name: "1min", value: 4.2 },
-];
+const EMPTY_DATA: { name: string; value: number }[] = [];
 
 const COLORS = ["#3b82f6", "#5b9afa", "#91c0fb"];
 
@@ -26,7 +22,7 @@ export const RetentionFunnelChart = ({ data }: RetentionFunnelChartProps) => {
   const hasLargeValues = hasRealData && data.some(d => d.value > 1000000);
   const chartData = hasLargeValues
     ? data.map(d => ({ ...d, value: Math.round(d.value / 100000) / 10 }))
-    : (data && data.length > 0 ? data : DEFAULT_DATA);
+    : (data && data.length > 0 ? data : EMPTY_DATA);
 
   return (
     <Card className="p-4 md:p-6 shadow-xl border-border bg-card hover:shadow-2xl transition-shadow">
@@ -40,6 +36,13 @@ export const RetentionFunnelChart = ({ data }: RetentionFunnelChartProps) => {
         </div>
       </div>
       <div className="h-64 w-full">
+        {!hasRealData ? (
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+            <Eye className="w-8 h-8 mb-2 opacity-30" />
+            <p className="text-sm font-medium">Sem dados disponíveis</p>
+            <p className="text-[10px] mt-1">Conecte o Meta para ver dados de retenção</p>
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="4 4" stroke="hsl(222, 30%, 18%)" vertical={false} />
@@ -55,11 +58,12 @@ export const RetentionFunnelChart = ({ data }: RetentionFunnelChartProps) => {
             />
             <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={60}>
               {chartData.map((_, idx) => (
-                <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} fillOpacity={hasRealData ? 0.9 : 0.3} />
+                <Cell key={`cell-${idx}`} fill={COLORS[idx % COLORS.length]} fillOpacity={0.9} />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        )}
       </div>
     </Card>
   );

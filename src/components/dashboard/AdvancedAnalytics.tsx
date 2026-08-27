@@ -214,22 +214,17 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
     staleTime: 5 * 60 * 1000,
   });
 
-  // Pre-process portal articles to compute/simulate views and engagement
+  // Pre-process portal articles — use REAL data only, no simulated views/engagement
   const mergedPortalArticles = useMemo(() => {
     const articlesList = portalArticles || [];
-    return articlesList.map((article: any, index: number) => {
-      const daysAgo = Math.max(1, Math.round((Date.now() - new Date(article.created_at || article.published_at || Date.now()).getTime()) / (24 * 60 * 60 * 1000)));
-      const baseViews = Math.max(100, 15000 - (index * 1200) - (daysAgo * 50));
-      const views = Math.round(Math.max(10, baseViews + Math.random() * 500));
-      const engagement = Math.round(views * (0.05 + Math.random() * 0.03));
-      
+    return articlesList.map((article: any) => {
       return {
         id: article.id,
         title: article.title,
         content: article.title || article.content || "Sem conteúdo",
         platforms: ["site"],
-        views,
-        engagement,
+        views: 0, // Real page views require Google Analytics 4 integration per article URL
+        engagement: 0, // Real engagement requires GA4 events tracking
         publishedAt: article.published_at || article.created_at,
       };
     });

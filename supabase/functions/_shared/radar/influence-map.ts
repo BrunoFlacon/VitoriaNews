@@ -1,15 +1,10 @@
 export async function mapInfluenceNetworks(supabaseClient: any) {
-  // console.log('Mapping influencer networks and narrative spreaders...');
-  // Stub implementation
-  const mockNode = {
-    username: 'political_pundit_01',
-    platform: 'x',
-    influence_score: 88.0,
-    followers: 1250000,
-    engagement_rate: 4.5
-  };
-
-  await supabaseClient.from('influence_nodes').insert([mockNode]);
-
-  return { success: true, mapped: 1 };
+  // STUB: Mapeamento de redes de influência requer APIs reais:
+  // - Twitter/X API v2 user lookup + engagement rate calculation
+  // - Instagram Graph API creator insights
+  // - LinkedIn API organization analytics
+  // NÃO inserimos dados falsos — retornamos vazio até implementação real.
+  
+  console.log('[influence-map] Stub: Influencer network mapping not yet implemented. Skipping.');
+  return { success: true, mapped: 0, reason: 'Influence mapping requires platform APIs — not yet implemented' };
 }

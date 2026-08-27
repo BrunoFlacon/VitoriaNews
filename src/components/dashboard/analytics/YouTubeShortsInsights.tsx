@@ -10,21 +10,17 @@ interface YouTubeShortsInsightsProps {
   spectators?: { newViewers: number; returningViewers: number; subscribers: number };
 }
 
-const DEFAULT_TRAFFIC = [
-  { name: "Pesquisa do YouTube", value: 87.5 },
-  { name: "Páginas de hashtag", value: 8.3 },
-  { name: "Feed dos Shorts", value: 4.2 },
-];
+const EMPTY_TRAFFIC: { name: string; value: number }[] = [];
 const TRAFFIC_COLORS = ["#a855f7", "#60a5fa", "#9ca3af"];
 
 export const YouTubeShortsInsights = ({ funnelData, trafficData, engagementRate, spectators }: YouTubeShortsInsightsProps) => {
-  const funnel = funnelData || { impressions: 624, views: 17, watchTimeHours: 0.15 };
-  const traffic = trafficData && trafficData.length > 0 ? trafficData : DEFAULT_TRAFFIC;
+  const funnel = funnelData || { impressions: 0, views: 0, watchTimeHours: 0 };
+  const traffic = trafficData && trafficData.length > 0 ? trafficData : EMPTY_TRAFFIC;
   const hasTrafficData = trafficData !== undefined && trafficData.length > 0;
   const hasFunnelData = funnelData !== undefined;
   const hasEngagementData = engagementRate !== undefined;
   const hasSpectatorsData = spectators !== undefined;
-  const engRate = engagementRate ?? 38.2;
+  const engRate = engagementRate ?? 0;
   const spec = spectators || { newViewers: 0, returningViewers: 0, subscribers: 0 };
 
   return (

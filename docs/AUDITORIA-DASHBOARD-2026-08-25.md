@@ -45,7 +45,7 @@ Quando qualquer query secundaria (`post_metrics`, `post_metrics_details`, `media
 - `post_metrics` e `post_metrics_details` agora rodam em `Promise.all()` dentro de `try/catch`
 - Query `media` agora tem `try/catch` proprio
 - Query `published_posts` agora tem `try/catch` proprio
-- **Impacto**: Se metrics/media/published_posts falharem, os posts AINDA sao exibidos (sem metricas/detalhes)
+- **Impacto**: Se metrics/media/published_posts falharem, os posts AINDA sao exibidos (sem metrics/detalhes)
 
 #### 2b. refetch shadowed por fetchPosts raw (useScheduledPosts.ts)
 - **Antes**: `refetch: fetchPosts` — chamadas manual nao atualizavam o cache do React Query

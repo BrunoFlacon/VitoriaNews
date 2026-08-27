@@ -1130,7 +1130,7 @@ export const TelegramCard = memo(function TelegramCardRenderer({ content, media,
           </div>
           <div className="tg-text text-[14.5px] leading-snug text-zinc-100 whitespace-pre-wrap mb-2">{content || "Acompanhe as últimas atualizações do hub oficial."}</div>
           <div className="tg-meta flex items-center justify-end gap-1.5 text-[10px] text-zinc-500 font-bold">
-            <Eye className="w-3.5 h-3.5 opacity-60" /> {formatNum(Math.floor((realMetrics?.followers ?? 0) * 0.12))} <span className="ml-1 opacity-60">10:42</span> <CheckCheck className="w-3.5 h-3.5 text-[#4ea4e0]" />
+            <Eye className="w-3.5 h-3.5 opacity-60" /> {formatNum(realMetrics?.views ?? realMetrics?.impressions ?? 0)} <span className="ml-1 opacity-60">10:42</span> <CheckCheck className="w-3.5 h-3.5 text-[#4ea4e0]" />
           </div>
         </div>
       </div>

@@ -937,7 +937,7 @@ async function processPlatform(conn: any, supabase: any) {
       metrics = {
         followers_count: 0,
         media_count: artStats?.length || 0,
-        views_count: (artStats?.filter(a => a.status === 'published').length || 0) * 150
+        views_count: 0 // Google News RSS does not provide view counts
       };
       break;
     }

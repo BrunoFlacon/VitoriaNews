@@ -109,12 +109,14 @@ export const SparklineCard = ({
 };
 
 const randomWalk = (steps: number, trend: number): number[] => {
-  let val = 50 + Math.random() * 20;
-  const result: number[] = [Math.round(val)];
-  for (let i = 1; i < steps; i++) {
-    val += (Math.random() - 0.5) * 12 + trend;
-    val = Math.max(5, Math.min(95, val));
-    result.push(Math.round(val));
+  // Generate deterministic sparkline based on trend direction
+  // No random data — shows a flat line when no real growth data is available
+  const baseValue = trend > 0 ? 55 : trend < 0 ? 45 : 50;
+  const result: number[] = [];
+  for (let i = 0; i < steps; i++) {
+    const progress = i / steps;
+    const val = baseValue + (trend * 10 * progress);
+    result.push(Math.round(Math.max(5, Math.min(95, val))));
   }
   return result;
 };

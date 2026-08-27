@@ -13,10 +13,10 @@ export const PlatformFollowersGrid = memo(({ groupedFollowers = [], dataSource }
   const isDemo = dataSource === "demo" || groupedFollowers.length === 0;
 
   const platformsToDisplay = [
-    { id: "facebook", name: "Facebook", defaultFollowers: 20020, defaultGrowth: 8.5 },
-    { id: "instagram", name: "Instagram", defaultFollowers: 22277, defaultGrowth: 12.4 },
-    { id: "linkedin", name: "LinkedIn", defaultFollowers: 0, defaultGrowth: 0 },
-    { id: "telegram", name: "Telegram", defaultFollowers: 89, defaultGrowth: 4.8 },
+    { id: "facebook", name: "Facebook" },
+    { id: "instagram", name: "Instagram" },
+    { id: "linkedin", name: "LinkedIn" },
+    { id: "telegram", name: "Telegram" },
   ];
 
   return (
@@ -35,10 +35,10 @@ export const PlatformFollowersGrid = memo(({ groupedFollowers = [], dataSource }
 
           // Find matching group from live stats
           const group = groupedFollowers.find((g: any) => g.platform === p.id);
-          const followers = group ? group.totalFollowers : p.defaultFollowers;
+          const followers = group ? group.totalFollowers : 0;
           
-          // Simulated growth
-          const growth = group?.profiles[0]?.growth ?? p.defaultGrowth;
+          // Real growth from API data only — no simulated values
+          const growth = group?.profiles[0]?.growth ?? 0;
           const isPositive = growth > 0;
           const isNeutral = growth === 0;
 

@@ -7,17 +7,12 @@ interface YouTubeEngagementChartProps {
   data?: { name: string; value: number }[];
 }
 
-const DEFAULT_DATA = [
-  { name: "Likes", value: 850 },
-  { name: "Comentários", value: 120 },
-  { name: "Compartilhamentos", value: 45 },
-  { name: "Dislikes", value: 12 },
-];
+const EMPTY_DATA: { name: string; value: number }[] = [];
 
 const COLORS = ["#22c55e", "#f59e0b", "#3b82f6", "#ef4444"];
 
 export const YouTubeEngagementChart = ({ data }: YouTubeEngagementChartProps) => {
-  const chartData = data && data.length > 0 ? data : DEFAULT_DATA;
+  const chartData = data && data.length > 0 ? data : EMPTY_DATA;
   const hasRealData = data !== undefined && data.length > 0;
 
   return (
@@ -32,6 +27,13 @@ export const YouTubeEngagementChart = ({ data }: YouTubeEngagementChartProps) =>
         </div>
       </div>
       <div className="h-64 w-full">
+        {!hasRealData ? (
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+            <Heart className="w-8 h-8 mb-2 opacity-30" />
+            <p className="text-sm font-medium">Sem dados disponíveis</p>
+            <p className="text-[10px] mt-1">Conecte o YouTube para ver engajamento real</p>
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="4 4" stroke="hsl(222, 30%, 18%)" vertical={false} />
@@ -47,11 +49,12 @@ export const YouTubeEngagementChart = ({ data }: YouTubeEngagementChartProps) =>
             />
             <Bar dataKey="value" radius={[4, 4, 0, 0]} maxBarSize={50}>
               {chartData.map((_, idx) => (
-                <Cell key={`cell-${idx}`} fill={COLORS[idx]} fillOpacity={hasRealData ? 0.9 : 0.3} />
+                <Cell key={`cell-${idx}`} fill={COLORS[idx]} fillOpacity={0.9} />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        )}
       </div>
     </Card>
   );

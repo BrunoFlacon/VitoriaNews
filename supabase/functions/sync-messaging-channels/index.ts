@@ -170,7 +170,7 @@ serve(async (req: Request) => {
         await supabase.from("messaging_channels").update({
           profile_picture: profilePicture,
           members_count: membersCount,
-          online_count: Math.floor(membersCount * (0.05 + Math.random() * 0.1)),
+          online_count: 0, // Dados reais de membros online requerem API específica do Telegram — não fabricar
         } as any).eq("id", channel.id);
         results.push({ id: channel.id, success: true });
       } else {

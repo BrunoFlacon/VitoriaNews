@@ -8,28 +8,16 @@ interface YouTubeAudienceChartsProps {
   trafficData?: { name: string; value: number }[];
 }
 
-const DEFAULT_AGE_DATA = [
-  { name: "13-17", value: 10 },
-  { name: "18-24", value: 35 },
-  { name: "25-34", value: 40 },
-  { name: "35-44", value: 10 },
-  { name: "45+", value: 5 },
-];
+const EMPTY_AGE_DATA: { name: string; value: number }[] = [];
 
-const DEFAULT_TRAFFIC_DATA = [
-  { name: "Pesquisa YT", value: 45 },
-  { name: "Sugeridos", value: 25 },
-  { name: "Navegação", value: 15 },
-  { name: "Externo", value: 10 },
-  { name: "Outros", value: 5 },
-];
+const EMPTY_TRAFFIC_DATA: { name: string; value: number }[] = [];
 
 const AGE_COLORS = ["#f87171", "#fb923c", "#fbbf24", "#34d399", "#60a5fa"];
 const TRAFFIC_COLORS = ["#ef4444", "#3b82f6", "#10b981", "#8b5cf6", "#6b7280"];
 
 export const YouTubeAudienceCharts = ({ ageData, trafficData }: YouTubeAudienceChartsProps) => {
-  const ageChart = ageData && ageData.length > 0 ? ageData : DEFAULT_AGE_DATA;
-  const trafficChart = trafficData && trafficData.length > 0 ? trafficData : DEFAULT_TRAFFIC_DATA;
+  const ageChart = ageData && ageData.length > 0 ? ageData : EMPTY_AGE_DATA;
+  const trafficChart = trafficData && trafficData.length > 0 ? trafficData : EMPTY_TRAFFIC_DATA;
   const hasAgeData = ageData !== undefined && ageData.length > 0;
   const hasTrafficData = trafficData !== undefined && trafficData.length > 0;
 
@@ -49,6 +37,14 @@ export const YouTubeAudienceCharts = ({ ageData, trafficData }: YouTubeAudienceC
           </div>
         </div>
         <div className="h-64 w-full relative" style={{ isolation: 'isolate' }}>
+          {!hasAgeData ? (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+              <Users className="w-8 h-8 mb-2 opacity-30" />
+              <p className="text-sm font-medium">Sem dados de audiência</p>
+              <p className="text-[10px] mt-1">Conecte o YouTube Analytics para ver dados</p>
+            </div>
+          ) : (
+          <>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -63,7 +59,7 @@ export const YouTubeAudienceCharts = ({ ageData, trafficData }: YouTubeAudienceC
                 stroke="none"
               >
                 {ageChart.map((_, idx) => (
-                  <Cell key={`cell-${idx}`} fill={AGE_COLORS[idx]} fillOpacity={hasAgeData ? 1 : 0.3} />
+                  <Cell key={`cell-${idx}`} fill={AGE_COLORS[idx]} />
                 ))}
               </Pie>
               <RechartsTooltip
@@ -88,6 +84,8 @@ export const YouTubeAudienceCharts = ({ ageData, trafficData }: YouTubeAudienceC
             <span className="text-lg font-bold text-white">{ageChart.reduce((max, d) => Math.max(max, d.value), 0)}%</span>
             <span className="text-[9px] font-medium text-muted-foreground block">Principal</span>
           </div>
+          </>
+          )}
         </div>
         <div className="mt-4 space-y-1.5">
           {ageChart.map((entry, idx) => {
@@ -114,6 +112,14 @@ export const YouTubeAudienceCharts = ({ ageData, trafficData }: YouTubeAudienceC
           </div>
         </div>
         <div className="h-64 w-full relative" style={{ isolation: 'isolate' }}>
+          {!hasTrafficData ? (
+            <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+              <MapPin className="w-8 h-8 mb-2 opacity-30" />
+              <p className="text-sm font-medium">Sem dados de tráfego</p>
+              <p className="text-[10px] mt-1">Conecte o YouTube Analytics para ver dados</p>
+            </div>
+          ) : (
+          <>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -128,7 +134,7 @@ export const YouTubeAudienceCharts = ({ ageData, trafficData }: YouTubeAudienceC
                 stroke="none"
               >
                 {trafficChart.map((_, idx) => (
-                  <Cell key={`cell-${idx}`} fill={TRAFFIC_COLORS[idx]} fillOpacity={hasTrafficData ? 1 : 0.3} />
+                  <Cell key={`cell-${idx}`} fill={TRAFFIC_COLORS[idx]} />
                 ))}
               </Pie>
               <RechartsTooltip
@@ -155,6 +161,8 @@ export const YouTubeAudienceCharts = ({ ageData, trafficData }: YouTubeAudienceC
             </span>
             <span className="text-[9px] font-medium text-muted-foreground block">Principal</span>
           </div>
+          </>
+          )}
         </div>
         <div className="mt-4 space-y-1.5">
           {trafficChart.map((entry, idx) => {

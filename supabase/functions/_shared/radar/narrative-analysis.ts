@@ -1,15 +1,8 @@
 export async function analyzeNarratives(supabaseClient: any) {
-  // console.log('Classifying dominant narratives using NLP...');
-  // Stub implementation
-  const mockNarrative = {
-    topic: 'Healthcare reform',
-    narrative_type: 'policy debate',
-    sentiment: 'neutral',
-    dominance_score: 82.5,
-    detected_at: new Date().toISOString()
-  };
-
-  await supabaseClient.from('narratives').insert([mockNarrative]);
-
-  return { success: true, count: 1 };
+  // STUB: Análise de narrativas requer pipeline de NLP (OpenAI embeddings + clustering)
+  // ou API dedicada de detecção de narrativas. 
+  // NÃO inserimos dados falsos — retornamos vazio até implementação real.
+  
+  console.log('[narrative-analysis] Stub: NLP narrative analysis not yet implemented. Skipping.');
+  return { success: true, count: 0, reason: 'Narrative analysis requires NLP pipeline — not yet implemented' };
 }

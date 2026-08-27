@@ -7,18 +7,10 @@ interface YouTubePerformanceChartProps {
   data?: { name: string; views: number; watchTime: number }[];
 }
 
-const DEFAULT_DATA = [
-  { name: "Segunda", views: 1200, watchTime: 80 },
-  { name: "Terça", views: 1900, watchTime: 120 },
-  { name: "Quarta", views: 1500, watchTime: 100 },
-  { name: "Quinta", views: 2200, watchTime: 150 },
-  { name: "Sexta", views: 1800, watchTime: 130 },
-  { name: "Sábado", views: 2500, watchTime: 180 },
-  { name: "Domingo", views: 3000, watchTime: 220 },
-];
+const EMPTY_DATA: { name: string; views: number; watchTime: number }[] = [];
 
 export const YouTubePerformanceChart = ({ data }: YouTubePerformanceChartProps) => {
-  const chartData = data && data.length > 0 ? data : DEFAULT_DATA;
+  const chartData = data && data.length > 0 ? data : EMPTY_DATA;
   const hasRealData = data !== undefined && data.length > 0;
 
   return (
@@ -33,6 +25,13 @@ export const YouTubePerformanceChart = ({ data }: YouTubePerformanceChartProps) 
         </div>
       </div>
       <div className="h-64 w-full">
+        {!hasRealData ? (
+          <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+            <TrendingUp className="w-8 h-8 mb-2 opacity-30" />
+            <p className="text-sm font-medium">Sem dados disponíveis</p>
+            <p className="text-[10px] mt-1">Conecte o YouTube para ver métricas reais</p>
+          </div>
+        ) : (
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
             <CartesianGrid strokeDasharray="4 4" stroke="hsl(222, 30%, 18%)" vertical={false} />
@@ -51,10 +50,11 @@ export const YouTubePerformanceChart = ({ data }: YouTubePerformanceChartProps) 
               iconType="circle"
               iconSize={8}
             />
-            <Line yAxisId="left" type="monotone" dataKey="views" name="Visualizações" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 3, fill: "#3b82f6" }} activeDot={{ r: 6 }} strokeOpacity={hasRealData ? 1 : 0.3} />
-            <Line yAxisId="right" type="monotone" dataKey="watchTime" name="Tempo (Horas)" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 3, fill: "#a855f7" }} activeDot={{ r: 6 }} strokeOpacity={hasRealData ? 1 : 0.3} />
+            <Line yAxisId="left" type="monotone" dataKey="views" name="Visualizações" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 3, fill: "#3b82f6" }} activeDot={{ r: 6 }} />
+            <Line yAxisId="right" type="monotone" dataKey="watchTime" name="Tempo (Horas)" stroke="#a855f7" strokeWidth={2.5} dot={{ r: 3, fill: "#a855f7" }} activeDot={{ r: 6 }} />
           </LineChart>
         </ResponsiveContainer>
+        )}
       </div>
     </Card>
   );

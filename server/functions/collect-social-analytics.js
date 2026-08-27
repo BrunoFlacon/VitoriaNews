@@ -72,10 +72,10 @@ async function processPlatform(conn, supabase) {
         if (resp.ok) {
           const data = await resp.json();
           const profilePic = data.picture?.data?.url || conn.profile_image_url || `https://graph.facebook.com/v21.0/${pageId}/picture?type=large`;
-          metrics = {
+            metrics = {
             followers_count: typeof data.followers_count === "number" ? data.followers_count : (data.fan_count || 0),
             media_count: finalPostsCount,
-            views_count: 500 + Math.floor(Math.random() * 1000),
+            views_count: 0, // Requires page_insights permission; see Facebook Graph API /{page}/insights
             profile_picture: profilePic,
           };
         }
@@ -467,9 +467,9 @@ async function processPlatform(conn, supabase) {
               metrics = {
                 followers_count: m.followers_count || 0,
                 media_count: m.tweet_count || 0,
-                views_count: Math.floor(m.followers_count * 1.5) || 0,
+                views_count: 0, // X API v2 does not expose aggregate tweet views at user level
                 profile_picture: data.data.profile_image_url?.replace('_normal', '') || conn.profile_image_url || null,
-                likes: 0,
+                likes: m.like_count || 0,
               };
             }
           }
@@ -550,12 +550,13 @@ async function processPlatform(conn, supabase) {
             metrics = {
               followers_count: data.followers?.total || 0,
               media_count: albumCount + playlistCount,
-              views_count: 5000 + Math.floor(Math.random() * 2000),
+              views_count: 0, // Spotify API does not expose stream/listen counts at profile level
               profile_picture: data.images?.[0]?.url || null,
             };
           }
         } else {
-          metrics = { followers_count: 1200, media_count: 8, views_count: 4500 };
+          // No token — return zeros, not fabricated data
+          metrics = { followers_count: 0, media_count: 0, views_count: 0 };
         }
         break;
       }
@@ -566,7 +567,7 @@ async function processPlatform(conn, supabase) {
         metrics = {
           followers_count: 0,
           media_count: artStats?.length || 0,
-          views_count: (artStats?.filter(a => a.status === 'published').length || 0) * 150,
+          views_count: 0, // Google News RSS does not provide view counts
         };
         break;
       }
@@ -589,7 +590,7 @@ async function processPlatform(conn, supabase) {
           metrics = {
             followers_count: channelCount,
             media_count: msgCount,
-            views_count: msgCount * 10,
+            views_count: 0, // Telegram Bot API does not expose profile/channel view counts
             profile_picture: conn.profile_image_url || null,
           };
         } catch (e) {
@@ -599,16 +600,15 @@ async function processPlatform(conn, supabase) {
       }
 
       // ─── FALLBACK platforms ──────────────────────────────────────
+      // No public API available — return zeros (no fabricated data)
       case "kwai":
       case "rumble":
       case "gettr":
       case "truthsocial": {
         metrics = {
-          followers_count: 1500 + Math.floor(Math.random() * 5000),
-          media_count: 10 + Math.floor(Math.random() * 40),
-          views_count: 2500 + Math.floor(Math.random() * 10000),
-          likes: 400 + Math.floor(Math.random() * 1000),
-          shares: 50 + Math.floor(Math.random() * 200),
+          followers_count: 0,
+          media_count: 0,
+          views_count: 0,
         };
         break;
       }
@@ -630,8 +630,8 @@ async function processPlatform(conn, supabase) {
 
       const finalFollowers = typeof metrics.followers_count === "number" ? Math.round(metrics.followers_count) : (Number(conn.followers_count) || 0);
       const finalPosts = typeof metrics.media_count === "number" ? Math.round(metrics.media_count) : (Number(conn.posts_count) || 0);
-      const finalLikes = typeof metrics.likes === "number" ? Math.round(metrics.likes) : Math.round(finalFollowers * 0.1);
-      const finalShares = typeof metrics.shares === "number" ? Math.round(metrics.shares) : Math.round(finalFollowers * 0.05);
+      const finalLikes = typeof metrics.likes === "number" ? Math.round(metrics.likes) : 0;
+      const finalShares = typeof metrics.shares === "number" ? Math.round(metrics.shares) : 0;
       const finalComments = typeof metrics.comments === "number" ? Math.round(metrics.comments) : 0;
 
       const puid = conn.platform === 'whatsapp'
