@@ -30,7 +30,7 @@ async function hmacSha256Base64(secret: string, data: string): Promise<string> {
 }
 
 async function getConsumerSecret(supabase): Promise<string | null> {
-  const envSecret = Deno.env.get("TWITTER_CONSUMER_SECRET");
+  const envSecret = Deno.env.get("TWITTER_CONSUMER_SECRET") || Deno.env.get("TWITTER_API_SECRET_KEY") || Deno.env.get("TWITTER_CLIENT_SECRET");
   if (envSecret) return envSecret;
   const { data } = await supabase
     .from("api_credentials")
@@ -39,6 +39,8 @@ async function getConsumerSecret(supabase): Promise<string | null> {
     .maybeSingle();
   return data?.credentials?.consumer_secret ||
          data?.credentials?.TWITTER_CONSUMER_SECRET ||
+         data?.credentials?.api_secret_key ||
+         data?.credentials?.api_secret ||
          data?.credentials?.client_secret ||
          null;
 }
