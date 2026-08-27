@@ -278,13 +278,29 @@ export function useApiCredentials() {
       }
 
 
-      const { error } = await supabase
-        .from("api_credentials" as any)
-        .upsert(
-          { user_id: user.id, platform, credentials: finalCreds } as any,
-          { onConflict: "user_id,platform" }
-        );
-      if (error) throw error;
+      let saveError: any = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const { error } = await supabase
+            .from("api_credentials" as any)
+            .upsert(
+              { user_id: user.id, platform, credentials: finalCreds } as any,
+              { onConflict: "user_id,platform" }
+            );
+          if (!error) {
+            saveError = null;
+            break;
+          }
+          saveError = error;
+        } catch (netErr) {
+          saveError = netErr;
+        }
+        if (attempt === 0) {
+          try { await supabase.auth.getSession(); } catch {}
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
+      if (saveError) throw saveError;
       setCredentials(prev => ({ ...prev, [platform]: finalCreds }));
       toast({ title: "Credenciais salvas", description: `${platform} atualizado com sucesso.` });
 
