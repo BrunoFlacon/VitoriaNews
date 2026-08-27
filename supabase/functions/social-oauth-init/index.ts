@@ -216,35 +216,29 @@ serve(async (req: Request) => {
         duration: "permanent"
       });
     } else if (platform === "twitter") {
-      let twitterKey = (getVal("client_id", "TWITTER_CLIENT_ID") || "").trim();
-      if (!twitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
+      let rawTwitterKey = (getVal("client_id", "TWITTER_CLIENT_ID") || "").trim();
+      if (!rawTwitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
 
-      // Smart Auto-Decode for Twitter Client ID
-      // Handles:
-      // 1) Fully base64 string: VGFNck0xWHVsdldCU0h3WWRVZUg6MTpjaQ -> TaMrM1XulvWBSHwYdUeH:1:ci
-      // 2) Partial base64 with suffix: YWIzaVViODJrT0c1Z0tKS2dlc0o:1:ci -> ab3iUb82kOG5gKJKgesJ:1:ci
-      // 3) Raw Twitter Client ID: ab3iUb82kOG5gKJKgesJ:1:ci (remains as-is)
-      try {
-        if (twitterKey.includes(':')) {
-          const parts = twitterKey.split(':');
-          const prefix = parts[0];
-          if (/^[A-Za-z0-9+/=]{20,}$/.test(prefix)) {
-            try {
-              const decodedPrefix = atob(prefix);
-              if (/^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
-                twitterKey = [decodedPrefix, ...parts.slice(1)].join(':');
-              }
-            } catch (_) {}
-          }
-        } else if (/^[A-Za-z0-9+/=]{20,}$/.test(twitterKey)) {
-          try {
-            const decoded = atob(twitterKey);
-            if (decoded.includes(':') || /^[A-Za-z0-9_-]+$/.test(decoded)) {
-              twitterKey = decoded;
-            }
-          } catch (_) {}
+      const safeAtob = (s: string) => {
+        try {
+          const padded = s + '='.repeat((4 - (s.length % 4)) % 4);
+          return atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+        } catch (_) {
+          return null;
         }
-      } catch (_) {}
+      };
+
+      let twitterKey = rawTwitterKey;
+      const fullDecoded = safeAtob(rawTwitterKey);
+      if (fullDecoded && (/^[A-Za-z0-9_-]+(:[0-9]+:[a-z_]+)?$/.test(fullDecoded) || fullDecoded.includes(':'))) {
+        twitterKey = fullDecoded;
+      } else if (rawTwitterKey.includes(':')) {
+        const parts = rawTwitterKey.split(':');
+        const decodedPrefix = safeAtob(parts[0]);
+        if (decodedPrefix && /^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
+          twitterKey = [decodedPrefix, ...parts.slice(1)].join(':');
+        }
+      }
       
       const verifierChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
       let codeVerifier = '';
