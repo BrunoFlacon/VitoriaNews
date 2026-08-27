@@ -87,6 +87,23 @@ export function getProxyUrl(url: string | null | undefined): string {
     url = url.replace(/https?:\/\/(supabase-kong|kong):8000/g, targetBase);
   }
 
+  // Fix legacy or misconfigured storage URLs pointing to the main web domain or old cloud instances
+  if (url.includes('webradiovitoria.com.br/supabase/storage/')) {
+    url = isLocalHost 
+      ? url.replace(/https?:\/\/webradiovitoria\.com\.br\/supabase\/storage\//g, '/supabase/storage/')
+      : url.replace(/https?:\/\/webradiovitoria\.com\.br\/supabase\/storage\//g, `${selfHostedUrl}/storage/`);
+  }
+  if (url.includes('webradiovitoria.com.br/storage/')) {
+    url = isLocalHost
+      ? url.replace(/https?:\/\/webradiovitoria\.com\.br\/storage\//g, '/supabase/storage/')
+      : url.replace(/https?:\/\/webradiovitoria\.com\.br\/storage\//g, `${selfHostedUrl}/storage/`);
+  }
+  if (url.includes('ghtkdkauseesambzqfrd.supabase.co/storage/') || url.includes('yttsmficdfnbvvuhhdmw.supabase.co/storage/')) {
+    url = isLocalHost
+      ? url.replace(/https?:\/\/[a-z0-9]+\.supabase\.co\/storage\//g, '/supabase/storage/')
+      : url.replace(/https?:\/\/[a-z0-9]+\.supabase\.co\/storage\//g, `${selfHostedUrl}/storage/`);
+  }
+
   // Resolve relative /supabase/storage/ or /storage/ paths:
   // - Em dev (localhost): usa proxy local /supabase/storage/...
   // - Em produção: usa URL absoluta da VPS https://supabase.webradiovitoria.com.br/storage/...
