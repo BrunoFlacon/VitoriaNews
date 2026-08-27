@@ -102,6 +102,7 @@ export const APITab = memo(({
   // toggleExpand is now received from parent to initialize formValues
   
   const [pixelList, updatePixels] = useState<string[]>(['']);
+  const [showTwitterAdvanced, setShowTwitterAdvanced] = useState(false);
 
   // Auto-repair AI config if api_key is missing/stale but openrouter_api_key exists
   // This is crucial because the current live Edge Function only looks at 'api_key'
@@ -840,60 +841,78 @@ export const APITab = memo(({
 
                             {/*  Credential fields and Actions  */}
                             <div className="space-y-6">
-                              {fields.length > 0 && (
-                                <div className="space-y-4">
-                                  <div className="flex items-center gap-2 px-1">
-                                    <Key className="w-4 h-4 text-muted-foreground/60" />
-                                    <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Configuração da API</p>
-                                    <Badge variant="outline" className="ml-2 h-5 text-[8px] border-white/10 text-white/40 bg-white/5">
-                                      v2.5.4-stable
-                                    </Badge>
-                                    {config.id === 'ai_config' && credentials['ai_config']?.api_key && (
-                                      <Badge variant="outline" className="ml-2 h-5 text-[8px] border-purple-500/30 text-purple-400 bg-purple-500/5">
-                                        Legacy Bridge: Sincronizado
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="grid gap-3">
-                                    {fields.map((field) => {
-                                      const fieldId = `${config.id}-${field.key}`;
-                                      const isVisible = visibleFields[fieldId] ?? false;
-                                      const savedValue = credentials[config.id]?.[field.key];
-                                      const val = formValues[config.id]?.[field.key] ?? credentials[config.id]?.[field.key] ?? "";
+                              {fields.length > 0 && (() => {
+                                const visibleFieldsList = config.id === 'twitter' && !showTwitterAdvanced
+                                  ? fields.filter(f => ['client_id', 'client_secret'].includes(f.key))
+                                  : fields;
 
-                                      return (
-                                        <form key={field.key} className="space-y-1.5" onSubmit={e => e.preventDefault()} autoComplete="on">
-                                          <input type="text" name="username" autoComplete="username" className="hidden" aria-hidden="true" />
-                                          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">
-                                            {field.label.includes("TOKEN") && config.id === 'telegram' ? "BOT TOKEN (@BOTFATHER)" : field.label}
-                                          </label>
-                                          <div className="relative">
-                                            <Input
-                                              type={isVisible ? "text" : "password"}
-                                              value={val}
-                                              onChange={(e) => updateFormField(config.id, field.key, e.target.value)}
-                                              placeholder={field.placeholder || (savedValue ? maskValue(savedValue) : `${field.label}`)}
-                                              className={cn(
-                                                "bg-muted/50 h-10 text-sm pr-10",
-                                                config.id === 'youtube' && field.key === 'client_id' && (val.startsWith('UC') || (val && !val.endsWith('.apps.googleusercontent.com') && val.length > 5)) && "border-red-500 ring-2 ring-red-500",
-                                                config.id === 'threads' && field.key === 'app_id' && val && !/^\d+$/.test(val) && "border-red-500 ring-2 ring-red-500"
-                                              )}
-                                              autoComplete={field.masked ? "new-password" : "off"}
-                                            />
-                                            <button
-                                              type="button"
-                                              onClick={() => toggleFieldVisibility(fieldId)}
-                                              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                            >
-                                              {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                            </button>
-                                          </div>
-                                        </form>
-                                      );
-                                    })}
+                                return (
+                                  <div className="space-y-4">
+                                    {config.id === 'twitter' && (
+                                      <div className="flex items-center justify-between p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 mb-2">
+                                        <div className="space-y-0.5">
+                                          <p className="text-xs font-bold text-white">Chaves de Webhooks & Tokens Avançados</p>
+                                          <p className="text-[11px] text-muted-foreground">Ative para configurar chaves de Webhook CRC (Consumer Key/Secret) e tokens manuais</p>
+                                        </div>
+                                        <Switch 
+                                          checked={showTwitterAdvanced} 
+                                          onCheckedChange={setShowTwitterAdvanced} 
+                                        />
+                                      </div>
+                                    )}
+                                    <div className="flex items-center gap-2 px-1">
+                                      <Key className="w-4 h-4 text-muted-foreground/60" />
+                                      <p className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground/70">Configuração da API</p>
+                                      <Badge variant="outline" className="ml-2 h-5 text-[8px] border-white/10 text-white/40 bg-white/5">
+                                        v2.5.4-stable
+                                      </Badge>
+                                      {config.id === 'ai_config' && credentials['ai_config']?.api_key && (
+                                        <Badge variant="outline" className="ml-2 h-5 text-[8px] border-purple-500/30 text-purple-400 bg-purple-500/5">
+                                          Legacy Bridge: Sincronizado
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <div className="grid gap-3">
+                                      {visibleFieldsList.map((field) => {
+                                        const fieldId = `${config.id}-${field.key}`;
+                                        const isVisible = visibleFields[fieldId] ?? false;
+                                        const savedValue = credentials[config.id]?.[field.key];
+                                        const val = formValues[config.id]?.[field.key] ?? credentials[config.id]?.[field.key] ?? "";
+
+                                        return (
+                                          <form key={field.key} className="space-y-1.5" onSubmit={e => e.preventDefault()} autoComplete="on">
+                                            <input type="text" name="username" autoComplete="username" className="hidden" aria-hidden="true" />
+                                            <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-1">
+                                              {field.label.includes("TOKEN") && config.id === 'telegram' ? "BOT TOKEN (@BOTFATHER)" : field.label}
+                                            </label>
+                                            <div className="relative">
+                                              <Input
+                                                type={isVisible ? "text" : "password"}
+                                                value={val}
+                                                onChange={(e) => updateFormField(config.id, field.key, e.target.value)}
+                                                placeholder={field.placeholder || (savedValue ? maskValue(savedValue) : `${field.label}`)}
+                                                className={cn(
+                                                  "bg-muted/50 h-10 text-sm pr-10",
+                                                  config.id === 'youtube' && field.key === 'client_id' && (val.startsWith('UC') || (val && !val.endsWith('.apps.googleusercontent.com') && val.length > 5)) && "border-red-500 ring-2 ring-red-500",
+                                                  config.id === 'threads' && field.key === 'app_id' && val && !/^\d+$/.test(val) && "border-red-500 ring-2 ring-red-500"
+                                                )}
+                                                autoComplete={field.masked ? "new-password" : "off"}
+                                              />
+                                              <button
+                                                type="button"
+                                                onClick={() => toggleFieldVisibility(fieldId)}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                                              >
+                                                {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                              </button>
+                                            </div>
+                                          </form>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })()}
 
                               {/* Motores de IA de Imagem (Studio) — sub-seção do ai_config */}
                               {config.id === 'ai_config' && (
