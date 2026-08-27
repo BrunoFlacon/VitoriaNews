@@ -357,13 +357,26 @@ async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: 
   let clientId = (creds.client_id || Deno.env.get("TWITTER_CLIENT_ID") || "").trim();
   let clientSecret = (creds.client_secret || Deno.env.get("TWITTER_CLIENT_SECRET") || "").trim();
 
-  // Auto-decode if client_id was base64 encoded
+  // Smart Auto-Decode for Twitter Client ID
   try {
-    if (/^[A-Za-z0-9+/=]+$/.test(clientId) && clientId.length > 20 && !clientId.includes(':')) {
-      const decoded = atob(clientId);
-      if (decoded.includes(':') || /^[A-Za-z0-9_-]+$/.test(decoded)) {
-        clientId = decoded;
+    if (clientId.includes(':')) {
+      const parts = clientId.split(':');
+      const prefix = parts[0];
+      if (/^[A-Za-z0-9+/=]{20,}$/.test(prefix)) {
+        try {
+          const decodedPrefix = atob(prefix);
+          if (/^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
+            clientId = [decodedPrefix, ...parts.slice(1)].join(':');
+          }
+        } catch (_) {}
       }
+    } else if (/^[A-Za-z0-9+/=]{20,}$/.test(clientId)) {
+      try {
+        const decoded = atob(clientId);
+        if (decoded.includes(':') || /^[A-Za-z0-9_-]+$/.test(decoded)) {
+          clientId = decoded;
+        }
+      } catch (_) {}
     }
   } catch (_) {}
   

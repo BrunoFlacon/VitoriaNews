@@ -219,13 +219,30 @@ serve(async (req: Request) => {
       let twitterKey = (getVal("client_id", "TWITTER_CLIENT_ID") || "").trim();
       if (!twitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
 
-      // Auto-decode if client_id was base64 encoded (e.g. VGFNck0xWHVsdldCU0h3WWRVZUg6MTpjaQ -> TaMrM1XulvWBSHwYdUeH:1:ci)
+      // Smart Auto-Decode for Twitter Client ID
+      // Handles:
+      // 1) Fully base64 string: VGFNck0xWHVsdldCU0h3WWRVZUg6MTpjaQ -> TaMrM1XulvWBSHwYdUeH:1:ci
+      // 2) Partial base64 with suffix: YWIzaVViODJrT0c1Z0tKS2dlc0o:1:ci -> ab3iUb82kOG5gKJKgesJ:1:ci
+      // 3) Raw Twitter Client ID: ab3iUb82kOG5gKJKgesJ:1:ci (remains as-is)
       try {
-        if (/^[A-Za-z0-9+/=]+$/.test(twitterKey) && twitterKey.length > 20 && !twitterKey.includes(':')) {
-          const decoded = atob(twitterKey);
-          if (decoded.includes(':') || /^[A-Za-z0-9_-]+$/.test(decoded)) {
-            twitterKey = decoded;
+        if (twitterKey.includes(':')) {
+          const parts = twitterKey.split(':');
+          const prefix = parts[0];
+          if (/^[A-Za-z0-9+/=]{20,}$/.test(prefix)) {
+            try {
+              const decodedPrefix = atob(prefix);
+              if (/^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
+                twitterKey = [decodedPrefix, ...parts.slice(1)].join(':');
+              }
+            } catch (_) {}
           }
+        } else if (/^[A-Za-z0-9+/=]{20,}$/.test(twitterKey)) {
+          try {
+            const decoded = atob(twitterKey);
+            if (decoded.includes(':') || /^[A-Za-z0-9_-]+$/.test(decoded)) {
+              twitterKey = decoded;
+            }
+          } catch (_) {}
         }
       } catch (_) {}
       
