@@ -266,12 +266,11 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         );
       };
 
-      const channel = supabase
-        .channel(channelName)
+      const channel = (supabase.channel(channelName) as any)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'social_connections' }, invalidateConnections)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, invalidateConnections);
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'api_credentials' }, invalidateConnections) as RealtimeChannel;
 
-      channel.subscribe((status) => {
+      channel.subscribe((status: string) => {
         if (status === 'CHANNEL_ERROR') {
           entry!.errorCount++;
         } else if (status === 'SUBSCRIBED') {
