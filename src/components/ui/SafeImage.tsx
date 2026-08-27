@@ -95,24 +95,19 @@ export const SafeImage = memo(({
       url = url.replace(/https?:\/\/(supabase-kong|kong):8000/g, supabaseUrl);
     }
 
+    let finalUrl = getProxyUrl(url);
+
     // Se for URL do Supabase com /object/sign/ ou token=, converte para /object/public/
-    if (url.includes('supabase.co/storage/') || url.includes('/storage/v1/object/')) {
-      if (url.includes('/object/sign/')) {
-        return url.replace('/object/sign/', '/object/public/').split('?')[0];
+    if (finalUrl.includes('supabase.co/storage/') || finalUrl.includes('/storage/v1/object/')) {
+      if (finalUrl.includes('/object/sign/')) {
+        finalUrl = finalUrl.replace('/object/sign/', '/object/public/').split('?')[0];
       }
-      if (url.includes('token=')) {
-        return url.split('?')[0];
+      if (finalUrl.includes('token=')) {
+        finalUrl = finalUrl.split('?')[0];
       }
     }
 
-    const proxied = getProxyUrl(url);
-    if (proxied !== url) return proxied;
-
-    if (url.startsWith('http') || url.startsWith('blob:') || url.startsWith('data:') || isExternal) {
-      return url;
-    }
-
-    return url;
+    return finalUrl;
   }, [rawSrc, resolvedBase, isExternal, signedUrl]);
 
   const isWhatsAppUrl = rawSrc?.includes('whatsapp.net');

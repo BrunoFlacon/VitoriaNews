@@ -78,17 +78,28 @@ export function getWhatsAppMediaUrl(mediaId: string, userId: string): string | n
 export function getProxyUrl(url: string | null | undefined): string {
   if (!url) return "";
 
+  const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
 
-  // Fix Docker-internal hostnames (supabase-kong:8000, kong:8000) FIRST BEFORE ANY RETURN!
+  // Fix Docker-internal hostnames (supabase-kong:8000, kong:8000)
   if (url.includes('supabase-kong:8000') || url.includes('kong:8000')) {
-    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-    const targetBase = isLocal ? (window.location.origin + '/supabase') : selfHostedUrl;
+    const targetBase = isLocalHost ? (window.location.origin + '/supabase') : selfHostedUrl;
     url = url.replace(/https?:\/\/(supabase-kong|kong):8000/g, targetBase);
   }
 
+  // Resolve relative /supabase/storage/ or /storage/ paths:
+  // - Em dev (localhost): usa proxy local /supabase/storage/...
+  // - Em produção: usa URL absoluta da VPS https://supabase.webradiovitoria.com.br/storage/...
+  if (url.startsWith('/supabase/storage/') || url.startsWith('/storage/')) {
+    if (!isLocalHost) {
+      const cleanPath = url.replace('/supabase', '');
+      return `${selfHostedUrl}${cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath}`;
+    }
+    return url.startsWith('/storage/') ? `/supabase${url}` : url;
+  }
+
   // URLs já proxied ou locais não precisam de novo proxy
-  if (url.startsWith('/api/') || url.startsWith('/supabase/')) return url;
+  if (url.startsWith('/api/')) return url;
   if (url.includes('/api/proxy-image?url=')) return url;
   if (url.includes('media-relay?url=') || url.includes('proxy-media?url=')) return url;
 
@@ -107,13 +118,9 @@ export function getProxyUrl(url: string | null | undefined): string {
   if (url.includes('supabase.co/storage/')) return url;
 
   // Em ambiente local (localhost/dev), passa pelo proxy Vite (/supabase/...) para evitar CORS/bloqueios.
-  // Em produção (webradiovitoria.com.br ou GitHub Pages), mantém a URL direta da VPS (https://supabase.webradiovitoria.com.br).
-  const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const selfHostedSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
-  
-  if (isLocalHost && selfHostedSupabaseUrl && url.startsWith(selfHostedSupabaseUrl + '/storage/')) {
-    const path = url.replace(selfHostedSupabaseUrl, '/supabase');
-    return path;
+  // Em produção, mantém a URL direta da VPS.
+  if (isLocalHost && selfHostedUrl && url.startsWith(selfHostedUrl + '/storage/')) {
+    return url.replace(selfHostedUrl, '/supabase');
   }
 
   const problematicDomains = [

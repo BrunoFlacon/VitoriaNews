@@ -44,10 +44,12 @@ export const getMediaUrl = (url: string, defaultBucket: string = "media") => {
     url = url.replace(/https?:\/\/(supabase-kong|kong):8000/g, targetBase);
   }
 
-  // Helper: converte URL absoluta do self-hosted Supabase para o proxy local do Vite
+  // Helper: converte URL absoluta do self-hosted Supabase para o proxy local do Vite (apenas em localhost)
   const toViteProxy = (url: string): string => {
-    const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || '';
-    if (selfHostedUrl && url.startsWith(selfHostedUrl + '/storage/')) {
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    const selfHostedUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+    
+    if (isLocal && selfHostedUrl && url.startsWith(selfHostedUrl + '/storage/')) {
       // Remove query params de tokens expirados
       return url.replace(selfHostedUrl, '/supabase').split('?')[0];
     }
@@ -70,12 +72,11 @@ export const getMediaUrl = (url: string, defaultBucket: string = "media") => {
     return url.replace("/object/sign/", "/object/public/").split('?')[0];
   }
 
-  // 3. URLs absolutas - rotear pelo proxy se for do domínio self-hosted
+  // 3. URLs absolutas - rotear pelo proxy se for do domínio self-hosted em localhost
   if (
     url.startsWith("http://") || 
     url.startsWith("https://")
   ) {
-    // Proxy do Vite para domínio self-hosted (evita 403 do Cloudflare)
     const proxied = toViteProxy(url);
     if (proxied !== url) return proxied;
     // URLs externas (blob, data, cdn externo) - passam direto
@@ -93,9 +94,16 @@ export const getMediaUrl = (url: string, defaultBucket: string = "media") => {
     return url;
   }
 
-  // Caminhos de proxy local já formatados
+  // Caminhos relativos de storage:
+  // - Em localhost: /supabase/...
+  // - Em produção: https://supabase.webradiovitoria.com.br/...
   if (url.startsWith("/supabase/") || url.startsWith("/storage/")) {
-    return url;
+    const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+    if (!isLocal) {
+      const cleanPath = url.replace('/supabase', '');
+      return `${selfHostedUrl}${cleanPath.startsWith('/') ? cleanPath : '/' + cleanPath}`;
+    }
+    return url.startsWith('/storage/') ? `/supabase${url}` : url;
   }
 
   // Tratar URLs /object/public/
