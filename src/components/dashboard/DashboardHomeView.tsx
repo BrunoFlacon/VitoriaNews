@@ -265,51 +265,51 @@ export const DashboardHomeView = memo(({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 stats-grid" style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}>
-<StatsCard 
-              title="Total de Posts" 
-              value={platformTotalPosts.toLocaleString('pt-BR')} 
-              icon={TrendingUp} 
-              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : engagementPerPost} 
-              trendLabel={metricGrowth?.engagement ? "cresc." : "por post"} 
-              trendType="growth"
-              color="primary" 
-              delay={0} 
-            />
-<StatsCard 
-              title="Visualizações" 
-              value={platformViews.toLocaleString('pt-BR')} 
-              icon={Eye} 
-              trend={metricGrowth?.views ? Number(metricGrowth.views) : viewsPerFollower} 
-              trendLabel={metricGrowth?.views ? "cresc." : "por seguidor"} 
-              trendType="growth"
-              color="accent" 
-              delay={0.1} 
-            />
-<StatsCard 
-              title="Engajamento" 
-              value={platformEngagement.toLocaleString('pt-BR')} 
-              icon={Heart} 
-              trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : engagementRate} 
-              trendLabel={metricGrowth?.engagement ? "cresc." : "taxa"} 
-              trendType="growth"
-              color="success" 
-              delay={0.1} 
-            />
-<StatsCard 
-              title="Seguidores" 
-              value={platformFollowers.toLocaleString('pt-BR')} 
-              icon={Users} 
-              trend={metricGrowth?.followers ? Number(metricGrowth.followers) : (platformFollowers > 0 && platformEngagement > 0 ? Number(((platformEngagement / platformFollowers) * 100).toFixed(2)) : 0)} 
-              trendLabel={metricGrowth?.followers ? "cresc." : "por seguidor"} 
-              trendType="growth"
-              color="warning" 
-              delay={0.1} 
-            />
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 stats-grid">
+        <StatsCard 
+          title="Total de Posts" 
+          value={platformTotalPosts.toLocaleString('pt-BR')} 
+          icon={TrendingUp} 
+          trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : engagementPerPost} 
+          trendLabel={metricGrowth?.engagement ? "cresc." : "por post"} 
+          trendType="growth"
+          color="primary" 
+          delay={0} 
+        />
+        <StatsCard 
+          title="Visualizações" 
+          value={platformViews.toLocaleString('pt-BR')} 
+          icon={Eye} 
+          trend={metricGrowth?.views ? Number(metricGrowth.views) : viewsPerFollower} 
+          trendLabel={metricGrowth?.views ? "cresc." : "por seguidor"} 
+          trendType="growth"
+          color="accent" 
+          delay={0.1} 
+        />
+        <StatsCard 
+          title="Engajamento" 
+          value={platformEngagement.toLocaleString('pt-BR')} 
+          icon={Heart} 
+          trend={metricGrowth?.engagement ? Number(metricGrowth.engagement) : engagementRate} 
+          trendLabel={metricGrowth?.engagement ? "cresc." : "taxa"} 
+          trendType="growth"
+          color="success" 
+          delay={0.1} 
+        />
+        <StatsCard 
+          title="Seguidores" 
+          value={platformFollowers.toLocaleString('pt-BR')} 
+          icon={Users} 
+          trend={metricGrowth?.followers ? Number(metricGrowth.followers) : (platformFollowers > 0 && platformEngagement > 0 ? Number(((platformEngagement / platformFollowers) * 100).toFixed(2)) : 0)} 
+          trendLabel={metricGrowth?.followers ? "cresc." : "por seguidor"} 
+          trendType="growth"
+          color="warning" 
+          delay={0.1} 
+        />
+      </div>
 
       {/* Account List and Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '400px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <AnalyticsChart 
             data={dashboardChartData}
@@ -321,7 +321,7 @@ export const DashboardHomeView = memo(({
         <div className="h-full">
           <div
             className="glass-card rounded-2xl border border-border p-4 md:p-5 h-full flex flex-col justify-between animate-fade-in min-h-[200px]"
-            style={{ animationDelay: '400ms', animationFillMode: 'backwards', contentVisibility: 'auto' }}
+            style={{ animationDelay: '400ms', animationFillMode: 'backwards' }}
           >
             <h3 className="font-display font-bold text-lg mb-4">Redes Conectadas</h3>
             <div className="space-y-3">
@@ -359,7 +359,7 @@ export const DashboardHomeView = memo(({
         <VideoCarousel />
       </div>
 
-      <div className="mt-6" style={{ contentVisibility: 'auto', containIntrinsicHeight: 400 }}>
+      <div className="mt-6">
         <Suspense fallback={null}>
           <RecentPosts onEditPost={onEditPost} />
         </Suspense>
