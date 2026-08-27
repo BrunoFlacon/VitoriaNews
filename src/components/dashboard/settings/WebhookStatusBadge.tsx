@@ -81,8 +81,8 @@ export const WebhookStatusBadge = React.memo(({
 
   if (!webhookInfo) return null;
 
-  const isHealthy = status ? (status.healthy && status.configured) : (isConnected !== undefined ? isConnected : true);
-  const isConfigured = status ? status.configured : (isConnected !== undefined ? (isConnected || !!hasCreds) : true);
+  const isHealthy = isConnected || (status ? (status.healthy && status.configured) : !!hasCreds);
+  const isConfigured = isConnected || (status ? status.configured : !!hasCreds);
 
   const getBadgeVariant = () => {
     if (loading) return "outline";
@@ -104,6 +104,10 @@ export const WebhookStatusBadge = React.memo(({
     if (isConfigured && !isHealthy) return "Webhook com Erro";
     return "Inativo";
   };
+
+  const detailsText = isConnected
+    ? (status?.details || "Webhook & API Conectados e Prontos para Receber Eventos")
+    : (status?.details || error || (hasCreds ? "Credenciais configuradas — conecte sua conta" : "Conecte sua conta para ativar o webhook"));
 
   if (compact) {
     return (
@@ -128,7 +132,7 @@ export const WebhookStatusBadge = React.memo(({
           <TooltipContent side="bottom" className="max-w-xs text-xs">
             <p className="font-semibold mb-1">{platformLabel || webhookInfo.label}</p>
             <p className="text-muted-foreground">
-              {status?.details || error || "Verificando..."}
+              {detailsText}
             </p>
             <p className="text-xs text-muted-foreground/70 mt-1">
               Clique para re-verificar

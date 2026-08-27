@@ -716,14 +716,16 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         pendingCloseCheck = true;
         try {
           // 1) Popup closed check (safe handling for cross-origin COOP)
-          try {
-            if (popup && popup.closed) {
-              clearInterval(pollInterval);
-              await finalize();
-              return;
+          if (popup && !popupIsCrossOrigin) {
+            try {
+              if (popup.closed) {
+                clearInterval(pollInterval);
+                await finalize();
+                return;
+              }
+            } catch (e) {
+              // Ignore COOP errors
             }
-          } catch (e) {
-            // COOP error handling fallback
           }
 
           // 2) Server source of truth: check if a connection was added/updated AFTER startTime
