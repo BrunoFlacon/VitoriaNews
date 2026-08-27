@@ -141,11 +141,14 @@ async function exchangeGoogle(code: string, redirectUri: string, creds: any, sup
 }
 
 async function exchangeMeta(code: string, redirectUri: string, platform: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
-  validateOAuthConfig("meta", creds);
+  const appId = (creds.app_id || creds.client_id || "").trim();
+  const appSecret = (creds.app_secret || creds.client_secret || "").trim();
+
+  validateOAuthConfig("meta", { app_id: appId, app_secret: appSecret });
 
   const url = `https://graph.facebook.com/v21.0/oauth/access_token?` + new URLSearchParams({
-    client_id: creds.app_id,
-    client_secret: creds.app_secret,
+    client_id: appId,
+    client_secret: appSecret,
     redirect_uri: redirectUri,
     code
   });
@@ -580,10 +583,14 @@ serve(async (req: Request) => {
       const c = await getCreds("google_cloud");
       raw = { ...c, ...y, ...g };
     } else if (["threads", "instagram", "facebook", "whatsapp"].includes(platform)) {
+      const own = await getCreds(platform);
       const fb = await getCreds("facebook");
       const meta = await getCreds("meta");
-      const own = await getCreds(platform);
-      raw = { ...fb, ...meta, ...own };
+      
+      const appId = (own.app_id || own.client_id || fb.app_id || meta.app_id || "").trim();
+      const appSecret = (own.app_secret || own.client_secret || fb.app_secret || meta.app_secret || "").trim();
+      
+      raw = { app_id: appId, app_secret: appSecret };
     } else {
       raw = await getCreds(platform);
     }
