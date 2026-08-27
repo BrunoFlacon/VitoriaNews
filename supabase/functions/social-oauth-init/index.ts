@@ -216,8 +216,18 @@ serve(async (req: Request) => {
         duration: "permanent"
       });
     } else if (platform === "twitter") {
-      const twitterKey = getVal("client_id", "TWITTER_CLIENT_ID");
+      let twitterKey = (getVal("client_id", "TWITTER_CLIENT_ID") || "").trim();
       if (!twitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
+
+      // Auto-decode if client_id was base64 encoded (e.g. VGFNck0xWHVsdldCU0h3WWRVZUg6MTpjaQ -> TaMrM1XulvWBSHwYdUeH:1:ci)
+      try {
+        if (/^[A-Za-z0-9+/=]+$/.test(twitterKey) && twitterKey.length > 20 && !twitterKey.includes(':')) {
+          const decoded = atob(twitterKey);
+          if (decoded.includes(':') || /^[A-Za-z0-9_-]+$/.test(decoded)) {
+            twitterKey = decoded;
+          }
+        }
+      } catch (_) {}
       
       const verifierChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
       let codeVerifier = '';

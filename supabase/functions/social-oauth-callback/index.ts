@@ -354,8 +354,18 @@ async function exchangeReddit(code: string, redirectUri: string, creds: any, sup
 }
 
 async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
-  const clientId = creds.client_id || Deno.env.get("TWITTER_CLIENT_ID");
-  const clientSecret = creds.client_secret || Deno.env.get("TWITTER_CLIENT_SECRET");
+  let clientId = (creds.client_id || Deno.env.get("TWITTER_CLIENT_ID") || "").trim();
+  let clientSecret = (creds.client_secret || Deno.env.get("TWITTER_CLIENT_SECRET") || "").trim();
+
+  // Auto-decode if client_id was base64 encoded
+  try {
+    if (/^[A-Za-z0-9+/=]+$/.test(clientId) && clientId.length > 20 && !clientId.includes(':')) {
+      const decoded = atob(clientId);
+      if (decoded.includes(':') || /^[A-Za-z0-9_-]+$/.test(decoded)) {
+        clientId = decoded;
+      }
+    }
+  } catch (_) {}
   
   if (!clientId) throw new Error("Client ID do Twitter não configurado.");
 
