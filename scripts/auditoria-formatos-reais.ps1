@@ -1,6 +1,6 @@
 # Testes REAIS de formatos faltantes: Áudio, PDF e Carrossel (2026-08-13)
 $ErrorActionPreference = 'Continue'
-$SUPA_URL = 'https://ghtkdkauseesambzqfrd.supabase.co'
+$SUPA_URL = 'https://supabase.webradiovitoria.com.br'
 $USER_ID  = '38cd9720-494e-406a-853d-19d81ae85e99'
 $OUT = Join-Path $PSScriptRoot 'auditoria-formatos-reais.jsonl'
 Remove-Item $OUT -ErrorAction SilentlyContinue

@@ -36,8 +36,8 @@ function loadConfig() {
     console.error("Erro ao carregar config:", e);
   }
   const defaultConfig = {
-    supabaseUrl: "https://ghtkdkauseesambzqfrd.supabase.co",
-    supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodGtka2F1c2Vlc2FtYnpxZnRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NTUwMTQsImV4cCI6MjA4OTUzMTAxNH0.X1OeIwLezATvztpzJzDJWMSUgukNXIWNQp2L1rHkLGs",
+    supabaseUrl: "https://supabase.webradiovitoria.com.br",
+    supabaseAnonKey: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NDQzNzM4MCwiZXhwIjo0OTQwMTEwOTgwLCJyb2xlIjoiYW5vbiJ9.YK5bepgy3Kj9Ak42dQ4nGXCE3hdH0BSr2GqXItbiA4c",
     userId: "",
     groqApiKey: "",
     useAI: true,

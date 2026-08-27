@@ -1,7 +1,7 @@
 
 const https = require('https');
 
-const URL_HOST = 'ghtkdkauseesambzqfrd.supabase.co';
+const URL_HOST = 'supabase.webradiovitoria.com.br';
 const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodGtka2F1c2Vlc2FtYnpxZnJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NTUwMTQsImV4cCI6MjA4OTUzMTAxNH0.X1OeIwLezATvztpzJzDJWMSUgukNXIWNQp2L1rHkLGs';
 
 function request(path, method = 'GET', extraHeaders = {}) {

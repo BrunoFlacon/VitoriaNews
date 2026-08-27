@@ -1,6 +1,6 @@
 const https = require('https');
 
-const PROJECT_REF = 'ghtkdkauseesambzqfrd';
+const PROJECT_REF = 'supabase.webradiovitoria.com.br';
 const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdodGtka2F1c2Vlc2FtYnpxZnJkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5NTUwMTQsImV4cCI6MjA4OTUzMTAxNH0.X1OeIwLezATvztpzJzDJWMSUgukNXIWNQp2L1rHkLGs';
 
 const sql = `
@@ -35,7 +35,7 @@ function postSql(query) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({ query });
     const options = {
-      hostname: `${PROJECT_REF}.supabase.co`,
+      hostname: PROJECT_REF,
       path: '/rest/v1/rpc/exec_sql',
       method: 'POST',
       headers: {

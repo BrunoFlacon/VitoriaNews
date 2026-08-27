@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://ghtkdkauseesambzqfrd.supabase.co';
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 const USER_ID = process.env.MCP_USER_ID || '';
 

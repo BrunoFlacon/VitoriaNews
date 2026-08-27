@@ -1,6 +1,6 @@
 # Reteste pós-correção — casos T04-T07, T19, T20
 $ErrorActionPreference = 'Stop'
-$SUPA_URL = 'https://ghtkdkauseesambzqfrd.supabase.co'
+$SUPA_URL = 'https://supabase.webradiovitoria.com.br'
 $USER_ID  = '38cd9720-494e-406a-853d-19d81ae85e99'
 $keyJson = & node_modules\.bin\supabase.cmd db query --linked --output json "SELECT value FROM public.settings WHERE key = 'supabase_service_role_key'" 2>$null
 $SRK = (($keyJson | ConvertFrom-Json) | Select-Object -First 1).value

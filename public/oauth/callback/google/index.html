@@ -8,6 +8,7 @@
     <meta http-equiv="Expires" content="0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' *; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; style-src 'self' 'unsafe-inline' *; img-src 'self' data: blob: *; connect-src *;">
     <title>Conectando Google - Vitória News</title>
+    <script src="/config.js"></script>
     <script>
         function getSessionToken() {
             try {
@@ -53,7 +54,8 @@
 
             if (code && state && platform && !hasOpener) {
                 var isLocal = window.location.origin.indexOf('localhost') !== -1 || window.location.origin.indexOf('127.0.0.1') !== -1;
-                var supabaseUrl = isLocal ? (window.location.origin + '/supabase') : 'https://supabase.webradiovitoria.com.br';
+                var cfg = window.__SUPABASE_CONFIG__ || {};
+                var supabaseUrl = isLocal ? (window.location.origin + '/supabase') : (cfg.SUPABASE_URL || 'https://supabase.webradiovitoria.com.br');
                 var sessionToken = getSessionToken();
                 if (sessionToken) {
                     var redirectUri = window.location.origin + window.location.pathname;

@@ -1,6 +1,6 @@
 # Reteste 4 casos com params corretos (top-level): T23R/T24R Telegram, T27R IG carrossel, T28R Threads video
 $ErrorActionPreference = 'Continue'
-$SUPA_URL = 'https://ghtkdkauseesambzqfrd.supabase.co'
+$SUPA_URL = 'https://supabase.webradiovitoria.com.br'
 $USER_ID  = '38cd9720-494e-406a-853d-19d81ae85e99'
 $keyJson = & node_modules\.bin\supabase.cmd db query --linked --output json "SELECT value FROM public.settings WHERE key = 'supabase_service_role_key'" 2>$null
 $SRK = (($keyJson | ConvertFrom-Json) | Select-Object -First 1).value

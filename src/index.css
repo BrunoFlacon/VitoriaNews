@@ -127,7 +127,7 @@
 
   /* Pre-allocate space for lazy-loaded sections */
   .content-shell {
-    content-visibility: auto;
+    /* Removed content-visibility: auto to prevent Chromium layout collapse & reflows */
     contain-intrinsic-size: 400px;
   }
 

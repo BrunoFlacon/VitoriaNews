@@ -6,7 +6,7 @@
 # ============================================================================
 $ErrorActionPreference = 'Stop'
 
-$SUPA_URL  = 'https://ghtkdkauseesambzqfrd.supabase.co'
+$SUPA_URL  = 'https://supabase.webradiovitoria.com.br'
 $USER_ID   = '38cd9720-494e-406a-853d-19d81ae85e99'
 $BUCKET    = 'media'
 $MEDIA_DIR = "$USER_ID"

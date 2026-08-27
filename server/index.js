@@ -7,6 +7,12 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+// Load .env from project root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 // Local "Edge Functions" runtime (ported from supabase/functions)
 import { getFunction } from "./functions/registry.js";
@@ -25,7 +31,7 @@ app.use(express.json());
 const pool = new Pool({
   host: process.env.LOCAL_DB_HOST || "localhost",
   port: parseInt(process.env.LOCAL_DB_PORT || "5433"),
-  database: process.env.LOCAL_DB_NAME || "ghtkdkauseesambzqfrd",
+  database: process.env.LOCAL_DB_NAME || "social_canvas",
   user: process.env.LOCAL_DB_USER || "postgres",
   password: process.env.LOCAL_DB_PASS || "123456",
 });

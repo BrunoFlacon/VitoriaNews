@@ -12,7 +12,7 @@ if (!$match.Success) {
 }
 $serviceRoleKey = $match.Groups[1].Value
 
-$supabaseUrl = "https://ghtkdkauseesambzqfrd.supabase.co"
+$supabaseUrl = "https://supabase.webradiovitoria.com.br"
 
 # Migration file to apply
 $migrationPath = Join-Path $PSScriptRoot ".." "supabase" "migrations" "20260705000003_fix_touch_presence.sql"
@@ -56,7 +56,7 @@ catch {
     }
     catch {
         Write-Host "Direct API failed. You'll need to apply manually." -ForegroundColor Red
-        Write-Host "Open: https://supabase.com/dashboard/project/ghtkdkauseesambzqfrd/sql/new" -ForegroundColor Yellow
+        Write-Host "Open: https://supabase.webradiovitoria.com.br/dashboard/sql/new" -ForegroundColor Yellow
         Write-Host "And paste the content of: $migrationPath" -ForegroundColor Yellow
         Write-Host "" -ForegroundColor Yellow
         Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red

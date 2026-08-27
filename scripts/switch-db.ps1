@@ -28,7 +28,7 @@ switch ($Mode) {
     "local" {
         Set-EnvVar $VarName "true"
         Write-Host "[OK] Modo alterado para: LOCAL" -ForegroundColor Green
-        Write-Host "      Database: postgresql://postgres@localhost:5433/ghtkdkauseesambzqfrd" -ForegroundColor Cyan
+        Write-Host "      Database: postgresql://postgres@localhost:5433/social_canvas" -ForegroundColor Cyan
         Write-Host "      Server:   http://localhost:3001" -ForegroundColor Cyan
         Write-Host ""
         Write-Host "Nao esqueca de iniciar o servidor local:" -ForegroundColor Yellow
@@ -37,16 +37,16 @@ switch ($Mode) {
     "supabase" {
         Set-EnvVar $VarName "false"
         Write-Host "[OK] Modo alterado para: SUPABASE" -ForegroundColor Green
-        Write-Host "      URL: https://ghtkdkauseesambzqfrd.supabase.co" -ForegroundColor Cyan
+        Write-Host "      URL: https://supabase.webradiovitoria.com.br" -ForegroundColor Cyan
     }
     "status" {
         if ($current -eq "true") {
             Write-Host "[STATUS] LOCAL" -ForegroundColor Cyan
             Write-Host "  Host: localhost:5433"
-            Write-Host "  Database: ghtkdkauseesambzqfrd"
+            Write-Host "  Database: social_canvas"
         } else {
             Write-Host "[STATUS] SUPABASE" -ForegroundColor Cyan
-            Write-Host "  URL: https://ghtkdkauseesambzqfrd.supabase.co"
+            Write-Host "  URL: https://supabase.webradiovitoria.com.br"
         }
         Write-Host ""
         Write-Host "Uso: .\scripts\switch-db.ps1 local    -> usar banco local" -ForegroundColor Yellow

@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  host: 'localhost', port: 5433, database: 'ghtkdkauseesambzqfrd',
+  host: 'localhost', port: 5433, database: 'social_canvas',
   user: 'postgres', password: '123456',
 });
 
