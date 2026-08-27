@@ -65,7 +65,12 @@ serve(async (req: Request) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) return oauthError("unknown", "auth", "Invalid authentication");
 
-    const { platform, redirect_uri } = await req.json();
+    const body = await req.json();
+    const platform = body.platform as string | undefined;
+    const redirect_uri = body.redirect_uri as string | undefined;
+    const incomingClientId = (body.client_id as string | undefined)?.trim();
+    const incomingClientSecret = (body.client_secret as string | undefined)?.trim();
+
     if (!platform || !redirect_uri) return oauthError(platform || "unknown", "init", "platform and redirect_uri are required");
 
     // Bloqueio preventivo para plataformas que NÃO usam OAuth
@@ -80,6 +85,8 @@ serve(async (req: Request) => {
     };
 
     let creds: any = await getPlatformCreds(platform) || {};
+    if (incomingClientId) creds.client_id = incomingClientId;
+    if (incomingClientSecret) creds.client_secret = incomingClientSecret;
 
     // Smart lookup with fallbacks
     if (["instagram", "threads", "whatsapp"].includes(platform)) {
