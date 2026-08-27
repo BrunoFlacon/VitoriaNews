@@ -60,7 +60,7 @@
     justify-content: center;
     gap: 1rem;
     margin-bottom: 2rem;
-    animation: fadeInDown 1s ease-out;
+    will-change: transform;
 }
 
 .portal-landing-root .brand-header svg {
@@ -93,7 +93,6 @@
 /* Seção de Textos Hero */
 .portal-landing-root .hero-section {
     margin-bottom: 2rem;
-    animation: fadeIn 1.2s ease-out;
 }
 
 .portal-landing-root .pre-title {
@@ -110,6 +109,7 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
     backdrop-filter: blur(10px);
     box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    contain: layout paint;
 }
 
 .portal-landing-root .main-title {
