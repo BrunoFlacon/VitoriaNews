@@ -344,7 +344,7 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
           throw new Error(`${fnName}: ${invErr.message}`);
         }
         if (data?.status === 'skipped') {
-          console.debug(`[Sync] ${fnName} skipped: ${data.message || 'not configured'}`);
+          // Silent skip when integration is not configured
         }
         return data;
       };

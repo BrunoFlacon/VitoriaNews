@@ -31,16 +31,30 @@ serve(async (req: Request) => {
       details: string;
     }> = {};
 
-    // Fetch connected platforms from social_accounts for this user
+    // Fetch connected platforms from social_accounts, social_connections, and api_credentials
     let userConnectedPlatforms: string[] = [];
     if (userId) {
-      const { data: userAccounts } = await supabase
-        .from("social_accounts")
-        .select("platform")
-        .eq("user_id", userId);
-      if (userAccounts) {
-        userConnectedPlatforms = userAccounts.map(a => a.platform);
-      }
+      const [accRes, connRes, credRes] = await Promise.all([
+        supabase.from("social_accounts").select("platform").eq("user_id", userId),
+        supabase.from("social_connections").select("platform").eq("user_id", userId),
+        supabase.from("api_credentials").select("platform").eq("user_id", userId),
+      ]);
+      const set = new Set<string>();
+      (accRes.data || []).forEach(a => set.add(a.platform));
+      (connRes.data || []).forEach(c => set.add(c.platform));
+      (credRes.data || []).forEach(cr => set.add(cr.platform));
+      userConnectedPlatforms = Array.from(set);
+    } else {
+      const [accRes, connRes, credRes] = await Promise.all([
+        supabase.from("social_accounts").select("platform"),
+        supabase.from("social_connections").select("platform"),
+        supabase.from("api_credentials").select("platform"),
+      ]);
+      const set = new Set<string>();
+      (accRes.data || []).forEach(a => set.add(a.platform));
+      (connRes.data || []).forEach(c => set.add(c.platform));
+      (credRes.data || []).forEach(cr => set.add(cr.platform));
+      userConnectedPlatforms = Array.from(set);
     }
 
     const verifyTokenConfigured = !!Deno.env.get("WEBHOOK_VERIFY_TOKEN");
