@@ -26,10 +26,12 @@ export const PLATFORM_CREDENTIAL_FIELDS: Record<string, { label: string; key: st
     { label: "App Secret", key: "app_secret", masked: true },
   ],
   twitter: [
-    { label: "Client ID (OAuth 2.0)", key: "client_id", placeholder: "ID Alfanumérico longo — ex: V0VfM3Bvamd..." },
-    { label: "Client Secret (OAuth 2.0)", key: "client_secret", masked: true, placeholder: "Client Secret OAuth 2.0" },
-    { label: "API Key / Consumer Key (Webhook & Bot)", key: "consumer_key", placeholder: "Ex: 25 caracteres alfanuméricos" },
-    { label: "API Key Secret / Consumer Secret (Webhook CRC)", key: "consumer_secret", masked: true, placeholder: "Usado na validação CRC do Webhook do X (Twitter)" },
+    { label: "Client ID (OAuth 2.0)", key: "client_id", placeholder: "Ex: VGFNck0x...:1:ci" },
+    { label: "Client Secret (OAuth 2.0)", key: "client_secret", masked: true, placeholder: "Client Secret do OAuth 2.0" },
+    { label: "API Key / Consumer Key (OAuth 1.0a / Webhook)", key: "consumer_key", placeholder: "API Key (25 caracteres)" },
+    { label: "API Secret Key / Consumer Secret (Webhook CRC)", key: "consumer_secret", masked: true, placeholder: "API Key Secret" },
+    { label: "Access Token (Opcional - Conexão Direta)", key: "access_token", masked: true, placeholder: "Access Token gerado no portal do X" },
+    { label: "Access Token Secret (Opcional)", key: "access_token_secret", masked: true, placeholder: "Access Token Secret gerado no portal do X" },
   ],
   youtube: [
     { label: "Google Client ID", key: "client_id", placeholder: "Ex: ...apps.googleusercontent.com" },

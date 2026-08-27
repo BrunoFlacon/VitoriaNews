@@ -525,6 +525,36 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
             client_id: clientId,
             client_secret: clientSecret,
           };
+        } else if (platform === 'twitter') {
+          let twCreds: Record<string, string | undefined> = {};
+          try {
+            const { data } = await supabase
+              .from('api_credentials')
+              .select('credentials')
+              .eq('user_id', user!.id)
+              .eq('platform', 'twitter')
+              .maybeSingle();
+            twCreds = (data?.credentials as Record<string, string>) || {};
+          } catch (e) {
+          }
+
+          const clientId = twCreds?.client_id?.trim();
+          const clientSecret = twCreds?.client_secret?.trim();
+
+          if (!clientId) {
+            toast({
+              title: "Client ID do Twitter (X) não configurado",
+              description: "Vá em Configurações → APIs → Twitter (X) e salve o Client ID antes de conectar.",
+              variant: "destructive",
+            });
+            popup.close();
+            return;
+          }
+
+          extraBody = {
+            client_id: clientId,
+            client_secret: clientSecret,
+          };
         }
 
         const { data, error: aErr } = await safeInvoke('social-oauth-init', {
