@@ -538,7 +538,34 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
           } catch (e) {
           }
 
-          const clientId = twCreds?.client_id?.trim();
+          const safeAtob = (s: string) => {
+            try {
+              const padded = s + '='.repeat((4 - (s.length % 4)) % 4);
+              return atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+            } catch (_) {
+              return null;
+            }
+          };
+
+          const decodeTwitterKey = (rawKey: string) => {
+            const clean = (rawKey || "").trim();
+            if (!clean) return clean;
+            const fullDecoded = safeAtob(clean);
+            if (fullDecoded && (/^[A-Za-z0-9_-]+(:[0-9]+:[a-z_]+)?$/.test(fullDecoded) || fullDecoded.includes(':'))) {
+              return fullDecoded;
+            }
+            if (clean.includes(':')) {
+              const parts = clean.split(':');
+              const decodedPrefix = safeAtob(parts[0]);
+              if (decodedPrefix && /^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
+                return [decodedPrefix, ...parts.slice(1)].join(':');
+              }
+            }
+            return clean;
+          };
+
+          const rawClientId = twCreds?.client_id?.trim() || "";
+          const clientId = decodeTwitterKey(rawClientId);
           const clientSecret = twCreds?.client_secret?.trim();
 
           if (!clientId) {
@@ -584,6 +611,35 @@ export function useSocialConnections(options: { enabled?: boolean } = {}) {
         // CORREÇÃO CRÍTICA: threads.com é uma empresa diferente. O Threads da Meta usa .net
         if (platform === 'threads' && finalUrl.includes('threads.com')) {
           finalUrl = finalUrl.replace('threads.com', 'www.threads.net');
+        }
+
+        // CORREÇÃO CRÍTICA: Twitter Client ID decodificado na URL final
+        if (platform === 'twitter' && finalUrl.includes('client_id=')) {
+          try {
+            const parsedAuth = new URL(finalUrl);
+            const currClientId = parsedAuth.searchParams.get('client_id') || '';
+            const safeAtob = (s: string) => {
+              try {
+                const padded = s + '='.repeat((4 - (s.length % 4)) % 4);
+                return atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
+              } catch (_) { return null; }
+            };
+            const fullDecoded = safeAtob(currClientId);
+            let decodedId = currClientId;
+            if (fullDecoded && (/^[A-Za-z0-9_-]+(:[0-9]+:[a-z_]+)?$/.test(fullDecoded) || fullDecoded.includes(':'))) {
+              decodedId = fullDecoded;
+            } else if (currClientId.includes(':')) {
+              const parts = currClientId.split(':');
+              const decodedPrefix = safeAtob(parts[0]);
+              if (decodedPrefix && /^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
+                decodedId = [decodedPrefix, ...parts.slice(1)].join(':');
+              }
+            }
+            if (decodedId && decodedId !== currClientId) {
+              parsedAuth.searchParams.set('client_id', decodedId);
+              finalUrl = parsedAuth.toString();
+            }
+          } catch (_) {}
         }
 
         // Navega popup para URL de autorização (about:blank → x.com é permitido)
