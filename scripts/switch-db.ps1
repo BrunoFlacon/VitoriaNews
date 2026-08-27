@@ -28,7 +28,7 @@ switch ($Mode) {
     "local" {
         Set-EnvVar $VarName "true"
         Write-Host "[OK] Modo alterado para: LOCAL" -ForegroundColor Green
-        Write-Host "      Database: postgresql://postgres@localhost:5433/social_canvas" -ForegroundColor Cyan
+        Write-Host "      Database: postgresql://postgres@localhost:5433/vitoria_news" -ForegroundColor Cyan
         Write-Host "      Server:   http://localhost:3001" -ForegroundColor Cyan
         Write-Host ""
         Write-Host "Nao esqueca de iniciar o servidor local:" -ForegroundColor Yellow
@@ -43,7 +43,7 @@ switch ($Mode) {
         if ($current -eq "true") {
             Write-Host "[STATUS] LOCAL" -ForegroundColor Cyan
             Write-Host "  Host: localhost:5433"
-            Write-Host "  Database: social_canvas"
+            Write-Host "  Database: vitoria_news"
         } else {
             Write-Host "[STATUS] SUPABASE" -ForegroundColor Cyan
             Write-Host "  URL: https://supabase.webradiovitoria.com.br"

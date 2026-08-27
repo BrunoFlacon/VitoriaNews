@@ -21,7 +21,7 @@ async function uploadWhatsAppMedia(
     throw new Error("WhatsApp media: arquivo vazio (0 bytes).");
   }
 
-  const boundary = `----SocialCanvasHub${Date.now().toString(36)}`;
+  const boundary = `----VitoriaNews${Date.now().toString(36)}`;
   const encoder = new TextEncoder();
   const lines: Uint8Array[] = [];
   const push = (s: string) => lines.push(encoder.encode(s));

@@ -3,8 +3,8 @@ import { writeFileSync } from "fs";
 import { resolve } from "path";
 import { createClient } from "@supabase/supabase-js";
 
-const BASE_URL = "https://vitoria-net.lovable.app";
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://yttsmficdfnbvvuhhdmw.supabase.co";
+const BASE_URL = "https://webradiovitoria.com.br";
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || "https://supabase.webradiovitoria.com.br";
 const SUPABASE_KEY =
   process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
   process.env.SUPABASE_ANON_KEY ||

@@ -78,6 +78,22 @@ export function clearSupabaseSession(): void {
 }
 
 function clearStaleSession(): void {
+  // Remove ALL old sessions from legacy Supabase projects
+  const OLD_SUPABASE_HOSTS = ['ghtkdkauseesambzqfrd', 'yttsmficdfnbvvuhhdmw'];
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      // Clear any sb-*-auth-token that belongs to an old Supabase project
+      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        if (OLD_SUPABASE_HOSTS.some(host => key.includes(host))) {
+          localStorage.removeItem(key);
+          console.warn('[Auth] Cleared stale session from old Supabase project:', key.slice(0, 40));
+        }
+      }
+    }
+  } catch {}
+
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return;

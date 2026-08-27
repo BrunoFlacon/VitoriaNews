@@ -3,13 +3,13 @@ const crypto = require('crypto');
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  host: 'localhost', port: 5433, database: 'social_canvas',
+  host: 'localhost', port: 5433, database: 'vitoria_news',
   user: 'postgres', password: '123456',
 });
 
 async function main() {
   const id = crypto.randomUUID();
-  const email = 'admin@socialcanvas.com';
+  const email = 'admin@webradiovitoria.com.br';
   const hashed = await bcrypt.hash('admin123', 10);
   const now = new Date().toISOString();
   const name = 'Admin';

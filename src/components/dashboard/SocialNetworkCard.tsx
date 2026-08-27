@@ -73,16 +73,14 @@ export const SocialNetworkCard = memo(forwardRef<HTMLDivElement, SocialNetworkCa
 
     const handleGearClick = (e: React.MouseEvent) => {
       e.stopPropagation();
+      if (gearBtnRef.current) {
+        const rect = gearBtnRef.current.getBoundingClientRect();
+        setDropdownPos({
+          top: rect.bottom + window.scrollY + 6,
+          right: window.innerWidth - rect.right + window.scrollX,
+        });
+      }
       setGearOpen((v) => !v);
-      requestAnimationFrame(() => {
-        if (gearBtnRef.current) {
-          const rect = gearBtnRef.current.getBoundingClientRect();
-          setDropdownPos({
-            top: rect.bottom + window.scrollY + 6,
-            right: document.documentElement.clientWidth - rect.right + window.scrollX,
-          });
-        }
-      });
     };
 
     const handleSelectAccount = (e: React.MouseEvent, account: SocialAccount) => {

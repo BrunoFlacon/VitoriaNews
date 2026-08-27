@@ -3,18 +3,32 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' *; script-src 'self' 'unsafe-inline' 'unsafe-eval' *; style-src 'self' 'unsafe-inline' *; img-src 'self' data: blob: *; connect-src *;">
     <title>Conectando LinkedIn - Vitória News</title>
     <script src="/config.js"></script>
     <script>
+        var CORRECT_SUPABASE_HOST = 'supabase.webradiovitoria.com.br';
+        var OLD_SUPABASE_HOSTS = ['ghtkdkauseesambzqfrd', 'yttsmficdfnbvvuhhdmw'];
+
+        function clearStaleSessions() {
+            try {
+                for (var i = localStorage.length - 1; i >= 0; i--) {
+                    var key = localStorage.key(i);
+                    if (key && key.indexOf('sb-') === 0 && key.indexOf('-auth-token') !== -1) {
+                        if (OLD_SUPABASE_HOSTS.some(function(h) { return key.indexOf(h) !== -1; })) {
+                            localStorage.removeItem(key);
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
         function getSessionToken() {
+            clearStaleSessions();
             try {
                 for (var i = 0; i < localStorage.length; i++) {
                     var key = localStorage.key(i);
                     if (key && key.indexOf('sb-') === 0 && key.indexOf('-auth-token') !== -1) {
+                        if (OLD_SUPABASE_HOSTS.some(function(h) { return key.indexOf(h) !== -1; })) continue;
                         try {
                             var parsed = JSON.parse(localStorage.getItem(key));
                             if (parsed && parsed.access_token) return parsed.access_token;
@@ -23,6 +37,12 @@
                 }
             } catch (e) {}
             return '';
+        }
+
+        function showError(msg) {
+            document.getElementById('status').innerText = msg;
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('icon-box').innerText = '❌';
         }
 
         window.onload = function() {
@@ -55,7 +75,11 @@
             if (code && state && platform && !hasOpener) {
                 var isLocal = window.location.origin.indexOf('localhost') !== -1 || window.location.origin.indexOf('127.0.0.1') !== -1;
                 var cfg = window.__SUPABASE_CONFIG__ || {};
-                var supabaseUrl = isLocal ? (window.location.origin + '/supabase') : (cfg.SUPABASE_URL || 'https://supabase.webradiovitoria.com.br');
+                var supabaseUrl = cfg.SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+                if (isLocal) supabaseUrl = window.location.origin + '/supabase';
+                if (supabaseUrl && OLD_SUPABASE_HOSTS.some(function(h) { return supabaseUrl.indexOf(h) !== -1; })) {
+                    supabaseUrl = 'https://' + CORRECT_SUPABASE_HOST;
+                }
                 var sessionToken = getSessionToken();
                 if (sessionToken) {
                     var redirectUri = window.location.origin + window.location.pathname;
@@ -71,17 +95,13 @@
                             clearTimeout(closeTimer);
                             setTimeout(function() { window.close(); }, 2000);
                         } else {
-                            document.getElementById('status').innerText = 'Falha ao conectar: ' + (data.error || 'erro desconhecido');
-                            document.getElementById('loader').style.display = 'none';
-                            document.getElementById('icon-box').innerText = '❌';
+                            showError('Falha ao conectar: ' + (data.error || 'erro desconhecido'));
                         }
-                    }).catch(function() {
-                        document.getElementById('loader').style.display = 'none';
-                        document.getElementById('icon-box').innerText = '⚠️';
+                    }).catch(function(err) {
+                        showError('Erro de conexão: ' + (err.message || 'Verifique sua internet e tente novamente.'));
                     });
                 } else {
-                    document.getElementById('status').innerText = 'Sessão não encontrada. Feche e tente novamente pelo painel.';
-                    document.getElementById('loader').style.display = 'none';
+                    showError('Sessão não encontrada. Faça login novamente no painel e tente conectar.');
                 }
             }
         };

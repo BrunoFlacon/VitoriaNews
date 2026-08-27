@@ -41,7 +41,7 @@ serve(async (req) => {
     // ou forneceremos uma estrutura de assinatura opcional
     
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
-    formData.append('upload_preset', upload_preset || 'social_canvas_hub')
+    formData.append('upload_preset', upload_preset || 'vitoria_news')
 
     const uploadResponse = await fetch(cloudinaryUrl, {
       method: 'POST',

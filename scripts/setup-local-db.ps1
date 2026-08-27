@@ -1,5 +1,5 @@
 param(
-    [string]$DbName = "social_canvas",
+    [string]$DbName = "vitoria_news",
     [string]$Port = "5433",
     [string]$User = "postgres",
     [string]$Password = "123456"

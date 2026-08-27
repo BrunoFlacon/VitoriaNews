@@ -117,7 +117,7 @@ const TOP_TAGS = [
   { name: 'Starboy - The Weeknd', value: 75, color: '#84cc16' }
 ];
 
-export default function SocialHubDashboard() {
+export default function VitoriaNewsDashboard() {
   const { settings } = useSystem();
   const [darkMode, setDarkMode] = useState(true);
   const [zoom, setZoom] = useState(1);

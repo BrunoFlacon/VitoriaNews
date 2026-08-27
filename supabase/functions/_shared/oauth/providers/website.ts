@@ -11,7 +11,7 @@ export async function exchangeWebsite(url: string): Promise<any[]> {
   let postsCount = 0;
 
   try {
-    const rssRes = await fetch(`https://${domain}/feed`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+    const rssRes = await fetch(`https://${domain}/feed`, { headers: { "User-Agent": "VitoriaNews/1.0" } });
     if (rssRes.ok) {
       const rssText = await rssRes.text();
       postsCount = (rssText.match(/<item>|<entry>/gi) || []).length;

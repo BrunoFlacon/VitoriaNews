@@ -1,16 +1,16 @@
-# Novo Portal — Redação Multimídia de Tupã e Região
+# Vitória News — Rede Vitória de Comunicação
 
 > Portal de notícias multimídia com análises de precisão, breaking news, podcasts e reportagens exclusivas da região de Tupã/SP.
 
 ## Conteúdo principal
-- [Portal de Notícias](https://vitoria-net.lovable.app/news)
-- [Página Inicial](https://vitoria-net.lovable.app/)
-- [Manual do Usuário](https://vitoria-net.lovable.app/manual)
-- [Perfil — Bruno Falcão](https://vitoria-net.lovable.app/profile/bruno-flacon)
+- [Portal de Notícias](https://webradiovitoria.com.br/news)
+- [Página Inicial](https://webradiovitoria.com.br/)
+- [Manual do Usuário](https://webradiovitoria.com.br/manual)
+- [Perfil — Bruno Falcão](https://webradiovitoria.com.br/profile/bruno-flacon)
 
 ## Sobre
 Plataforma omnichannel de redação multimídia que combina jornalismo, redes sociais e streaming ao vivo. Cobre política, economia, cultura e cotidiano da região de Tupã.
 
 ## Políticas
-- [Termos de Uso](https://vitoria-net.lovable.app/terms)
-- [Privacidade](https://vitoria-net.lovable.app/privacy)
+- [Termos de Uso](https://webradiovitoria.com.br/terms)
+- [Privacidade](https://webradiovitoria.com.br/privacy)

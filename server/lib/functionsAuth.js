@@ -3,7 +3,7 @@
 import jwt from "jsonwebtoken";
 import { pool } from "./db.js";
 
-const JWT_SECRET = process.env.LOCAL_JWT_SECRET || "social-canvas-hub-local-dev-secret-2026";
+const JWT_SECRET = process.env.LOCAL_JWT_SECRET || "vitoria-news-local-dev-secret-2026";
 
 export async function resolveUserFromAuth(authHeader) {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {

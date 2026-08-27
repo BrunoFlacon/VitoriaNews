@@ -167,7 +167,7 @@ serve(async (req: Request) => {
             contactBody.organizations = [{ name: company }];
           }
           contactBody.biographies = [{
-            value: `Sincronizado via Social Canvas Hub - ${platform}`,
+            value: `Sincronizado via Vitória News - ${platform}`,
             contentType: "TEXT_PLAIN",
           }];
           contactBody.userDefined = [

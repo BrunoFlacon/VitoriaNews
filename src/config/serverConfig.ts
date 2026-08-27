@@ -1,4 +1,4 @@
-// Centralized Server & Environment Configuration for Social Canvas Hub (Vitória News)
+// Centralized Server & Environment Configuration for Vitória News
 // Changes to server URLs or branding here automatically propagate across the application.
 
 const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://supabase.webradiovitoria.com.br";

@@ -40,7 +40,7 @@ serve(async (req) => {
       .single()
 
     if (!profile || !['dev_master', 'admin_master'].includes(profile.role)) {
-      throw new Error('Forbidden: Você não tem privilégios masters no Social Canvas.')
+      throw new Error('Forbidden: Você não tem privilégios masters no Vitória News.')
     }
 
     // Ler dados enviados pela requisição POST

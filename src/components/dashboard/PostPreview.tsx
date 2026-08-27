@@ -303,10 +303,10 @@ export const XLikeCard = memo(function XLikeCardRenderer({ content, media, autho
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1 mb-0.5">
             <div className="flex items-center gap-1 truncate">
-              <span className="font-black text-[15px] truncate">{authorName || "Vitoria News"}</span>
+              <span className="font-black text-[15px] truncate">{authorName || "Vitória News"}</span>
               <CheckCircle2 className="w-4 h-4 text-sky-500 fill-sky-500 shrink-0" />
               {visibility && <span className="ml-1 text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-900 px-2 py-0.5 rounded border border-white/5">{visibility === 'public' ? 'Público' : visibility === 'private' ? 'Privado' : 'Assinantes'}</span>}
-              <span className="text-zinc-500 text-[14px]">@{authorName?.toLowerCase().replace(/\s/g, "") || "vitorianews"}</span>
+              <span className="text-zinc-500 text-[14px]">@{authorName?.toLowerCase().replace(/\s/g, "") || "webradiovitoria"}</span>
               <span className="text-zinc-500 text-[14px] ml-1">• {formatNum(realMetrics?.followers ?? 0)}</span>
             </div>
             <MoreHorizontal className="w-5 h-5 text-zinc-500 shrink-0" />
@@ -382,7 +382,7 @@ export const TruthSocialCard = memo(function TruthSocialCardRenderer({ content, 
           <div className="flex items-center gap-1 mb-0.5">
             <span className="font-bold text-[15px] truncate text-[#552B7C] dark:text-[#8D49CC]">{authorName || "Vitória News"}</span>
             <CheckCircle2 className="w-4 h-4 text-[#552B7C] fill-[#552B7C] dark:text-[#8D49CC] dark:fill-[#8D49CC]" />
-            <span className="text-zinc-500 text-[14px]">@{authorName?.toLowerCase().replace(/\s/g, "") || "vitorianews"}</span>
+            <span className="text-zinc-500 text-[14px]">@{authorName?.toLowerCase().replace(/\s/g, "") || "webradiovitoria"}</span>
           </div>
           <div className="text-[15px] leading-snug mb-3 whitespace-pre-wrap">{content || "Explorando a liberdade de expressão com novas ideias."}</div>
           
@@ -450,7 +450,7 @@ export const GettrCard = memo(function GettrCardRenderer({ content, media, autho
           <div className="flex items-center gap-1 mb-1">
             <span className="font-bold text-[15px] truncate">{authorName || "Vitória News"}</span>
             <CheckCircle2 className="w-4 h-4 text-[#FC223B] fill-[#FC223B]" />
-            <span className="text-zinc-500 text-[14px]">@{authorName?.toLowerCase().replace(/\s/g, "") || "vitorianews"}</span>
+            <span className="text-zinc-500 text-[14px]">@{authorName?.toLowerCase().replace(/\s/g, "") || "webradiovitoria"}</span>
             <span className="text-zinc-500 text-[14px]">· 2m</span>
           </div>
           <div className="text-[15px] leading-snug mb-3 whitespace-pre-wrap">{content || "Notícias sem censura na plataforma."}</div>
@@ -711,7 +711,7 @@ export const InstagramCard = memo(function InstagramCardRenderer({ content, medi
       </div>
       <div className="insta-likes px-4 font-black text-[14px] mb-2">{formatNum(likes)} curtidas</div>
       <div className="insta-caption px-4 text-[14px] mb-3 leading-relaxed">
-        <span className="font-black mr-2 hover:underline cursor-pointer">{authorName?.toLowerCase().replace(/\s/g, '') || "vitoria.news"}</span>
+        <span className="font-black mr-2 hover:underline cursor-pointer">{authorName?.toLowerCase().replace(/\s/g, '') || "webradiovitoria"}</span>
         <span className="text-zinc-200">{content || "A revolução do conteúdo digital."}</span>
       </div>
       <div className="px-4 text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-4">HÁ 2 MINUTOS</div>
@@ -815,7 +815,7 @@ export const ThreadsCard = memo(function ThreadsCardRenderer({ content, media, a
         <div className="min-w-0">
           <div className="flex items-center justify-between mb-1.5">
             <div className="flex items-center gap-2">
-              <span className="font-black text-[15px] hover:underline cursor-pointer">{authorName?.toLowerCase().replace(/\s/g, '') || "vitorianews"}</span>
+              <span className="font-black text-[15px] hover:underline cursor-pointer">{authorName?.toLowerCase().replace(/\s/g, '') || "webradiovitoria"}</span>
               {visibility && <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-900 px-2 py-0.5 rounded border border-white/5">{visibility === 'public' ? 'Público' : visibility === 'private' ? 'Privado' : 'Assinantes'}</span>}
             </div>
             <div className="flex items-center gap-3">
@@ -890,7 +890,7 @@ export const RedditCard = memo(function RedditCardRenderer({ content, media, aut
         <div className="text-[11px] text-zinc-500 flex items-center gap-2 mb-2 font-bold uppercase tracking-wider">
           <div className="w-5 h-5 rounded-full bg-orange-600 flex items-center justify-center text-white text-[10px]">r/</div>
           <span className="text-zinc-200">r/IntelligenceHub</span>
-          <span>• u/{authorName?.toLowerCase().replace(/\s/g, '') || "vitorianews"}</span>
+          <span>• u/{authorName?.toLowerCase().replace(/\s/g, '') || "webradiovitoria"}</span>
           {visibility && <span className="ml-1 text-[9px] font-black text-zinc-500 uppercase tracking-widest bg-zinc-900 px-1.5 py-0.5 rounded border border-white/5">{visibility === 'public' ? 'Público' : visibility === 'private' ? 'Privado' : 'Assinantes'}</span>}
         </div>
         <h3 className="text-lg font-black text-white mb-3 leading-tight">{content?.split('\n')[0] || "O Futuro da Inteligência de Conteúdo em 2026"}</h3>
@@ -939,7 +939,7 @@ export const TikTokCard = memo(function TikTokCardRenderer({ content, media, aut
       <div className="tt-overlay absolute bottom-0 left-0 w-full p-5 flex items-end justify-between z-20">
         <div className="tt-info flex-1 pr-12 mb-6">
           <div className="tt-user flex items-center gap-2 mb-3">
-            <span className="font-black text-base shadow-lg">@{authorName?.toLowerCase().replace(/\s/g, '') || "vitorianews"}</span>
+            <span className="font-black text-base shadow-lg">@{authorName?.toLowerCase().replace(/\s/g, '') || "webradiovitoria"}</span>
             {visibility && <span className="text-[10px] font-black text-white/70 uppercase tracking-widest bg-black/40 px-2 py-0.5 rounded border border-white/10 backdrop-blur-md">{visibility === 'public' ? 'Público' : visibility === 'private' ? 'Privado' : 'Assinantes'}</span>}
             <button className="bg-red-500 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-lg active:scale-95 transition-all">Seguir</button>
           </div>
@@ -1335,7 +1335,7 @@ export const PinterestCard = memo(function PinterestCardRenderer({ content, medi
         <div className="absolute inset-0 bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-all duration-500 backdrop-blur-[1px]">
            <button className={cn("absolute top-6 right-6 px-8 py-3.5 rounded-full font-black text-[15px] shadow-2xl transition-all active:scale-90 hover:scale-105", saved ? "bg-white text-black" : "bg-pinterest-red text-white hover:bg-red-700")} onClick={(e) => { e.stopPropagation(); setSaved(!saved); }}>{saved ? "Salvo" : "Salvar"}</button>
            <div className="absolute bottom-6 left-6 right-6 flex justify-between items-center translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
-              <div className="bg-white/10 backdrop-blur-2xl p-2.5 rounded-full shadow-2xl flex items-center gap-3 px-5 border border-white border-opacity-10 cursor-pointer hover:bg-white/20 transition-all group/link"><Globe className="w-4 h-4 text-white group-hover:scale-110 transition-transform" /><span className="text-[11px] font-black text-white uppercase tracking-wider truncate max-w-[100px]">vitorianews.com</span></div>
+               <div className="bg-white/10 backdrop-blur-2xl p-2.5 rounded-full shadow-2xl flex items-center gap-3 px-5 border border-white border-opacity-10 cursor-pointer hover:bg-white/20 transition-all group/link"><Globe className="w-4 h-4 text-white group-hover:scale-110 transition-transform" /><span className="text-[11px] font-black text-white uppercase tracking-wider truncate max-w-[100px]">webradiovitoria.com.br</span></div>
               <div className="flex gap-3"><div className="w-11 h-11 rounded-full bg-white/10 backdrop-blur-2xl flex items-center justify-center shadow-2xl cursor-pointer hover:bg-white/20 border border-white border-opacity-10 transition-all active:scale-90"><Share2 className="w-5 h-5 text-white" /></div><div className="w-11 h-11 rounded-full bg-white/10 backdrop-blur-2xl flex items-center justify-center shadow-2xl cursor-pointer hover:bg-white/20 border border-white border-opacity-10 transition-all active:scale-90"><MoreHorizontal className="w-5 h-5 text-white" /></div></div>
            </div>
         </div>
@@ -1375,7 +1375,7 @@ export const WebsiteCard = memo(function WebsiteCardRenderer({ content, media, a
           <div className="w-2.5 h-2.5 rounded-full bg-green-400" />
         </div>
         <div className="flex-1 bg-white rounded border px-3 py-1 text-[10px] text-zinc-400 truncate">
-          https://vitorianews.com.br/{content?.split('\n')[0].toLowerCase().replace(/\s/g, '-') || "noticia-exclusiva"}
+          https://webradiovitoria.com.br/{content?.split('\n')[0].toLowerCase().replace(/\s/g, '-') || "noticia-exclusiva"}
         </div>
       </div>
       {media.length > 0 && (

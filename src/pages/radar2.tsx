@@ -125,7 +125,7 @@ const TRENDS_DATA = [
   }
 ];
 
-export default function SocialHubDashboard() {
+export default function VitoriaNewsDashboard() {
   const [darkMode, setDarkMode] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -175,7 +175,7 @@ export default function SocialHubDashboard() {
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-white flex items-center gap-2">
-                SocialHub News <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded text-[10px] font-bold uppercase tracking-wider">Radar</span>
+                Vitória News <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded text-[10px] font-bold uppercase tracking-wider">Radar</span>
               </h1>
             </div>
           </div>

@@ -250,7 +250,7 @@ export const LayoutAdvisorPlugin: StudioPlugin = {
   id: 'builtin-layout-advisor',
   name: 'Layout Advisor',
   version: '1.0.0',
-  author: 'Social Canvas Hub',
+  author: 'Vitória News',
   description: 'Analisa a composição e sugere melhorias de layout',
   tools: [
     {
@@ -278,7 +278,7 @@ export const PrintExportPlugin: StudioPlugin = {
   id: 'builtin-print-export',
   name: 'Print Export',
   version: '1.0.0',
-  author: 'Social Canvas Hub',
+  author: 'Vitória News',
   description: 'Exportação para impressão com crop marks e bleed',
   exportFormats: [
     {
@@ -303,7 +303,7 @@ export const AnimationPlugin: StudioPlugin = {
   id: 'builtin-animations',
   name: 'Layer Animations',
   version: '1.0.0',
-  author: 'Social Canvas Hub',
+  author: 'Vitória News',
   description: 'Animações de camada com keyframes',
   tools: ANIMATION_PRESETS.slice(0, 3).map((preset) => ({
     id: `anim-${preset.name.toLowerCase().replace(/\s+/g, '-')}`,

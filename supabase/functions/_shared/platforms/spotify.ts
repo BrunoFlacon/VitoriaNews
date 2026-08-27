@@ -19,7 +19,7 @@ export async function publishToSpotify(supabase: any, payload: PublishPayload): 
       },
       body: JSON.stringify({
         name: playlistName,
-        description: `Published via Social Canvas Hub — ${new Date().toISOString().split('T')[0]}`,
+        description: `Published via Vitória News — ${new Date().toISOString().split('T')[0]}`,
         public: false
       })
     });

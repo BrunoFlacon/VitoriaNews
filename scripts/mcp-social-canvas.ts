@@ -36,9 +36,9 @@ async function query(table: string, select = '*', filters: Record<string, any> =
 }
 
 const server = new McpServer({
-  name: 'social-canvas-hub',
+  name: 'vitoria-news',
   version: '1.0.0',
-  description: 'MCP server for Social Canvas Hub — access all social media metrics from Supabase',
+  description: 'MCP server for Vitória News — access all social media metrics from Supabase',
 });
 
 server.registerTool(

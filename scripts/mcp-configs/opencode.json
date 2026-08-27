@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "social-canvas-hub": {
+    "vitoria-news": {
       "command": "npx",
       "args": ["tsx", "scripts/mcp-social-canvas.ts"],
       "env": {

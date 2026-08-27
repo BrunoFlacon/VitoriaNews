@@ -31,7 +31,7 @@ app.use(express.json());
 const pool = new Pool({
   host: process.env.LOCAL_DB_HOST || "localhost",
   port: parseInt(process.env.LOCAL_DB_PORT || "5433"),
-  database: process.env.LOCAL_DB_NAME || "social_canvas",
+  database: process.env.LOCAL_DB_NAME || "vitoria_news",
   user: process.env.LOCAL_DB_USER || "postgres",
   password: process.env.LOCAL_DB_PASS || "123456",
 });
@@ -589,7 +589,7 @@ app.delete("/api/storage/:bucket/*filePath", async (req, res) => {
   }
 });
 
-const JWT_SECRET = process.env.LOCAL_JWT_SECRET || "social-canvas-hub-local-dev-secret-2026";
+const JWT_SECRET = process.env.LOCAL_JWT_SECRET || "vitoria-news-local-dev-secret-2026";
 const JWT_EXPIRES_IN = "24h";
 
 // ─── Local "Edge Functions" runtime ─────────────────────────────
@@ -838,7 +838,7 @@ app.get("/db-console", (req, res) => {
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"/>
-<title>DB Console — Social Canvas Hub</title>
+<title>DB Console — Vitória News</title>
 <style>
   body { font-family: system-ui, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
   header { padding: 14px 20px; background: #1e293b; border-bottom: 1px solid #334155; }

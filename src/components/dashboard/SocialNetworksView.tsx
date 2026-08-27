@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, memo } from "react";
 import { motion } from "framer-motion";
-import { RefreshCw, Share2, CheckCircle2, AlertCircle, PlusCircle, Palette } from "lucide-react";
+import { RefreshCw, Share2, CheckCircle2, AlertCircle, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSocialConnections } from "@/hooks/useSocialConnections";
@@ -46,24 +46,18 @@ export const SocialNetworksView = memo(() => {
   const isConnected = useCallback(
     (platformId: string) => {
       if (platformId === 'youtube' || platformId === 'google') {
-        return (
-          connections.some((c) => (c.platform === 'youtube' || c.platform === 'google') && c.is_connected) ||
-          stats.some((s) => s.platform === 'youtube' || s.platform === 'google')
-        );
+        return connections.some((c) => (c.platform === 'youtube' || c.platform === 'google') && c.is_connected);
       }
-      return (
-        connections.some((c) => c.platform === platformId && c.is_connected) ||
-        stats.some((s) => s.platform === platformId)
-      );
+      return connections.some((c) => c.platform === platformId && c.is_connected);
     },
-    [connections, stats]
+    [connections]
   );
 
   const getPageName = useCallback(
     (platformId: string) => {
-      const conn = connections.find((c) => (c.platform === platformId || (platformId === 'youtube' && c.platform === 'google')) && c.is_connected);
-      const relatedStats = stats.find(s => s.platform === platformId || (platformId === 'youtube' && s.platform === 'google'));
-      return relatedStats?.username || conn?.page_name || conn?.username || (platformId === 'threads' ? "webradiovitoriaa" : null);
+      const conn = connections.find((c) => c.platform === platformId && c.is_connected);
+      const relatedStats = stats.find(s => s.platform === platformId);
+      return relatedStats?.username || conn?.page_name || conn?.username || null;
     },
     [connections, stats]
   );
@@ -78,7 +72,7 @@ export const SocialNetworksView = memo(() => {
   };
 
   const handleDisconnect = async (platformId: string) => {
-    const conn = connections.find((c) => (c.platform === platformId || (platformId === 'youtube' && c.platform === 'google')) && c.is_connected);
+    const conn = connections.find((c) => c.platform === platformId && c.is_connected);
     if (!conn) return;
     await disconnect(`${platformId}|${conn.id}`);
   };
@@ -181,7 +175,7 @@ export const SocialNetworksView = memo(() => {
           const platform = socialPlatforms.find((p) => p.id === platformId);
           if (!platform) return null;
 
-          const rawConns = (accountsByPlatform[platformId] || []);
+          const rawConns = [...(accountsByPlatform[platformId] || [])];
           if (platformId === 'youtube' && rawConns.length === 0) {
             rawConns.push(...(accountsByPlatform['google'] || []));
           }
@@ -224,7 +218,7 @@ export const SocialNetworksView = memo(() => {
 
             return {
               id: conn.id,
-              page_name: conn.page_name || accountStats?.username || conn.username || (platformId === 'threads' ? 'webradiovitoriaa' : 'Conta Conectada'),
+              page_name: conn.page_name || accountStats?.username || conn.username || 'Conta Conectada',
               platform_user_id: conn.platform_user_id,
               profile_image_url: displayPhoto,
               followers_count: displayFollowers,
@@ -238,7 +232,7 @@ export const SocialNetworksView = memo(() => {
             };
           });
 
-          if (platformAccounts.length === 0 && platformSocialStats.length > 0) {
+          if (platformAccounts.length === 0 && platformSocialStats.length > 0 && isConnected(platformId)) {
             platformSocialStats.forEach(st => {
               const rawPhoto = st.profile_picture || "";
               const displayFollowers = (platformId === 'telegram' || platformId === 'whatsapp')
@@ -247,7 +241,7 @@ export const SocialNetworksView = memo(() => {
 
               platformAccounts.push({
                 id: st.id || `stat-${platformId}-${st.username || '1'}`,
-                page_name: st.username || (platformId === 'threads' ? 'webradiovitoriaa' : 'Conta Conectada'),
+                page_name: st.username || 'Conta Conectada',
                 platform_user_id: st.platform_user_id,
                 profile_image_url: getProxyUrl(rawPhoto),
                 followers_count: displayFollowers,

@@ -177,7 +177,7 @@ export default function SystemEvolutionPage() {
         <div className="max-w-md space-y-6">
           <Shield className="w-16 h-16 text-red-500 mx-auto" />
           <h1 className="text-2xl font-black text-white uppercase tracking-widest">Acesso Restrito</h1>
-          <p className="text-slate-400">Esta área contém registros técnicos confidenciais do Social Canvas Hub. Apenas o criador tem acesso.</p>
+          <p className="text-slate-400">Esta área contém registros técnicos confidenciais do Vitória News. Apenas o criador tem acesso.</p>
           <button onClick={() => navigate(-1)} className="text-theme font-bold flex items-center gap-2 mx-auto"><ArrowLeft className="w-4 h-4" /> Voltar</button>
         </div>
       </div>
@@ -235,7 +235,7 @@ export default function SystemEvolutionPage() {
         <div className="flex items-center gap-4">
           <History className="w-7 h-7 text-theme" />
           <div>
-            <h1 className="text-xl font-black tracking-tighter uppercase leading-none">Social Canvas Evolution</h1>
+            <h1 className="text-xl font-black tracking-tighter uppercase leading-none">Vitória News Evolution</h1>
             <span className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Console de Registro Mestre</span>
           </div>
         </div>
@@ -312,7 +312,7 @@ export default function SystemEvolutionPage() {
             <div className="flex items-center justify-center gap-3 md:gap-5 text-[9px] md:text-[10px] font-mono text-slate-600 font-bold tracking-widest flex-wrap uppercase">
                <span>Ago/2012 Web Rádio Vitória</span>
                <span className="w-1.5 h-1.5 bg-theme/30 rotate-45" />
-               <span>Out/2025 Social Hub</span>
+               <span>Out/2025 Vitória News</span>
                <span className="w-1.5 h-1.5 bg-theme/30 rotate-45" />
                 <span>© Jan/2026 {settings?.platform_name || "Vitória News"}</span>
             </div>

@@ -20,7 +20,7 @@ const News = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { settings } = useSystem();
 
-  const platformName = settings?.platform_name || "SocialHub";
+  const platformName = settings?.platform_name || "Vitória News";
   const logoUrl = settings?.logo_url;
 
   useEffect(() => {

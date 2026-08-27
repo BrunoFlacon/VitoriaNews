@@ -156,7 +156,7 @@ export const IdentityTab = () => {
                 </div>
               )}
               <span className="font-display font-bold text-xl gradient-text truncate">
-                {settings.platform_name || "SocialHub"}
+                {settings.platform_name || "Vitória News"}
               </span>
             </div>
             <div className="p-4 space-y-2">
@@ -176,7 +176,7 @@ export const IdentityTab = () => {
                   )}
                 </div>
                 <span className="text-xs font-medium text-foreground truncate max-w-[120px]">
-                  {settings.platform_name || "SocialHub"} - Dashboard
+                  {settings.platform_name || "Vitória News"} - Dashboard
                 </span>
              </div>
           </div>

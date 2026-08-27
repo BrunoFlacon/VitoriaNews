@@ -3,11 +3,11 @@
  */
 export const COMMUNICATION_TEMPLATES = {
   EMAIL_WELCOME_FREE: {
-    subject: "Bem-vindo ao Social Canvas Hub! 🚀",
+    subject: "Bem-vindo ao Vitória News! 🚀",
     body: `
       Olá, [NOME]!
 
-      É um prazer ter você conosco no Social Canvas Hub. Acabamos de confirmar sua assinatura gratuita em nossa Newsletter.
+      É um prazer ter você conosco no Vitória News. Acabamos de confirmar sua assinatura gratuita em nossa Newsletter.
 
       A partir de agora, você receberá:
       - Resumos semanais das principais tendências.
@@ -17,7 +17,7 @@ export const COMMUNICATION_TEMPLATES = {
       Seja bem-vindo à nova era da inteligência social.
 
       Atenciosamente,
-      Equipe Social Canvas Hub
+      Equipe Vitória News
     `
   },
   EMAIL_WELCOME_PAID: {
@@ -25,7 +25,7 @@ export const COMMUNICATION_TEMPLATES = {
     body: `
       Olá, [NOME]!
 
-      Parabéns! Seu acesso ao Social Canvas Hub Premium foi confirmado com sucesso.
+      Parabéns! Seu acesso ao Vitória News Premium foi confirmado com sucesso.
 
       Como assinante exclusivo, você agora tem acesso a:
       - Radar de Poder em tempo real.
@@ -36,11 +36,11 @@ export const COMMUNICATION_TEMPLATES = {
       Prepare-se para estar sempre um passo à frente da concorrência.
 
       Atenciosamente,
-      Equipe Social Canvas Hub
+      Equipe Vitória News
     `
   },
   WHATSAPP_CONFIRMATION: {
-    text: "Olá, [NOME]! 👋 Confirmamos seu cadastro no Social Canvas Hub. Você passará a receber nossos alertas de inteligência ebreaking news diretamente por aqui. Seja bem-vindo!"
+    text: "Olá, [NOME]! 👋 Confirmamos seu cadastro no Vitória News. Você passará a receber nossos alertas de inteligência ebreaking news diretamente por aqui. Seja bem-vindo!"
   },
   INTERNAL_CONVERSION_ALERT: {
     text: "🚀 *Nova Conversão!* O seguidor [NOME] acaba de assinar o plano [PLANO]. Origem: [ORIGEM] / Conteúdo: [CONTEUDO]."

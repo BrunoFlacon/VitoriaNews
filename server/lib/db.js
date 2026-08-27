@@ -14,7 +14,7 @@ const { Pool } = pg;
 export const pool = new Pool({
   host: process.env.LOCAL_DB_HOST || "localhost",
   port: parseInt(process.env.LOCAL_DB_PORT || "5433"),
-  database: process.env.LOCAL_DB_NAME || "social_canvas",
+  database: process.env.LOCAL_DB_NAME || "vitoria_news",
   user: process.env.LOCAL_DB_USER || "postgres",
   password: process.env.LOCAL_DB_PASS || "123456",
   max: 10,

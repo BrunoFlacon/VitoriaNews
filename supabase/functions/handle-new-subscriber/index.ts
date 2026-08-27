@@ -76,7 +76,7 @@ serve(async (req) => {
           type: "text",
           text: {
             preview_url: false,
-            body: `Olá ${record.full_name}! 👋 Confirmamos seu cadastro no Social Canvas Hub. Você passará a receber nossos alertas de inteligência e breaking news diretamente por aqui. Seja bem-vindo!`
+            body: `Olá ${record.full_name}! 👋 Confirmamos seu cadastro no Vitória News. Você passará a receber nossos alertas de inteligência e breaking news diretamente por aqui. Seja bem-vindo!`
           }
         }),
       })

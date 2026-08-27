@@ -543,7 +543,7 @@ export const AdvancedAnalytics = ({ onNavigate }: AdvancedAnalyticsProps = {}) =
       const imgProps = pdf.getImageProperties(imgData);
       const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, imgHeight);
-      pdf.save(`SocialHub_Report_${period}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      pdf.save(`VitoriaNews_Report_${period}_${new Date().toISOString().slice(0, 10)}.pdf`);
       toast({ title: "Sucesso!", description: "Relatório exportado com sucesso." });
     } catch (err) {
       console.error("PDF Export failed:", err);

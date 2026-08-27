@@ -321,7 +321,7 @@ async function exchangeReddit(code: string, redirectUri: string, creds: any, sup
     headers: { 
       "Authorization": `Basic ${auth}`,
       "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "SocialCanvasHub/1.0"
+      "User-Agent": "VitoriaNews/1.0"
     },
     body: new URLSearchParams(payload)
   });
@@ -334,7 +334,7 @@ async function exchangeReddit(code: string, redirectUri: string, creds: any, sup
   const expiresIn = data.expires_in || 3600;
 
   const userRes = await fetch("https://oauth.reddit.com/api/v1/me", {
-    headers: { "Authorization": `Bearer ${accessToken}`, "User-Agent": "SocialCanvasHub/1.0" }
+    headers: { "Authorization": `Bearer ${accessToken}`, "User-Agent": "VitoriaNews/1.0" }
   });
   const userData = await userRes.json();
 

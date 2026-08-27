@@ -435,7 +435,7 @@ async function generateWithOpenRouter(
       'Authorization': `Bearer ${openrouterKey}`,
       'Content-Type': 'application/json',
       'HTTP-Referer': window.location.origin,
-      'X-Title': 'Social Canvas Hub',
+      'X-Title': 'Vitória News',
     },
     body: JSON.stringify({
       model: modelId,

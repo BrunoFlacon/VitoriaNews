@@ -2,9 +2,9 @@ export async function exchangeRumble(manualToken: string, username: string): Pro
   if (!username) throw new Error("Username do Rumble é obrigatório.");
   let videoCount = 0;
   try {
-    const rssRes = await fetch(`https://rumble.com/c/${username}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+    const rssRes = await fetch(`https://rumble.com/c/${username}/rss`, { headers: { "User-Agent": "VitoriaNews/1.0" } });
     if (!rssRes.ok) {
-      const rssRes2 = await fetch(`https://rumble.com/user/${username}/rss`, { headers: { "User-Agent": "SocialCanvasHub/1.0" } });
+      const rssRes2 = await fetch(`https://rumble.com/user/${username}/rss`, { headers: { "User-Agent": "VitoriaNews/1.0" } });
       if (rssRes2.ok) {
         const rssText = await rssRes2.text();
         videoCount = (rssText.match(/<item>/g) || []).length;

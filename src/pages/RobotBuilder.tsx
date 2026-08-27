@@ -866,7 +866,7 @@ const RobotBuilder = () => {
       <div className="p-8 rounded-[40px] bg-gradient-to-br from-indigo-500/10 via-accent/5 to-primary/10 border border-border/50 text-center relative overflow-hidden group">
          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-5 pointer-events-none" />
          <Zap className="w-12 h-12 text-primary mx-auto mb-4 animate-bounce" />
-         <h2 className="text-2xl font-black mb-2 italic">Integração Total Vitória Net</h2>
+          <h2 className="text-2xl font-black mb-2 italic">Integração Total Vitória News</h2>
          <p className="text-muted-foreground max-w-2xl mx-auto font-medium">
            Este robô não apenas responde mensagens. Ele sincroniza o sentimento das conversas com o seu <strong>Analytics</strong>, identifica <strong>Trends</strong> virais no inbox e alerta sobre <strong>Eventos de Ataque</strong> em tempo real.
          </p>
@@ -979,7 +979,7 @@ const RobotBuilder = () => {
                 
                 <div className="p-4 bg-muted/10 border-t border-border/30 text-center">
                   <p className="text-[9px] font-bold text-muted-foreground/50 uppercase tracking-widest leading-none">
-                    Vitoria Net Security Audit • {new Date().getFullYear()}
+                    Vitória News Security Audit • {new Date().getFullYear()}
                   </p>
                 </div>
               </SheetContent>

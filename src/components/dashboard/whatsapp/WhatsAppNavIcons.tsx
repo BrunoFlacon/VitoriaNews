@@ -41,51 +41,51 @@ export function WhatsAppNavIcons({ activeNav, onNavChange }: WhatsAppNavIconsPro
   const [profileName, setProfileName] = useState<string>("");
   const [connections, setConnections] = useState<ConnectionProfile[]>([]);
 
+  const fetchConnections = async () => {
+    if (!user?.id) return;
+    try {
+      const { data: conns } = await supabase
+        .from('social_connections')
+        .select('id, page_name, username, profile_image_url, profile_picture, metadata, is_connected')
+        .eq('user_id', user.id)
+        .eq('platform', 'whatsapp')
+        .order('created_at', { ascending: false });
+
+      if (conns && conns.length > 0) {
+        const profiles: ConnectionProfile[] = conns.map(c => ({
+          id: c.id,
+          name: c.page_name || c.username || (c.metadata as Record<string,any>)?.business_name || "WhatsApp",
+          phone: c.username || (c.metadata as Record<string,any>)?.phone || "",
+          avatar_url: c.profile_image_url || c.profile_picture || (c.metadata as Record<string,any>)?.avatar_url || null,
+          is_connected: c.is_connected || false,
+        }));
+        setConnections(profiles);
+
+        const activeProfile = profiles.find(p => p.is_connected) || profiles[0];
+        if (activeProfile) {
+          if (activeProfile.avatar_url) setAvatarUrl(activeProfile.avatar_url);
+          setProfileName(activeProfile.name);
+        }
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('avatar_url, name')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
+      setProfileName(profile?.name || user.email?.split('@')[0] || "Usuário");
+    } catch {
+    }
+  };
+
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
 
     const fetchData = async () => {
-      try {
-        // Fetch all WhatsApp connections for multi-profile menu
-        const { data: conns } = await supabase
-          .from('social_connections')
-          .select('id, page_name, username, profile_image_url, profile_picture, metadata, is_connected')
-          .eq('user_id', user.id)
-          .eq('platform', 'whatsapp')
-          .order('created_at', { ascending: false });
-
-        if (!cancelled && conns && conns.length > 0) {
-          const profiles: ConnectionProfile[] = conns.map(c => ({
-            id: c.id,
-            name: c.page_name || c.username || (c.metadata as Record<string,any>)?.business_name || "WhatsApp",
-            phone: c.username || (c.metadata as Record<string,any>)?.phone || "",
-            avatar_url: c.profile_image_url || c.profile_picture || (c.metadata as Record<string,any>)?.avatar_url || null,
-            is_connected: c.is_connected || false,
-          }));
-          setConnections(profiles);
-
-          // Set avatar from first connected connection or first connection
-          const activeProfile = profiles.find(p => p.is_connected) || profiles[0];
-          if (!cancelled && activeProfile) {
-            if (activeProfile.avatar_url) setAvatarUrl(activeProfile.avatar_url);
-            setProfileName(activeProfile.name);
-          }
-          return;
-        }
-
-        // Fallback to user profile if no WhatsApp connections
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('avatar_url, name')
-          .eq('user_id', user.id)
-          .maybeSingle();
-        if (!cancelled) {
-          if (profile?.avatar_url) setAvatarUrl(profile.avatar_url);
-          setProfileName(profile?.name || user.email?.split('@')[0] || "Usuário");
-        }
-      } catch {
-      }
+      await fetchConnections();
     };
 
     fetchData();
@@ -183,8 +183,8 @@ export function WhatsAppNavIcons({ activeNav, onNavChange }: WhatsAppNavIconsPro
                           .update({ is_connected: true })
                           .eq('id', conn.id);
                         toast({ title: `Alternando para ${conn.name}` });
-                        // Re-fetch to update UI
-                        window.location.reload();
+                        // Re-fetch connections to update UI without full page reload
+                        await fetchConnections();
                       } catch {
                         toast({ title: "Erro ao alternar conta", variant: "destructive" });
                       }

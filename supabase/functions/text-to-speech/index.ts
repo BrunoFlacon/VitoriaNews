@@ -71,8 +71,8 @@ serve(async (req) => {
       "Content-Type": "application/json",
     };
     if (useOpenRouter) {
-      ttsHeaders["HTTP-Referer"] = "https://socialhub.vitoria.net";
-      ttsHeaders["X-OpenRouter-Title"] = "Social Canvas Hub";
+      ttsHeaders["HTTP-Referer"] = "https://webradiovitoria.com.br";
+      ttsHeaders["X-OpenRouter-Title"] = "Vitória News";
     }
 
     const ttsBody: any = {

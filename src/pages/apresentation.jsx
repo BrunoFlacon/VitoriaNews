@@ -44,7 +44,7 @@ const INITIAL_CONTENT = {
     logoType: 'text', // 'text' ou 'image'
     logoText: 'V',
     logoUrl: '',
-    brandName: 'Vitória Net'
+    brandName: 'Vitória News'
   },
   style: {
     fontFamily: '"Outfit", sans-serif',
@@ -117,7 +117,7 @@ const INITIAL_CONTENT = {
       { id: 1, label: "Política de Privacidade", url: "#" },
       { id: 2, label: "Termos de Uso", url: "#" }
     ],
-    copyright: "Todos Os Direitos Reservados • Vitória Net."
+    copyright: "Todos Os Direitos Reservados • Vitória News."
   }
 };
 

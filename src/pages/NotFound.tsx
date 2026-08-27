@@ -19,7 +19,7 @@ const NotFound = () => {
         </div>
         <h1 className="text-3xl font-display font-bold mb-3">Página não encontrada</h1>
         <p className="text-muted-foreground mb-8">
-          A página que você está procurando no SocialHub não existe ou foi movida.
+          A página que você está procurando no Vitória News não existe ou foi movida.
         </p>
         <Link to="/">
           <Button className="rounded-full px-8 h-12 gap-2">

@@ -222,7 +222,7 @@ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "dashboard
   );
 
   const isConnected = useCallback((platformId: string) => {
-    return connections?.some(c => c.platform === platformId) || false;
+    return connections?.some(c => c.platform === platformId && c.is_connected) || false;
   }, [connections]);
 
   const localTotalPosts = useMemo(() => 

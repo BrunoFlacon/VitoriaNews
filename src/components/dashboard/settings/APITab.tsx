@@ -132,12 +132,6 @@ export const APITab = memo(({
     <div className="space-y-3">
               {UNIQUE_PLATFORM_CONFIGS.filter(c => activePlatformIds.includes(c.id)).map((config) => {
                 const platformStats = socialStats.find(s => s.platform === config.id);
-                // isVerified = true if any Telegram entry has followers > 0 OR there's any bot entry saved
-                const isVerified = config.id === 'telegram' || config.id === 'whatsapp'
-                  ? socialStats.some(s => s.platform === config.id)
-                  : (!!platformStats && (platformStats.followers_count > 0 || (platformStats.posts_count ?? 0) > 0));
-
-
                 const hasCreds = hasCredentials(config.id);
                 const rawPlatformConnections = (config.id === 'google' || config.id === 'youtube')
                   ? connections.filter(c => (c.platform === 'google' || c.platform === 'youtube') && (c.is_connected || !!c.access_token))
@@ -147,7 +141,7 @@ export const APITab = memo(({
                         : socialStats.filter(s => s.platform === 'telegram').map(s => ({
                             id: `telegram-${s.username || 'bot'}`,
                             platform: 'telegram',
-                            page_name: s.username || 'WebRadioVitoria_Newsbot',
+                            page_name: s.username || 'VitoriaNews_Bot',
                             username: s.username,
                             followers_count: s.followers_count || 0,
                             posts_count: s.posts_count || 0,
@@ -158,11 +152,18 @@ export const APITab = memo(({
                         (c.is_connected || !!(c as any).access_token || config.id === 'whatsapp')
                       );
 
-                const isVerifiedFinal = (config.id === 'telegram' && hasCreds) || (config.id === 'whatsapp' && hasCreds) || socialStats.some(s => s.platform === config.id || (config.id === 'youtube' && s.platform === 'google'));
+                // Only Telegram and WhatsApp are "API-key" platforms where having creds = connected
+                const isApiKeyPlatform = config.id === 'telegram' || config.id === 'whatsapp';
+                const isVerifiedFinal = isApiKeyPlatform && hasCreds;
 
                 // For tools/manual APIs, having credentials means it is effectively connected
                 const isTool = config.type === 'tool' || !config.oauthSupported;
                 const isEffectivelyConnected = rawPlatformConnections.length > 0 || isVerifiedFinal || (isTool && hasCreds);
+
+                // isVerified = true if API-key platform has actual social stats, or OAuth platform is truly connected
+                const isVerified = isApiKeyPlatform
+                  ? socialStats.some(s => s.platform === config.id)
+                  : isEffectivelyConnected;
 
                 const platformSocialStats = socialStats.filter(s =>
                   s.platform === config.id || (config.id === 'youtube' && s.platform === 'google')
@@ -178,7 +179,7 @@ export const APITab = memo(({
 
                 platformSocialStats.forEach(stat => {
                   const key = stat.platform_user_id || stat.username || stat.id;
-                  if (!platformConnectionsMap.has(key)) {
+                  if (!platformConnectionsMap.has(key) && isEffectivelyConnected) {
                     platformConnectionsMap.set(key, {
                       id: stat.id || `stat-${config.id}-${key}`,
                       platform: config.id,
@@ -192,6 +193,7 @@ export const APITab = memo(({
                     });
                   } else {
                     const existing = platformConnectionsMap.get(key);
+                    if (!existing) return;
                     if (!existing.followers_count && (stat.followers_count || (stat as any).followers)) {
                       existing.followers_count = stat.followers_count || (stat as any).followers;
                     }

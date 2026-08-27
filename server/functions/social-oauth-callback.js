@@ -193,7 +193,7 @@ async function exchangeReddit(code, redirectUri, creds, supabase, userId) {
 
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const res = await fetch("https://www.reddit.com/api/v1/access_token", {
-    method: "POST", headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "SocialCanvasHub/1.0" },
+    method: "POST", headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "VitoriaNews/1.0" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri }),
   });
   const data = await res.json();
@@ -202,7 +202,7 @@ async function exchangeReddit(code, redirectUri, creds, supabase, userId) {
   const accessToken = data.access_token;
   const refreshToken = data.refresh_token || "";
   const expiresIn = data.expires_in || 3600;
-  const userRes = await fetch("https://oauth.reddit.com/api/v1/me", { headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "SocialCanvasHub/1.0" } });
+  const userRes = await fetch("https://oauth.reddit.com/api/v1/me", { headers: { Authorization: `Bearer ${accessToken}`, "User-Agent": "VitoriaNews/1.0" } });
   const userData = await userRes.json();
   return [{ accessToken, refreshToken, expiresIn, platformUserId: userData.id, pageName: userData.name, pageId: "", profileImageUrl: userData.icon_img?.split("?")[0] || "", username: userData.name }];
 }

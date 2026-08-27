@@ -108,7 +108,7 @@ export const PresentationMode: React.FC<PresentationModeProps> = ({ milestones, 
           </button>
         </div>
 
-        {/* Marca do Sistema Vitória Net - Destaque Nativo */}
+        {/* Marca do Sistema Vitória News - Destaque Nativo */}
         <div className="flex items-center gap-4 drop-shadow-[0_0_20px_rgba(var(--primary),0.5)]">
            {settings?.show_logo !== false && (
              settings?.logo_url ? (
