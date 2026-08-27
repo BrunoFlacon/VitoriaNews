@@ -20,8 +20,12 @@ try {
     return acc;
   }, {});
 
-  const supabaseUrl = envVars['VITE_SUPABASE_URL'];
-  // Suporta VITE_SUPABASE_ANON_KEY (padrão) ou VITE_SUPABASE_PUBLISHABLE_KEY (alias usado neste projeto)
+  // VITE_SUPABASE_URL no .env pode conter "${SUPABASE_URL}" (Vite interpola), mas Node puro lê o literal.
+  // Resolve: usa SUPABASE_URL diretamente se VITE_SUPABASE_URL não for URL válida.
+  let supabaseUrl = envVars['VITE_SUPABASE_URL'];
+  if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
+    supabaseUrl = envVars['SUPABASE_URL'];
+  }
   const supabaseKey = envVars['VITE_SUPABASE_ANON_KEY'] || envVars['VITE_SUPABASE_PUBLISHABLE_KEY'];
 
   if (!supabaseUrl || !supabaseKey) {
@@ -57,7 +61,7 @@ try {
       // Se RLS bloquear o insert com a váriavel Anon, mostraremos o erro
       console.error('❌ Falha ao tentar injetar milestone no Supabase (Checar RLS):', error.message);
     } else {
-      console.log('✅ Milestone de evolução gravado com sucesso no Vitória Net (Supabase)!');
+      console.log('✅ Milestone de evolução gravado com sucesso no Vitória News (Supabase)!');
     }
   };
 
