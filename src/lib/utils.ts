@@ -106,12 +106,12 @@ export function getProxyUrl(url: string | null | undefined): string {
   // Em modo remoto, URLs do storage do Supabase cloud são servidas diretamente
   if (url.includes('supabase.co/storage/')) return url;
 
-  // Verifica se a URL é do domínio self-hosted configurado (ex: supabase.webradiovitoria.com.br)
-  // Essas URLs precisam passar pelo proxy Vite (/supabase/...) para evitar bloqueio 403 do Cloudflare
-  // quando a requisição vem de localhost com referer externo
-  const selfHostedSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-  if (selfHostedSupabaseUrl && url.startsWith(selfHostedSupabaseUrl + '/storage/')) {
-    // Converte https://supabase.webradiovitoria.com.br/storage/... → /supabase/storage/...
+  // Em ambiente local (localhost/dev), passa pelo proxy Vite (/supabase/...) para evitar CORS/bloqueios.
+  // Em produção (webradiovitoria.com.br ou GitHub Pages), mantém a URL direta da VPS (https://supabase.webradiovitoria.com.br).
+  const isLocalHost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const selfHostedSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br';
+  
+  if (isLocalHost && selfHostedSupabaseUrl && url.startsWith(selfHostedSupabaseUrl + '/storage/')) {
     const path = url.replace(selfHostedSupabaseUrl, '/supabase');
     return path;
   }
