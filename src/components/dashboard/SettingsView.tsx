@@ -794,15 +794,39 @@ export const SettingsView = ({ defaultTab }: { defaultTab?: string }) => {
   const handleToggleBot = useCallback(async (active: boolean) => {
     setLocalBotActive(active);
     try {
-      const { error } = await supabase
+      const { data: existing } = await supabase
         .from('system_settings')
-        .upsert({ key: 'wa_bot_active', value: active ? 'true' : 'false', group: 'features' }, { onConflict: 'key' });
-      if (error) throw error;
+        .select('id')
+        .eq('key', 'wa_bot_active')
+        .maybeSingle();
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from('system_settings')
+          .update({ value: active ? 'true' : 'false', active: active, updated_at: new Date().toISOString() })
+          .eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('system_settings')
+          .insert([{ key: 'wa_bot_active', value: active ? 'true' : 'false', active: active, group: 'features' }]);
+        if (error) throw error;
+      }
+
+      toast({
+        title: active ? "Robô Ativado" : "Robô Pausado",
+        description: `O bot do WhatsApp foi ${active ? 'ligado' : 'desligado'} com sucesso.`
+      });
     } catch (e) {
       console.error('Error toggling bot:', e);
       setLocalBotActive(null);
+      toast({
+        title: "Erro ao alternar robô",
+        description: "Não foi possível salvar o estado do bot.",
+        variant: "destructive"
+      });
     }
-  }, []);
+  }, [toast]);
   const handleDisconnectCustom = useCallback(async (platformId: string, connectionId: string) => {
     try {
       await disconnect(`${platformId}|${connectionId}`);

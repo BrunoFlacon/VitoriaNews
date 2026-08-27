@@ -27,7 +27,7 @@ export const WhatsAppBotControl = ({
       <div className="flex items-center gap-6 flex-1 min-w-0">
         <div className="relative">
           <Avatar className="w-16 h-16 rounded-2xl border-[3px] border-[#151726]/30 shadow-xl flex-shrink-0 transition-transform group-hover:scale-105 bg-green-500/20">
-            <AvatarImage src="/bot-avatar.png" alt="Perfil do RobÃ´" className="object-cover" />
+            <AvatarImage src="/bot-avatar.png" alt="Perfil do Robô" className="object-cover" />
             <AvatarFallback className="rounded-2xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 text-xl font-bold text-green-500">
               RT
             </AvatarFallback>
@@ -36,7 +36,7 @@ export const WhatsAppBotControl = ({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 mb-2">
-            <p className="font-black text-[17px] text-white tracking-tight">RobÃ´ Bot_Zap</p>
+            <p className="font-black text-[17px] text-white tracking-tight">Robô Bot_Zap</p>
             <Badge className={cn(
               "text-[8px] font-black uppercase tracking-tighter",
               isBotOn ? "bg-green-500/20 text-green-500 border-green-500/30" : "bg-red-500/20 text-red-500 border-red-500/30"
