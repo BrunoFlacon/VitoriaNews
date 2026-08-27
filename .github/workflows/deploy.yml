@@ -38,8 +38,8 @@ jobs:
 
       - name: Build the project
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://supabase.webradiovitoria.com.br' }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY || 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NDQzNzM4MCwiZXhwIjo0OTQwMTEwOTgwLCJyb2xlIjoiYW5vbiJ9.YK5bepgy3Kj9Ak42dQ4nGXCE3hdH0BSr2GqXItbiA4c' }}
+          VITE_SUPABASE_URL: "https://supabase.webradiovitoria.com.br"
+          VITE_SUPABASE_PUBLISHABLE_KEY: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NDQzNzM4MCwiZXhwIjo0OTQwMTEwOTgwLCJyb2xlIjoiYW5vbiJ9.YK5bepgy3Kj9Ak42dQ4nGXCE3hdH0BSr2GqXItbiA4c"
           VITE_USE_LOCAL_DB: "false"
           NODE_OPTIONS: "--max_old_space_size=4096"
         run: npm run build
