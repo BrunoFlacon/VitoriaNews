@@ -238,7 +238,7 @@ serve(async (req: Request) => {
       await supabase.from("oauth_states").update({ code_verifier: codeVerifier }).eq("state", state);
       
       const scopes = "tweet.read tweet.write users.read offline.access"; 
-      authUrl = `https://twitter.com/i/oauth2/authorize?` + new URLSearchParams({
+      authUrl = `https://x.com/i/oauth2/authorize?` + new URLSearchParams({
         response_type: "code",
         client_id: twitterKey,
         redirect_uri: redirect_uri,

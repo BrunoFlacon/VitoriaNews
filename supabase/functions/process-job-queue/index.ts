@@ -108,8 +108,8 @@ serve(async (req: Request) => {
     return new Response(JSON.stringify({ processed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: String(error) }), {
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error?.message || JSON.stringify(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

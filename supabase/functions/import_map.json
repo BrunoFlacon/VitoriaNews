@@ -2,6 +2,8 @@
   "imports": {
     "std/": "https://deno.land/std@0.168.0/",
     "https://deno.land/std@0.168.0/http/server.ts": "https://deno.land/std@0.168.0/http/server.ts",
-    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2"
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2",
+    "resend": "https://esm.sh/resend@3.2.0",
+    "rss-parser": "https://esm.sh/rss-parser@3.13.0"
   }
 }
