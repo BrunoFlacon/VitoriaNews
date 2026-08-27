@@ -417,17 +417,22 @@ async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: 
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   const userData = await userRes.json();
-  const user = userData.data;
+  const user = userData?.data || userData;
+
+  if (!user || (!user.id && !user.username)) {
+    console.error("[Twitter] Invalid user response:", userData);
+    throw new Error(userData?.detail || userData?.title || "Não foi possível obter os dados do perfil do Twitter/X.");
+  }
 
   return [{
     accessToken,
     refreshToken,
     expiresIn,
-    platformUserId: user.id,
-    pageName: user.name,
+    platformUserId: String(user.id || user.username || "twitter_user"),
+    pageName: user.name || user.username || "X (Twitter)",
     pageId: "",
     profileImageUrl: user.profile_image_url?.replace("_normal", "") || "",
-    username: user.username,
+    username: user.username || "",
     followers: user.public_metrics?.followers_count || 0,
     postsCount: user.public_metrics?.tweet_count || 0
   }];
