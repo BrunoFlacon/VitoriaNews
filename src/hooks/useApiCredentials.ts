@@ -241,29 +241,6 @@ export function useApiCredentials() {
           bot_token: tokens[0] || '',
           tokens,
         } as any;
-      } else if (platform === "twitter") {
-        const safeAtob = (s: string) => {
-          try {
-            const padded = s + '='.repeat((4 - (s.length % 4)) % 4);
-            return atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
-          } catch (_) {
-            return null;
-          }
-        };
-
-        if (sanitizedCreds.client_id) {
-          const raw = sanitizedCreds.client_id;
-          const fullDecoded = safeAtob(raw);
-          if (fullDecoded && (/^[A-Za-z0-9_-]+(:[0-9]+:[a-z_]+)?$/.test(fullDecoded) || fullDecoded.includes(':'))) {
-            sanitizedCreds.client_id = fullDecoded;
-          } else if (raw.includes(':')) {
-            const parts = raw.split(':');
-            const decodedPrefix = safeAtob(parts[0]);
-            if (decodedPrefix && /^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
-              sanitizedCreds.client_id = [decodedPrefix, ...parts.slice(1)].join(':');
-            }
-          }
-        }
       } else if (platform === "ai_config") {
         // Normalize provider to lowercase — the DB may contain "OpenRouter"/"OpenAI" etc.
         if (sanitizedCreds.provider) {

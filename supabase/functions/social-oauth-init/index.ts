@@ -216,29 +216,8 @@ serve(async (req: Request) => {
         duration: "permanent"
       });
     } else if (platform === "twitter") {
-      let rawTwitterKey = (getVal("client_id", "TWITTER_CLIENT_ID") || "").trim();
-      if (!rawTwitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
-
-      const safeAtob = (s: string) => {
-        try {
-          const padded = s + '='.repeat((4 - (s.length % 4)) % 4);
-          return atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
-        } catch (_) {
-          return null;
-        }
-      };
-
-      let twitterKey = rawTwitterKey;
-      const fullDecoded = safeAtob(rawTwitterKey);
-      if (fullDecoded && (/^[A-Za-z0-9_-]+(:[0-9]+:[a-z_]+)?$/.test(fullDecoded) || fullDecoded.includes(':'))) {
-        twitterKey = fullDecoded;
-      } else if (rawTwitterKey.includes(':')) {
-        const parts = rawTwitterKey.split(':');
-        const decodedPrefix = safeAtob(parts[0]);
-        if (decodedPrefix && /^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
-          twitterKey = [decodedPrefix, ...parts.slice(1)].join(':');
-        }
-      }
+      const twitterKey = (getVal("client_id", "TWITTER_CLIENT_ID") || "").trim();
+      if (!twitterKey) throw new Error("Client ID do X (Twitter) não configurado.");
       
       const verifierChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
       let codeVerifier = '';

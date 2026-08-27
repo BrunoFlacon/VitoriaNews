@@ -354,29 +354,8 @@ async function exchangeReddit(code: string, redirectUri: string, creds: any, sup
 }
 
 async function exchangeTwitter(code: string, redirectUri: string, codeVerifier: string, creds: any, supabase: any, userId: string): Promise<TokenResult[]> {
-  let rawClientId = (creds.client_id || Deno.env.get("TWITTER_CLIENT_ID") || "").trim();
-  let clientSecret = (creds.client_secret || Deno.env.get("TWITTER_CLIENT_SECRET") || "").trim();
-
-  const safeAtob = (s: string) => {
-    try {
-      const padded = s + '='.repeat((4 - (s.length % 4)) % 4);
-      return atob(padded.replace(/-/g, '+').replace(/_/g, '/'));
-    } catch (_) {
-      return null;
-    }
-  };
-
-  let clientId = rawClientId;
-  const fullDecoded = safeAtob(rawClientId);
-  if (fullDecoded && (/^[A-Za-z0-9_-]+(:[0-9]+:[a-z_]+)?$/.test(fullDecoded) || fullDecoded.includes(':'))) {
-    clientId = fullDecoded;
-  } else if (rawClientId.includes(':')) {
-    const parts = rawClientId.split(':');
-    const decodedPrefix = safeAtob(parts[0]);
-    if (decodedPrefix && /^[A-Za-z0-9_-]+$/.test(decodedPrefix)) {
-      clientId = [decodedPrefix, ...parts.slice(1)].join(':');
-    }
-  }
+  const clientId = (creds.client_id || Deno.env.get("TWITTER_CLIENT_ID") || "").trim();
+  const clientSecret = (creds.client_secret || Deno.env.get("TWITTER_CLIENT_SECRET") || "").trim();
   
   if (!clientId) throw new Error("Client ID do Twitter não configurado.");
 
