@@ -3,27 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://connect.facebook.net https://*.facebook.net https://static.cloudflareinsights.com https://www.googletagmanager.com; script-src-elem 'self' 'unsafe-inline' blob: https://connect.facebook.net https://*.facebook.net https://static.cloudflareinsights.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: http://localhost:* blob: https://*.supabase.co https://*.webradiovitoria.com.br http://supabase-kong:8000; media-src 'self' blob: http://localhost:* https://assets.mixkit.co https://*.supabase.co https://*.webradiovitoria.com.br; connect-src 'self' blob: data: http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://*.webradiovitoria.com.br wss://*.webradiovitoria.com.br https://*.facebook.com https://*.facebook.net https://*.fb.com https://static.cloudflareinsights.com https://www.google-analytics.com https://openrouter.ai https://*.openrouter.ai https://maps.googleapis.com https://staticimgly.com https://image.pollinations.ai https://pollinations.ai https://aihorde.net https://*.aihorde.net https://koboldai.artcdn.org https://generativelanguage.googleapis.com https://ai.api.nvidia.comm https://api.openai.com https://router.huggingface.co https://api-inference.huggingface.co https://*.r2.cloudflarestorage.com http://supabase-kong:8000; frame-src 'self' https://*.facebook.com https://*.fb.com; worker-src 'self' blob:; base-uri 'self'; form-action 'self';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: https://connect.facebook.net https://*.facebook.net https://static.cloudflareinsights.com https://www.googletagmanager.com; script-src-elem 'self' 'unsafe-inline' blob: data: https://connect.facebook.net https://*.facebook.net https://static.cloudflareinsights.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.gstatic.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https: http://localhost:* blob: https://*.supabase.co https://*.webradiovitoria.com.br http://supabase-kong:8000; media-src 'self' blob: http://localhost:* https://assets.mixkit.co https://*.supabase.co https://*.webradiovitoria.com.br; connect-src 'self' blob: data: http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://*.webradiovitoria.com.br wss://*.webradiovitoria.com.br https://*.facebook.com https://*.facebook.net https://*.fb.com https://static.cloudflareinsights.com https://www.google-analytics.com https://openrouter.ai https://*.openrouter.ai https://maps.googleapis.com https://staticimgly.com https://image.pollinations.ai https://pollinations.ai https://aihorde.net https://*.aihorde.net https://koboldai.artcdn.org https://generativelanguage.googleapis.com https://ai.api.nvidia.comm https://api.openai.com https://router.huggingface.co https://api-inference.huggingface.co https://*.r2.cloudflarestorage.com http://supabase-kong:8000; frame-src 'self' https://*.facebook.com https://*.fb.com; worker-src 'self' blob:; base-uri 'self'; form-action 'self';">
 
     <meta http-equiv="Permissions-Policy" content="camera=(self), microphone=(self), geolocation=(), browsing-topics=()">
     <meta name="referrer" content="strict-origin-when-cross-origin">
 
-    <!-- Meta Tags Primárias -->
+    <!-- Preconnects & Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="preconnect" href="https://supabase.webradiovitoria.com.br">
     <link rel="preconnect" href="https://webradiovitoria.com.br">
-    <!-- Preload das fontes latinas (variáveis — um arquivo cobre todos os pesos) para acelerar o LCP -->
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4Cw.woff2" fetchpriority="high">
-    <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2">
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" fetchpriority="high">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all';this.onload=null;">
-    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
-
-    <!-- Preload critical modules (modulepreload only — script preload breaks Vite dev) -->
-    <link rel="modulepreload" href="/src/main.tsx" fetchpriority="high">
-    <link rel="modulepreload" href="/src/App.tsx" fetchpriority="high">
-    <link rel="modulepreload" href="/src/pages/Dashboard.tsx" fetchpriority="high">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Critical inline CSS to eliminate render delay for LCP -->
     <style>
