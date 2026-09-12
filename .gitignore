@@ -92,3 +92,6 @@ backup_migrations/
 *.mjs
 *.sql
 export_*.json
+
+# Allow supabase migrations (they must be in version control)
+!supabase/migrations/*.sql
