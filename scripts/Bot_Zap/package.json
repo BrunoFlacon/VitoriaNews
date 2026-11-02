@@ -9,7 +9,7 @@
     "instalar": "npm install"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "express": "^4.22.3",
     "openai": "^4.52.0",
     "qrcode": "^1.5.3",
     "socket.io": "^4.7.2",
