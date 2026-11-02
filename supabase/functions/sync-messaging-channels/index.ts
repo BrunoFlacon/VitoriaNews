@@ -56,7 +56,7 @@ serve(async (req: Request) => {
     const botToken = (telegramCreds?.credentials as any)?.bot_token || (telegramCreds?.credentials as any)?.botToken;
     
     // ── Helper: Ensure Storage Bucket exists ────────────────────────────────
-    async function ensureBucketExists() {
+    const ensureBucketExists = async () => {
       try {
         const { data: buckets } = await supabase.storage.listBuckets();
         const exists = buckets?.find((b: any) => b.id === "media");
@@ -66,11 +66,11 @@ serve(async (req: Request) => {
           else console.log("Bucket 'media' created successfully");
         }
       } catch (e) { console.error("ensureBucketExists failed", e); }
-    }
+    };
     await ensureBucketExists();
 
     // ── Helper: Download and Upload to Storage ──────────────────────────────
-    async function downloadAndUploadImage(url: string, path: string): Promise<string | null> {
+    const downloadAndUploadImage = async (url: string, path: string): Promise<string | null> => {
       try {
         const res = await fetch(url);
         if (!res.ok) return null;
@@ -91,7 +91,7 @@ serve(async (req: Request) => {
         console.error(`Download/Upload failed for ${path}:`, e);
         return null;
       }
-    }
+    };
 
     const results = [];
 

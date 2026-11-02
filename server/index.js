@@ -290,8 +290,7 @@ async function fetchPlatformPhoto(platform, platformUserId) {
 }
 
 // ─── Local Storage (file system) ───────────────────────────────
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// __filename and __dirname are already declared once at the top of this module.
 const STORAGE_BASE = path.join(__dirname, "storage");
 
 // Ensure base storage directory exists
@@ -427,7 +426,7 @@ app.get("/api/storage/:bucket", async (req, res) => {
 
     const files = [];
 
-    function walk(dir, relativePath) {
+    const walk = (dir, relativePath) => {
       let entries;
       try {
         entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -463,7 +462,7 @@ app.get("/api/storage/:bucket", async (req, res) => {
           });
         }
       }
-    }
+    };
 
     walk(resolved, prefix);
     res.json({ data: files, error: null });
@@ -1184,13 +1183,13 @@ app.patch("/api/:table", async (req, res) => {
     const values = [...bodyKeys.map(k => req.body[k])];
     let idx = bodyKeys.length + 1;
 
-    function addFilters(obj, op) {
+    const addFilters = (obj, op) => {
       if (!obj) return;
       for (const [key, val] of Object.entries(JSON.parse(obj))) {
         whereClauses.push(`${safeIdent(key)} ${op} $${idx++}`);
         values.push(val);
       }
-    }
+    };
 
     addFilters(req.query.eq, "=");
     addFilters(req.query.neq, "<>");
@@ -1270,13 +1269,13 @@ app.delete("/api/:table", async (req, res) => {
     const values = [];
     let idx = 1;
 
-    function addFilters(obj, op) {
+    const addFilters = (obj, op) => {
       if (!obj) return;
       for (const [key, val] of Object.entries(JSON.parse(obj))) {
         whereClauses.push(`${safeIdent(key)} ${op} $${idx++}`);
         values.push(val);
       }
-    }
+    };
 
     addFilters(req.query.eq, "=");
     addFilters(req.query.neq, "<>");

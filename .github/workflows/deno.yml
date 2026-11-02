@@ -31,7 +31,7 @@ jobs:
           deno-version: v2.x
 
       - name: Run linter
-        run: deno lint --config deno.json supabase/functions/ || deno lint --config deno.json
+        run: deno lint --config deno.json
 
       - name: Run tests
-        run: deno test -A --config deno.json supabase/functions/ || echo "Tests completed"
+        run: deno test -A --config deno.json --permit-no-files supabase/functions/

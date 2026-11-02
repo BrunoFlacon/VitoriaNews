@@ -429,7 +429,7 @@ async function processPlatform(conn: any, supabase: any) {
         const connFilter: any = conn.id ? { "metadata->>connection_id": conn.id } : {};
         const hasConnFilter = !!conn.id;
 
-        async function countMsgs(filters: Record<string, any>): Promise<number> {
+        const countMsgs = async (filters: Record<string, any>): Promise<number> => {
           let q = supabase.from("messages").select("*", { count: "exact", head: true });
           for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
           if (hasConnFilter) {
@@ -439,7 +439,7 @@ async function processPlatform(conn: any, supabase: any) {
           }
           const { count: total } = await q as any;
           return total || 0;
-        }
+        };
 
         const totalSent = (await countMsgs({ user_id: conn.user_id, platform: "whatsapp", "metadata->>bot_reply": "true" }))
           || (await countMsgs({ user_id: conn.user_id, platform: "whatsapp", status: "sent" }));

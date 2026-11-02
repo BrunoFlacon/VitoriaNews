@@ -95,3 +95,6 @@ export_*.json
 
 # Allow supabase migrations (they must be in version control)
 !supabase/migrations/*.sql
+
+# Nested clone of this repository (was committed as a gitlink without .gitmodules, breaking CI checkout)
+/VitoriaNews/
