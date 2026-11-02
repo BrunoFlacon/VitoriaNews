@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { AUTH_ERROR_MESSAGES, mapAuthError } from "../authErrors";
+import { describe, it, expect, vi } from "vitest";
+import { AUTH_ERROR_MESSAGES, describeLoginFailure, mapAuthError } from "../authErrors";
 
 describe("mapAuthError", () => {
   it("retorna string vazia quando não há erro", () => {
@@ -73,5 +73,33 @@ describe("mapAuthError", () => {
     expect(mapAuthError({ message: "Something odd happened" })).toBe(
       AUTH_ERROR_MESSAGES.generic,
     );
+  });
+});
+
+describe("describeLoginFailure", () => {
+  it("não sonda o servidor quando o erro já é conclusivo", async () => {
+    const probe = vi.fn(async () => true);
+
+    await expect(
+      describeLoginFailure({ code: "invalid_credentials", status: 400 }, probe),
+    ).resolves.toBe(AUTH_ERROR_MESSAGES.invalidCredentials);
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it("culpa o servidor (e não a conexão do usuário) quando o backend está fora", async () => {
+    const probe = vi.fn(async () => false);
+
+    await expect(
+      describeLoginFailure({ name: "AuthRetryableFetchError", message: "Failed to fetch", status: 0 }, probe),
+    ).resolves.toBe(AUTH_ERROR_MESSAGES.serverUnavailable);
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it("mantém a mensagem de conexão quando o servidor responde ao health check", async () => {
+    const probe = vi.fn(async () => true);
+
+    await expect(
+      describeLoginFailure({ name: "AuthRetryableFetchError", message: "Failed to fetch", status: 0 }, probe),
+    ).resolves.toBe(AUTH_ERROR_MESSAGES.network);
   });
 });

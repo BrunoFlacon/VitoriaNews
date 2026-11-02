@@ -78,3 +78,21 @@ export function mapAuthError(error: AuthErrorLike | null | undefined): string {
 
   return AUTH_ERROR_MESSAGES.generic;
 }
+
+/**
+ * Fecha o diagnóstico de falhas de conectividade.
+ *
+ * Erros de rede chegam ao JS como "Failed to fetch" tanto quando o backend
+ * está fora (Cloudflare 522, sem header CORS) quanto quando a conexão do
+ * usuário caiu. Só a sonda de health distingue os dois casos.
+ */
+export async function describeLoginFailure(
+  error: AuthErrorLike | null | undefined,
+  probeServer: () => Promise<boolean>,
+): Promise<string> {
+  const message = mapAuthError(error);
+  if (message !== AUTH_ERROR_MESSAGES.network) return message;
+
+  const reachable = await probeServer();
+  return reachable ? message : AUTH_ERROR_MESSAGES.serverUnavailable;
+}

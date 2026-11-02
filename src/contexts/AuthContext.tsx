@@ -1,7 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { supabase, clearSupabaseSession } from '@/integrations/supabase/client';
-import { mapAuthError } from '@/utils/authErrors';
+import { describeLoginFailure } from '@/utils/authErrors';
+import { isAuthServerReachable } from '@/utils/authServerHealth';
+import { REAL_SUPABASE_URL } from '@/config/serverConfig';
 import { User, Session } from '@supabase/supabase-js';
+
+/**
+ * Em produção a sonda confirma se o backend está no ar antes de culpar a
+ * conexão do usuário. Em dev o client usa o proxy `/supabase`, então a sonda
+ * não se aplica.
+ */
+const probeAuthServer = import.meta.env.DEV
+  ? async () => true
+  : () => isAuthServerReachable(REAL_SUPABASE_URL);
 
 export interface Profile {
   id: string;
@@ -279,7 +290,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         status: error.status,
         message: error.message,
       });
-      return { success: false, error: mapAuthError(error) };
+      return {
+        success: false,
+        error: await describeLoginFailure(error, probeAuthServer),
+      };
     }
 
     return { success: true };
