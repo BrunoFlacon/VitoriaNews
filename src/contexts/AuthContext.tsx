@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import { supabase, clearSupabaseSession } from '@/integrations/supabase/client';
+import { mapAuthError } from '@/utils/authErrors';
 import { User, Session } from '@supabase/supabase-js';
 
 export interface Profile {
@@ -267,13 +268,18 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }, [profile, user, isLoading]);
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      return { success: false, error: 'Email ou senha incorretos.' };
+      console.debug('[Auth] Falha no login:', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      });
+      return { success: false, error: mapAuthError(error) };
     }
 
     return { success: true };
